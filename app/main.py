@@ -15,6 +15,7 @@ RUNTIME_DIR = BASE_DIR / "runtime"
 DEFAULTS_FILE = RUNTIME_DIR / "defaults.json"
 PROFILES_FILE = RUNTIME_DIR / "profiles.json"
 SETTINGS_FILE = RUNTIME_DIR / "settings.json"
+PROMPTS_FILE = RUNTIME_DIR / "prompts.json"
 
 RUNTIME_DIR.mkdir(exist_ok=True)
 
@@ -27,6 +28,7 @@ def _ensure_json(path: Path, default_obj: dict):
 _ensure_json(DEFAULTS_FILE, {"selected_profile": "", "theme": "sunset-glass"})
 _ensure_json(PROFILES_FILE, {"selected_profile": "", "profiles": []})
 _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openrouter_api_key": ""})
+_ensure_json(PROMPTS_FILE, {"prompts": [""]})
 
 app = FastAPI(title="Chrome Automation Template")
 app.add_middleware(
@@ -72,6 +74,10 @@ class LaunchProfilePayload(BaseModel):
 class PromptDispatchPayload(BaseModel):
     prompt: str
     targets: list[str]
+
+
+class PromptConfigPayload(BaseModel):
+    prompts: list[str]
 
 
 def _read_json(path: Path) -> dict:
@@ -259,7 +265,6 @@ def dispatch_prompt(payload: PromptDispatchPayload):
     target_map = {
         "chatgpt": f"https://chatgpt.com/?q={q}",
         "gemini": f"https://gemini.google.com/app#autoPrompt={q}",
-        "claude": f"https://claude.ai/new",
     }
 
     opened = []
@@ -272,6 +277,22 @@ def dispatch_prompt(payload: PromptDispatchPayload):
             skipped.append(t)
 
     return {"ok": True, "opened": opened, "skipped": skipped}
+
+
+@app.get("/api/prompts")
+def get_prompts():
+    data = _read_json(PROMPTS_FILE)
+    prompts = data.get("prompts") if isinstance(data, dict) else []
+    if not isinstance(prompts, list):
+        prompts = []
+    return {"prompts": [str(p) for p in prompts]}
+
+
+@app.post("/api/prompts")
+def save_prompts(payload: PromptConfigPayload):
+    cleaned = [str(p) for p in payload.prompts]
+    _write_json(PROMPTS_FILE, {"prompts": cleaned})
+    return {"ok": True, "count": len(cleaned)}
 
 
 @app.post("/api/test-provider")

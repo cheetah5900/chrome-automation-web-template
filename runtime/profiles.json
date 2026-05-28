@@ -1,13 +1,4 @@
 {
-  "selected_profile": "test1",
-  "profiles": [
-    {
-      "name": "test1",
-      "path": "/home/hermes/chrome-automation-web-template/runtime/chrome-profiles/test1",
-      "debug_port": 9222,
-      "startup_urls": [
-        "https://facebook.com"
-      ]
-    }
-  ]
+  "selected_profile": "",
+  "profiles": []
 }

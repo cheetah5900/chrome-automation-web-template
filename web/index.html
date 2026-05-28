@@ -12,49 +12,45 @@
     <header class="topbar">
       <div>
         <h1>Chrome Automation Template</h1>
-        <p class="sub">จัดการ Chrome Profile + ส่ง Prompt ไป ChatGPT/Gemini ได้ในหน้าเดียว</p>
+        <p class="sub">จัดการ Chrome Profile + Custom Prompt</p>
       </div>
       <button id="openSettings" class="gear" title="Settings">⚙️</button>
     </header>
 
-    <section class="card">
-      <h2>Chrome Profiles</h2>
-      <label>Profile Name</label>
-      <input id="profileName" placeholder="e.g. work-profile-1" />
+    <div class="layout-grid">
+      <section class="card left-col">
+        <h2>Chrome Profiles</h2>
+        <label>Profile Name</label>
+        <input id="profileName" placeholder="e.g. work-profile-1" />
 
-      <label>Debug Port</label>
-      <input id="debugPort" type="number" value="9222" />
+        <label>Debug Port</label>
+        <input id="debugPort" type="number" value="9222" />
 
-      <label>Startup Websites (ใส่ทีละบรรทัด)</label>
-      <textarea id="startupUrls" rows="4" placeholder="https://chatgpt.com&#10;https://gemini.google.com/app"></textarea>
+        <label>Startup Websites (ใส่ทีละบรรทัด)</label>
+        <textarea id="startupUrls" rows="6" placeholder="https://chatgpt.com&#10;https://gemini.google.com/app"></textarea>
 
-      <div class="row">
-        <button id="createProfile">Create Profile</button>
-        <button id="updateProfile" class="secondary">Update Profile</button>
-        <button id="launchProfile" class="secondary">Launch Selected</button>
-      </div>
+        <div class="row">
+          <button id="createProfile">Create Profile</button>
+          <button id="updateProfile" class="secondary">Update Profile</button>
+          <button id="launchProfile" class="secondary">Launch Selected</button>
+        </div>
 
-      <label>Available Profiles</label>
-      <select id="profileSelect"></select>
-      <button id="setProfile" class="secondary">Set as default</button>
-      <p id="profileMsg" class="msg"></p>
-    </section>
+        <label>Available Profiles</label>
+        <select id="profileSelect"></select>
+        <button id="setProfile" class="secondary">Set as default</button>
+        <p id="profileMsg" class="msg"></p>
+      </section>
 
-    <section class="card">
-      <h2>Custom Prompt Dispatcher</h2>
-      <label>Prompt</label>
-      <textarea id="customPrompt" rows="4" placeholder="พิมพ์ prompt ที่ต้องการ"></textarea>
-
-      <label>เลือกปลายทาง</label>
-      <div class="row wrap">
-        <label class="checkbox-wrap"><input type="checkbox" value="chatgpt" class="target" checked><span>ChatGPT</span></label>
-        <label class="checkbox-wrap"><input type="checkbox" value="gemini" class="target" checked><span>Gemini</span></label>
-        <label class="checkbox-wrap"><input type="checkbox" value="claude" class="target"><span>Claude</span></label>
-      </div>
-
-      <button id="dispatchPrompt">Send Prompt</button>
-      <p id="dispatchMsg" class="msg"></p>
-    </section>
+      <section class="card right-col">
+        <h2>Custom Prompt Dispatcher</h2>
+        <div id="promptList" class="prompt-list"></div>
+        <div class="row">
+          <button id="addPrompt" class="secondary">+ Add Prompt</button>
+          <button id="savePrompts">Save Prompts</button>
+        </div>
+        <p id="dispatchMsg" class="msg"></p>
+      </section>
+    </div>
   </main>
 
   <div id="settingsModal" class="modal hidden">
