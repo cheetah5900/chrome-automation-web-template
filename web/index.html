@@ -9,23 +9,53 @@
 <body>
   <div class="bg"></div>
   <main class="container">
-    <h1>Chrome Automation Template</h1>
-    <p class="sub">Prepare Chrome profile + debug port 9222 and provider keys quickly.</p>
+    <header class="topbar">
+      <div>
+        <h1>Chrome Automation Template</h1>
+        <p class="sub">Create/select Chrome profiles, launch with debug port, and run Gemini automation.</p>
+      </div>
+      <button id="openSettings" class="gear" title="Settings">⚙️</button>
+    </header>
 
     <section class="card">
-      <h2>Profile Defaults</h2>
-      <label>Chrome Profile Folder Path</label>
-      <input id="profilePath" placeholder="e.g. C:/Users/you/chrome-profile-1" />
+      <h2>Chrome Profiles</h2>
+      <label>Profile Name</label>
+      <input id="profileName" placeholder="e.g. work-profile-1" />
 
-      <label>Debug Port</label>
+      <label>Debug Port (used at creation)</label>
       <input id="debugPort" type="number" value="9222" />
 
-      <button id="saveDefaults">Set as default (save JSON)</button>
-      <p id="defaultsMsg" class="msg"></p>
+      <div class="row">
+        <button id="createProfile">Create Profile</button>
+        <button id="launchProfile" class="secondary">Launch Selected Profile</button>
+      </div>
+      <p id="profileMsg" class="msg"></p>
+
+      <label>Available Profiles</label>
+      <select id="profileSelect"></select>
+      <button id="setProfile" class="secondary">Set as default</button>
     </section>
 
     <section class="card">
-      <h2>API Providers</h2>
+      <h2>Gemini Image Automation (Copied logic base from ddcm-browser-helper-ai)</h2>
+      <label>Prompts (one prompt per line)</label>
+      <textarea id="prompts" rows="7" placeholder="Prompt 1&#10;Prompt 2"></textarea>
+      <label class="checkbox-wrap">
+        <input type="checkbox" id="downloadImages" />
+        <span>Click Gemini "Download generated image" buttons after generation</span>
+      </label>
+      <button id="runGemini">Run Gemini Automation</button>
+      <p id="geminiMsg" class="msg"></p>
+    </section>
+  </main>
+
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>API Settings</h3>
+        <button id="closeSettings" class="secondary">Close</button>
+      </div>
+
       <div class="provider">
         <label>OpenAI API Key</label>
         <input id="openaiKey" type="password" placeholder="sk-..." />
@@ -36,8 +66,8 @@
       <div class="provider">
         <label>Gemini API Key</label>
         <input id="geminiKey" type="password" placeholder="AIza..." />
-        <button onclick="testProvider('gemini', 'geminiKey', 'geminiMsg')">Test Gemini</button>
-        <p id="geminiMsg" class="msg"></p>
+        <button onclick="testProvider('gemini', 'geminiKey', 'geminiMsg2')">Test Gemini</button>
+        <p id="geminiMsg2" class="msg"></p>
       </div>
 
       <div class="provider">
@@ -46,8 +76,11 @@
         <button onclick="testProvider('openrouter', 'openrouterKey', 'openrouterMsg')">Test OpenRouter</button>
         <p id="openrouterMsg" class="msg"></p>
       </div>
-    </section>
-  </main>
+
+      <button id="saveSettings">Save Settings</button>
+      <p id="settingsMsg" class="msg"></p>
+    </div>
+  </div>
 
   <script src="/web/app.js"></script>
 </body>

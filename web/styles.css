@@ -13,11 +13,8 @@ body {
               #0c0f1f;
   z-index: -1;
 }
-.container {
-  max-width: 900px;
-  margin: 32px auto;
-  padding: 16px;
-}
+.container { max-width: 920px; margin: 32px auto; padding: 16px; }
+.topbar { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
 h1 { margin: 0 0 8px; font-size: 2rem; }
 .sub { margin: 0 0 22px; color: #cfd5ff; }
 .card {
@@ -29,7 +26,7 @@ h1 { margin: 0 0 8px; font-size: 2rem; }
   margin-bottom: 16px;
 }
 label { display: block; margin: 8px 0 6px; color: #c9d1ff; font-size: 0.92rem; }
-input {
+input, textarea, select {
   width: 100%;
   border: 1px solid #ffffff2e;
   background: #0e1329;
@@ -38,6 +35,7 @@ input {
   border-radius: 10px;
   margin-bottom: 10px;
 }
+textarea { resize: vertical; }
 button {
   border: 0;
   border-radius: 12px;
@@ -47,6 +45,32 @@ button {
   background: linear-gradient(135deg, #7f5cff, #3aa0ff);
 }
 button:hover { filter: brightness(1.1); }
+button.secondary { background: #2a335a; }
+button.gear { font-size: 1.2rem; padding: 10px 12px; }
 .provider { margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff1f; }
 .msg { min-height: 20px; color: #9ee6b8; font-size: 0.9rem; }
 .error { color: #ff9fa8; }
+.row { display:flex; gap:10px; margin: 8px 0; }
+.checkbox-wrap { display:flex; align-items:center; gap:10px; }
+.checkbox-wrap input { width:auto; margin:0; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: #00000088;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+}
+.modal.hidden { display: none; }
+.modal-card {
+  width: min(760px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 14px;
+  padding: 16px;
+  background: #151b38;
+  border: 1px solid #ffffff29;
+}
+.modal-head { display:flex; justify-content:space-between; align-items:center; }
