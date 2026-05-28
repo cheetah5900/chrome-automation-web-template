@@ -6,8 +6,8 @@ from pydantic import BaseModel
 from pathlib import Path
 import json
 import httpx
-import shutil
 import subprocess
+import socket
 from urllib.parse import quote_plus
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -113,6 +113,14 @@ def _find_profile(name: str) -> dict:
     return profile
 
 
+def _is_local_port_open(port: int) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", int(port)), timeout=0.6):
+            return True
+    except Exception:
+        return False
+
+
 @app.get("/api/defaults")
 def get_defaults():
     return _read_json(DEFAULTS_FILE)
@@ -200,30 +208,38 @@ def launch_profile(payload: LaunchProfilePayload):
     debug_port = int(profile.get("debug_port", 9222))
     startup_urls = _normalize_urls(profile.get("startup_urls", []))
 
-    base_args = [f"--remote-debugging-port={debug_port}", f"--user-data-dir={profile_path}"]
-    chrome_cmds = [
-        ["google-chrome", *base_args, *startup_urls],
-        ["google-chrome-stable", *base_args, *startup_urls],
-        ["chromium-browser", *base_args, *startup_urls],
-        ["chromium", *base_args, *startup_urls],
+    if _is_local_port_open(debug_port):
+        return {
+            "ok": True,
+            "already_running": True,
+            "message": f"มี Chrome debug port {debug_port} รันอยู่แล้ว",
+            "debug_port": debug_port,
+            "profile_path": profile_path,
+            "startup_urls": startup_urls,
+        }
+
+    chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    cmd = [
+        chrome_binary,
+        f"--remote-debugging-port={debug_port}",
+        f"--user-data-dir={profile_path}",
+        *startup_urls,
     ]
 
-    launched = False
-    for cmd in chrome_cmds:
-        if shutil.which(cmd[0]):
-            subprocess.Popen(cmd)
-            launched = True
-            break
-
-    if not launched:
+    try:
+        subprocess.Popen(cmd)
+    except FileNotFoundError:
         raise HTTPException(
             status_code=400,
-            detail="Chrome/Chromium not found. ติดตั้งเบราว์เซอร์ก่อน หรือรันเองด้วย --remote-debugging-port",
+            detail="ไม่พบ Google Chrome ที่ /Applications/Google Chrome.app (macOS)",
         )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"เปิด Chrome ไม่สำเร็จ: {e}")
 
     return {
         "ok": True,
-        "message": "Chrome launched",
+        "already_running": False,
+        "message": f"เปิด Google Chrome ด้วย debug port {debug_port} แล้ว",
         "debug_port": debug_port,
         "profile_path": profile_path,
         "startup_urls": startup_urls,

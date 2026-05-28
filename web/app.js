@@ -130,7 +130,11 @@ async function launchProfile() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     });
-    msg.textContent = `Launched ${name} (port ${data.debug_port})`;
+    if (data.already_running) {
+      msg.textContent = `มี Chrome ที่ port ${data.debug_port} รันอยู่แล้ว`;
+    } else {
+      msg.textContent = `เปิด ${name} ที่ port ${data.debug_port} แล้ว`;
+    }
   } catch (e) {
     msg.textContent = e.message;
     msg.classList.add('error');
