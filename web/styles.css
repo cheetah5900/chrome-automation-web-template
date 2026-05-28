@@ -1,0 +1,52 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #f5f7ff;
+  background: #0c0f1f;
+}
+.bg {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(1000px 500px at 10% 10%, #ff5ea855, transparent),
+              radial-gradient(800px 400px at 90% 30%, #5ea8ff55, transparent),
+              #0c0f1f;
+  z-index: -1;
+}
+.container {
+  max-width: 900px;
+  margin: 32px auto;
+  padding: 16px;
+}
+h1 { margin: 0 0 8px; font-size: 2rem; }
+.sub { margin: 0 0 22px; color: #cfd5ff; }
+.card {
+  background: #161a32cc;
+  border: 1px solid #ffffff22;
+  backdrop-filter: blur(8px);
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+label { display: block; margin: 8px 0 6px; color: #c9d1ff; font-size: 0.92rem; }
+input {
+  width: 100%;
+  border: 1px solid #ffffff2e;
+  background: #0e1329;
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #7f5cff, #3aa0ff);
+}
+button:hover { filter: brightness(1.1); }
+.provider { margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff1f; }
+.msg { min-height: 20px; color: #9ee6b8; font-size: 0.9rem; }
+.error { color: #ff9fa8; }

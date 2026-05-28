@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chrome Automation Template</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <main class="container">
+    <h1>Chrome Automation Template</h1>
+    <p class="sub">Prepare Chrome profile + debug port 9222 and provider keys quickly.</p>
+
+    <section class="card">
+      <h2>Profile Defaults</h2>
+      <label>Chrome Profile Folder Path</label>
+      <input id="profilePath" placeholder="e.g. C:/Users/you/chrome-profile-1" />
+
+      <label>Debug Port</label>
+      <input id="debugPort" type="number" value="9222" />
+
+      <button id="saveDefaults">Set as default (save JSON)</button>
+      <p id="defaultsMsg" class="msg"></p>
+    </section>
+
+    <section class="card">
+      <h2>API Providers</h2>
+      <div class="provider">
+        <label>OpenAI API Key</label>
+        <input id="openaiKey" type="password" placeholder="sk-..." />
+        <button onclick="testProvider('openai', 'openaiKey', 'openaiMsg')">Test OpenAI</button>
+        <p id="openaiMsg" class="msg"></p>
+      </div>
+
+      <div class="provider">
+        <label>Gemini API Key</label>
+        <input id="geminiKey" type="password" placeholder="AIza..." />
+        <button onclick="testProvider('gemini', 'geminiKey', 'geminiMsg')">Test Gemini</button>
+        <p id="geminiMsg" class="msg"></p>
+      </div>
+
+      <div class="provider">
+        <label>OpenRouter API Key</label>
+        <input id="openrouterKey" type="password" placeholder="sk-or-v1-..." />
+        <button onclick="testProvider('openrouter', 'openrouterKey', 'openrouterMsg')">Test OpenRouter</button>
+        <p id="openrouterMsg" class="msg"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/web/app.js"></script>
+</body>
+</html>
