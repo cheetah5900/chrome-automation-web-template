@@ -51,6 +51,7 @@ button.gear { font-size: 1.2rem; padding: 10px 12px; }
 .msg { min-height: 20px; color: #9ee6b8; font-size: 0.9rem; }
 .error { color: #ff9fa8; }
 .row { display:flex; gap:10px; margin: 8px 0; }
+.row.wrap { flex-wrap: wrap; }
 .checkbox-wrap { display:flex; align-items:center; gap:10px; }
 .checkbox-wrap input { width:auto; margin:0; }
 

@@ -12,7 +12,7 @@
     <header class="topbar">
       <div>
         <h1>Chrome Automation Template</h1>
-        <p class="sub">Create/select Chrome profiles, launch with debug port, and run Gemini automation.</p>
+        <p class="sub">จัดการ Chrome Profile + ส่ง Prompt ไป ChatGPT/Gemini ได้ในหน้าเดียว</p>
       </div>
       <button id="openSettings" class="gear" title="Settings">⚙️</button>
     </header>
@@ -22,30 +22,38 @@
       <label>Profile Name</label>
       <input id="profileName" placeholder="e.g. work-profile-1" />
 
-      <label>Debug Port (used at creation)</label>
+      <label>Debug Port</label>
       <input id="debugPort" type="number" value="9222" />
+
+      <label>Startup Websites (ใส่ทีละบรรทัด)</label>
+      <textarea id="startupUrls" rows="4" placeholder="https://chatgpt.com&#10;https://gemini.google.com/app"></textarea>
 
       <div class="row">
         <button id="createProfile">Create Profile</button>
-        <button id="launchProfile" class="secondary">Launch Selected Profile</button>
+        <button id="updateProfile" class="secondary">Update Profile</button>
+        <button id="launchProfile" class="secondary">Launch Selected</button>
       </div>
-      <p id="profileMsg" class="msg"></p>
 
       <label>Available Profiles</label>
       <select id="profileSelect"></select>
       <button id="setProfile" class="secondary">Set as default</button>
+      <p id="profileMsg" class="msg"></p>
     </section>
 
     <section class="card">
-      <h2>Gemini Image Automation (Copied logic base from ddcm-browser-helper-ai)</h2>
-      <label>Prompts (one prompt per line)</label>
-      <textarea id="prompts" rows="7" placeholder="Prompt 1&#10;Prompt 2"></textarea>
-      <label class="checkbox-wrap">
-        <input type="checkbox" id="downloadImages" />
-        <span>Click Gemini "Download generated image" buttons after generation</span>
-      </label>
-      <button id="runGemini">Run Gemini Automation</button>
-      <p id="geminiMsg" class="msg"></p>
+      <h2>Custom Prompt Dispatcher</h2>
+      <label>Prompt</label>
+      <textarea id="customPrompt" rows="4" placeholder="พิมพ์ prompt ที่ต้องการ"></textarea>
+
+      <label>เลือกปลายทาง</label>
+      <div class="row wrap">
+        <label class="checkbox-wrap"><input type="checkbox" value="chatgpt" class="target" checked><span>ChatGPT</span></label>
+        <label class="checkbox-wrap"><input type="checkbox" value="gemini" class="target" checked><span>Gemini</span></label>
+        <label class="checkbox-wrap"><input type="checkbox" value="claude" class="target"><span>Claude</span></label>
+      </div>
+
+      <button id="dispatchPrompt">Send Prompt</button>
+      <p id="dispatchMsg" class="msg"></p>
     </section>
   </main>
 

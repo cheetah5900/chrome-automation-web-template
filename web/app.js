@@ -5,6 +5,8 @@ async function jsonFetch(url, options = {}) {
   return data;
 }
 
+let profileCache = [];
+
 async function loadSettings() {
   const data = await jsonFetch('/api/settings');
   document.getElementById('openaiKey').value = data.openai_api_key || '';
@@ -32,33 +34,68 @@ async function saveSettings() {
   }
 }
 
+function splitUrls(text) {
+  return text.split('\n').map(x => x.trim()).filter(Boolean);
+}
+
+function fillProfileForm(profile) {
+  if (!profile) return;
+  document.getElementById('profileName').value = profile.name || '';
+  document.getElementById('debugPort').value = profile.debug_port || 9222;
+  document.getElementById('startupUrls').value = (profile.startup_urls || []).join('\n');
+}
+
 async function loadProfiles() {
   const data = await jsonFetch('/api/profiles');
+  profileCache = data.profiles || [];
   const select = document.getElementById('profileSelect');
   select.innerHTML = '';
-  for (const p of data.profiles || []) {
+  for (const p of profileCache) {
     const opt = document.createElement('option');
     opt.value = p.name;
     opt.textContent = `${p.name} (port ${p.debug_port})`;
     if (p.name === data.selected_profile) opt.selected = true;
     select.appendChild(opt);
   }
+  const selected = profileCache.find(x => x.name === select.value) || profileCache[0];
+  fillProfileForm(selected);
 }
 
 async function createProfile() {
   const msg = document.getElementById('profileMsg');
   msg.classList.remove('error');
   try {
-    const payload = {
-      name: document.getElementById('profileName').value.trim(),
-      debug_port: Number(document.getElementById('debugPort').value || 9222),
-    };
     await jsonFetch('/api/profiles/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        name: document.getElementById('profileName').value.trim(),
+        debug_port: Number(document.getElementById('debugPort').value || 9222),
+        startup_urls: splitUrls(document.getElementById('startupUrls').value),
+      }),
     });
     msg.textContent = 'Profile created';
+    await loadProfiles();
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.classList.add('error');
+  }
+}
+
+async function updateProfile() {
+  const msg = document.getElementById('profileMsg');
+  msg.classList.remove('error');
+  try {
+    await jsonFetch('/api/profiles/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('profileName').value.trim(),
+        debug_port: Number(document.getElementById('debugPort').value || 9222),
+        startup_urls: splitUrls(document.getElementById('startupUrls').value),
+      }),
+    });
+    msg.textContent = 'Profile updated';
     await loadProfiles();
   } catch (e) {
     msg.textContent = e.message;
@@ -93,31 +130,30 @@ async function launchProfile() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     });
-    msg.textContent = `Launched ${name} on port ${data.debug_port}`;
+    msg.textContent = `Launched ${name} (port ${data.debug_port})`;
   } catch (e) {
     msg.textContent = e.message;
     msg.classList.add('error');
   }
 }
 
-async function runGemini() {
-  const msg = document.getElementById('geminiMsg');
+async function dispatchPrompt() {
+  const msg = document.getElementById('dispatchMsg');
   msg.classList.remove('error');
   try {
-    const prompts = document.getElementById('prompts').value
-      .split('\n')
-      .map(x => x.trim())
-      .filter(Boolean);
-
-    const data = await jsonFetch('/api/gemini/run', {
+    const prompt = document.getElementById('customPrompt').value.trim();
+    const targets = Array.from(document.querySelectorAll('.target:checked')).map(x => x.value);
+    const data = await jsonFetch('/api/prompt/dispatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompts,
-        download_images: document.getElementById('downloadImages').checked,
-      }),
+      body: JSON.stringify({ prompt, targets }),
     });
-    msg.textContent = `Done. Sent ${data.sent_prompts}, download attempts ${data.download_attempts}`;
+
+    for (const item of data.opened || []) {
+      window.open(item.url, '_blank');
+    }
+
+    msg.textContent = `ส่งแล้ว ${data.opened.length} ปลายทาง`;
   } catch (e) {
     msg.textContent = e.message;
     msg.classList.add('error');
@@ -156,9 +192,14 @@ function initModal() {
 
 document.getElementById('saveSettings').addEventListener('click', saveSettings);
 document.getElementById('createProfile').addEventListener('click', createProfile);
+document.getElementById('updateProfile').addEventListener('click', updateProfile);
 document.getElementById('setProfile').addEventListener('click', setDefaultProfile);
 document.getElementById('launchProfile').addEventListener('click', launchProfile);
-document.getElementById('runGemini').addEventListener('click', runGemini);
+document.getElementById('dispatchPrompt').addEventListener('click', dispatchPrompt);
+document.getElementById('profileSelect').addEventListener('change', () => {
+  const selected = profileCache.find(x => x.name === document.getElementById('profileSelect').value);
+  fillProfileForm(selected);
+});
 
 initModal();
 loadSettings();
