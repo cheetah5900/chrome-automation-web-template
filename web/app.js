@@ -52,35 +52,84 @@ async function loadProfiles() {
   }
   const selected = profileCache.find(x => x.name === select.value) || profileCache[0];
   fillProfileForm(selected);
+  updatePortStatus();
 }
 
 async function createProfile() {
-  const msg = document.getElementById('profileMsg'); msg.classList.remove('error');
+  const msg = document.getElementById('modalProfileMsg'); msg.classList.remove('error');
+  const name = document.getElementById('profileName').value.trim();
+  const port = Number(document.getElementById('debugPort').value || 9222);
+
+  if (!name) {
+    msg.textContent = 'Profile name is required';
+    msg.classList.add('error');
+    return;
+  }
+
+  // Frontend duplication checks
+  if (profileCache.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+    msg.textContent = `Profile name "${name}" already exists`;
+    msg.classList.add('error');
+    return;
+  }
+  if (profileCache.some(p => Number(p.debug_port) === port)) {
+    msg.textContent = `Port ${port} is already used by another profile`;
+    msg.classList.add('error');
+    return;
+  }
+
   try {
     await jsonFetch('/api/profiles/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: document.getElementById('profileName').value.trim(),
-        debug_port: Number(document.getElementById('debugPort').value || 9222),
+        name,
+        debug_port: port,
         startup_urls: splitUrls(document.getElementById('startupUrls').value),
       }),
     });
-    msg.textContent = 'Profile created'; await loadProfiles();
+    msg.textContent = 'Profile created successfully!'; 
+    await loadProfiles();
   } catch (e) { msg.textContent = e.message; msg.classList.add('error'); }
 }
 
 async function updateProfile() {
-  const msg = document.getElementById('profileMsg'); msg.classList.remove('error');
+  const msg = document.getElementById('modalProfileMsg'); msg.classList.remove('error');
+  const nameInput = document.getElementById('profileName');
+  const oldName = nameInput.dataset.oldName || '';
+  const newName = nameInput.value.trim();
+  const port = Number(document.getElementById('debugPort').value || 9222);
+
+  if (!newName) {
+    msg.textContent = 'Profile name is required';
+    msg.classList.add('error');
+    return;
+  }
+
+  // Frontend duplication checks
+  if (oldName.toLowerCase() !== newName.toLowerCase() && profileCache.some(p => p.name.toLowerCase() === newName.toLowerCase())) {
+    msg.textContent = `Profile name "${newName}" already exists`;
+    msg.classList.add('error');
+    return;
+  }
+  if (profileCache.some(p => p.name !== oldName && Number(p.debug_port) === port)) {
+    msg.textContent = `Port ${port} is already used by another profile`;
+    msg.classList.add('error');
+    return;
+  }
+
   try {
     await jsonFetch('/api/profiles/update', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: document.getElementById('profileName').value.trim(),
-        debug_port: Number(document.getElementById('debugPort').value || 9222),
+        old_name: oldName,
+        new_name: newName,
+        debug_port: port,
         startup_urls: splitUrls(document.getElementById('startupUrls').value),
       }),
     });
-    msg.textContent = 'Profile updated'; await loadProfiles();
+    msg.textContent = 'Profile updated successfully!';
+    nameInput.dataset.oldName = newName;
+    await loadProfiles();
   } catch (e) { msg.textContent = e.message; msg.classList.add('error'); }
 }
 
@@ -102,9 +151,7 @@ async function launchProfile() {
     const data = await jsonFetch('/api/profiles/launch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
     });
-    msg.textContent = data.already_running
-      ? `มี Chrome ที่ port ${data.debug_port} รันอยู่แล้ว`
-      : `เปิด ${name} ที่ port ${data.debug_port} แล้ว`;
+    msg.textContent = data.message || `เปิด ${name} ที่ port ${data.debug_port} แล้ว`;
   } catch (e) { msg.textContent = e.message; msg.classList.add('error'); }
 }
 
@@ -116,6 +163,7 @@ function promptRowTemplate(text = '') {
     <div class="row wrap">
       <button class="send-btn" data-target="chatgpt">ChatGPT</button>
       <button class="send-btn" data-target="gemini">Gemini</button>
+      <button class="send-btn" data-target="claude">Claude</button>
       <button class="secondary delete-btn" type="button">Delete</button>
     </div>
   `;
@@ -150,7 +198,6 @@ async function savePrompts() {
 async function dispatchSinglePrompt(row, target, clickedBtn) {
   const msg = document.getElementById('dispatchMsg'); msg.classList.remove('error');
   const prompt = row.querySelector('.prompt-input').value.trim();
-  if (!prompt) { msg.textContent = 'กรุณาใส่ prompt ก่อน'; msg.classList.add('error'); return; }
 
   const rowButtons = row.querySelectorAll('button');
   rowButtons.forEach(b => b.disabled = true);
@@ -161,13 +208,51 @@ async function dispatchSinglePrompt(row, target, clickedBtn) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, targets: [target] }),
     });
-    for (const item of data.opened || []) window.open(item.url, '_blank');
-    msg.textContent = `ส่ง prompt ไป ${target} แล้ว`;
+    
+    if (data.fallback && data.fallback.length > 0) {
+      for (const item of data.fallback) {
+        window.open(item.url, '_blank');
+      }
+      msg.textContent = `เปิด ${target} ในแท็บใหม่แล้ว`;
+    } else if (data.already_open && data.already_open.includes(target)) {
+      msg.textContent = `ตรวจพบแท็บ ${target} เปิดอยู่แล้ว (ทำการสลับหน้าจอ)`;
+    } else {
+      msg.textContent = `เปิด ${target} ใน Chrome Profile สำเร็จ`;
+    }
   } catch (e) {
     msg.textContent = e.message; msg.classList.add('error');
   } finally {
     clickedBtn.classList.remove('loading');
     rowButtons.forEach(b => b.disabled = false);
+  }
+}
+
+async function updatePortStatus() {
+  const badge = document.getElementById('portStatusBadge');
+  if (!badge) return;
+
+  const select = document.getElementById('profileSelect');
+  if (!select || !select.value) {
+    badge.textContent = 'No Profile';
+    badge.className = 'status-badge offline';
+    return;
+  }
+
+  const selected = profileCache.find(x => x.name === select.value);
+  const port = selected ? selected.debug_port : 9222;
+
+  try {
+    const data = await jsonFetch(`/api/profiles/status?port=${port}`);
+    if (data.online) {
+      badge.textContent = `Online (Port ${port})`;
+      badge.className = 'status-badge online';
+    } else {
+      badge.textContent = `Offline (Port ${port})`;
+      badge.className = 'status-badge offline';
+    }
+  } catch (e) {
+    badge.textContent = `Offline (Port ${port})`;
+    badge.className = 'status-badge offline';
   }
 }
 
@@ -187,6 +272,66 @@ function initModal() {
   const modal = document.getElementById('settingsModal');
   document.getElementById('openSettings').addEventListener('click', () => modal.classList.remove('hidden'));
   document.getElementById('closeSettings').addEventListener('click', () => modal.classList.add('hidden'));
+
+  const pModal = document.getElementById('profileModal');
+  const modalTitle = pModal.querySelector('h3');
+  const createBtn = document.getElementById('createProfile');
+  const updateBtn = document.getElementById('updateProfile');
+  const nameInput = document.getElementById('profileName');
+  const portInput = document.getElementById('debugPort');
+  const urlsInput = document.getElementById('startupUrls');
+  const msg = document.getElementById('modalProfileMsg');
+
+  // Add Profile button clicked
+  document.getElementById('addProfileBtn').addEventListener('click', () => {
+    modalTitle.textContent = 'Add New Chrome Profile';
+    msg.textContent = '';
+    msg.classList.remove('error');
+    
+    // Clear inputs
+    nameInput.value = '';
+    nameInput.readOnly = false;
+    nameInput.disabled = false;
+    portInput.value = '9222';
+    urlsInput.value = 'https://chatgpt.com\nhttps://gemini.google.com/app';
+    
+    // Toggle buttons
+    createBtn.style.display = 'inline-block';
+    updateBtn.style.display = 'none';
+    
+    pModal.classList.remove('hidden');
+  });
+
+  // Edit Profile button clicked
+  document.getElementById('editProfileBtn').addEventListener('click', () => {
+    const selectedName = document.getElementById('profileSelect').value;
+    if (!selectedName) {
+      alert('Please create or select a profile first.');
+      return;
+    }
+    const selected = profileCache.find(x => x.name === selectedName);
+    if (!selected) return;
+
+    modalTitle.textContent = 'Edit Chrome Profile';
+    msg.textContent = '';
+    msg.classList.remove('error');
+    
+    // Pre-fill inputs
+    nameInput.value = selected.name;
+    nameInput.dataset.oldName = selected.name; // Keep old name reference
+    nameInput.readOnly = false; // Allow editing profile name
+    nameInput.disabled = false;
+    portInput.value = selected.debug_port || 9222;
+    urlsInput.value = (selected.startup_urls || []).join('\n');
+    
+    // Toggle buttons
+    createBtn.style.display = 'none';
+    updateBtn.style.display = 'inline-block';
+    
+    pModal.classList.remove('hidden');
+  });
+
+  document.getElementById('closeProfileModal').addEventListener('click', () => pModal.classList.add('hidden'));
 }
 
 document.getElementById('saveSettings').addEventListener('click', saveSettings);
@@ -199,9 +344,13 @@ document.getElementById('savePrompts').addEventListener('click', savePrompts);
 document.getElementById('profileSelect').addEventListener('change', () => {
   const selected = profileCache.find(x => x.name === document.getElementById('profileSelect').value);
   fillProfileForm(selected);
+  updatePortStatus();
 });
 
 initModal();
 loadSettings();
 loadProfiles();
 loadPrompts();
+
+// Start periodic real-time status check every 3 seconds
+setInterval(updatePortStatus, 3000);

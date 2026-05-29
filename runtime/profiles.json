@@ -1,4 +1,14 @@
 {
-  "selected_profile": "",
-  "profiles": []
+  "selected_profile": "Generate Affiliate",
+  "profiles": [
+    {
+      "name": "Generate Affiliate",
+      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Generate Affiliate",
+      "debug_port": 9222,
+      "startup_urls": [
+        "https://gemini.google.com/app",
+        "https://chatgpt.com/"
+      ]
+    }
+  ]
 }

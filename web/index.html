@@ -19,25 +19,18 @@
 
     <div class="layout-grid">
       <section class="card left-col">
-        <h2>Chrome Profiles</h2>
-        <label>Profile Name</label>
-        <input id="profileName" placeholder="e.g. work-profile-1" />
-
-        <label>Debug Port</label>
-        <input id="debugPort" type="number" value="9222" />
-
-        <label>Startup Websites (ใส่ทีละบรรทัด)</label>
-        <textarea id="startupUrls" rows="6" placeholder="https://chatgpt.com&#10;https://gemini.google.com/app"></textarea>
-
-        <div class="row">
-          <button id="createProfile">Create Profile</button>
-          <button id="updateProfile" class="secondary">Update Profile</button>
-          <button id="launchProfile" class="secondary">Launch Selected</button>
+        <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h2 style="margin:0;">Chrome Profiles</h2>
+          <button id="addProfileBtn" class="secondary" style="padding: 6px 12px; font-size: 0.88rem;">+ Add Profile</button>
         </div>
-
-        <label>Available Profiles</label>
+        <label>Available Profiles <span id="portStatusBadge" class="status-badge offline">Checking...</span></label>
         <select id="profileSelect"></select>
-        <button id="setProfile" class="secondary">Set as default</button>
+
+        <div class="row wrap">
+          <button id="launchProfile">Launch Selected</button>
+          <button id="setProfile" class="secondary">Set as default</button>
+          <button id="editProfileBtn" class="secondary">Edit Selected</button>
+        </div>
         <p id="profileMsg" class="msg"></p>
       </section>
 
@@ -83,6 +76,30 @@
 
       <button id="saveSettings">Save Settings</button>
       <p id="settingsMsg" class="msg"></p>
+    </div>
+  </div>
+
+  <div id="profileModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Manage Chrome Profile</h3>
+        <button id="closeProfileModal" class="secondary">Close</button>
+      </div>
+
+      <label>Profile Name</label>
+      <input id="profileName" placeholder="e.g. work-profile-1" />
+
+      <label>Debug Port</label>
+      <input id="debugPort" type="number" value="9222" />
+
+      <label>Startup Websites (ใส่ทีละบรรทัด)</label>
+      <textarea id="startupUrls" rows="6" placeholder="https://chatgpt.com&#10;https://gemini.google.com/app"></textarea>
+
+      <div class="row">
+        <button id="createProfile">Create Profile</button>
+        <button id="updateProfile" class="secondary">Update Profile</button>
+      </div>
+      <p id="modalProfileMsg" class="msg"></p>
     </div>
   </div>
 

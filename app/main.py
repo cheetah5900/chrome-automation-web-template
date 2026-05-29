@@ -9,6 +9,8 @@ import httpx
 import subprocess
 import socket
 from urllib.parse import quote_plus
+import websockets
+import asyncio
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = BASE_DIR / "runtime"
@@ -58,7 +60,8 @@ class CreateProfilePayload(BaseModel):
 
 
 class UpdateProfilePayload(BaseModel):
-    name: str
+    old_name: str
+    new_name: str
     debug_port: int = 9222
     startup_urls: list[str] = []
 
@@ -72,7 +75,7 @@ class LaunchProfilePayload(BaseModel):
 
 
 class PromptDispatchPayload(BaseModel):
-    prompt: str
+    prompt: str = ""
     targets: list[str]
 
 
@@ -127,6 +130,26 @@ def _is_local_port_open(port: int) -> bool:
         return False
 
 
+def _activate_chrome():
+    script = """
+    tell application "Google Chrome"
+        activate
+        repeat with w in windows
+            if minimized of w is true then
+                set minimized of w to false
+            end if
+        end repeat
+    end tell
+    """
+    try:
+        subprocess.run(["osascript", "-e", script], check=False)
+    except Exception:
+        try:
+            subprocess.run(["open", "-a", "Google Chrome"], check=False)
+        except Exception:
+            pass
+
+
 @app.get("/api/defaults")
 def get_defaults():
     return _read_json(DEFAULTS_FILE)
@@ -149,6 +172,11 @@ def list_profiles():
     return _profiles_data()
 
 
+@app.get("/api/profiles/status")
+def get_profile_status(port: int = 9222):
+    return {"online": _is_local_port_open(port)}
+
+
 @app.post("/api/profiles/create")
 def create_profile(payload: CreateProfilePayload):
     name = payload.name.strip()
@@ -161,18 +189,24 @@ def create_profile(payload: CreateProfilePayload):
     profile_dir.mkdir(parents=True, exist_ok=True)
 
     data = _profiles_data()
+    
+    # Check duplication of name
+    if any(p.get("name").lower() == name.lower() for p in data["profiles"]):
+        raise HTTPException(status_code=400, detail=f"Profile name '{name}' already exists.")
+
+    # Check duplication of port
+    port = int(payload.debug_port)
+    if any(int(p.get("debug_port", 0)) == port for p in data["profiles"]):
+        raise HTTPException(status_code=400, detail=f"Port {port} is already used by another profile.")
+
     startup_urls = _normalize_urls(payload.startup_urls)
-    existing = next((p for p in data["profiles"] if p.get("name") == name), None)
     profile_obj = {
         "name": name,
         "path": str(profile_dir),
-        "debug_port": int(payload.debug_port),
+        "debug_port": port,
         "startup_urls": startup_urls,
     }
-    if existing:
-        existing.update(profile_obj)
-    else:
-        data["profiles"].append(profile_obj)
+    data["profiles"].append(profile_obj)
 
     if not data.get("selected_profile"):
         data["selected_profile"] = name
@@ -184,13 +218,53 @@ def create_profile(payload: CreateProfilePayload):
 
 @app.post("/api/profiles/update")
 def update_profile(payload: UpdateProfilePayload):
+    old_name = payload.old_name.strip()
+    new_name = payload.new_name.strip()
+    if not old_name or not new_name:
+        raise HTTPException(status_code=400, detail="old_name and new_name are required")
+
     data = _profiles_data()
-    profile = next((p for p in data["profiles"] if p.get("name") == payload.name), None)
+    profile = next((p for p in data["profiles"] if p.get("name") == old_name), None)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-    profile["debug_port"] = int(payload.debug_port)
+
+    # Check duplication of name
+    if old_name.lower() != new_name.lower():
+        if any(p.get("name").lower() == new_name.lower() for p in data["profiles"]):
+            raise HTTPException(status_code=400, detail=f"Profile name '{new_name}' already exists.")
+
+    # Check duplication of port
+    port = int(payload.debug_port)
+    for p in data["profiles"]:
+        if p.get("name") != old_name and int(p.get("debug_port", 0)) == port:
+            raise HTTPException(status_code=400, detail=f"Port {port} is already used by another profile.")
+
+    # Perform filesystem rename of the directory
+    old_dir = Path(profile["path"])
+    new_dir = old_dir.parent / new_name
+
+    try:
+        if old_dir.exists() and old_dir != new_dir:
+            old_dir.rename(new_dir)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to rename directory: {e}")
+
+    # Update profile fields
+    profile["name"] = new_name
+    profile["path"] = str(new_dir)
+    profile["debug_port"] = port
     profile["startup_urls"] = _normalize_urls(payload.startup_urls)
+
+    if data.get("selected_profile") == old_name:
+        data["selected_profile"] = new_name
+
     _write_json(PROFILES_FILE, data)
+
+    defaults = _read_json(DEFAULTS_FILE)
+    if defaults.get("selected_profile") == old_name:
+        defaults["selected_profile"] = new_name
+        _write_json(DEFAULTS_FILE, defaults)
+
     return {"ok": True, "profile": profile}
 
 
@@ -207,7 +281,7 @@ def select_profile(payload: SelectProfilePayload):
 
 
 @app.post("/api/profiles/launch")
-def launch_profile(payload: LaunchProfilePayload):
+async def launch_profile(payload: LaunchProfilePayload):
     profile = _find_profile(payload.name)
 
     profile_path = profile["path"]
@@ -215,14 +289,25 @@ def launch_profile(payload: LaunchProfilePayload):
     startup_urls = _normalize_urls(profile.get("startup_urls", []))
 
     if _is_local_port_open(debug_port):
-        return {
-            "ok": True,
-            "already_running": True,
-            "message": f"มี Chrome debug port {debug_port} รันอยู่แล้ว",
-            "debug_port": debug_port,
-            "profile_path": profile_path,
-            "startup_urls": startup_urls,
-        }
+        try:
+            async with httpx.AsyncClient(timeout=2) as client:
+                r = await client.get(f"http://127.0.0.1:{debug_port}/json")
+                if r.status_code == 200:
+                    urls_to_open = startup_urls if startup_urls else ["https://google.com"]
+                    for url in urls_to_open:
+                        await client.get(f"http://127.0.0.1:{debug_port}/json/new?{url}")
+                    _activate_chrome()
+                    return {
+                        "ok": True,
+                        "already_running": True,
+                        "restored": True,
+                        "message": f"Chrome ที่ port {debug_port} เปิดอยู่แล้ว (ทำการเปิดแท็บใหม่บนหน้าจอ)",
+                        "debug_port": debug_port,
+                        "profile_path": profile_path,
+                        "startup_urls": startup_urls,
+                    }
+        except Exception:
+            pass
 
     chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     cmd = [
@@ -252,31 +337,260 @@ def launch_profile(payload: LaunchProfilePayload):
     }
 
 
+async def _automate_tab(debug_port: int, target: str, prompt: str):
+    target_map = {
+        "chatgpt": "https://chatgpt.com/",
+        "gemini": "https://gemini.google.com/app",
+        "claude": "https://claude.ai/",
+    }
+    target_url = target_map.get(target)
+    if not target_url:
+        return
+
+    safe_prompt = prompt.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+
+    js_chatgpt = f"""
+    (function() {{
+        const el = document.querySelector('#prompt-textarea > p');
+        if (el) {{
+            el.textContent = "{safe_prompt}";
+            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            setTimeout(() => {{
+                const sendBtn = document.querySelector('button[data-testid="send-button"]') || 
+                                document.querySelector('button[aria-label="Send prompt"]');
+                if (sendBtn) {{
+                    sendBtn.click();
+                }} else {{
+                    const enterEvent = new KeyboardEvent('keydown', {{
+                        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+                    }});
+                    el.dispatchEvent(enterEvent);
+                }}
+            }}, 150);
+            return true;
+        }}
+        return false;
+    }})();
+    """
+
+    js_gemini = f"""
+    (function() {{
+        const exactSelector = `#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div > div > div > chat-window > div > input-container > fieldset > input-area-v2 > div > div > div.ng-tns-c1080643930-4.single-line-format.ng-star-inserted > div > div > div > rich-textarea > div.ql-editor.ql-blank.textarea.new-input-ui > p`;
+        const fallbackSelector = `rich-textarea p, div.ql-editor p`;
+        let el = document.querySelector(exactSelector);
+        if (!el) {{
+            el = document.querySelector(fallbackSelector);
+        }}
+        if (el) {{
+            el.textContent = "{safe_prompt}";
+            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            setTimeout(() => {{
+                const sendBtn = document.querySelector('button[aria-label="Send message"]') || 
+                                document.querySelector('.send-button-container button') ||
+                                document.querySelector('button.send-button');
+                if (sendBtn) {{
+                    sendBtn.click();
+                }} else {{
+                    const enterEvent = new KeyboardEvent('keydown', {{
+                        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+                    }});
+                    el.dispatchEvent(enterEvent);
+                }}
+            }}, 150);
+            return true;
+        }}
+        return false;
+    }})();
+    """
+
+    js_claude = f"""
+    (function() {{
+        const firstSelector = `#main-content > div.flex.h-full.flex-col > div > main > div.top-5.z-10.mx-auto.w-full.max-w-2xl > div:nth-child(2) > div:nth-child(1) > div > fieldset > div.relative > div.\\!box-content.flex.flex-col.bg-bg-000.mx-2.md\\:mx-0.items-stretch.transition-all.duration-200.relative.z-10.rounded-\\[20px\\].cursor-text.relative.z-\\[1\\].border.border-transparent.md\\:w-full.shadow-\\[0_0\\.25rem_1\\.25rem_hsl\\(var\\(--always-black\\)\\/3\\.5\\%\\)\\,0_0_0_0\\.5px_hsla\\(var\\(--border-300\\)\\/0\\.15\\)\\].hover\\:shadow-\\[0_0\\.25rem_1\\.25rem_hsl\\(var\\(--always-black\\)\\/3\\.5\\%\\)\\,0_0_0_0\\.5px_hsla\\(var\\(--border-200\\)\\/0\\.3\\)\\].focus-within\\:shadow-\\[0_0\\.25rem_1\\.25rem_hsl\\(var\\(--always-black\\)\\/7\\.5\\%\\)\\,0_0_0_0\\.5px_hsla\\(var\\(--border-200\\)\\/0\\.3\\)\\].hover\\:focus-within\\:shadow-\\[0_0\\.25rem_1\\.25rem_hsl\\(var\\(--always-black\\)\\/7\\.5\\%\\)\\,0_0_0_0\\.5px_hsla\\(var\\(--border-200\\)\\/0\\.3\\)\\] > div.flex.flex-col.m-3\\.5.gap-3 > div.relative.font-large > div.w-full.overflow-y-auto.break-words.transition-opacity.duration-200.font-large.max-h-96.min-h-\\[3rem\\].pl-\\[6px\\].pt-\\[6px\\].\\[\\&_\\.is-editor-empty\\]\\:before\\:\\!content-\\[\\'\\'\\]`;
+        const followUpSelector = `#main-content > div > div.h-full.flex.flex-col.overflow-hidden.md\\:pt-\\[var\\(--df-header-h\\,0px\\)\\].print\\:h-auto.print\\:overflow-visible > div > div > div > div.sticky.bottom-0.mx-auto.w-full.pt-6.print\\:hidden.z-\\[5\\] > div:nth-child(2) > fieldset > div.relative > div.\\!box-content.flex.flex-col.bg-bg-000.mx-2.md\\:mx-0.items-stretch.transition-all.duration-200.relative.z-10.rounded-\\[20px\\].cursor-text.relative.z-\\[1\\].border.border-transparent.md\\:w-full.shadow-\\[0_0\\.25rem_1\\.25rem_hsl\\(var\\(--always-black\\)\\/3\\.5\\%\\)\\,0_0_0_0\\.5px_hsla\\(var\\(--border-300\\)\\/0\\.15\\)\\].hover\\:shadow-\\[0_0\\.25rem_1\\.25rem_hsl\\(var\\(--always-black\\)\\/3\\.5\\%\\)\\,0_0_0_0\\.5px_hsla\\(var\\(--border-200\\)\\/0\\.3\\)\\].focus-within\\:shadow-\\[0_0\\.25rem_1\\.25rem_hsl\\(var\\(--always-black\\)\\/7\\.5\\%\\)\\,0_0_0_0\\.5px_hsla\\(var\\(--border-200\\)\\/0\\.3\\)\\].hover\\:focus-within\\:shadow-\\[0_0\\.25rem_1\\.25rem_hsl\\(var\\(--always-black\\)\\/7\\.5\\%\\)\\,0_0_0_0\\.5px_hsla\\(var\\(--border-200\\)\\/0\\.3\\)\\] > div.flex.flex-col.m-3\\.5.gap-3 > div.relative.font-large > div > div > p`;
+        
+        let el = null;
+        try {{
+            el = document.querySelector(firstSelector) || document.querySelector(followUpSelector);
+        }} catch(err) {{
+            // Ignore syntax errors in long custom selectors
+        }}
+        
+        if (!el) {{
+            el = document.querySelector('div.ProseMirror p') || 
+                 document.querySelector('div.ProseMirror') ||
+                 document.querySelector('[contenteditable="true"] p') ||
+                 document.querySelector('[contenteditable="true"]');
+        }}
+        
+        if (el) {{
+            el.innerHTML = "<p>{safe_prompt}</p>";
+            if (el.tagName === 'P') {{
+                el.textContent = "{safe_prompt}";
+            }}
+            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            setTimeout(() => {{
+                const sendBtn = document.querySelector('button[aria-label="Send Message"]') || 
+                                document.querySelector('button[aria-label="Send message"]') ||
+                                document.querySelector('button.bg-text-000') ||
+                                document.querySelector('button[disabled="false"]');
+                if (sendBtn) {{
+                    sendBtn.click();
+                }} else {{
+                    const enterEvent = new KeyboardEvent('keydown', {{
+                        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+                    }});
+                    el.dispatchEvent(enterEvent);
+                }}
+            }}, 150);
+            return true;
+        }}
+        return false;
+    }})();
+    """
+
+    js_code = js_chatgpt if target == "chatgpt" else (js_gemini if target == "gemini" else js_claude)
+
+    # Poll until success or timeout (15 seconds)
+    for _ in range(30):
+        await asyncio.sleep(0.5)
+        try:
+            async with httpx.AsyncClient(timeout=2) as client:
+                r = await client.get(f"http://127.0.0.1:{debug_port}/json")
+                if r.status_code == 200:
+                    tabs = r.json()
+                    ws_url = None
+                    for tab in tabs:
+                        tab_url = tab.get("url", "")
+                        if target == "gemini" and ("gemini.google.com/app" in tab_url or "gemini.google.com" in tab_url):
+                            ws_url = tab.get("webSocketDebuggerUrl")
+                            break
+                        elif target == "chatgpt" and ("chatgpt.com" in tab_url):
+                            ws_url = tab.get("webSocketDebuggerUrl")
+                            break
+                        elif target == "claude" and ("claude.ai" in tab_url):
+                            ws_url = tab.get("webSocketDebuggerUrl")
+                            break
+                    
+                    if ws_url:
+                        async with websockets.connect(ws_url) as websocket:
+                            payload = {
+                                "id": 1,
+                                "method": "Runtime.evaluate",
+                                "params": {
+                                    "expression": js_code,
+                                    "returnByValue": True
+                                }
+                            }
+                            await websocket.send(json.dumps(payload))
+                            res_raw = await websocket.recv()
+                            res = json.loads(res_raw)
+                            result = res.get("result", {}).get("result", {})
+                            if result.get("value") is True:
+                                break
+        except Exception:
+            pass
+
+
 @app.post("/api/prompt/dispatch")
-def dispatch_prompt(payload: PromptDispatchPayload):
-    prompt = payload.prompt.strip()
+async def dispatch_prompt(payload: PromptDispatchPayload):
     targets = [t.lower().strip() for t in payload.targets if t and t.strip()]
-    if not prompt:
-        raise HTTPException(status_code=400, detail="prompt is required")
     if not targets:
         raise HTTPException(status_code=400, detail="targets is required")
 
-    q = quote_plus(prompt)
+    defaults = _read_json(DEFAULTS_FILE)
+    selected_profile_name = defaults.get("selected_profile", "")
+    debug_port = 9222
+    profile_path = ""
+    if selected_profile_name:
+        try:
+            profile = _find_profile(selected_profile_name)
+            debug_port = int(profile.get("debug_port", 9222))
+            profile_path = profile.get("path", "")
+        except Exception:
+            pass
+
     target_map = {
-        "chatgpt": f"https://chatgpt.com/?q={q}",
-        "gemini": f"https://gemini.google.com/app#autoPrompt={q}",
+        "chatgpt": "https://chatgpt.com/",
+        "gemini": "https://gemini.google.com/app",
+        "claude": "https://claude.ai/",
     }
 
     opened = []
     skipped = []
-    for t in targets:
-        url = target_map.get(t)
-        if url:
-            opened.append({"target": t, "url": url})
-        else:
-            skipped.append(t)
+    already_open_targets = []
+    fallback_urls = []
 
-    return {"ok": True, "opened": opened, "skipped": skipped}
+    port_open = _is_local_port_open(debug_port)
+
+    if port_open:
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                r = await client.get(f"http://127.0.0.1:{debug_port}/json")
+                if r.status_code == 200:
+                    tabs = r.json()
+                    
+                    for t in targets:
+                        target_url = target_map.get(t)
+                        if not target_url:
+                            skipped.append(t)
+                            continue
+                        
+                        existing_tab = None
+                        for tab in tabs:
+                            tab_url = tab.get("url", "")
+                            if t == "gemini" and ("gemini.google.com/app" in tab_url or "gemini.google.com" in tab_url):
+                                existing_tab = tab
+                                break
+                            elif t == "chatgpt" and ("chatgpt.com" in tab_url):
+                                existing_tab = tab
+                                break
+                            elif t == "claude" and ("claude.ai" in tab_url):
+                                existing_tab = tab
+                                break
+                        
+                        if existing_tab:
+                            tab_id = existing_tab.get("id")
+                            if tab_id:
+                                await client.get(f"http://127.0.0.1:{debug_port}/json/activate/{tab_id}")
+                            already_open_targets.append(t)
+                        else:
+                            # Open tab by calling Chrome binary with user data dir to bypass CDP URL encoding issues
+                            chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                            cmd = [
+                                chrome_binary,
+                                f"--user-data-dir={profile_path}",
+                                target_url
+                            ]
+                            subprocess.Popen(cmd)
+                            opened.append({"target": t, "url": target_url, "via": "chrome_ipc"})
+                    
+                    if opened or already_open_targets:
+                        _activate_chrome()
+                else:
+                    port_open = False
+        except Exception:
+            port_open = False
+
+    if port_open and payload.prompt.strip():
+        for t in targets:
+            if t in ["chatgpt", "gemini", "claude"]:
+                asyncio.create_task(_automate_tab(debug_port, t, payload.prompt.strip()))
+
+    if not port_open:
+        for t in targets:
+            target_url = target_map.get(t)
+            if target_url:
+                fallback_urls.append({"target": t, "url": target_url, "via": "fallback"})
+            else:
+                skipped.append(t)
+
+    return {
+        "ok": True,
+        "opened": opened,
+        "already_open": already_open_targets,
+        "fallback": fallback_urls,
+        "skipped": skipped
+    }
 
 
 @app.get("/api/prompts")
