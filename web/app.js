@@ -817,6 +817,7 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
     btnElement.disabled = true;
   }
   
+  let success = false;
   try {
     writeConsoleLine(`Executing action: ${stepEndpoint}...`, 'system', consoleId);
     const response = await jsonFetch(stepEndpoint, {
@@ -825,19 +826,18 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
       body: JSON.stringify(payload)
     });
     
-    if (response.ok) {
-      writeConsoleLine(`Action completed: ${stepEndpoint}`, 'success', consoleId);
-    } else {
-      writeConsoleLine(`Action response: ${JSON.stringify(response)}`, 'info', consoleId);
-    }
+    writeConsoleLine(`Action completed: ${stepEndpoint}`, 'success', consoleId);
+    success = true;
   } catch (e) {
     writeConsoleLine(`Action failed: ${e.message}`, 'error', consoleId);
+    success = false;
   } finally {
     if (btnElement) {
       btnElement.classList.remove('loading');
       btnElement.disabled = false;
     }
   }
+  return success;
 }
 
 // Initialize steps listeners
@@ -900,13 +900,13 @@ function initWorkflowActionListeners() {
       
       updateRowStatus(row, 'Generating...');
 
-      try {
-        await executeStep('/api/step/3', { prompt: p, reference_image: refImg }, null, 'imageConsole');
+      const success = await executeStep('/api/step/3', { prompt: p, reference_image: refImg }, null, 'imageConsole');
+      if (success) {
         updateRowStatus(row, 'Done');
         writeConsoleLine(`[${i + 1}/${activeRows.length}] Completed successfully!`, 'success', 'imageConsole');
-      } catch (err) {
+      } else {
         updateRowStatus(row, 'Failed');
-        writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed: ${err.message}`, 'error', 'imageConsole');
+        writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed to execute.`, 'error', 'imageConsole');
       }
       
       // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
@@ -949,13 +949,13 @@ function initWorkflowActionListeners() {
       
       updateRowStatus(row, 'Generating...');
 
-      try {
-        await executeStep('/api/step/3-chatgpt', { prompt: p, reference_image: refImg }, null, 'imageConsole');
+      const success = await executeStep('/api/step/3-chatgpt', { prompt: p, reference_image: refImg }, null, 'imageConsole');
+      if (success) {
         updateRowStatus(row, 'Done');
         writeConsoleLine(`[${i + 1}/${activeRows.length}] Completed successfully!`, 'success', 'imageConsole');
-      } catch (err) {
+      } else {
         updateRowStatus(row, 'Failed');
-        writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed: ${err.message}`, 'error', 'imageConsole');
+        writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed to execute.`, 'error', 'imageConsole');
       }
       
       // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
