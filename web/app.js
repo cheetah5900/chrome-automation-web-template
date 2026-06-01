@@ -611,6 +611,30 @@ function updateImageGenButtonsState() {
   }
 }
 
+function updateRowStatus(row, status) {
+  const badge = row.querySelector('.row-status');
+  if (!badge) return;
+
+  badge.textContent = status;
+  if (status === 'Not start') {
+    badge.style.background = 'rgba(255, 255, 255, 0.05)';
+    badge.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+    badge.style.color = 'rgba(255, 255, 255, 0.6)';
+  } else if (status === 'Generating...') {
+    badge.style.background = 'rgba(58, 160, 255, 0.15)';
+    badge.style.borderColor = 'rgba(58, 160, 255, 0.25)';
+    badge.style.color = '#8da6ff';
+  } else if (status === 'Done') {
+    badge.style.background = 'rgba(72, 187, 120, 0.18)';
+    badge.style.borderColor = 'rgba(72, 187, 120, 0.3)';
+    badge.style.color = '#68d391';
+  } else if (status === 'Failed') {
+    badge.style.background = 'rgba(245, 101, 101, 0.18)';
+    badge.style.borderColor = 'rgba(245, 101, 101, 0.3)';
+    badge.style.color = '#fc8181';
+  }
+}
+
 // Dynamic Prompt Rows for Tab 2 Image Generation
 function imagePromptRowTemplate(text = '') {
   const row = document.createElement('div');
@@ -625,6 +649,7 @@ function imagePromptRowTemplate(text = '') {
   
   row.innerHTML = `
     <textarea class="image-prompt-input" rows="2" style="margin-bottom:0; flex-grow:1;" placeholder="เช่น A cute baby lion, isolated background...">${text.replace(/</g, '&lt;')}</textarea>
+    <span class="row-status" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; font-weight: bold; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); min-width: 95px; text-align: center; white-space: nowrap; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.25s ease;">Not start</span>
     <button class="secondary delete-btn" style="padding: 8px 12px; margin-bottom: 0;" type="button">Delete</button>
   `;
   row.querySelector('.delete-btn').addEventListener('click', () => {
@@ -850,8 +875,10 @@ function initWorkflowActionListeners() {
 
   // Step 2 Gemini (Bulk loop)
   document.getElementById('btn_step3_gemini').addEventListener('click', async (e) => {
-    const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
-    if (prompts.length === 0) {
+    const rows = Array.from(document.querySelectorAll('#imagePromptList .prompt-row'));
+    const activeRows = rows.filter(r => r.querySelector('.image-prompt-input').value.trim() !== '');
+    
+    if (activeRows.length === 0) {
       writeConsoleLine('Error: No prompts entered. Please add at least one prompt.', 'error', 'imageConsole');
       return;
     }
@@ -862,21 +889,28 @@ function initWorkflowActionListeners() {
 
     const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
 
-    writeConsoleLine(`Bulk Generation: Starting loop over ${prompts.length} prompts on Gemini...`, 'system', 'imageConsole');
+    writeConsoleLine(`Bulk Generation: Starting loop over ${activeRows.length} prompts on Gemini...`, 'system', 'imageConsole');
 
-    for (let i = 0; i < prompts.length; i++) {
-      const p = prompts[i];
-      writeConsoleLine(`[${i + 1}/${prompts.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
+    activeRows.forEach(r => updateRowStatus(r, 'Not start'));
+
+    for (let i = 0; i < activeRows.length; i++) {
+      const row = activeRows[i];
+      const p = row.querySelector('.image-prompt-input').value.trim();
+      writeConsoleLine(`[${i + 1}/${activeRows.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
       
+      updateRowStatus(row, 'Generating...');
+
       try {
         await executeStep('/api/step/3', { prompt: p, reference_image: refImg }, null, 'imageConsole');
-        writeConsoleLine(`[${i + 1}/${prompts.length}] Completed successfully!`, 'success', 'imageConsole');
+        updateRowStatus(row, 'Done');
+        writeConsoleLine(`[${i + 1}/${activeRows.length}] Completed successfully!`, 'success', 'imageConsole');
       } catch (err) {
-        writeConsoleLine(`[${i + 1}/${prompts.length}] Failed: ${err.message}`, 'error', 'imageConsole');
+        updateRowStatus(row, 'Failed');
+        writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed: ${err.message}`, 'error', 'imageConsole');
       }
       
       // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
-      if (i < prompts.length - 1) {
+      if (i < activeRows.length - 1) {
         const randomDelay = Math.floor(Math.random() * (15 - 3 + 1)) + 3;
         writeConsoleLine(`Human simulation: Waiting ${randomDelay} seconds before the next prompt...`, 'info', 'imageConsole');
         await new Promise(r => setTimeout(r, randomDelay * 1000));
@@ -890,8 +924,10 @@ function initWorkflowActionListeners() {
 
   // Step 2 ChatGPT (Bulk loop)
   document.getElementById('btn_step3_chatgpt').addEventListener('click', async (e) => {
-    const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
-    if (prompts.length === 0) {
+    const rows = Array.from(document.querySelectorAll('#imagePromptList .prompt-row'));
+    const activeRows = rows.filter(r => r.querySelector('.image-prompt-input').value.trim() !== '');
+    
+    if (activeRows.length === 0) {
       writeConsoleLine('Error: No prompts entered. Please add at least one prompt.', 'error', 'imageConsole');
       return;
     }
@@ -902,21 +938,28 @@ function initWorkflowActionListeners() {
 
     const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
 
-    writeConsoleLine(`Bulk Generation: Starting loop over ${prompts.length} prompts on ChatGPT...`, 'system', 'imageConsole');
+    writeConsoleLine(`Bulk Generation: Starting loop over ${activeRows.length} prompts on ChatGPT...`, 'system', 'imageConsole');
 
-    for (let i = 0; i < prompts.length; i++) {
-      const p = prompts[i];
-      writeConsoleLine(`[${i + 1}/${prompts.length}] Sending prompt to ChatGPT: "${p}"`, 'info', 'imageConsole');
+    activeRows.forEach(r => updateRowStatus(r, 'Not start'));
+
+    for (let i = 0; i < activeRows.length; i++) {
+      const row = activeRows[i];
+      const p = row.querySelector('.image-prompt-input').value.trim();
+      writeConsoleLine(`[${i + 1}/${activeRows.length}] Sending prompt to ChatGPT: "${p}"`, 'info', 'imageConsole');
       
+      updateRowStatus(row, 'Generating...');
+
       try {
         await executeStep('/api/step/3-chatgpt', { prompt: p, reference_image: refImg }, null, 'imageConsole');
-        writeConsoleLine(`[${i + 1}/${prompts.length}] Completed successfully!`, 'success', 'imageConsole');
+        updateRowStatus(row, 'Done');
+        writeConsoleLine(`[${i + 1}/${activeRows.length}] Completed successfully!`, 'success', 'imageConsole');
       } catch (err) {
-        writeConsoleLine(`[${i + 1}/${prompts.length}] Failed: ${err.message}`, 'error', 'imageConsole');
+        updateRowStatus(row, 'Failed');
+        writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed: ${err.message}`, 'error', 'imageConsole');
       }
       
       // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
-      if (i < prompts.length - 1) {
+      if (i < activeRows.length - 1) {
         const randomDelay = Math.floor(Math.random() * (15 - 3 + 1)) + 3;
         writeConsoleLine(`Human simulation: Waiting ${randomDelay} seconds before the next prompt...`, 'info', 'imageConsole');
         await new Promise(r => setTimeout(r, randomDelay * 1000));
