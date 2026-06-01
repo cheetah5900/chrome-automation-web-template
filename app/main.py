@@ -1078,11 +1078,12 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                 import subprocess
                 escaped_path = file_path.replace('"', '\\"')
                 script = f"""
+                set the clipboard to "{escaped_path}"
+                delay 0.5
                 tell application "System Events"
-                    delay 0.5
                     keystroke "g" using {{command down, shift down}}
                     delay 1.0
-                    keystroke "{escaped_path}"
+                    keystroke "v" using {{command down}}
                     delay 1.0
                     keystroke return
                     delay 1.0
@@ -1359,10 +1360,12 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 script = f"""
                 tell application "Google Chrome" to activate
                 delay 1.0
+                set the clipboard to "{escaped_path}"
+                delay 0.5
                 tell application "System Events"
                     keystroke "g" using {{command down, shift down}}
                     delay 1.5
-                    keystroke "{escaped_path}"
+                    keystroke "v" using {{command down}}
                     delay 1.5
                     keystroke return
                     delay 1.5
