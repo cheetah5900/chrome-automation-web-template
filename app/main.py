@@ -350,14 +350,22 @@ async def launch_profile(payload: LaunchProfilePayload):
 
     # If it is the Everyday Chrome profile, bypass the non-default user-data-dir check using a symlink structure
     if profile_path == "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome":
+        import shutil
         dev_dir = Path("/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/DailyChromeDev")
         dev_dir.mkdir(parents=True, exist_ok=True)
         symlink_path = dev_dir / "Default"
-        if not symlink_path.exists():
+        if symlink_path.exists() or symlink_path.is_symlink():
             try:
-                os.symlink("/Users/litarcopperkaikem/Library/Application Support/Google/Chrome/Default", symlink_path)
+                if symlink_path.is_symlink() or symlink_path.is_file():
+                    symlink_path.unlink()
+                else:
+                    shutil.rmtree(symlink_path)
             except Exception:
                 pass
+        try:
+            os.symlink("/Users/litarcopperkaikem/Library/Application Support/Google/Chrome/Default", symlink_path)
+        except Exception:
+            pass
         profile_path = str(dev_dir)
 
     if _is_local_port_open(debug_port):
@@ -452,11 +460,19 @@ def use_current_chrome():
     dev_dir = Path("/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/DailyChromeDev")
     dev_dir.mkdir(parents=True, exist_ok=True)
     symlink_path = dev_dir / "Default"
-    if not symlink_path.exists():
+    if symlink_path.exists() or symlink_path.is_symlink():
         try:
-            os.symlink(f"{daily_path}/Default", symlink_path)
+            import shutil
+            if symlink_path.is_symlink() or symlink_path.is_file():
+                symlink_path.unlink()
+            else:
+                shutil.rmtree(symlink_path)
         except Exception:
             pass
+    try:
+        os.symlink(f"{daily_path}/Default", symlink_path)
+    except Exception:
+        pass
 
     # Inject/update "Daily Chrome" profile inside profiles.json
     data = _profiles_data()
