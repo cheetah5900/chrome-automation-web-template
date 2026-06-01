@@ -230,6 +230,23 @@ def save_ref_image_default(payload: RefImageDefaultPayload):
     return {"ok": True, "message": "Saved default reference image", "data": data}
 
 
+class RefImageVerifyPayload(BaseModel):
+    path: str
+
+
+@app.post("/api/config/reference-image/verify")
+def verify_reference_image(payload: RefImageVerifyPayload):
+    path = payload.path.strip()
+    if not path:
+        return {"exists": False, "message": "Reference image path is empty."}
+    
+    import os
+    if os.path.exists(path) and os.path.isfile(path):
+        return {"exists": True, "message": f"Success: Reference file exists at: {path}"}
+    else:
+        return {"exists": False, "message": f"Error: Reference file does not exist at: {path}"}
+
+
 @app.get("/api/profiles")
 def list_profiles():
     return _profiles_data()

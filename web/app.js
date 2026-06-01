@@ -670,6 +670,33 @@ async function setRefImageDefault() {
   }
 }
 
+async function verifyRefImage() {
+  const refImgInput = document.getElementById('cfg_reference_image');
+  const path = refImgInput ? refImgInput.value.trim() : '';
+  if (!path) {
+    showToast('Please enter a reference image path first.', 'error');
+    return;
+  }
+
+  try {
+    const res = await jsonFetch('/api/config/reference-image/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+    
+    if (res.exists) {
+      showToast(res.message, 'success');
+      writeConsoleLine(res.message, 'success', 'imageConsole');
+    } else {
+      showToast(res.message, 'error');
+      writeConsoleLine(res.message, 'error', 'imageConsole');
+    }
+  } catch (e) {
+    showToast(`Verification failed: ${e.message}`, 'error');
+  }
+}
+
 async function saveImagePrompts() {
   const msg = document.getElementById('imagePromptMsg');
   msg.classList.remove('error');
@@ -804,6 +831,7 @@ function initWorkflowActionListeners() {
   document.getElementById('saveImagePromptsBtn').addEventListener('click', saveImagePrompts);
   document.getElementById('deleteAllImagePromptsBtn').addEventListener('click', deleteAllImagePrompts);
   document.getElementById('setRefImageDefaultBtn').addEventListener('click', setRefImageDefault);
+  document.getElementById('verifyRefImageBtn').addEventListener('click', verifyRefImage);
 
   // Step 1
   document.getElementById('btn_step2').addEventListener('click', (e) => {
