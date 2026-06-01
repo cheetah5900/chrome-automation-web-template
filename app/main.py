@@ -178,6 +178,21 @@ def _physical_switch_to_tab(url_part):
         return False
 
 
+def _macos_file_exists(file_path):
+    import subprocess
+    escaped_path = file_path.replace('"', '\\"')
+    script = f"""
+    tell application "System Events"
+        exists file "{escaped_path}"
+    end tell
+    """
+    try:
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, check=False)
+        return "true" in res.stdout.lower()
+    except Exception:
+        return False
+
+
 @app.get("/api/defaults")
 def get_defaults():
     return _read_json(DEFAULTS_FILE)
@@ -957,10 +972,9 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                 log("Gemini prompt placed successfully! Skipping file attachment (Reference path is empty).")
                 return {"ok": True}
                 
-            # If reference image is specified, proceed with automation to open modal and upload via AppleScript
-            if not os.path.exists(reference_image):
-                log(f"Warning: Reference image path does not exist: {reference_image}. Skipping upload.")
-                return {"ok": True}
+            # If reference image is specified, verify file existence via AppleScript. If not there, stop and raise error.
+            if not _macos_file_exists(reference_image):
+                raise RuntimeError(f"Reference image file not found on macOS: {reference_image}")
                 
             # Helper local function to click with 3 retries and 5s interval
             def click_element_with_retry(selectors, name):
@@ -1237,9 +1251,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     time.sleep(1.5)
                 return {"ok": True}
 
-            if not os.path.exists(reference_image):
-                log(f"Warning: Reference image path does not exist: {reference_image}. Skipping upload.")
-                return {"ok": True}
+            if not _macos_file_exists(reference_image):
+                raise RuntimeError(f"Reference image file not found on macOS: {reference_image}")
 
             # 3. press Cmd + U directly to open file modal
             log("Sending Cmd + U keystroke via System Events directly to trigger file modal...")
