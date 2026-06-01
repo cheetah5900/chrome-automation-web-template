@@ -106,7 +106,10 @@
 
             <!-- Generation Prompts Section -->
             <section class="card">
-              <h2 class="section-title">🎨 Generation Prompts</h2>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <h2 class="section-title" style="margin-bottom: 0;">🎨 Generation Prompts</h2>
+                <span id="imagePromptCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Prompts</span>
+              </div>
               <p class="section-subtitle">เพิ่ม/ลด พรอพต์ที่ต้องการส่งไปเจเนอเรทภาพเป็นชุด</p>
               
               <div id="imagePromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>

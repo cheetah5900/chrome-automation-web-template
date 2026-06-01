@@ -599,6 +599,11 @@ function updateImageGenButtonsState() {
   
   if (geminiBtn) geminiBtn.disabled = !hasText;
   if (chatgptBtn) chatgptBtn.disabled = !hasText;
+
+  const badge = document.getElementById('imagePromptCountBadge');
+  if (badge) {
+    badge.textContent = `${inputs.length} Prompts`;
+  }
 }
 
 // Dynamic Prompt Rows for Tab 2 Image Generation
