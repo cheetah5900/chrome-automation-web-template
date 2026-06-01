@@ -688,6 +688,20 @@ async function saveImagePrompts() {
   }
 }
 
+async function deleteAllImagePrompts() {
+  if (!confirm('Are you sure you want to delete all generation prompts?')) return;
+
+  const list = document.getElementById('imagePromptList');
+  if (list) {
+    list.innerHTML = '';
+    // Append a single empty prompt row so it's not totally blank visually
+    list.appendChild(imagePromptRowTemplate(''));
+  }
+
+  updateImageGenButtonsState();
+  await saveImagePrompts();
+}
+
 // Write line to terminal console
 function writeConsoleLine(text, type = 'info', consoleId = 'ddcmConsole') {
   const consoleBox = document.getElementById(consoleId);
@@ -783,6 +797,7 @@ function initWorkflowActionListeners() {
   });
 
   document.getElementById('saveImagePromptsBtn').addEventListener('click', saveImagePrompts);
+  document.getElementById('deleteAllImagePromptsBtn').addEventListener('click', deleteAllImagePrompts);
   document.getElementById('setRefImageDefaultBtn').addEventListener('click', setRefImageDefault);
 
   // Step 1
