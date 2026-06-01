@@ -1198,8 +1198,8 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                             
                         # Wait until generation is completed (Stop button disappears)
                         import random
-                        delay_seconds = random.uniform(90.0, 150.0)
-                        log(f"Waiting {delay_seconds:.1f} seconds (random 1.30 - 2.30 mins) before starting status checks...")
+                        delay_seconds = random.uniform(60.0, 135.0)
+                        log(f"Waiting {delay_seconds:.1f} seconds (random 1.00 - 2.15 mins) before starting status checks...")
                         time.sleep(delay_seconds)
                         log("Checking if Stop button has disappeared...")
                         start_time = time.time()
@@ -1434,8 +1434,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             
             # 7. Wait until generation is completed (Stop button disappears)
             import random
-            delay_seconds = random.uniform(90.0, 150.0)
-            log(f"Waiting {delay_seconds:.1f} seconds (random 1.30 - 2.30 mins) before starting status checks...")
+            delay_seconds = random.uniform(60.0, 135.0)
+            log(f"Waiting {delay_seconds:.1f} seconds (random 1.00 - 2.15 mins) before starting status checks...")
             time.sleep(delay_seconds)
             log("Checking if Stop button has disappeared...")
             start_time = time.time()
