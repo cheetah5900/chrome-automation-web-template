@@ -1358,10 +1358,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             def upload_macos_file_dialog(file_path):
                 escaped_path = file_path.replace('"', '\\"')
                 script = f"""
-                tell application "Google Chrome" to activate
-                delay 1.0
                 set the clipboard to "{escaped_path}"
-                delay 0.5
                 tell application "System Events"
                     keystroke "g" using {{command down, shift down}}
                     delay 1.0
