@@ -977,6 +977,7 @@ def step2(payload: dict[str, Any]) -> dict[str, Any]:
 
 @app.post("/api/step/3")
 def step3(payload: dict[str, Any]) -> dict[str, Any]:
+    _activate_chrome()
     custom_prompt = payload.get("prompt")
     if custom_prompt:
         try:
@@ -1232,6 +1233,7 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
 
 @app.post("/api/step/3-chatgpt")
 def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
+    _activate_chrome()
     custom_prompt = payload.get("prompt")
     if custom_prompt:
         try:
