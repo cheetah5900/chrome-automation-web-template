@@ -1122,8 +1122,12 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             bot = browser_manager.get()
             driver = bot.driver
             
-            # Check if ChatGPT is open, if not open a new tab natively via webdriver protocol (immune to popup blockers)
-            if not bot.switch_to_tab_containing("chatgpt.com"):
+            # Check if ChatGPT is open, supporting both chatgpt.com and chat.openai.com
+            found_chatgpt = bot.switch_to_tab_containing("chatgpt.com")
+            if not found_chatgpt:
+                found_chatgpt = bot.switch_to_tab_containing("chat.openai.com")
+                
+            if not found_chatgpt:
                 log("ChatGPT tab not found, opening natively in new tab...")
                 try:
                     driver.switch_to.new_window('tab')
@@ -1133,8 +1137,12 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     driver.get("https://chatgpt.com/")
                     time.sleep(3.0)
             
+            # Bring Chrome window to active focus natively
+            _activate_chrome()
+            time.sleep(0.5)
+            
             # Strictly verify we are on the ChatGPT page before sending input!
-            if "chatgpt.com" not in driver.current_url:
+            if "chatgpt.com" not in driver.current_url and "chat.openai.com" not in driver.current_url:
                 raise RuntimeError("Failed to switch to ChatGPT tab. Please open it manually.")
             
             input_strats = [
