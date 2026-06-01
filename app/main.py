@@ -1241,24 +1241,11 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 log(f"Warning: Reference image path does not exist: {reference_image}. Skipping upload.")
                 return {"ok": True}
 
-            # 3. click at '#composer-plus-btn'
-            log("Locating and clicking ChatGPT plus button (#composer-plus-btn)...")
-            try:
-                plus_btn = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-plus-btn"))
-                )
-                plus_btn.click()
-            except Exception:
-                driver.execute_script("document.querySelector('#composer-plus-btn').click();")
-            
-            # 4. wait 1-2s, press ctrl + U to open file modal
-            log("Waiting 1.5 seconds...")
-            time.sleep(1.5)
-            
+            # 3. press Cmd + U directly to open file modal
+            log("Sending Cmd + U keystroke via System Events directly to trigger file modal...")
             _activate_chrome()
-            time.sleep(0.5)
+            time.sleep(1.0)
             
-            log("Sending Cmd + U keystroke via System Events...")
             import subprocess
             cmd_u_script = """
             tell application "System Events"
@@ -1268,22 +1255,24 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             try:
                 subprocess.run(["osascript", "-e", cmd_u_script], check=False)
             except Exception as e:
-                log(f"Keystroke control + u failed: {e}")
+                log(f"Keystroke Cmd + U failed: {e}")
                 
-            time.sleep(1.5)
+            log("Waiting 2.0 seconds for file modal to fully open...")
+            time.sleep(2.0)
             
             # 5. use the same flow to select a file like the Gemini one
             def upload_macos_file_dialog(file_path):
                 escaped_path = file_path.replace('"', '\\"')
                 script = f"""
+                tell application "Google Chrome" to activate
+                delay 1.0
                 tell application "System Events"
-                    delay 0.5
                     keystroke "g" using {{command down, shift down}}
-                    delay 1.0
+                    delay 1.5
                     keystroke "{escaped_path}"
-                    delay 1.0
+                    delay 1.5
                     keystroke return
-                    delay 1.0
+                    delay 1.5
                     keystroke return
                 end tell
                 """
