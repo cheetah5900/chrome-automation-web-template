@@ -666,8 +666,15 @@ async function loadImagePrompts() {
     const list = document.getElementById('imagePromptList');
     list.innerHTML = '';
     const prompts = config.image_prompts || [''];
+    const savedStatuses = config.image_prompt_statuses || [];
+
     for (const p of prompts) {
-      list.appendChild(imagePromptRowTemplate(p));
+      const row = imagePromptRowTemplate(p);
+      const matched = savedStatuses.find(s => s.text === p);
+      if (matched) {
+        updateRowStatus(row, matched.status);
+      }
+      list.appendChild(row);
     }
     const refImgInput = document.getElementById('cfg_reference_image');
     if (refImgInput) {
@@ -727,26 +734,40 @@ async function verifyRefImage() {
   }
 }
 
-async function saveImagePrompts() {
+async function saveImagePrompts(silent = false) {
   const msg = document.getElementById('imagePromptMsg');
-  msg.classList.remove('error');
-  msg.textContent = 'Saving...';
+  if (!silent) {
+    msg.classList.remove('error');
+    msg.textContent = 'Saving...';
+  }
   try {
     const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
     const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
+    
+    // Map text to current statuses
+    const statuses = Array.from(document.querySelectorAll('#imagePromptList .prompt-row')).map(row => {
+      const text = row.querySelector('.image-prompt-input').value.trim();
+      const status = row.querySelector('.row-status').textContent.trim();
+      return { text, status };
+    }).filter(x => x.text !== '');
+
     const currentConfig = await jsonFetch('/api/config');
-    const payload = { ...currentConfig, image_prompts: prompts, reference_image: refImg };
+    const payload = { ...currentConfig, image_prompts: prompts, reference_image: refImg, image_prompt_statuses: statuses };
     await jsonFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    msg.textContent = 'Prompts and Reference Image saved successfully!';
-    writeConsoleLine('Image generation prompts and reference image saved successfully.', 'success', 'imageConsole');
+    if (!silent) {
+      msg.textContent = 'Prompts and Reference Image saved successfully!';
+      writeConsoleLine('Image generation prompts and reference image saved successfully.', 'success', 'imageConsole');
+    }
   } catch (e) {
-    msg.textContent = e.message;
-    msg.classList.add('error');
-    writeConsoleLine(`Failed to save prompts: ${e.message}`, 'error', 'imageConsole');
+    if (!silent) {
+      msg.textContent = e.message;
+      msg.classList.add('error');
+      writeConsoleLine(`Failed to save prompts: ${e.message}`, 'error', 'imageConsole');
+    }
   }
 }
 
@@ -908,6 +929,7 @@ function initWorkflowActionListeners() {
         updateRowStatus(row, 'Failed');
         writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed to execute.`, 'error', 'imageConsole');
       }
+      await saveImagePrompts(true);
       
       // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
       if (i < activeRows.length - 1) {
@@ -957,6 +979,7 @@ function initWorkflowActionListeners() {
         updateRowStatus(row, 'Failed');
         writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed to execute.`, 'error', 'imageConsole');
       }
+      await saveImagePrompts(true);
       
       // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
       if (i < activeRows.length - 1) {
