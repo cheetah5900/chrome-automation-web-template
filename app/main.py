@@ -341,11 +341,24 @@ def select_profile(payload: SelectProfilePayload):
 
 @app.post("/api/profiles/launch")
 async def launch_profile(payload: LaunchProfilePayload):
+    import os
     profile = _find_profile(payload.name)
 
     profile_path = profile["path"]
     debug_port = int(profile.get("debug_port", 9222))
     startup_urls = _normalize_urls(profile.get("startup_urls", []))
+
+    # If it is the Everyday Chrome profile, bypass the non-default user-data-dir check using a symlink structure
+    if profile_path == "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome":
+        dev_dir = Path("/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/DailyChromeDev")
+        dev_dir.mkdir(parents=True, exist_ok=True)
+        symlink_path = dev_dir / "Default"
+        if not symlink_path.exists():
+            try:
+                os.symlink("/Users/litarcopperkaikem/Library/Application Support/Google/Chrome/Default", symlink_path)
+            except Exception:
+                pass
+        profile_path = str(dev_dir)
 
     if _is_local_port_open(debug_port):
         try:
@@ -403,6 +416,84 @@ def close_profile():
         return {"ok": True, "message": "Browser profile disconnected successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed closing browser: {e}")
+
+
+@app.post("/api/profiles/use-current")
+def use_current_chrome():
+    import subprocess
+    import time
+    import os
+    
+    # Try to quit cleanly via AppleScript
+    try:
+        subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to quit'], check=False)
+        time.sleep(2.0)
+    except Exception:
+        pass
+        
+    # Force kill Google Chrome and its helper subprocesses
+    try:
+        subprocess.run(["pkill", "-f", "Google Chrome"], check=False)
+        subprocess.run(["pkill", "-f", "Google Chrome Helper"], check=False)
+        time.sleep(1.0)
+    except Exception:
+        pass
+        
+    # Active wait loop to ensure Google Chrome processes have exited completely
+    for _ in range(15):
+        res = subprocess.run(["pgrep", "-f", "Google Chrome"], capture_output=True, text=True, check=False)
+        running_pids = [pid for pid in res.stdout.strip().split() if pid]
+        if not running_pids:
+            break
+        time.sleep(0.3)
+        
+    # Construct redirect user data dir for Everyday Chrome profile (Default-only symlink)
+    daily_path = "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome"
+    dev_dir = Path("/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/DailyChromeDev")
+    dev_dir.mkdir(parents=True, exist_ok=True)
+    symlink_path = dev_dir / "Default"
+    if not symlink_path.exists():
+        try:
+            os.symlink(f"{daily_path}/Default", symlink_path)
+        except Exception:
+            pass
+
+    # Inject/update "Daily Chrome" profile inside profiles.json
+    data = _profiles_data()
+    
+    existing = next((p for p in data["profiles"] if p.get("name") == "Daily Chrome"), None)
+    if not existing:
+        existing = {
+            "name": "Daily Chrome",
+            "path": daily_path,
+            "debug_port": 9222,
+            "startup_urls": ["https://chatgpt.com", "https://gemini.google.com/app"]
+        }
+        data["profiles"].append(existing)
+    else:
+        existing["path"] = daily_path
+        existing["debug_port"] = 9222
+        
+    data["selected_profile"] = "Daily Chrome"
+    _write_json(PROFILES_FILE, data)
+    _write_json(DEFAULTS_FILE, {"selected_profile": "Daily Chrome", "theme": "sunset-glass"})
+        
+    # Reopen daily Chrome in debug mode with our redirect directory!
+    chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    cmd = [
+        chrome_binary,
+        "--remote-debugging-port=9222",
+        f"--user-data-dir={dev_dir}"
+    ]
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to reopen Google Chrome in debug mode: {e}")
+        
+    return {
+        "ok": True,
+        "message": "Google Chrome restarted successfully in debug mode on port 9222!"
+    }
 
 
 async def _automate_tab(debug_port: int, target: str, prompt: str):
