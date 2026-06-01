@@ -8,43 +8,231 @@
 </head>
 <body>
   <div class="bg"></div>
+
   <main class="container">
     <header class="topbar">
       <div>
-        <h1>Chrome Automation Template</h1>
-        <p class="sub">จัดการ Chrome Profile + Custom Prompt</p>
+        <h1>Chrome Automation Cockpit</h1>
+        <p class="sub">จัดการ Chrome Profile + Workflow Automation</p>
       </div>
-      <button id="openSettings" class="gear" title="Settings">⚙️</button>
+      <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+        <button id="disconnectProfileBtn" class="secondary" style="padding: 8px 14px; font-size: 0.85rem; border-color: rgba(255, 94, 168, 0.3); color: #ff9fa8; font-weight: bold;">🔒 Lock Dashboard</button>
+        <button id="openSettings" class="gear" title="Settings">⚙️</button>
+      </div>
     </header>
 
-    <div class="layout-grid">
-      <section class="card left-col">
-        <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h2 style="margin:0;">Chrome Profiles</h2>
-          <button id="addProfileBtn" class="secondary" style="padding: 6px 12px; font-size: 0.88rem;">+ Add Profile</button>
+    <!-- SECTION 1: CHROME PROFILES (ONE SECTION AHEAD OF OTHERS) -->
+    <section class="card profile-manager-card" style="margin-bottom: 24px; padding: 24px; background: rgba(22, 26, 50, 0.85); border-radius: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h2 style="margin: 0; font-size: 1.4rem; background: linear-gradient(135deg, #ffffff, #cfd5ff, #8da6ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🌐 Chrome Profile Manager</h2>
+          <p class="section-subtitle" style="margin: 4px 0 0 0; font-size: 0.88rem;">เลือกรันโปรไฟล์เพื่อปลดล็อกการใช้งานและเข้าสู่ระบบออโตเมชัน</p>
         </div>
-        <label>Available Profiles <span id="portStatusBadge" class="status-badge offline">Checking...</span></label>
-        <select id="profileSelect"></select>
+        <div>
+          <span id="portStatusBadge" class="status-badge offline">Checking...</span>
+        </div>
+      </div>
 
-        <div class="row wrap">
-          <button id="launchProfile">Launch Selected</button>
-          <button id="setProfile" class="secondary">Set as default</button>
-          <button id="editProfileBtn" class="secondary">Edit Selected</button>
+      <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 250px;">
+          <label style="font-size: 0.95rem; margin-bottom: 8px;">Select Available Profile</label>
+          <select id="profileSelect" style="padding: 12px; font-size: 1rem; border-radius: 12px; margin-bottom: 0;"></select>
         </div>
-        <p id="profileMsg" class="msg"></p>
-      </section>
 
-      <section class="card right-col">
-        <h2>Custom Prompt Dispatcher</h2>
-        <div id="promptList" class="prompt-list"></div>
-        <div class="row">
-          <button id="addPrompt" class="secondary">+ Add Prompt</button>
-          <button id="savePrompts">Save Prompts</button>
+        <div style="display: flex; flex-direction: column; gap: 10px; flex: 1.2; min-width: 320px; justify-content: center;">
+          <div style="display: flex; gap: 10px; width: 100%;">
+            <button id="launchProfile" style="flex: 2; padding: 12px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #7f5cff, #3aa0ff);">🚀 Launch Profile & Open Dashboard</button>
+            <button id="setProfile" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem;">Set Default</button>
+          </div>
+          
+          <div style="display: flex; gap: 10px; width: 100%;">
+            <button id="editProfileBtn" class="secondary" style="flex: 1; padding: 10px; font-size: 0.85rem;">Edit Profile</button>
+            <button id="addProfileBtn" class="secondary" style="flex: 1; padding: 10px; font-size: 0.85rem; background: rgba(72, 187, 120, 0.1); border-color: rgba(72, 187, 120, 0.2); color: #48bb78;">+ Add Profile</button>
+          </div>
         </div>
-        <p id="dispatchMsg" class="msg"></p>
-      </section>
-    </div>
+      </div>
+      <p id="profileMsg" class="msg" style="margin: 12px 0 0; min-height: auto; font-size: 0.88rem; text-align: center;"></p>
+    </section>
+
+    <!-- LOCKED DASHBOARD CONTENT (Disabled/Blurred unless profile is launched and active) -->
+    <div id="lockedDashboardContent" class="locked-dashboard-content locked">
+      <!-- LOCKED BANNER OVERLAY (Displayed when dashboard is locked) -->
+      <div class="locked-overlay">
+        <div class="locked-overlay-card">
+          <div class="locked-lock-icon">🔒</div>
+          <h3>Dashboard is Locked</h3>
+          <p>Please launch a Chrome Profile above to unlock all tabs and tools.</p>
+        </div>
+      </div>
+
+      <div class="tabs-container">
+        <button id="tabBrowserBtn" class="tab-btn active">🌐 Browser Manager</button>
+        <button id="tabImageGenBtn" class="tab-btn">🖼️ Image Generation</button>
+        <button id="tabWorkflowBtn" class="tab-btn">🤖 Workflow Bot</button>
+      </div>
+
+      <!-- VIEW 1: BROWSER MANAGER -->
+      <div id="browserManagerView" class="tab-view">
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          <section class="card" style="width: 100%;">
+            <h2>Custom Prompt Dispatcher</h2>
+            <p class="section-subtitle">พิมพ์คำสั่งของคุณเพื่อสั่งการแท็บเบราว์เซอร์ที่เปิดอยู่อย่างรวดเร็ว</p>
+            <div id="promptList" class="prompt-list"></div>
+            <div class="row">
+              <button id="addPrompt" class="secondary">+ Add Prompt</button>
+              <button id="savePrompts">Save Prompts</button>
+            </div>
+            <p id="dispatchMsg" class="msg"></p>
+          </section>
+        </div>
+      </div>
+
+      <!-- VIEW 2: IMAGE GENERATION -->
+      <div id="imageGenView" class="tab-view hidden">
+        <div class="layout-grid workflow-grid">
+          <!-- Configuration Column -->
+          <section class="card">
+            <h2 class="section-title">🎨 Generation Prompts</h2>
+            <p class="section-subtitle">เพิ่ม/ลด พรอพต์ที่ต้องการส่งไปเจเนอเรทภาพเป็นชุด</p>
+            
+            <div id="imagePromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
+            <div class="row">
+              <button id="addImagePromptBtn" class="secondary">+ Add Prompt</button>
+              <button id="saveImagePromptsBtn">Save Prompts</button>
+            </div>
+            <p id="imagePromptMsg" class="msg"></p>
+          </section>
+
+          <!-- Actions Column -->
+          <div class="actions-column">
+            <section class="card steps-card">
+              <h2 class="section-title">🤖 Image Generation Cockpit</h2>
+              <p class="section-subtitle">รันการเจเนอเรทภาพเป็นชุดบน Gemini หรือจำลองด้วย ChatGPT</p>
+
+              <div style="display: flex; gap: 12px; margin-top: 12px;">
+                <button class="step-action-btn gemini-btn" id="btn_step3_gemini" style="width: 50%; padding: 14px; font-size: 1rem;">Gemini (Bulk Gen)</button>
+                <button class="step-action-btn secondary" id="btn_step3_chatgpt" style="width: 50%; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366);">ChatGPT (Mockup)</button>
+              </div>
+            </section>
+
+            <!-- Console Card -->
+            <section class="card console-card">
+              <div class="console-header">
+                <h3>📟 Generation Logs Console</h3>
+                <button id="clearImageConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
+              </div>
+              <div id="imageConsole" class="console-box">
+                <div class="console-line system">Waiting for generation to start...</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 3: WORKFLOW BOT -->
+      <div id="workflowBotView" class="tab-view hidden">
+        <div class="layout-grid workflow-grid">
+          <!-- Configuration Column -->
+          <section class="card">
+            <h2 class="section-title">⚙️ Settings</h2>
+            
+            <div class="settings-form">
+              <div class="form-group">
+                <label for="cfg_folder_name">Folder Name (ชื่อโฟลเดอร์งาน)</label>
+                <input id="cfg_folder_name" placeholder="เช่น Cute Animal Clipart" />
+              </div>
+
+              <div class="form-group">
+                <label for="cfg_local_path">Local Path (ที่เก็บงานในเครื่อง)</label>
+                <input id="cfg_local_path" placeholder="เช่น C:\Files\Project\local work" />
+              </div>
+
+              <div class="form-group">
+                <label for="cfg_remote_path">Remote Path (ที่เก็บงานบน Drive)</label>
+                <input id="cfg_remote_path" placeholder="เช่น G:\My Drive\Projects\work" />
+              </div>
+
+              <div class="form-group row" style="align-items: center; margin-top: 10px;">
+                <input id="cfg_focus_browser_tabs" type="checkbox" style="width: auto; margin-bottom: 0; margin-right: 8px;" />
+                <label for="cfg_focus_browser_tabs" style="margin: 0; user-select: none;">Focus Browser Tabs automatically during actions</label>
+              </div>
+
+              <button id="saveConfigBtn" class="primary-btn" style="width: 100%; margin-top: 12px;">Save Config</button>
+              <p id="configMsg" class="msg" style="text-align: center; margin-top: 8px;"></p>
+            </div>
+          </section>
+
+          <!-- Actions Column -->
+          <div class="actions-column">
+            <!-- Automation Stepper Card -->
+            <section class="card steps-card">
+              <h2 class="section-title">🤖 Automation Control Cockpit</h2>
+              <p class="section-subtitle">กดคลิกเพื่อรันขั้นตอนต่างๆ ตามลำดับ workflow ของคุณ</p>
+
+              <div class="steps-container">
+                <!-- Group 1: Setup and Gen -->
+                <div class="steps-group">
+                  <div class="group-header">🎨 Phase 1: Setup & Data Ingestion</div>
+                  <div class="steps-inner-grid">
+                    <!-- Step 1 -->
+                    <div class="step-box">
+                      <span class="step-num">Step 1</span>
+                      <h4>สร้างโฟลเดอร์</h4>
+                      <button class="step-action-btn" id="btn_step2">Create Folders</button>
+                    </div>
+                    <!-- Step 2 -->
+                    <div class="step-box step-span-2">
+                      <span class="step-num">Step 2</span>
+                      <h4>จัดเก็บรูปภาพ</h4>
+                      <button class="step-action-btn" id="btn_step4">Download Images</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Group 2: Downloads & Extraction -->
+                <div class="steps-group">
+                  <div class="group-header">📂 Phase 2: Processing & Integration</div>
+                  <div class="steps-inner-grid">
+                    <!-- Step 3 -->
+                    <div class="step-box">
+                      <span class="step-num">Step 3</span>
+                      <h4>แตกไฟล์ Zip</h4>
+                      <button class="step-action-btn" id="btn_step12">Unzip Downloads</button>
+                    </div>
+                    <!-- Step 4 -->
+                    <div class="step-box">
+                      <span class="step-num">Step 4</span>
+                      <h4>รวบรวมไฟล์</h4>
+                      <button class="step-action-btn" id="btn_step13">Download to Local</button>
+                    </div>
+                    <!-- Step 5 -->
+                    <div class="step-box">
+                      <span class="step-num">Step 5</span>
+                      <h4>สำรองไฟล์ขึ้น Drive</h4>
+                      <button class="step-action-btn drive-btn" id="btn_step14">Local to Remote</button>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </section>
+
+            <!-- Console Card -->
+            <section class="card console-card">
+              <div class="console-header">
+                <h3>📟 Real-Time Logs Console</h3>
+                <button id="clearConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
+              </div>
+              <div id="ddcmConsole" class="console-box">
+                <div class="console-line system">Waiting for execution to start...</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div> <!-- Close lockedDashboardContent -->
   </main>
+
 
   <div id="settingsModal" class="modal hidden">
     <div class="modal-card">

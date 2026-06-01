@@ -167,8 +167,22 @@ function promptRowTemplate(text = '') {
       <button class="secondary delete-btn" type="button">Delete</button>
     </div>
   `;
+
+  const textarea = row.querySelector('.prompt-input');
+  const sendBtns = row.querySelectorAll('.send-btn');
+
+  const updateBtnState = () => {
+    const hasText = textarea.value.trim().length > 0;
+    sendBtns.forEach(btn => {
+      btn.disabled = !hasText;
+    });
+  };
+
+  textarea.addEventListener('input', updateBtnState);
+  updateBtnState(); // Initial call
+
   row.querySelector('.delete-btn').addEventListener('click', () => row.remove());
-  row.querySelectorAll('.send-btn').forEach(btn => btn.addEventListener('click', () => dispatchSinglePrompt(row, btn.dataset.target, btn)));
+  sendBtns.forEach(btn => btn.addEventListener('click', () => dispatchSinglePrompt(row, btn.dataset.target, btn)));
   return row;
 }
 
@@ -232,27 +246,53 @@ async function updatePortStatus() {
   if (!badge) return;
 
   const select = document.getElementById('profileSelect');
+  const launchBtn = document.getElementById('launchProfile');
+  const lockedDash = document.getElementById('lockedDashboardContent');
+
   if (!select || !select.value) {
     badge.textContent = 'No Profile';
     badge.className = 'status-badge offline';
+    if (lockedDash) lockedDash.classList.add('locked');
     return;
   }
 
   const selected = profileCache.find(x => x.name === select.value);
   const port = selected ? selected.debug_port : 9222;
 
+  let isOnline = false;
   try {
     const data = await jsonFetch(`/api/profiles/status?port=${port}`);
-    if (data.online) {
-      badge.textContent = `Online (Port ${port})`;
-      badge.className = 'status-badge online';
-    } else {
-      badge.textContent = `Offline (Port ${port})`;
-      badge.className = 'status-badge offline';
-    }
+    isOnline = !!data.online;
   } catch (e) {
+    isOnline = false;
+  }
+
+  if (isOnline) {
+    badge.textContent = `Online (Port ${port})`;
+    badge.className = 'status-badge online';
+    
+    // Unlock entry and show dashboard content
+    if (lockedDash) lockedDash.classList.remove('locked');
+    if (select) select.disabled = true;
+
+    if (launchBtn) {
+      launchBtn.disabled = true;
+      launchBtn.textContent = 'Profile Running';
+      launchBtn.style.background = 'rgba(72, 187, 120, 0.4)';
+    }
+  } else {
     badge.textContent = `Offline (Port ${port})`;
     badge.className = 'status-badge offline';
+    
+    // Lock entry and hide dashboard content
+    if (lockedDash) lockedDash.classList.add('locked');
+    if (select) select.disabled = false;
+
+    if (launchBtn) {
+      launchBtn.disabled = false;
+      launchBtn.textContent = '🚀 Launch Profile & Open Dashboard';
+      launchBtn.style.background = '';
+    }
   }
 }
 
@@ -334,11 +374,30 @@ function initModal() {
   document.getElementById('closeProfileModal').addEventListener('click', () => pModal.classList.add('hidden'));
 }
 
+async function disconnectProfile() {
+  const msg = document.getElementById('profileMsg');
+  if (msg) {
+    msg.classList.remove('error');
+    msg.textContent = 'Disconnecting profile...';
+  }
+  try {
+    await jsonFetch('/api/profiles/close', { method: 'POST' });
+    if (msg) msg.textContent = 'Chrome profile disconnected successfully.';
+    await updatePortStatus();
+  } catch (e) {
+    if (msg) {
+      msg.textContent = e.message;
+      msg.classList.add('error');
+    }
+  }
+}
+
 document.getElementById('saveSettings').addEventListener('click', saveSettings);
 document.getElementById('createProfile').addEventListener('click', createProfile);
 document.getElementById('updateProfile').addEventListener('click', updateProfile);
 document.getElementById('setProfile').addEventListener('click', setDefaultProfile);
 document.getElementById('launchProfile').addEventListener('click', launchProfile);
+document.getElementById('disconnectProfileBtn').addEventListener('click', disconnectProfile);
 document.getElementById('addPrompt').addEventListener('click', () => document.getElementById('promptList').appendChild(promptRowTemplate('')));
 document.getElementById('savePrompts').addEventListener('click', savePrompts);
 document.getElementById('profileSelect').addEventListener('change', () => {
@@ -347,10 +406,360 @@ document.getElementById('profileSelect').addEventListener('change', () => {
   updatePortStatus();
 });
 
+// --- Workflow Tab and API integrations ---
+
+// Tab Switching
+function initTabNavigation() {
+  const btnBrowser = document.getElementById('tabBrowserBtn');
+  const btnImageGen = document.getElementById('tabImageGenBtn');
+  const btnWorkflow = document.getElementById('tabWorkflowBtn');
+  
+  const viewBrowser = document.getElementById('browserManagerView');
+  const viewImageGen = document.getElementById('imageGenView');
+  const viewWorkflow = document.getElementById('workflowBotView');
+
+  btnBrowser.addEventListener('click', () => {
+    btnBrowser.classList.add('active');
+    btnImageGen.classList.remove('active');
+    btnWorkflow.classList.remove('active');
+    
+    viewBrowser.classList.remove('hidden');
+    viewImageGen.classList.add('hidden');
+    viewWorkflow.classList.add('hidden');
+  });
+
+  btnImageGen.addEventListener('click', () => {
+    btnImageGen.classList.add('active');
+    btnBrowser.classList.remove('active');
+    btnWorkflow.classList.remove('active');
+    
+    viewImageGen.classList.remove('hidden');
+    viewBrowser.classList.add('hidden');
+    viewWorkflow.classList.add('hidden');
+    
+    loadImagePrompts();
+  });
+
+  btnWorkflow.addEventListener('click', () => {
+    btnWorkflow.classList.add('active');
+    btnBrowser.classList.remove('active');
+    btnImageGen.classList.remove('active');
+    
+    viewWorkflow.classList.remove('hidden');
+    viewBrowser.classList.add('hidden');
+    viewImageGen.classList.add('hidden');
+    
+    loadConfig();
+  });
+}
+
+// Load and populate configuration
+async function loadConfig() {
+  try {
+    const config = await jsonFetch('/api/config');
+    document.getElementById('cfg_folder_name').value = config.folder_name || '';
+    document.getElementById('cfg_local_path').value = config.local_path || '';
+    document.getElementById('cfg_remote_path').value = config.remote_path || '';
+    document.getElementById('cfg_focus_browser_tabs').checked = !!config.focus_browser_tabs;
+  } catch (e) {
+    writeConsoleLine(`Failed to load config: ${e.message}`, 'error', 'ddcmConsole');
+  }
+}
+
+// Gather config values from inputs
+function gatherConfigData() {
+  return {
+    folder_name: document.getElementById('cfg_folder_name').value.trim(),
+    local_path: document.getElementById('cfg_local_path').value.trim(),
+    remote_path: document.getElementById('cfg_remote_path').value.trim(),
+    focus_browser_tabs: document.getElementById('cfg_focus_browser_tabs').checked,
+  };
+}
+
+// Save config
+async function saveConfig() {
+  const msg = document.getElementById('configMsg');
+  msg.classList.remove('error');
+  msg.textContent = 'Saving...';
+  try {
+    const currentConfig = await jsonFetch('/api/config');
+    const payload = { ...currentConfig, ...gatherConfigData() };
+    await jsonFetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    msg.textContent = 'Config saved successfully!';
+    writeConsoleLine('Configuration saved successfully.', 'success', 'ddcmConsole');
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.classList.add('error');
+    writeConsoleLine(`Failed to save config: ${e.message}`, 'error', 'ddcmConsole');
+  }
+}
+
+// Dynamic Prompt Rows for Tab 2 Image Generation
+function imagePromptRowTemplate(text = '') {
+  const row = document.createElement('div');
+  row.className = 'prompt-row';
+  row.style.display = 'flex';
+  row.style.gap = '10px';
+  row.style.alignItems = 'center';
+  row.style.background = 'rgba(15, 21, 48, 0.4)';
+  row.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+  row.style.borderRadius = '10px';
+  row.style.padding = '8px 12px';
+  
+  row.innerHTML = `
+    <textarea class="image-prompt-input" rows="2" style="margin-bottom:0; flex-grow:1;" placeholder="เช่น A cute baby lion, isolated background...">${text.replace(/</g, '&lt;')}</textarea>
+    <button class="secondary delete-btn" style="padding: 8px 12px; margin-bottom: 0;" type="button">Delete</button>
+  `;
+  row.querySelector('.delete-btn').addEventListener('click', () => {
+    row.remove();
+  });
+  return row;
+}
+
+async function loadImagePrompts() {
+  try {
+    const config = await jsonFetch('/api/config');
+    const list = document.getElementById('imagePromptList');
+    list.innerHTML = '';
+    const prompts = config.image_prompts || [''];
+    for (const p of prompts) {
+      list.appendChild(imagePromptRowTemplate(p));
+    }
+  } catch (e) {
+    writeConsoleLine(`Failed to load prompts: ${e.message}`, 'error', 'imageConsole');
+  }
+}
+
+async function saveImagePrompts() {
+  const msg = document.getElementById('imagePromptMsg');
+  msg.classList.remove('error');
+  msg.textContent = 'Saving...';
+  try {
+    const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
+    const currentConfig = await jsonFetch('/api/config');
+    const payload = { ...currentConfig, image_prompts: prompts };
+    await jsonFetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    msg.textContent = 'Prompts saved successfully!';
+    writeConsoleLine('Image generation prompts saved successfully.', 'success', 'imageConsole');
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.classList.add('error');
+    writeConsoleLine(`Failed to save prompts: ${e.message}`, 'error', 'imageConsole');
+  }
+}
+
+// Write line to terminal console
+function writeConsoleLine(text, type = 'info', consoleId = 'ddcmConsole') {
+  const consoleBox = document.getElementById(consoleId);
+  if (!consoleBox) return;
+
+  const line = document.createElement('div');
+  line.className = `console-line ${type}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+  consoleBox.appendChild(line);
+  consoleBox.scrollTop = consoleBox.scrollHeight;
+}
+
+// SSE Logging Stream setup
+let logSource = null;
+function setupLogStream() {
+  if (logSource) {
+    logSource.close();
+  }
+  
+  logSource = new EventSource('/logs');
+  
+  logSource.addEventListener('status', (e) => {
+    writeConsoleLine(`Log system status: ${e.data}`, 'system', 'ddcmConsole');
+  });
+
+  logSource.addEventListener('log', (e) => {
+    const txt = e.data;
+    const type = (txt.toLowerCase().includes('error') || txt.toLowerCase().includes('failed') || txt.toLowerCase().includes('exception')) ? 'error' :
+                 (txt.toLowerCase().includes('success') || txt.toLowerCase().includes('completed') || txt.toLowerCase().includes('successfully') || txt.toLowerCase().includes('done') || txt.toLowerCase().includes('finish')) ? 'success' : 'info';
+    
+    writeConsoleLine(txt, type, 'ddcmConsole');
+    // Also mirror logs to imageConsole if it's active
+    if (document.getElementById('imageGenView').classList.contains('active') || !document.getElementById('imageGenView').classList.contains('hidden')) {
+      writeConsoleLine(txt, type, 'imageConsole');
+    }
+  });
+
+  logSource.addEventListener('ping', () => {
+    // heartbeat
+  });
+
+  logSource.onerror = () => {
+    writeConsoleLine('SSE connection lost. Reconnecting...', 'error', 'ddcmConsole');
+  };
+}
+
+// Trigger automation step
+async function executeStep(stepEndpoint, payload = {}, btnElement = null, consoleId = 'ddcmConsole') {
+  if (btnElement) {
+    btnElement.classList.add('loading');
+    btnElement.disabled = true;
+  }
+  
+  try {
+    writeConsoleLine(`Executing action: ${stepEndpoint}...`, 'system', consoleId);
+    const response = await jsonFetch(stepEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (response.ok) {
+      writeConsoleLine(`Action completed: ${stepEndpoint}`, 'success', consoleId);
+    } else {
+      writeConsoleLine(`Action response: ${JSON.stringify(response)}`, 'info', consoleId);
+    }
+  } catch (e) {
+    writeConsoleLine(`Action failed: ${e.message}`, 'error', consoleId);
+  } finally {
+    if (btnElement) {
+      btnElement.classList.remove('loading');
+      btnElement.disabled = false;
+    }
+  }
+}
+
+// Initialize steps listeners
+function initWorkflowActionListeners() {
+  document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
+  document.getElementById('clearConsoleBtn').addEventListener('click', () => {
+    const consoleBox = document.getElementById('ddcmConsole');
+    if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
+  });
+
+  document.getElementById('clearImageConsoleBtn').addEventListener('click', () => {
+    const consoleBox = document.getElementById('imageConsole');
+    if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
+  });
+
+  document.getElementById('addImagePromptBtn').addEventListener('click', () => {
+    document.getElementById('imagePromptList').appendChild(imagePromptRowTemplate(''));
+  });
+
+  document.getElementById('saveImagePromptsBtn').addEventListener('click', saveImagePrompts);
+
+  // Step 1
+  document.getElementById('btn_step2').addEventListener('click', (e) => {
+    const config = gatherConfigData();
+    executeStep('/api/step/2', {
+      folder_name: config.folder_name,
+      local_path: config.local_path,
+      remote_path: config.remote_path
+    }, e.target, 'ddcmConsole');
+  });
+
+  // Step 2 Gemini (Bulk loop)
+  document.getElementById('btn_step3_gemini').addEventListener('click', async (e) => {
+    const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
+    if (prompts.length === 0) {
+      writeConsoleLine('Error: No prompts entered. Please add at least one prompt.', 'error', 'imageConsole');
+      return;
+    }
+
+    const btn = e.target;
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    writeConsoleLine(`Bulk Generation: Starting loop over ${prompts.length} prompts on Gemini...`, 'system', 'imageConsole');
+
+    for (let i = 0; i < prompts.length; i++) {
+      const p = prompts[i];
+      writeConsoleLine(`[${i + 1}/${prompts.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
+      
+      try {
+        await executeStep('/api/step/3', { prompt: p }, null, 'imageConsole');
+        writeConsoleLine(`[${i + 1}/${prompts.length}] Completed successfully!`, 'success', 'imageConsole');
+      } catch (err) {
+        writeConsoleLine(`[${i + 1}/${prompts.length}] Failed: ${err.message}`, 'error', 'imageConsole');
+      }
+      
+      // Delay briefly between prompts to allow browser tab settling
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    writeConsoleLine('Bulk Generation: Completed all loop operations!', 'success', 'imageConsole');
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  });
+
+  // Step 2 ChatGPT (Mockup bulk loop)
+  document.getElementById('btn_step3_chatgpt').addEventListener('click', async (e) => {
+    const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
+    if (prompts.length === 0) {
+      writeConsoleLine('Error: No prompts entered. Please add at least one prompt.', 'error', 'imageConsole');
+      return;
+    }
+
+    const btn = e.target;
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    writeConsoleLine(`Bulk Generation (Mockup): Starting loop over ${prompts.length} prompts on ChatGPT...`, 'system', 'imageConsole');
+
+    for (let i = 0; i < prompts.length; i++) {
+      const p = prompts[i];
+      writeConsoleLine(`[${i + 1}/${prompts.length}] (Mockup) Sending prompt: "${p}"`, 'info', 'imageConsole');
+      await new Promise(r => setTimeout(r, 1200));
+      writeConsoleLine(`[${i + 1}/${prompts.length}] (Mockup) Completed successfully!`, 'success', 'imageConsole');
+    }
+
+    writeConsoleLine('Bulk Generation (Mockup): Completed all loop operations!', 'success', 'imageConsole');
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  });
+
+  // Step 3 (Download Images)
+  document.getElementById('btn_step4').addEventListener('click', (e) => {
+    executeStep('/api/step/4', {}, e.target, 'ddcmConsole');
+  });
+
+  // Step 4 (Unzip)
+  document.getElementById('btn_step12').addEventListener('click', (e) => {
+    executeStep('/api/step/12', {}, e.target, 'ddcmConsole');
+  });
+
+  // Step 5 (Reroute files)
+  document.getElementById('btn_step13').addEventListener('click', (e) => {
+    const config = gatherConfigData();
+    executeStep('/api/step/13', {
+      folder_name: config.folder_name,
+      local_path: config.local_path
+    }, e.target, 'ddcmConsole');
+  });
+
+  // Step 6 (Backup files)
+  document.getElementById('btn_step14').addEventListener('click', (e) => {
+    const config = gatherConfigData();
+    executeStep('/api/step/14-no-elements', {
+      folder_name: config.folder_name,
+      local_path: config.local_path,
+      remote_path: config.remote_path
+    }, e.target, 'ddcmConsole');
+  });
+}
+
+// Initial setup on load
 initModal();
 loadSettings();
 loadProfiles();
 loadPrompts();
+initTabNavigation();
+initWorkflowActionListeners();
+setupLogStream();
 
 // Start periodic real-time status check every 3 seconds
 setInterval(updatePortStatus, 3000);
+

@@ -1,9 +1,9 @@
 {
-  "selected_profile": "Generate Affiliate",
+  "selected_profile": "Generate Image Dino",
   "profiles": [
     {
-      "name": "Generate Affiliate",
-      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Generate Affiliate",
+      "name": "Generate Image Dino",
+      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Generate Image Dino",
       "debug_port": 9222,
       "startup_urls": [
         "https://gemini.google.com/app",
