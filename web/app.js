@@ -495,7 +495,6 @@ document.getElementById('updateProfile').addEventListener('click', updateProfile
 document.getElementById('setProfile').addEventListener('click', setDefaultProfile);
 document.getElementById('launchProfile').addEventListener('click', launchProfile);
 document.getElementById('deleteProfileBtn').addEventListener('click', deleteProfile);
-document.getElementById('disconnectProfileBtn').addEventListener('click', disconnectProfile);
 document.getElementById('addPrompt').addEventListener('click', () => document.getElementById('promptList').appendChild(promptRowTemplate('')));
 document.getElementById('savePrompts').addEventListener('click', savePrompts);
 document.getElementById('profileSelect').addEventListener('change', () => {
