@@ -905,43 +905,9 @@ function initWorkflowActionListeners() {
   });
 }
 
-// Parse batch import file content
-function parseImportedPrompts(text, filename) {
-  const ext = filename.split('.').pop().toLowerCase();
-  let prompts = [];
-
-  if (ext === 'json') {
-    try {
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) {
-        prompts = parsed.map(x => (typeof x === 'object' ? JSON.stringify(x) : String(x).trim())).filter(Boolean);
-      } else if (parsed && typeof parsed === 'object') {
-        const potentialArray = parsed.prompts || parsed.list || parsed.data || Object.values(parsed);
-        if (Array.isArray(potentialArray)) {
-          prompts = potentialArray.map(x => (typeof x === 'object' ? JSON.stringify(x) : String(x).trim())).filter(Boolean);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to parse JSON prompt import:', e);
-    }
-  } else if (ext === 'csv') {
-    // Simple robust CSV parser handling quotes
-    const lines = text.split(/\r?\n/);
-    for (let line of lines) {
-      line = line.trim();
-      if (!line) continue;
-      // Handle simple comma separation & remove surrounding quotes
-      const cells = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => {
-        return cell.trim().replace(/^["']|["']$/g, '').replace(/""/g, '"');
-      }).filter(Boolean);
-      prompts.push(...cells);
-    }
-  } else {
-    // TXT format - newline separated
-    prompts = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-  }
-
-  return prompts;
+// Parse batch import file content (TXT only, newline separated)
+function parseImportedPrompts(text) {
+  return text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
 }
 
 function initFileImports() {
@@ -956,7 +922,7 @@ function initFileImports() {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const text = e.target.result;
-        const prompts = parseImportedPrompts(text, file.name);
+        const prompts = parseImportedPrompts(text);
 
         if (prompts.length === 0) {
           showToast('No valid prompts found in the file.', 'error');
