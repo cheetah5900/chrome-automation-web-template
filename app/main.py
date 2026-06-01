@@ -72,6 +72,10 @@ class SelectProfilePayload(BaseModel):
     name: str
 
 
+class DeleteProfilePayload(BaseModel):
+    name: str
+
+
 class LaunchProfilePayload(BaseModel):
     name: str
 
@@ -273,6 +277,49 @@ def create_profile(payload: CreateProfilePayload):
     _write_json(PROFILES_FILE, data)
     _write_json(DEFAULTS_FILE, {"selected_profile": data["selected_profile"], "theme": "sunset-glass"})
     return {"ok": True, "profile": profile_obj}
+
+
+@app.post("/api/profiles/delete")
+def delete_profile(payload: DeleteProfilePayload):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Profile name is required")
+        
+    data = _profiles_data()
+    profile = next((p for p in data["profiles"] if p.get("name").lower() == name.lower()), None)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+        
+    # Prevent deleting if it is the only profile left
+    if len(data["profiles"]) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the only profile. Please add another profile first.")
+        
+    # Update selected profile if we are deleting the active one
+    if data.get("selected_profile") == name:
+        # Select another profile
+        remaining = [p for p in data["profiles"] if p.get("name").lower() != name.lower()]
+        data["selected_profile"] = remaining[0]["name"] if remaining else ""
+    
+    data["profiles"] = [p for p in data["profiles"] if p.get("name").lower() != name.lower()]
+    _write_json(PROFILES_FILE, data)
+    
+    # Clean up local profile directory under runtime/chrome-profiles (but NEVER touch the default everyday path!)
+    profile_path_str = profile.get("path", "")
+    if "chrome-profiles" in profile_path_str:
+        profile_path = Path(profile_path_str)
+        if profile_path.exists():
+            import shutil
+            try:
+                shutil.rmtree(profile_path)
+            except Exception:
+                pass
+                
+    defaults = json.loads(DEFAULTS_FILE.read_text())
+    if defaults.get("selected_profile") == name:
+        defaults["selected_profile"] = data["selected_profile"]
+        _write_json(DEFAULTS_FILE, defaults)
+        
+    return {"ok": True, "message": f"Profile '{name}' deleted successfully.", "next_profile": data["selected_profile"]}
 
 
 @app.post("/api/profiles/update")

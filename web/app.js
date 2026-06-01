@@ -447,11 +447,49 @@ async function disconnectProfile() {
   }
 }
 
+async function deleteProfile() {
+  const select = document.getElementById('profileSelect');
+  if (!select || !select.value) {
+    showToast('Please select a profile to delete.', 'error');
+    return;
+  }
+  const name = select.value;
+  if (!confirm(`Are you sure you want to delete the profile "${name}"? This action cannot be undone.`)) {
+    return;
+  }
+  const msg = document.getElementById('profileMsg');
+  if (msg) {
+    msg.classList.remove('error');
+    msg.textContent = `Deleting profile "${name}"...`;
+  }
+  try {
+    const res = await jsonFetch('/api/profiles/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    showToast(res.message, 'success');
+    if (msg) msg.textContent = res.message;
+    await loadProfiles();
+    if (select && res.next_profile) {
+      select.value = res.next_profile;
+      select.dispatchEvent(new Event('change'));
+    }
+  } catch (e) {
+    showToast(e.message, 'error');
+    if (msg) {
+      msg.textContent = e.message;
+      msg.classList.add('error');
+    }
+  }
+}
+
 document.getElementById('saveSettings').addEventListener('click', saveSettings);
 document.getElementById('createProfile').addEventListener('click', createProfile);
 document.getElementById('updateProfile').addEventListener('click', updateProfile);
 document.getElementById('setProfile').addEventListener('click', setDefaultProfile);
 document.getElementById('launchProfile').addEventListener('click', launchProfile);
+document.getElementById('deleteProfileBtn').addEventListener('click', deleteProfile);
 document.getElementById('disconnectProfileBtn').addEventListener('click', disconnectProfile);
 document.getElementById('addPrompt').addEventListener('click', () => document.getElementById('promptList').appendChild(promptRowTemplate('')));
 document.getElementById('savePrompts').addEventListener('click', savePrompts);
