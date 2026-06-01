@@ -66,13 +66,13 @@
       </div>
 
       <div class="tabs-container">
-        <button id="tabBrowserBtn" class="tab-btn active">🌐 Browser Manager</button>
-        <button id="tabImageGenBtn" class="tab-btn">🖼️ Image Generation</button>
+        <button id="tabImageGenBtn" class="tab-btn active">🖼️ Image Generation</button>
         <button id="tabWorkflowBtn" class="tab-btn">🤖 Workflow Bot</button>
+        <button id="tabBrowserBtn" class="tab-btn">🌐 Browser Manager</button>
       </div>
 
       <!-- VIEW 1: BROWSER MANAGER -->
-      <div id="browserManagerView" class="tab-view">
+      <div id="browserManagerView" class="tab-view hidden">
         <div style="display: flex; flex-direction: column; gap: 20px;">
           <section class="card" style="width: 100%;">
             <h2>Custom Prompt Dispatcher</h2>
@@ -90,7 +90,7 @@
       </div>
 
       <!-- VIEW 2: IMAGE GENERATION -->
-      <div id="imageGenView" class="tab-view hidden">
+      <div id="imageGenView" class="tab-view">
         <div class="layout-grid workflow-grid">
           <!-- Configuration Column -->
           <div style="display: flex; flex-direction: column; gap: 20px;">

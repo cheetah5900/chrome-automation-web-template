@@ -1026,6 +1026,7 @@ initModal();
 loadSettings();
 loadProfiles();
 loadPrompts();
+loadImagePrompts();
 initTabNavigation();
 initWorkflowActionListeners();
 initFileImports();
