@@ -1351,8 +1351,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             except Exception as e:
                 log(f"Keystroke Cmd + U failed: {e}")
                 
-            log("Waiting 2.0 seconds for file modal to fully open...")
-            time.sleep(2.0)
+            log("Waiting 1.0 second for file modal to fully open...")
+            time.sleep(1.0)
             
             # 5. use the same flow to select a file like the Gemini one
             def upload_macos_file_dialog(file_path):
@@ -1364,11 +1364,11 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 delay 0.5
                 tell application "System Events"
                     keystroke "g" using {{command down, shift down}}
-                    delay 1.5
+                    delay 1.0
                     keystroke "v" using {{command down}}
-                    delay 1.5
+                    delay 1.0
                     keystroke return
-                    delay 1.5
+                    delay 1.0
                     keystroke return
                 end tell
                 """
