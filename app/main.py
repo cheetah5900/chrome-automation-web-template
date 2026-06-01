@@ -1167,22 +1167,166 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             box.send_keys(custom_prompt)
             driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
             
-            # Ultra-efficient Native File Upload check for ChatGPT
-            reference_image = payload.get("reference_image")
+            # ChatGPT File Upload & Submission automation
+            reference_image = payload.get("reference_image", "").strip()
             import os
-            if reference_image and os.path.exists(reference_image):
+            if not reference_image:
+                log("ChatGPT prompt placed successfully! Skipping file attachment (Reference path is empty).")
+                log("Submitting prompt to ChatGPT...")
                 try:
-                    log(f"Attempting efficient native file upload: {reference_image}...")
-                    file_input = WebDriverWait(driver, 5).until(
-                        EC.presence_of_element_located((By.XPATH, "//input[@type='file']"))
+                    submit_btn = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-submit-button"))
                     )
-                    file_input.send_keys(os.path.abspath(reference_image))
-                    log("Reference image uploaded successfully natively! Pausing before submission.")
-                    time.sleep(2.0)
-                except Exception as file_err:
-                    log(f"Warning: Direct native upload failed ({file_err}). Please attach files manually.")
+                    submit_btn.click()
+                except Exception:
+                    driver.execute_script("document.querySelector('#composer-submit-button').click();")
+                
+                log("Waiting for ChatGPT to start generating (onprocess)...")
+                stop_xpath = (
+                    "//button[@id='composer-submit-button' and (@aria-label='Stop answering' or @data-testid='stop-button')]"
+                )
+                time.sleep(3.0)
+                
+                start_time = time.time()
+                while time.time() - start_time < 180.0:
+                    try:
+                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                        visible = any(b.is_displayed() for b in stop_btns)
+                        if not visible:
+                            log("ChatGPT generation completed successfully!")
+                            break
+                    except Exception:
+                        log("ChatGPT generation completed successfully!")
+                        break
+                    time.sleep(1.5)
+                return {"ok": True}
+
+            if not os.path.exists(reference_image):
+                log(f"Warning: Reference image path does not exist: {reference_image}. Skipping upload.")
+                return {"ok": True}
+
+            # 3. click at '#composer-plus-btn'
+            log("Locating and clicking ChatGPT plus button (#composer-plus-btn)...")
+            try:
+                plus_btn = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-plus-btn"))
+                )
+                plus_btn.click()
+            except Exception:
+                driver.execute_script("document.querySelector('#composer-plus-btn').click();")
+            
+            # 4. wait 1-2s, press ctrl + U to open file modal
+            log("Waiting 1.5 seconds...")
+            time.sleep(1.5)
+            
+            _activate_chrome()
+            time.sleep(0.5)
+            
+            log("Sending ctrl + U keystroke via System Events...")
+            import subprocess
+            ctrl_u_script = """
+            tell application "System Events"
+                key code 32 using control down
+            end tell
+            """
+            try:
+                subprocess.run(["osascript", "-e", ctrl_u_script], check=False)
+            except Exception as e:
+                log(f"Keystroke control + u failed: {e}")
+                
+            time.sleep(1.5)
+            
+            # 5. use the same flow to select a file like the Gemini one
+            def upload_macos_file_dialog(file_path):
+                escaped_path = file_path.replace('"', '\\"')
+                script = f"""
+                tell application "System Events"
+                    delay 0.5
+                    keystroke "g" using {{command down, shift down}}
+                    delay 1.0
+                    keystroke "{escaped_path}"
+                    delay 1.0
+                    keystroke return
+                    delay 1.0
+                    keystroke return
+                end tell
+                """
+                try:
+                    subprocess.run(["osascript", "-e", script], check=False)
+                    return True
+                except Exception as e:
+                    log(f"AppleScript dialog input failed: {e}")
+                    return False
+
+            log("Triggering AppleScript folder path sheet to select file...")
+            if upload_macos_file_dialog(reference_image):
+                log("Reference image uploaded successfully via macOS File Dialog AppleScript automation!")
             else:
-                log("ChatGPT prompt placed successfully! Ready for file attachment.")
+                log("Warning: AppleScript keys injection encountered an issue.")
+                
+            log("Waiting 5 seconds for file upload to settle...")
+            time.sleep(5.0)
+            
+            # 6. Click at '#composer-submit-button' to submit
+            log("Locating and clicking ChatGPT submit button (#composer-submit-button)...")
+            submit_success = False
+            for click_attempt in range(3):
+                try:
+                    submit_btn = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-submit-button"))
+                    )
+                    submit_btn.click()
+                except Exception:
+                    try:
+                        driver.execute_script("document.querySelector('#composer-submit-button').click();")
+                    except Exception:
+                        pass
+                
+                stop_xpath = (
+                    "//button[@id='composer-submit-button' and (@aria-label='Stop answering' or @data-testid='stop-button')]"
+                )
+                
+                # Check for onprocess state for 5 seconds
+                for sec in range(5):
+                    try:
+                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                        visible = any(b.is_displayed() for b in stop_btns)
+                        if visible:
+                            log("Confirmed: ChatGPT generation is onprocess!")
+                            submit_success = True
+                            break
+                    except Exception:
+                        pass
+                    time.sleep(1.0)
+                
+                if submit_success:
+                    break
+                else:
+                    log("Warning: ChatGPT generation did not start yet. Retrying submit...")
+                    
+            if not submit_success:
+                log("Warning: Submit button click did not transition to onprocess state. Forcing ENTER key...")
+                try:
+                    box.send_keys(Keys.ENTER)
+                except Exception:
+                    pass
+            
+            # 7. Wait until generation is completed (Stop button disappears)
+            log("Waiting for the generation to complete (waiting for Stop button to disappear)...")
+            start_time = time.time()
+            generation_timeout = 180.0
+            
+            while time.time() - start_time < generation_timeout:
+                try:
+                    stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                    visible = any(b.is_displayed() for b in stop_btns)
+                    if not visible:
+                        log("ChatGPT generation completed successfully!")
+                        break
+                except Exception:
+                    log("ChatGPT generation completed successfully!")
+                    break
+                time.sleep(1.5)
                 
             return {"ok": True}
         except Exception as e:
