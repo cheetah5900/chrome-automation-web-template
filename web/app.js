@@ -447,46 +447,11 @@ async function disconnectProfile() {
   }
 }
 
-async function useCurrentChrome() {
-  const msg = document.getElementById('profileMsg');
-  if (msg) {
-    msg.classList.remove('error');
-    msg.textContent = 'Restarting your daily Google Chrome in debug mode on port 9222...';
-  }
-  showToast('Closing Google Chrome and reopening in debug mode (Port 9222)... Please wait 4 seconds!', 'info');
-  try {
-    const res = await jsonFetch('/api/profiles/use-current', { method: 'POST' });
-    showToast(res.message, 'success');
-    if (msg) msg.textContent = res.message;
-    
-    // Reload profiles list from backend
-    await loadProfiles();
-    
-    // Select the "Daily Chrome" profile in the dropdown
-    const select = document.getElementById('profileSelect');
-    if (select) {
-      select.value = 'Daily Chrome';
-      select.dispatchEvent(new Event('change'));
-    }
-    
-    setTimeout(async () => {
-      await updatePortStatus();
-    }, 4000);
-  } catch (e) {
-    showToast(e.message, 'error');
-    if (msg) {
-      msg.textContent = e.message;
-      msg.classList.add('error');
-    }
-  }
-}
-
 document.getElementById('saveSettings').addEventListener('click', saveSettings);
 document.getElementById('createProfile').addEventListener('click', createProfile);
 document.getElementById('updateProfile').addEventListener('click', updateProfile);
 document.getElementById('setProfile').addEventListener('click', setDefaultProfile);
 document.getElementById('launchProfile').addEventListener('click', launchProfile);
-document.getElementById('launchCurrentChromeBtn').addEventListener('click', useCurrentChrome);
 document.getElementById('disconnectProfileBtn').addEventListener('click', disconnectProfile);
 document.getElementById('addPrompt').addEventListener('click', () => document.getElementById('promptList').appendChild(promptRowTemplate('')));
 document.getElementById('savePrompts').addEventListener('click', savePrompts);
