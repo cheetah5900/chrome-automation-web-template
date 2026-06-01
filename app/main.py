@@ -1291,10 +1291,11 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 stop_xpath = (
                     "//button[@id='composer-submit-button' and (@aria-label='Stop answering' or @data-testid='stop-button')]"
                 )
-                time.sleep(3.0)
+                log("Waiting 1.30 minutes (90 seconds) before starting status checks...")
+                time.sleep(90.0)
                 
                 start_time = time.time()
-                while time.time() - start_time < 180.0:
+                while time.time() - start_time < 90.0:
                     try:
                         stop_btns = driver.find_elements(By.XPATH, stop_xpath)
                         visible = any(b.is_displayed() for b in stop_btns)
@@ -1406,9 +1407,11 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     pass
             
             # 7. Wait until generation is completed (Stop button disappears)
-            log("Waiting for the generation to complete (waiting for Stop button to disappear)...")
+            log("Waiting 1.30 minutes (90 seconds) before starting status checks...")
+            time.sleep(90.0)
+            log("Checking if Stop button has disappeared...")
             start_time = time.time()
-            generation_timeout = 180.0
+            generation_timeout = 90.0
             
             while time.time() - start_time < generation_timeout:
                 try:
