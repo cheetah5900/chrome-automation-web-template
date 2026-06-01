@@ -905,6 +905,103 @@ function initWorkflowActionListeners() {
   });
 }
 
+// Parse batch import file content
+function parseImportedPrompts(text, filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  let prompts = [];
+
+  if (ext === 'json') {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        prompts = parsed.map(x => (typeof x === 'object' ? JSON.stringify(x) : String(x).trim())).filter(Boolean);
+      } else if (parsed && typeof parsed === 'object') {
+        const potentialArray = parsed.prompts || parsed.list || parsed.data || Object.values(parsed);
+        if (Array.isArray(potentialArray)) {
+          prompts = potentialArray.map(x => (typeof x === 'object' ? JSON.stringify(x) : String(x).trim())).filter(Boolean);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse JSON prompt import:', e);
+    }
+  } else if (ext === 'csv') {
+    // Simple robust CSV parser handling quotes
+    const lines = text.split(/\r?\n/);
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+      // Handle simple comma separation & remove surrounding quotes
+      const cells = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => {
+        return cell.trim().replace(/^["']|["']$/g, '').replace(/""/g, '"');
+      }).filter(Boolean);
+      prompts.push(...cells);
+    }
+  } else {
+    // TXT format - newline separated
+    prompts = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  }
+
+  return prompts;
+}
+
+function initFileImports() {
+  const setupImport = (inputId, listId, rowCreator, saveFunc, msgId, isImageTab = false) => {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    input.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const text = e.target.result;
+        const prompts = parseImportedPrompts(text, file.name);
+
+        if (prompts.length === 0) {
+          showToast('No valid prompts found in the file.', 'error');
+          input.value = '';
+          return;
+        }
+
+        const list = document.getElementById(listId);
+        if (!list) return;
+
+        // Clear existing empty prompts
+        const currentInputs = list.querySelectorAll(isImageTab ? '.image-prompt-input' : '.prompt-input');
+        const allEmpty = Array.from(currentInputs).every(inp => inp.value.trim() === '');
+        if (allEmpty) {
+          list.innerHTML = '';
+        }
+
+        // Add new prompt rows
+        prompts.forEach(p => {
+          list.appendChild(rowCreator(p));
+        });
+
+        // Trigger updates & save
+        if (isImageTab) {
+          updateImageGenButtonsState();
+        }
+        await saveFunc();
+
+        showToast(`Imported ${prompts.length} prompts successfully!`, 'success');
+        input.value = ''; // Reset input
+      };
+
+      reader.onerror = () => {
+        showToast('Error reading the file.', 'error');
+        input.value = '';
+      };
+
+      reader.readAsText(file);
+    });
+  };
+
+  setupImport('importPromptsFile', 'promptList', promptRowTemplate, savePrompts, 'dispatchMsg', false);
+  setupImport('importImagePromptsFile', 'imagePromptList', imagePromptRowTemplate, saveImagePrompts, 'imagePromptMsg', true);
+}
+
 // Initial setup on load
 initModal();
 loadSettings();
@@ -912,8 +1009,10 @@ loadProfiles();
 loadPrompts();
 initTabNavigation();
 initWorkflowActionListeners();
+initFileImports();
 setupLogStream();
 
 // Start periodic real-time status check every 3 seconds
 setInterval(updatePortStatus, 3000);
+
 
