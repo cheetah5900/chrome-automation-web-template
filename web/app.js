@@ -784,8 +784,12 @@ function initWorkflowActionListeners() {
         writeConsoleLine(`[${i + 1}/${prompts.length}] Failed: ${err.message}`, 'error', 'imageConsole');
       }
       
-      // Delay briefly between prompts to allow browser tab settling
-      await new Promise(r => setTimeout(r, 2000));
+      // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
+      if (i < prompts.length - 1) {
+        const randomDelay = Math.floor(Math.random() * (15 - 3 + 1)) + 3;
+        writeConsoleLine(`Human simulation: Waiting ${randomDelay} seconds before the next prompt...`, 'info', 'imageConsole');
+        await new Promise(r => setTimeout(r, randomDelay * 1000));
+      }
     }
 
     writeConsoleLine('Bulk Generation: Completed all loop operations!', 'success', 'imageConsole');
@@ -820,8 +824,12 @@ function initWorkflowActionListeners() {
         writeConsoleLine(`[${i + 1}/${prompts.length}] Failed: ${err.message}`, 'error', 'imageConsole');
       }
       
-      // Delay briefly between prompts to allow browser tab settling
-      await new Promise(r => setTimeout(r, 2000));
+      // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
+      if (i < prompts.length - 1) {
+        const randomDelay = Math.floor(Math.random() * (15 - 3 + 1)) + 3;
+        writeConsoleLine(`Human simulation: Waiting ${randomDelay} seconds before the next prompt...`, 'info', 'imageConsole');
+        await new Promise(r => setTimeout(r, randomDelay * 1000));
+      }
     }
 
     writeConsoleLine('Bulk Generation: Completed all ChatGPT loop operations!', 'success', 'imageConsole');
