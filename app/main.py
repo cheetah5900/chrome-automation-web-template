@@ -1258,15 +1258,15 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             _activate_chrome()
             time.sleep(0.5)
             
-            log("Sending ctrl + U keystroke via System Events...")
+            log("Sending Cmd + U keystroke via System Events...")
             import subprocess
-            ctrl_u_script = """
+            cmd_u_script = """
             tell application "System Events"
-                key code 32 using control down
+                key code 32 using command down
             end tell
             """
             try:
-                subprocess.run(["osascript", "-e", ctrl_u_script], check=False)
+                subprocess.run(["osascript", "-e", cmd_u_script], check=False)
             except Exception as e:
                 log(f"Keystroke control + u failed: {e}")
                 
