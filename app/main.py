@@ -341,32 +341,11 @@ def select_profile(payload: SelectProfilePayload):
 
 @app.post("/api/profiles/launch")
 async def launch_profile(payload: LaunchProfilePayload):
-    import os
     profile = _find_profile(payload.name)
 
     profile_path = profile["path"]
     debug_port = int(profile.get("debug_port", 9222))
     startup_urls = _normalize_urls(profile.get("startup_urls", []))
-
-    # If it is the Everyday Chrome profile, bypass the non-default user-data-dir check using a symlink structure
-    if profile_path == "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome":
-        import shutil
-        dev_dir = Path("/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/DailyChromeDev")
-        dev_dir.mkdir(parents=True, exist_ok=True)
-        symlink_path = dev_dir / "Default"
-        if symlink_path.exists() or symlink_path.is_symlink():
-            try:
-                if symlink_path.is_symlink() or symlink_path.is_file():
-                    symlink_path.unlink()
-                else:
-                    shutil.rmtree(symlink_path)
-            except Exception:
-                pass
-        try:
-            os.symlink("/Users/litarcopperkaikem/Library/Application Support/Google/Chrome/Default", symlink_path)
-        except Exception:
-            pass
-        profile_path = str(dev_dir)
 
     if _is_local_port_open(debug_port):
         try:
@@ -390,12 +369,20 @@ async def launch_profile(payload: LaunchProfilePayload):
             pass
 
     chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    cmd = [
-        chrome_binary,
-        f"--remote-debugging-port={debug_port}",
-        f"--user-data-dir={profile_path}",
-        *startup_urls,
-    ]
+    # Launch without --user-data-dir if it is the Everyday Chrome profile, to load untouched daily sessions directly
+    if profile_path == "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome":
+        cmd = [
+            chrome_binary,
+            f"--remote-debugging-port={debug_port}",
+            *startup_urls,
+        ]
+    else:
+        cmd = [
+            chrome_binary,
+            f"--remote-debugging-port={debug_port}",
+            f"--user-data-dir={profile_path}",
+            *startup_urls,
+        ]
 
     try:
         subprocess.Popen(cmd)
@@ -455,26 +442,8 @@ def use_current_chrome():
             break
         time.sleep(0.3)
         
-    # Construct redirect user data dir for Everyday Chrome profile (Default-only symlink)
-    daily_path = "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome"
-    dev_dir = Path("/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/DailyChromeDev")
-    dev_dir.mkdir(parents=True, exist_ok=True)
-    symlink_path = dev_dir / "Default"
-    if symlink_path.exists() or symlink_path.is_symlink():
-        try:
-            import shutil
-            if symlink_path.is_symlink() or symlink_path.is_file():
-                symlink_path.unlink()
-            else:
-                shutil.rmtree(symlink_path)
-        except Exception:
-            pass
-    try:
-        os.symlink(f"{daily_path}/Default", symlink_path)
-    except Exception:
-        pass
-
     # Inject/update "Daily Chrome" profile inside profiles.json
+    daily_path = "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome"
     data = _profiles_data()
     
     existing = next((p for p in data["profiles"] if p.get("name") == "Daily Chrome"), None)
@@ -494,12 +463,11 @@ def use_current_chrome():
     _write_json(PROFILES_FILE, data)
     _write_json(DEFAULTS_FILE, {"selected_profile": "Daily Chrome", "theme": "sunset-glass"})
         
-    # Reopen daily Chrome in debug mode with our redirect directory!
+    # Reopen daily Chrome in debug mode directly without --user-data-dir
     chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     cmd = [
         chrome_binary,
-        "--remote-debugging-port=9222",
-        f"--user-data-dir={dev_dir}"
+        "--remote-debugging-port=9222"
     ]
     try:
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
