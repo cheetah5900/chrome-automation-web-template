@@ -91,17 +91,30 @@
       <div id="imageGenView" class="tab-view hidden">
         <div class="layout-grid workflow-grid">
           <!-- Configuration Column -->
-          <section class="card">
-            <h2 class="section-title">🎨 Generation Prompts</h2>
-            <p class="section-subtitle">เพิ่ม/ลด พรอพต์ที่ต้องการส่งไปเจเนอเรทภาพเป็นชุด</p>
-            
-            <div id="imagePromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
-            <div class="row">
-              <button id="addImagePromptBtn" class="secondary">+ Add Prompt</button>
-              <button id="saveImagePromptsBtn">Save Prompts</button>
-            </div>
-            <p id="imagePromptMsg" class="msg"></p>
-          </section>
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Reference Image Section (Dedicated card) -->
+            <section class="card" style="padding: 20px;">
+              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 4px;">🖼️ Reference Image</h2>
+              <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">ระบุพาทของรูปภาพอ้างอิงเพื่อส่งไปพร้อมกับพรอพต์สร้างภาพ (ถ้ามี)</p>
+              <div class="form-group" style="margin-bottom: 0; display: flex; gap: 10px; align-items: center;">
+                <input id="cfg_reference_image" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex-grow: 1;" />
+                <button id="setRefImageDefaultBtn" class="secondary" style="padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">Set Default</button>
+              </div>
+            </section>
+
+            <!-- Generation Prompts Section -->
+            <section class="card">
+              <h2 class="section-title">🎨 Generation Prompts</h2>
+              <p class="section-subtitle">เพิ่ม/ลด พรอพต์ที่ต้องการส่งไปเจเนอเรทภาพเป็นชุด</p>
+              
+              <div id="imagePromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
+              <div class="row">
+                <button id="addImagePromptBtn" class="secondary">+ Add Prompt</button>
+                <button id="saveImagePromptsBtn">Save Prompts</button>
+              </div>
+              <p id="imagePromptMsg" class="msg"></p>
+            </section>
+          </div>
 
           <!-- Actions Column -->
           <div class="actions-column">
@@ -290,6 +303,9 @@
       <p id="modalProfileMsg" class="msg"></p>
     </div>
   </div>
+
+  <!-- Toast Notifications Container -->
+  <div id="toastContainer" class="toast-container"></div>
 
   <script src="/web/app.js"></script>
 </body>

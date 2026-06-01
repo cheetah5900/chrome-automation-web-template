@@ -18,6 +18,7 @@ DEFAULTS_FILE = RUNTIME_DIR / "defaults.json"
 PROFILES_FILE = RUNTIME_DIR / "profiles.json"
 SETTINGS_FILE = RUNTIME_DIR / "settings.json"
 PROMPTS_FILE = RUNTIME_DIR / "prompts.json"
+REF_IMAGE_DEFAULT_FILE = RUNTIME_DIR / "ref_image_default.json"
 
 RUNTIME_DIR.mkdir(exist_ok=True)
 
@@ -31,6 +32,7 @@ _ensure_json(DEFAULTS_FILE, {"selected_profile": "", "theme": "sunset-glass"})
 _ensure_json(PROFILES_FILE, {"selected_profile": "", "profiles": []})
 _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openrouter_api_key": ""})
 _ensure_json(PROMPTS_FILE, {"prompts": [""]})
+_ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": ""})
 
 app = FastAPI(title="Chrome Automation Template")
 app.add_middleware(
@@ -165,6 +167,22 @@ def save_settings(payload: SaveSettingsPayload):
     data = payload.model_dump()
     _write_json(SETTINGS_FILE, data)
     return {"ok": True, "message": "Saved runtime/settings.json", "data": data}
+
+
+@app.get("/api/config/reference-image/default")
+def get_ref_image_default():
+    return _read_json(REF_IMAGE_DEFAULT_FILE)
+
+
+class RefImageDefaultPayload(BaseModel):
+    reference_image: str
+
+
+@app.post("/api/config/reference-image/default")
+def save_ref_image_default(payload: RefImageDefaultPayload):
+    data = payload.model_dump()
+    _write_json(REF_IMAGE_DEFAULT_FILE, data)
+    return {"ok": True, "message": "Saved default reference image", "data": data}
 
 
 @app.get("/api/profiles")
@@ -857,11 +875,20 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
             bot = browser_manager.get()
             driver = bot.driver
             
+            # Check if Gemini is open, if not open a new tab natively via webdriver protocol (immune to popup blockers)
             if not bot.switch_to_tab_containing("gemini.google.com"):
-                log("Gemini tab not found, opening...")
-                driver.execute_script("window.open('https://gemini.google.com/app', '_blank');")
-                time.sleep(3.0)
-                bot.switch_to_tab_containing("gemini.google.com")
+                log("Gemini tab not found, opening natively in new tab...")
+                try:
+                    driver.switch_to.new_window('tab')
+                    driver.get("https://gemini.google.com/app")
+                    time.sleep(3.0)
+                except Exception:
+                    driver.get("https://gemini.google.com/app")
+                    time.sleep(3.0)
+                    
+            # Strictly verify we are on the Gemini page before sending input!
+            if "gemini.google.com" not in driver.current_url:
+                raise RuntimeError("Failed to switch to Gemini tab. Please open it manually.")
             
             input_strats = [
                 "//div[contains(@class, 'ql-editor') and @contenteditable='true']",
@@ -887,26 +914,280 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                 
             driver.execute_script(
                 "if(arguments[0].textContent !== undefined) { arguments[0].textContent = ''; } else { arguments[0].innerText = ''; }",
-                box,
+                box
             )
             box.send_keys(custom_prompt)
-            box.send_keys(Keys.ENTER)
-            time.sleep(3)
+            driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
             
-            st_xp = "//mat-icon[contains(@data-mat-icon-name, 'stop') or @fonticon='stop']"
-            el = 0
-            while el < 120:
+            # Check if reference image is provided
+            reference_image = payload.get("reference_image", "").strip()
+            import os
+            if not reference_image:
+                log("Gemini prompt placed successfully! Skipping file attachment (Reference path is empty).")
+                return {"ok": True}
+                
+            # If reference image is specified, proceed with automation to open modal and upload via AppleScript
+            if not os.path.exists(reference_image):
+                log(f"Warning: Reference image path does not exist: {reference_image}. Skipping upload.")
+                return {"ok": True}
+                
+            # Helper local function to click with 3 retries and 5s interval
+            def click_element_with_retry(selectors, name):
+                combined_selector = ", ".join(selectors)
+                for attempt in range(3):
+                    log(f"Attempt {attempt + 1}/3 to locate and click {name}...")
+                    try:
+                        el = WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.CSS_SELECTOR, combined_selector)))
+                        if el.is_displayed():
+                            try:
+                                el.click()
+                            except Exception:
+                                driver.execute_script("arguments[0].click();", el)
+                            log(f"Successfully clicked {name}!")
+                            return True
+                    except Exception as e:
+                        pass
+                    
+                    if attempt < 2:
+                        log(f"Failed to click {name}. Waiting 1.5 seconds before next attempt...")
+                        time.sleep(1.5)
+                
+                log(f"CRITICAL ERROR: Failed to click {name} after 3 attempts.")
+                return False
+
+            def upload_macos_file_dialog(file_path):
+                import subprocess
+                escaped_path = file_path.replace('"', '\\"')
+                script = f"""
+                tell application "System Events"
+                    delay 0.5
+                    keystroke "g" using {{command down, shift down}}
+                    delay 1.0
+                    keystroke "{escaped_path}"
+                    delay 1.0
+                    keystroke return
+                    delay 1.0
+                    keystroke return
+                end tell
+                """
                 try:
-                    driver.find_element(By.XPATH, st_xp)
-                    time.sleep(2)
-                    el += 2
-                except Exception:
-                    break
-            time.sleep(3)
-            log("Gemini prompt sent successfully!")
+                    subprocess.run(["osascript", "-e", script], check=False)
+                    return True
+                except Exception as e:
+                    log(f"AppleScript dialog input failed: {e}")
+                    return False
+
+            # Step 1: Click upload menu button
+            time.sleep(1.0)
+            sel1_exact = "#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div > div > div > chat-window > div > input-container > fieldset > input-area-v2 > div > div > div.leading-actions-wrapper.ng-tns-c5435433-4.has-model-picker.ng-star-inserted > simplified-input-menu > div > span > gem-icon-button > button"
+            sel1_fallbacks = [
+                sel1_exact,
+                "simplified-input-menu button",
+                "input-area-v2 .leading-actions-wrapper button",
+                "button[aria-label='Upload file']",
+                "button[aria-label='Attach files']"
+            ]
+            
+            if click_element_with_retry(sel1_fallbacks, "Gemini upload menu button"):
+                log("Opened Gemini upload menu. Proceeding to uploader...")
+                time.sleep(1.2)
+                
+                # Step 2: Click the image/file uploader button to open system file modal
+                sel2_exact_0 = "#cdk-overlay-0 > mat-card > mat-action-list > div:nth-child(1) > uploader > div > mat-action-list > images-files-uploader > button"
+                sel2_exact_3 = "#cdk-overlay-3 > mat-card > mat-action-list > div:nth-child(1) > uploader > div > mat-action-list > images-files-uploader > button"
+                sel2_fallbacks = [
+                    "images-files-uploader button",
+                    "mat-action-list images-files-uploader button",
+                    "[id^='cdk-overlay-'] mat-card images-files-uploader button",
+                    sel2_exact_0,
+                    sel2_exact_3,
+                    "uploader button"
+                ]
+                
+                uploader_clicked = False
+                try:
+                    uploader_clicked = click_element_with_retry(sel2_fallbacks, "Gemini uploader button")
+                except Exception as click_err:
+                    log(f"Warning: Exception encountered locating uploader button: {click_err}")
+                
+                if uploader_clicked:
+                    log("File open dialog triggered! Activating AppleScript folder path sheet...")
+                    # Focus Chrome
+                    _activate_chrome()
+                    time.sleep(0.5)
+                    # Trigger AppleScript keys injection
+                    if upload_macos_file_dialog(reference_image):
+                        log("Reference image uploaded successfully via macOS File Dialog AppleScript automation!")
+                        
+                        log("Waiting 5 seconds for file attachment processing...")
+                        time.sleep(5.0)
+                        
+                        active_selector = "#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div > div > div > chat-window > div > input-container > fieldset > input-area-v2 > div > div > div.trailing-actions-wrapper.ng-tns-c5435433-4.with-model-picker > div.input-buttons-wrapper-bottom.ng-tns-c5435433-4.persistent-mic > div.mat-mdc-tooltip-trigger.send-button-container.ng-tns-c5435433-4.inner.lm-enabled.persistent-mic.ng-star-inserted.visible"
+                        
+                        log("Waiting for the Send button to become active...")
+                        stop_button_xpath = (
+                            "//button[@aria-label='หยุดคำตอบ'] | "
+                            "//button[contains(@aria-label, 'Stop')] | "
+                            "//button[.//mat-icon[@fonticon='stop' or @data-mat-icon-name='stop' or contains(@class, 'stop')]]"
+                        )
+                        
+                        send_success = False
+                        
+                        for click_attempt in range(3):
+                            try:
+                                send_btn = WebDriverWait(driver, 10).until(
+                                    EC.element_to_be_clickable((By.CSS_SELECTOR, active_selector))
+                                )
+                                log(f"Send button found! Click attempt {click_attempt + 1}/3...")
+                                try:
+                                    send_btn.click()
+                                except Exception:
+                                    driver.execute_script("arguments[0].click();", send_btn)
+                                log("Send button clicked, verifying start of generation...")
+                            except Exception as click_err:
+                                log(f"Send button click failed or not clickable: {click_err}. Trying Enter key on input box...")
+                                try:
+                                    box.send_keys(Keys.ENTER)
+                                except Exception:
+                                    pass
+                            
+                            # Verify if it went to 'onprocess' state (Stop button visible) within 5 seconds
+                            for sec in range(5):
+                                try:
+                                    stop_buttons = driver.find_elements(By.XPATH, stop_button_xpath)
+                                    visible_stop_button = False
+                                    for btn in stop_buttons:
+                                        if btn.is_displayed():
+                                            visible_stop_button = True
+                                            break
+                                    if visible_stop_button:
+                                        log("Confirmed: Generation is onprocess!")
+                                        send_success = True
+                                        break
+                                except Exception:
+                                    pass
+                                time.sleep(1.0)
+                            
+                            if send_success:
+                                break
+                            else:
+                                log("Warning: Generation did not start yet. Retrying send...")
+                                
+                        if not send_success:
+                            raise RuntimeError("Failed to start generation: Send button clicked but 'onprocess' stop button did not appear within 5 seconds.")
+                            
+                        # Wait until generation is completed (Stop button disappears)
+                        log("Waiting for the generation to complete (waiting for Stop button to disappear)...")
+                        start_time = time.time()
+                        generation_timeout = 180.0  # 3 minutes maximum wait
+                        
+                        while time.time() - start_time < generation_timeout:
+                            try:
+                                stop_buttons = driver.find_elements(By.XPATH, stop_button_xpath)
+                                visible_stop_button = False
+                                for btn in stop_buttons:
+                                    if btn.is_displayed():
+                                        visible_stop_button = True
+                                        break
+                                if not visible_stop_button:
+                                    log("Stop button has disappeared! Generation completed.")
+                                    break
+                            except Exception:
+                                log("Stop button no longer found. Generation completed.")
+                                break
+                            time.sleep(1.5)
+                    else:
+                        log("Warning: AppleScript keys injection encountered an issue.")
+                else:
+                    log("Warning: Failed to open system uploader modal after 3 attempts.")
+            else:
+                log("Warning: Failed to open Gemini upload menu after 3 attempts.")
+                
             return {"ok": True}
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/step/3-chatgpt")
+def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
+    custom_prompt = payload.get("prompt")
+    if custom_prompt:
+        try:
+            import time
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.common.keys import Keys
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            
+            bot = browser_manager.get()
+            driver = bot.driver
+            
+            # Check if ChatGPT is open, if not open a new tab natively via webdriver protocol (immune to popup blockers)
+            if not bot.switch_to_tab_containing("chatgpt.com"):
+                log("ChatGPT tab not found, opening natively in new tab...")
+                try:
+                    driver.switch_to.new_window('tab')
+                    driver.get("https://chatgpt.com/")
+                    time.sleep(3.0)
+                except Exception:
+                    driver.get("https://chatgpt.com/")
+                    time.sleep(3.0)
+            
+            # Strictly verify we are on the ChatGPT page before sending input!
+            if "chatgpt.com" not in driver.current_url:
+                raise RuntimeError("Failed to switch to ChatGPT tab. Please open it manually.")
+            
+            input_strats = [
+                "//div[@id='prompt-textarea']",
+                "//textarea[@id='prompt-textarea']",
+                "//div[@contenteditable='true']",
+            ]
+            box = None
+            for s in input_strats:
+                try:
+                    tmp = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, s)))
+                    if tmp.is_displayed():
+                        box = tmp
+                        break
+                except Exception:
+                    continue
+            if not box:
+                raise RuntimeError("Could not find ChatGPT input box. Please make sure the tab is fully loaded.")
+            
+            try:
+                box.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", box)
+                
+            driver.execute_script(
+                "if(arguments[0].textContent !== undefined) { arguments[0].textContent = ''; } else { arguments[0].innerText = ''; }",
+                box,
+            )
+            driver.execute_script("arguments[0].focus();", box)
+            box.send_keys(custom_prompt)
+            driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
+            
+            # Ultra-efficient Native File Upload check for ChatGPT
+            reference_image = payload.get("reference_image")
+            import os
+            if reference_image and os.path.exists(reference_image):
+                try:
+                    log(f"Attempting efficient native file upload: {reference_image}...")
+                    file_input = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((By.XPATH, "//input[@type='file']"))
+                    )
+                    file_input.send_keys(os.path.abspath(reference_image))
+                    log("Reference image uploaded successfully natively! Pausing before submission.")
+                    time.sleep(2.0)
+                except Exception as file_err:
+                    log(f"Warning: Direct native upload failed ({file_err}). Please attach files manually.")
+            else:
+                log("ChatGPT prompt placed successfully! Ready for file attachment.")
+                
+            return {"ok": True}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True}
             
     mode = str(payload.get("mode") or "single").strip().lower()
     single_count = payload.get("single_count")

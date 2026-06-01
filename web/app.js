@@ -1,3 +1,57 @@
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+
+  let icon = '🔔';
+  if (type === 'success') icon = '✅';
+  else if (type === 'error') icon = '❌';
+  else if (type === 'info') icon = 'ℹ️';
+
+  toast.innerHTML = `
+    <span class="toast-icon">${icon}</span>
+    <span class="toast-content">${message}</span>
+    <button class="toast-close" title="Close">&times;</button>
+  `;
+
+  // Close on click close button
+  toast.querySelector('.toast-close').addEventListener('click', () => {
+    toast.classList.remove('show');
+    toast.classList.add('hide');
+    setTimeout(() => toast.remove(), 400);
+  });
+
+  container.appendChild(toast);
+
+  // Trigger animation after adding to DOM
+  setTimeout(() => {
+    toast.classList.add('show');
+  }, 10);
+
+  // Auto remove after 4 seconds
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.classList.remove('show');
+      toast.classList.add('hide');
+      setTimeout(() => toast.remove(), 400);
+    }
+  }, 4000);
+}
+
+// Override window.alert to automatically use our beautiful top-right toast system
+window.alert = function (message) {
+  let type = 'info';
+  const msgLower = message.toLowerCase();
+  if (msgLower.includes('success') || msgLower.includes('saved') || msgLower.includes('set to') || msgLower.includes('completed')) {
+    type = 'success';
+  } else if (msgLower.includes('error') || msgLower.includes('fail') || msgLower.includes('please') || msgLower.includes('first')) {
+    type = 'error';
+  }
+  showToast(message, type);
+};
+
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, options);
   const data = await res.json();
@@ -6,6 +60,7 @@ async function jsonFetch(url, options = {}) {
 }
 
 let profileCache = [];
+
 
 async function loadSettings() {
   const data = await jsonFetch('/api/settings');
@@ -498,6 +553,16 @@ async function saveConfig() {
   }
 }
 
+function updateImageGenButtonsState() {
+  const inputs = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
+  const geminiBtn = document.getElementById('btn_step3_gemini');
+  const chatgptBtn = document.getElementById('btn_step3_chatgpt');
+  const hasText = inputs.length > 0;
+  
+  if (geminiBtn) geminiBtn.disabled = !hasText;
+  if (chatgptBtn) chatgptBtn.disabled = !hasText;
+}
+
 // Dynamic Prompt Rows for Tab 2 Image Generation
 function imagePromptRowTemplate(text = '') {
   const row = document.createElement('div');
@@ -516,7 +581,9 @@ function imagePromptRowTemplate(text = '') {
   `;
   row.querySelector('.delete-btn').addEventListener('click', () => {
     row.remove();
+    updateImageGenButtonsState();
   });
+  row.querySelector('.image-prompt-input').addEventListener('input', updateImageGenButtonsState);
   return row;
 }
 
@@ -529,8 +596,34 @@ async function loadImagePrompts() {
     for (const p of prompts) {
       list.appendChild(imagePromptRowTemplate(p));
     }
+    const refImgInput = document.getElementById('cfg_reference_image');
+    if (refImgInput) {
+      if (config.reference_image) {
+        refImgInput.value = config.reference_image;
+      } else {
+        const defaultData = await jsonFetch('/api/config/reference-image/default');
+        refImgInput.value = defaultData.reference_image || '';
+      }
+    }
+    updateImageGenButtonsState();
   } catch (e) {
     writeConsoleLine(`Failed to load prompts: ${e.message}`, 'error', 'imageConsole');
+  }
+}
+
+async function setRefImageDefault() {
+  const refImgInput = document.getElementById('cfg_reference_image');
+  const path = refImgInput ? refImgInput.value.trim() : '';
+  try {
+    await jsonFetch('/api/config/reference-image/default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reference_image: path })
+    });
+    writeConsoleLine(`Reference image default saved: ${path || 'None'}`, 'success', 'imageConsole');
+    alert(`Default reference image path set to: ${path || 'None'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default: ${e.message}`, 'error', 'imageConsole');
   }
 }
 
@@ -540,15 +633,16 @@ async function saveImagePrompts() {
   msg.textContent = 'Saving...';
   try {
     const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
+    const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
     const currentConfig = await jsonFetch('/api/config');
-    const payload = { ...currentConfig, image_prompts: prompts };
+    const payload = { ...currentConfig, image_prompts: prompts, reference_image: refImg };
     await jsonFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    msg.textContent = 'Prompts saved successfully!';
-    writeConsoleLine('Image generation prompts saved successfully.', 'success', 'imageConsole');
+    msg.textContent = 'Prompts and Reference Image saved successfully!';
+    writeConsoleLine('Image generation prompts and reference image saved successfully.', 'success', 'imageConsole');
   } catch (e) {
     msg.textContent = e.message;
     msg.classList.add('error');
@@ -647,9 +741,11 @@ function initWorkflowActionListeners() {
 
   document.getElementById('addImagePromptBtn').addEventListener('click', () => {
     document.getElementById('imagePromptList').appendChild(imagePromptRowTemplate(''));
+    updateImageGenButtonsState();
   });
 
   document.getElementById('saveImagePromptsBtn').addEventListener('click', saveImagePrompts);
+  document.getElementById('setRefImageDefaultBtn').addEventListener('click', setRefImageDefault);
 
   // Step 1
   document.getElementById('btn_step2').addEventListener('click', (e) => {
@@ -673,6 +769,8 @@ function initWorkflowActionListeners() {
     btn.classList.add('loading');
     btn.disabled = true;
 
+    const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
+
     writeConsoleLine(`Bulk Generation: Starting loop over ${prompts.length} prompts on Gemini...`, 'system', 'imageConsole');
 
     for (let i = 0; i < prompts.length; i++) {
@@ -680,7 +778,7 @@ function initWorkflowActionListeners() {
       writeConsoleLine(`[${i + 1}/${prompts.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
       
       try {
-        await executeStep('/api/step/3', { prompt: p }, null, 'imageConsole');
+        await executeStep('/api/step/3', { prompt: p, reference_image: refImg }, null, 'imageConsole');
         writeConsoleLine(`[${i + 1}/${prompts.length}] Completed successfully!`, 'success', 'imageConsole');
       } catch (err) {
         writeConsoleLine(`[${i + 1}/${prompts.length}] Failed: ${err.message}`, 'error', 'imageConsole');
@@ -695,7 +793,7 @@ function initWorkflowActionListeners() {
     btn.disabled = false;
   });
 
-  // Step 2 ChatGPT (Mockup bulk loop)
+  // Step 2 ChatGPT (Bulk loop)
   document.getElementById('btn_step3_chatgpt').addEventListener('click', async (e) => {
     const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
     if (prompts.length === 0) {
@@ -707,16 +805,26 @@ function initWorkflowActionListeners() {
     btn.classList.add('loading');
     btn.disabled = true;
 
-    writeConsoleLine(`Bulk Generation (Mockup): Starting loop over ${prompts.length} prompts on ChatGPT...`, 'system', 'imageConsole');
+    const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
+
+    writeConsoleLine(`Bulk Generation: Starting loop over ${prompts.length} prompts on ChatGPT...`, 'system', 'imageConsole');
 
     for (let i = 0; i < prompts.length; i++) {
       const p = prompts[i];
-      writeConsoleLine(`[${i + 1}/${prompts.length}] (Mockup) Sending prompt: "${p}"`, 'info', 'imageConsole');
-      await new Promise(r => setTimeout(r, 1200));
-      writeConsoleLine(`[${i + 1}/${prompts.length}] (Mockup) Completed successfully!`, 'success', 'imageConsole');
+      writeConsoleLine(`[${i + 1}/${prompts.length}] Sending prompt to ChatGPT: "${p}"`, 'info', 'imageConsole');
+      
+      try {
+        await executeStep('/api/step/3-chatgpt', { prompt: p, reference_image: refImg }, null, 'imageConsole');
+        writeConsoleLine(`[${i + 1}/${prompts.length}] Completed successfully!`, 'success', 'imageConsole');
+      } catch (err) {
+        writeConsoleLine(`[${i + 1}/${prompts.length}] Failed: ${err.message}`, 'error', 'imageConsole');
+      }
+      
+      // Delay briefly between prompts to allow browser tab settling
+      await new Promise(r => setTimeout(r, 2000));
     }
 
-    writeConsoleLine('Bulk Generation (Mockup): Completed all loop operations!', 'success', 'imageConsole');
+    writeConsoleLine('Bulk Generation: Completed all ChatGPT loop operations!', 'success', 'imageConsole');
     btn.classList.remove('loading');
     btn.disabled = false;
   });
