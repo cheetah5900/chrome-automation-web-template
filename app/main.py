@@ -1178,7 +1178,11 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                             raise RuntimeError("Failed to start generation: Send button clicked but 'onprocess' stop button did not appear within 5 seconds.")
                             
                         # Wait until generation is completed (Stop button disappears)
-                        log("Waiting for the generation to complete (waiting for Stop button to disappear)...")
+                        import random
+                        delay_seconds = random.uniform(90.0, 150.0)
+                        log(f"Waiting {delay_seconds:.1f} seconds (random 1.30 - 2.30 mins) before starting status checks...")
+                        time.sleep(delay_seconds)
+                        log("Checking if Stop button has disappeared...")
                         start_time = time.time()
                         generation_timeout = 180.0  # 3 minutes maximum wait
                         
@@ -1407,8 +1411,10 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     pass
             
             # 7. Wait until generation is completed (Stop button disappears)
-            log("Waiting 1.30 minutes (90 seconds) before starting status checks...")
-            time.sleep(90.0)
+            import random
+            delay_seconds = random.uniform(90.0, 150.0)
+            log(f"Waiting {delay_seconds:.1f} seconds (random 1.30 - 2.30 mins) before starting status checks...")
+            time.sleep(delay_seconds)
             log("Checking if Stop button has disappeared...")
             start_time = time.time()
             generation_timeout = 90.0
