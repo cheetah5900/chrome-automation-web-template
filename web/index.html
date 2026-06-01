@@ -98,10 +98,12 @@
             <section class="card" style="padding: 20px;">
               <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 4px;">🖼️ Reference Image</h2>
               <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">ระบุพาทของรูปภาพอ้างอิงเพื่อส่งไปพร้อมกับพรอพต์สร้างภาพ (ถ้ามี)</p>
-              <div class="form-group" style="margin-bottom: 0; display: flex; gap: 10px; align-items: center;">
-                <input id="cfg_reference_image" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex-grow: 1;" />
-                <button id="setRefImageDefaultBtn" class="secondary" style="padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">Set Default</button>
-                <button id="verifyRefImageBtn" class="secondary" style="padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">🔍 Verify File</button>
+              <div class="form-group" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 10px;">
+                <input id="cfg_reference_image" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; width: 100%;" />
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <button id="setRefImageDefaultBtn" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">Set Default</button>
+                  <button id="verifyRefImageBtn" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">🔍 Verify File</button>
+                </div>
               </div>
             </section>
 
