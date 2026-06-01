@@ -261,7 +261,12 @@ async function savePrompts() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompts }),
     });
     msg.textContent = 'บันทึก prompt ลง JSON แล้ว';
-  } catch (e) { msg.textContent = e.message; msg.classList.add('error'); }
+    showToast('บันทึก prompt ลง JSON สำเร็จ', 'success');
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.classList.add('error');
+    showToast(e.message, 'error');
+  }
 }
 
 async function dispatchSinglePrompt(row, target, clickedBtn) {
