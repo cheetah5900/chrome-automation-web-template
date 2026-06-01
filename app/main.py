@@ -152,6 +152,32 @@ def _activate_chrome():
             pass
 
 
+def _physical_switch_to_tab(url_part):
+    import subprocess
+    script = f"""
+    tell application "Google Chrome"
+        repeat with w in windows
+            set tabIndex to 1
+            repeat with t in tabs of w
+                if URL of t contains "{url_part}" then
+                    set active tab index of w to tabIndex
+                    set index of w to 1
+                    activate
+                    return true
+                end if
+                set tabIndex to tabIndex + 1
+            end repeat
+        end repeat
+        return false
+    end tell
+    """
+    try:
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, check=False)
+        return "true" in res.stdout.lower()
+    except Exception:
+        return False
+
+
 @app.get("/api/defaults")
 def get_defaults():
     return _read_json(DEFAULTS_FILE)
@@ -886,6 +912,11 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     driver.get("https://gemini.google.com/app")
                     time.sleep(3.0)
                     
+            # Physically switch to the Gemini tab in macOS Chrome UI!
+            _physical_switch_to_tab("gemini.google.com")
+            _activate_chrome()
+            time.sleep(0.5)
+            
             # Strictly verify we are on the Gemini page before sending input!
             if "gemini.google.com" not in driver.current_url:
                 raise RuntimeError("Failed to switch to Gemini tab. Please open it manually.")
@@ -1133,7 +1164,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     driver.get("https://chatgpt.com/")
                     time.sleep(3.0)
             
-            # Bring Chrome window to active focus natively
+            # Physically switch to the ChatGPT tab in macOS Chrome UI!
+            _physical_switch_to_tab("chatgpt.com")
             _activate_chrome()
             time.sleep(0.5)
             
