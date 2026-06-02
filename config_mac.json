@@ -16,9 +16,7 @@
     "secondary_color": "Gray",
     "focus_browser_tabs": true,
     "canva_design_url_part": "",
-    "image_prompts": [
-        ""
-    ],
+    "image_prompts": [],
     "image_prompt_statuses": [],
     "image_prompts_2": [
         "Based on the attached image reference. The same fox paints fine red floral motifs onto the lantern paper while warm courtyard lights glow behind, hyper-realistic cinematic live-action, detailed brushwork, vertical 9:16.",

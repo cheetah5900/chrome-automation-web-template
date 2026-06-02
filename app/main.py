@@ -1267,12 +1267,13 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             if chatgpt_url:
                 log(f"Round transition: Opening a new tab for ChatGPT project URL: {chatgpt_url}")
                 try:
-                    driver.switch_to.new_window('tab')
+                    driver.execute_script("window.open('');")
+                    driver.switch_to.window(driver.window_handles[-1])
                     driver.get(chatgpt_url)
                     log("Waiting 3 seconds for the ChatGPT project tab to fully load...")
                     time.sleep(3.0)
                 except Exception as e:
-                    log(f"Failed to open project URL in new tab: {e}. Navigating active window instead...")
+                    log(f"Failed to open project URL in new tab via script: {e}. Navigating active window instead...")
                     driver.get(chatgpt_url)
                     log("Waiting 3 seconds for the ChatGPT project page to load...")
                     time.sleep(3.0)
@@ -1302,7 +1303,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 if not bot.switch_to_tab_containing("chatgpt.com"):
                     log("ChatGPT tab not found, opening natively in new tab...")
                     try:
-                        driver.switch_to.new_window('tab')
+                        driver.execute_script("window.open('');")
+                        driver.switch_to.window(driver.window_handles[-1])
                         driver.get("https://chatgpt.com/")
                         time.sleep(3.0)
                     except Exception:
