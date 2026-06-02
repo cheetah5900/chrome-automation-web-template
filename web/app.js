@@ -661,7 +661,7 @@ function imagePromptRowTemplate(text = '') {
 
 let promptsByRound = { 1: [], 2: [], 3: [] };
 let statusesByRound = { 1: [], 2: [], 3: [] };
-let urlsByRound = { 1: '', 2: '', 3: '' };
+let chatgptUrl = '';
 let currentPromptRound = 1;
 
 function commitCurrentRoundFromDOM() {
@@ -675,12 +675,8 @@ function commitCurrentRoundFromDOM() {
   promptsByRound[currentPromptRound] = prompts.length > 0 ? prompts : [''];
   statusesByRound[currentPromptRound] = statuses;
 
-  const urlInput1 = document.getElementById('round1UrlInput');
-  if (urlInput1) urlsByRound[1] = urlInput1.value.trim();
-  const urlInput2 = document.getElementById('round2UrlInput');
-  if (urlInput2) urlsByRound[2] = urlInput2.value.trim();
-  const urlInput3 = document.getElementById('round3UrlInput');
-  if (urlInput3) urlsByRound[3] = urlInput3.value.trim();
+  const chatgptUrlInput = document.getElementById('chatgptUrlInput');
+  if (chatgptUrlInput) chatgptUrl = chatgptUrlInput.value.trim();
 }
 
 function renderImagePromptsForRound(round) {
@@ -713,16 +709,10 @@ async function loadImagePrompts() {
     promptsByRound[3] = config.image_prompts_3 || [''];
     statusesByRound[3] = config.image_prompt_statuses_3 || [];
     
-    urlsByRound[1] = config.image_url_1 || '';
-    urlsByRound[2] = config.image_url_2 || '';
-    urlsByRound[3] = config.image_url_3 || '';
+    chatgptUrl = config.chatgpt_url || '';
 
-    const urlInput1 = document.getElementById('round1UrlInput');
-    if (urlInput1) urlInput1.value = urlsByRound[1];
-    const urlInput2 = document.getElementById('round2UrlInput');
-    if (urlInput2) urlInput2.value = urlsByRound[2];
-    const urlInput3 = document.getElementById('round3UrlInput');
-    if (urlInput3) urlInput3.value = urlsByRound[3];
+    const chatgptUrlInput = document.getElementById('chatgptUrlInput');
+    if (chatgptUrlInput) chatgptUrlInput.value = chatgptUrl;
 
     renderImagePromptsForRound(currentPromptRound);
     
@@ -801,9 +791,7 @@ async function saveImagePrompts(silent = false) {
       image_prompt_statuses_2: statusesByRound[2],
       image_prompts_3: promptsByRound[3], 
       image_prompt_statuses_3: statusesByRound[3],
-      image_url_1: urlsByRound[1] || '',
-      image_url_2: urlsByRound[2] || '',
-      image_url_3: urlsByRound[3] || '',
+      chatgpt_url: chatgptUrl,
       reference_image: refImg 
     };
     await jsonFetch('/api/config', {
@@ -976,6 +964,8 @@ function initWorkflowActionListeners() {
 
     writeConsoleLine(`Bulk Generation: Starting multi-round generation on ${target === 'gemini' ? 'Gemini' : 'ChatGPT'}...`, 'system', 'imageConsole');
 
+    let hasProcessedAnyRound = false;
+
     for (let r = 1; r <= 3; r++) {
       const tabBtn = document.querySelector(`.prompt-tab-btn[data-round="${r}"]`);
       if (tabBtn) tabBtn.click();
@@ -987,10 +977,10 @@ function initWorkflowActionListeners() {
         continue;
       }
 
-      // If r > 1, wait in random time starting from 1-2 mins (60 to 120 seconds)
-      if (r > 1) {
+      // If we have processed a previous round, wait in random time starting from 1-2 mins (60 to 120 seconds)
+      if (hasProcessedAnyRound) {
         const waitSeconds = Math.floor(Math.random() * (120 - 60 + 1)) + 60;
-        writeConsoleLine(`Round ${r - 1} completed. Cooldown: Waiting ${waitSeconds} seconds (1-2 mins) before processing Round ${r}...`, 'system', 'imageConsole');
+        writeConsoleLine(`Cooldown: Waiting ${waitSeconds} seconds (1-2 mins) before processing Round ${r}...`, 'system', 'imageConsole');
         for (let s = waitSeconds; s > 0; s--) {
           if (s % 10 === 0 || s <= 5) {
             writeConsoleLine(`Cooldown: ${s} seconds remaining...`, 'info', 'imageConsole');
@@ -1013,8 +1003,8 @@ function initWorkflowActionListeners() {
 
         const endpoint = target === 'gemini' ? '/api/step/3' : '/api/step/3-chatgpt';
         const payload = { prompt: p, reference_image: refImg };
-        if (target === 'chatgpt' && i === 0 && urlsByRound[r]) {
-          payload.chatgpt_url = urlsByRound[r];
+        if (target === 'chatgpt' && i === 0 && chatgptUrl) {
+          payload.chatgpt_url = chatgptUrl;
         }
         const success = await executeStep(endpoint, payload, null, 'imageConsole');
         if (success) {
