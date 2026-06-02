@@ -1265,54 +1265,33 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             
             chatgpt_url = payload.get("chatgpt_url")
             if chatgpt_url:
-                log(f"Round transition: Opening a new tab for ChatGPT project URL: {chatgpt_url}")
+                log(f"Round transition: Redirecting first tab to ChatGPT project URL: {chatgpt_url}")
                 try:
-                    old_handles = driver.window_handles[:]
-                    driver.execute_script("window.open('');")
-                    time.sleep(0.5)
-                    new_handles = driver.window_handles
-                    diff = list(set(new_handles) - set(old_handles))
-                    if diff:
-                        new_tab_handle = diff[0]
-                    else:
-                        new_tab_handle = new_handles[-1]
-                    driver.switch_to.window(new_tab_handle)
-                    driver.get(chatgpt_url)
-                    log("Waiting 3 seconds for the ChatGPT project tab to fully load...")
-                    time.sleep(3.0)
-                except Exception as e:
-                    log(f"Failed to open project URL in new tab via script: {e}. Navigating active window instead...")
+                    all_handles = driver.window_handles
+                    if not all_handles:
+                        raise RuntimeError("No browser windows/tabs open.")
+                    
+                    keep_handle = all_handles[0]
+                    driver.switch_to.window(keep_handle)
                     driver.get(chatgpt_url)
                     log("Waiting 3 seconds for the ChatGPT project page to load...")
                     time.sleep(3.0)
 
-                # Close all other ChatGPT tabs to avoid clutter
-                try:
-                    new_tab_handle = driver.current_window_handle
-                    all_handles = driver.window_handles[:]
+                    # Close all other ChatGPT tabs to avoid clutter
                     closed_count = 0
-                    log(f"Starting tab cleanup. Total tabs: {len(all_handles)}")
-                    for handle in all_handles:
-                        if handle != new_tab_handle:
-                            try:
-                                driver.switch_to.window(handle)
-                                current_url = driver.current_url.lower()
-                                log(f"Checking tab {handle}: URL is {current_url}")
-                                if "chatgpt.com" in current_url:
-                                    driver.close()
-                                    closed_count += 1
-                                    log(f"Closed old ChatGPT tab: {handle}")
-                            except Exception as ex_single:
-                                log(f"Skipping tab {handle} due to switch/read error: {ex_single}")
-                    driver.switch_to.window(new_tab_handle)
+                    for handle in all_handles[1:]:
+                        try:
+                            driver.switch_to.window(handle)
+                            if "chatgpt.com" in driver.current_url.lower():
+                                driver.close()
+                                closed_count += 1
+                        except Exception:
+                            pass
+                    driver.switch_to.window(keep_handle)
                     if closed_count > 0:
                         log(f"Closed {closed_count} old ChatGPT tab(s) to keep workspace clean.")
-                except Exception as ex:
-                    log(f"Warning during tab cleanup: {ex}")
-                    try:
-                        driver.switch_to.window(new_tab_handle)
-                    except Exception:
-                        pass
+                except Exception as e:
+                    log(f"Failed to navigate and clean tabs: {e}")
             else:
                 # Check if ChatGPT is open
                 if not bot.switch_to_tab_containing("chatgpt.com"):
