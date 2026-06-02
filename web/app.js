@@ -746,6 +746,22 @@ async function setRefImageDefault() {
   }
 }
 
+async function setChatgptUrlDefault() {
+  const urlInput = document.getElementById('chatgptUrlInput');
+  const url = urlInput ? urlInput.value.trim() : '';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'chatgpt_url', value: url })
+    });
+    writeConsoleLine(`ChatGPT default URL saved: ${url || 'None'}`, 'success', 'imageConsole');
+    alert(`Default ChatGPT Project/Chat URL set to: ${url || 'None'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default ChatGPT URL: ${e.message}`, 'error', 'imageConsole');
+  }
+}
+
 async function verifyRefImage() {
   const refImgInput = document.getElementById('cfg_reference_image');
   const path = refImgInput ? refImgInput.value.trim() : '';
@@ -924,6 +940,11 @@ function initWorkflowActionListeners() {
   document.getElementById('deleteAllImagePromptsBtn').addEventListener('click', deleteAllImagePrompts);
   document.getElementById('setRefImageDefaultBtn').addEventListener('click', setRefImageDefault);
   document.getElementById('verifyRefImageBtn').addEventListener('click', verifyRefImage);
+  
+  const setUrlBtn = document.getElementById('setChatgptUrlDefaultBtn');
+  if (setUrlBtn) {
+    setUrlBtn.addEventListener('click', setChatgptUrlDefault);
+  }
 
   // Step 1
   document.getElementById('btn_step2').addEventListener('click', (e) => {
