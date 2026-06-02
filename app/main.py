@@ -830,6 +830,12 @@ def _default_config() -> dict[str, Any]:
             "secondary_color": "Gray",
             "focus_browser_tabs": False,
             "canva_design_url_part": "",
+            "image_prompts": [""],
+            "image_prompt_statuses": [],
+            "image_prompts_2": [""],
+            "image_prompt_statuses_2": [],
+            "image_prompts_3": [""],
+            "image_prompt_statuses_3": [],
         }
 
     h = os.path.expanduser("~")
@@ -851,6 +857,12 @@ def _default_config() -> dict[str, Any]:
         "secondary_color": "Gray",
         "focus_browser_tabs": False,
         "canva_design_url_part": "",
+        "image_prompts": [""],
+        "image_prompt_statuses": [],
+        "image_prompts_2": [""],
+        "image_prompt_statuses_2": [],
+        "image_prompts_3": [""],
+        "image_prompt_statuses_3": [],
     }
 
 

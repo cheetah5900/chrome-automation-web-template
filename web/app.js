@@ -659,22 +659,53 @@ function imagePromptRowTemplate(text = '') {
   return row;
 }
 
+let promptsByRound = { 1: [], 2: [], 3: [] };
+let statusesByRound = { 1: [], 2: [], 3: [] };
+let currentPromptRound = 1;
+
+function commitCurrentRoundFromDOM() {
+  const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
+  const statuses = Array.from(document.querySelectorAll('#imagePromptList .prompt-row')).map(row => {
+    const text = row.querySelector('.image-prompt-input').value.trim();
+    const status = row.querySelector('.row-status').textContent.trim();
+    return { text, status };
+  }).filter(x => x.text !== '');
+  
+  promptsByRound[currentPromptRound] = prompts.length > 0 ? prompts : [''];
+  statusesByRound[currentPromptRound] = statuses;
+}
+
+function renderImagePromptsForRound(round) {
+  const list = document.getElementById('imagePromptList');
+  list.innerHTML = '';
+  const prompts = promptsByRound[round] || [''];
+  const savedStatuses = statusesByRound[round] || [];
+
+  for (const p of prompts) {
+    const row = imagePromptRowTemplate(p);
+    const matched = savedStatuses.find(s => s.text === p);
+    if (matched) {
+      updateRowStatus(row, matched.status);
+    }
+    list.appendChild(row);
+  }
+  updateImageGenButtonsState();
+}
+
 async function loadImagePrompts() {
   try {
     const config = await jsonFetch('/api/config');
-    const list = document.getElementById('imagePromptList');
-    list.innerHTML = '';
-    const prompts = config.image_prompts || [''];
-    const savedStatuses = config.image_prompt_statuses || [];
-
-    for (const p of prompts) {
-      const row = imagePromptRowTemplate(p);
-      const matched = savedStatuses.find(s => s.text === p);
-      if (matched) {
-        updateRowStatus(row, matched.status);
-      }
-      list.appendChild(row);
-    }
+    promptsByRound[1] = config.image_prompts || [''];
+    statusesByRound[1] = config.image_prompt_statuses || [];
+    
+    promptsByRound[2] = config.image_prompts_2 || [''];
+    statusesByRound[2] = config.image_prompt_statuses_2 || [];
+    
+    promptsByRound[3] = config.image_prompts_3 || [''];
+    statusesByRound[3] = config.image_prompt_statuses_3 || [];
+    
+    renderImagePromptsForRound(currentPromptRound);
+    
     const refImgInput = document.getElementById('cfg_reference_image');
     if (refImgInput) {
       if (config.reference_image) {
@@ -684,7 +715,6 @@ async function loadImagePrompts() {
         refImgInput.value = defaultData.reference_image || '';
       }
     }
-    updateImageGenButtonsState();
   } catch (e) {
     writeConsoleLine(`Failed to load prompts: ${e.message}`, 'error', 'imageConsole');
   }
@@ -734,31 +764,32 @@ async function verifyRefImage() {
 }
 
 async function saveImagePrompts(silent = false) {
+  commitCurrentRoundFromDOM();
   const msg = document.getElementById('imagePromptMsg');
   if (!silent) {
     msg.classList.remove('error');
     msg.textContent = 'Saving...';
   }
   try {
-    const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
     const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
-    
-    // Map text to current statuses
-    const statuses = Array.from(document.querySelectorAll('#imagePromptList .prompt-row')).map(row => {
-      const text = row.querySelector('.image-prompt-input').value.trim();
-      const status = row.querySelector('.row-status').textContent.trim();
-      return { text, status };
-    }).filter(x => x.text !== '');
-
     const currentConfig = await jsonFetch('/api/config');
-    const payload = { ...currentConfig, image_prompts: prompts, reference_image: refImg, image_prompt_statuses: statuses };
+    const payload = { 
+      ...currentConfig, 
+      image_prompts: promptsByRound[1], 
+      image_prompt_statuses: statusesByRound[1],
+      image_prompts_2: promptsByRound[2], 
+      image_prompt_statuses_2: statusesByRound[2],
+      image_prompts_3: promptsByRound[3], 
+      image_prompt_statuses_3: statusesByRound[3],
+      reference_image: refImg 
+    };
     await jsonFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     if (!silent) {
-      msg.textContent = 'Prompts and Reference Image saved successfully!';
+      msg.textContent = `Round ${currentPromptRound} and other tabs saved successfully!`;
       writeConsoleLine('Image generation prompts and reference image saved successfully.', 'success', 'imageConsole');
     }
   } catch (e) {
@@ -771,15 +802,15 @@ async function saveImagePrompts(silent = false) {
 }
 
 async function deleteAllImagePrompts() {
-  if (!confirm('Are you sure you want to delete all generation prompts?')) return;
+  if (!confirm(`Are you sure you want to delete all generation prompts in Round ${currentPromptRound}?`)) return;
 
   const list = document.getElementById('imagePromptList');
   if (list) {
     list.innerHTML = '';
-    // Append a single empty prompt row so it's not totally blank visually
     list.appendChild(imagePromptRowTemplate(''));
   }
-
+  
+  commitCurrentRoundFromDOM();
   updateImageGenButtonsState();
   await saveImagePrompts();
 }
@@ -893,104 +924,104 @@ function initWorkflowActionListeners() {
     }, e.target, 'ddcmConsole');
   });
 
-  // Step 2 Gemini (Bulk loop)
-  document.getElementById('btn_step3_gemini').addEventListener('click', async (e) => {
-    const rows = Array.from(document.querySelectorAll('#imagePromptList .prompt-row'));
-    const activeRows = rows.filter(r => r.querySelector('.image-prompt-input').value.trim() !== '');
-    
-    if (activeRows.length === 0) {
-      writeConsoleLine('Error: No prompts entered. Please add at least one prompt.', 'error', 'imageConsole');
-      return;
-    }
+  // Prompt Tabs Click Listeners
+  document.querySelectorAll('.prompt-tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      commitCurrentRoundFromDOM();
+      document.querySelectorAll('.prompt-tab-btn').forEach(b => {
+        b.classList.remove('active');
+        b.style.background = 'transparent';
+        b.style.color = 'rgba(255,255,255,0.6)';
+        b.style.border = '1px solid rgba(255,255,255,0.1)';
+        b.style.fontWeight = 'normal';
+      });
+      btn.classList.add('active');
+      btn.style.background = 'rgba(255,255,255,0.05)';
+      btn.style.color = '#fff';
+      btn.style.border = '1px solid rgba(255,255,255,0.15)';
+      btn.style.fontWeight = 'bold';
+      currentPromptRound = parseInt(btn.dataset.round, 10);
+      renderImagePromptsForRound(currentPromptRound);
+    });
+  });
 
-    const btn = e.target;
+  const runMultiRoundGeneration = async (target, btn) => {
     btn.classList.add('loading');
     btn.disabled = true;
-
+    commitCurrentRoundFromDOM();
     const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
 
-    writeConsoleLine(`Bulk Generation: Starting loop over ${activeRows.length} prompts on Gemini...`, 'system', 'imageConsole');
+    writeConsoleLine(`Bulk Generation: Starting multi-round generation on ${target === 'gemini' ? 'Gemini' : 'ChatGPT'}...`, 'system', 'imageConsole');
 
-    activeRows.forEach(r => updateRowStatus(r, 'Not start'));
+    for (let r = 1; r <= 3; r++) {
+      const tabBtn = document.querySelector(`.prompt-tab-btn[data-round="${r}"]`);
+      if (tabBtn) tabBtn.click();
 
-    for (let i = 0; i < activeRows.length; i++) {
-      const row = activeRows[i];
-      const p = row.querySelector('.image-prompt-input').value.trim();
-      writeConsoleLine(`[${i + 1}/${activeRows.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
-      
-      updateRowStatus(row, 'Generating...');
-
-      const success = await executeStep('/api/step/3', { prompt: p, reference_image: refImg }, null, 'imageConsole');
-      if (success) {
-        updateRowStatus(row, 'Done');
-        writeConsoleLine(`[${i + 1}/${activeRows.length}] Completed successfully!`, 'success', 'imageConsole');
-      } else {
-        updateRowStatus(row, 'Failed');
-        writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed to execute.`, 'error', 'imageConsole');
+      // Check if there are active prompts in this round
+      const activePrompts = (promptsByRound[r] || []).map(p => p.trim()).filter(Boolean);
+      if (activePrompts.length === 0) {
+        writeConsoleLine(`Round ${r}: No active prompts found. Skipping...`, 'info', 'imageConsole');
+        continue;
       }
-      await saveImagePrompts(true);
-      
-      // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
-      if (i < activeRows.length - 1) {
-        const randomDelay = Math.floor(Math.random() * (15 - 3 + 1)) + 3;
-        writeConsoleLine(`Human simulation: Waiting ${randomDelay} seconds before the next prompt...`, 'info', 'imageConsole');
-        await new Promise(r => setTimeout(r, randomDelay * 1000));
+
+      // If r > 1, wait in random time starting from 1-2 mins (60 to 120 seconds)
+      if (r > 1) {
+        const waitSeconds = Math.floor(Math.random() * (120 - 60 + 1)) + 60;
+        writeConsoleLine(`Round ${r - 1} completed. Cooldown: Waiting ${waitSeconds} seconds (1-2 mins) before processing Round ${r}...`, 'system', 'imageConsole');
+        for (let s = waitSeconds; s > 0; s--) {
+          if (s % 10 === 0 || s <= 5) {
+            writeConsoleLine(`Cooldown: ${s} seconds remaining...`, 'info', 'imageConsole');
+          }
+          await new Promise(res => setTimeout(res, 1000));
+        }
       }
+
+      writeConsoleLine(`Round ${r}: Starting loop over ${activePrompts.length} prompts...`, 'system', 'imageConsole');
+      const rows = Array.from(document.querySelectorAll('#imagePromptList .prompt-row'));
+      rows.forEach(row => updateRowStatus(row, 'Not start'));
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const p = row.querySelector('.image-prompt-input').value.trim();
+        if (!p) continue;
+
+        writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
+        updateRowStatus(row, 'Generating...');
+
+        const endpoint = target === 'gemini' ? '/api/step/3' : '/api/step/3-chatgpt';
+        const success = await executeStep(endpoint, { prompt: p, reference_image: refImg }, null, 'imageConsole');
+        if (success) {
+          updateRowStatus(row, 'Done');
+          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Completed successfully!`, 'success', 'imageConsole');
+        } else {
+          updateRowStatus(row, 'Failed');
+          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Failed to execute.`, 'error', 'imageConsole');
+        }
+        await saveImagePrompts(true);
+
+        // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt inside same round
+        if (i < rows.length - 1) {
+          const randomDelay = Math.floor(Math.random() * (15 - 3 + 1)) + 3;
+          writeConsoleLine(`Human simulation: Waiting ${randomDelay} seconds before the next prompt...`, 'info', 'imageConsole');
+          await new Promise(res => setTimeout(res, randomDelay * 1000));
+        }
+      }
+      writeConsoleLine(`Round ${r}: Completed all loop operations!`, 'success', 'imageConsole');
     }
 
-    writeConsoleLine('Bulk Generation: Completed all loop operations!', 'success', 'imageConsole');
+    writeConsoleLine('Bulk Generation: Completed all rounds successfully!', 'success', 'imageConsole');
     btn.classList.remove('loading');
     btn.disabled = false;
+  };
+
+  // Step 2 Gemini (Bulk loop)
+  document.getElementById('btn_step3_gemini').addEventListener('click', async (e) => {
+    await runMultiRoundGeneration('gemini', e.target);
   });
 
   // Step 2 ChatGPT (Bulk loop)
   document.getElementById('btn_step3_chatgpt').addEventListener('click', async (e) => {
-    const rows = Array.from(document.querySelectorAll('#imagePromptList .prompt-row'));
-    const activeRows = rows.filter(r => r.querySelector('.image-prompt-input').value.trim() !== '');
-    
-    if (activeRows.length === 0) {
-      writeConsoleLine('Error: No prompts entered. Please add at least one prompt.', 'error', 'imageConsole');
-      return;
-    }
-
-    const btn = e.target;
-    btn.classList.add('loading');
-    btn.disabled = true;
-
-    const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
-
-    writeConsoleLine(`Bulk Generation: Starting loop over ${activeRows.length} prompts on ChatGPT...`, 'system', 'imageConsole');
-
-    activeRows.forEach(r => updateRowStatus(r, 'Not start'));
-
-    for (let i = 0; i < activeRows.length; i++) {
-      const row = activeRows[i];
-      const p = row.querySelector('.image-prompt-input').value.trim();
-      writeConsoleLine(`[${i + 1}/${activeRows.length}] Sending prompt to ChatGPT: "${p}"`, 'info', 'imageConsole');
-      
-      updateRowStatus(row, 'Generating...');
-
-      const success = await executeStep('/api/step/3-chatgpt', { prompt: p, reference_image: refImg }, null, 'imageConsole');
-      if (success) {
-        updateRowStatus(row, 'Done');
-        writeConsoleLine(`[${i + 1}/${activeRows.length}] Completed successfully!`, 'success', 'imageConsole');
-      } else {
-        updateRowStatus(row, 'Failed');
-        writeConsoleLine(`[${i + 1}/${activeRows.length}] Failed to execute.`, 'error', 'imageConsole');
-      }
-      await saveImagePrompts(true);
-      
-      // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt
-      if (i < activeRows.length - 1) {
-        const randomDelay = Math.floor(Math.random() * (15 - 3 + 1)) + 3;
-        writeConsoleLine(`Human simulation: Waiting ${randomDelay} seconds before the next prompt...`, 'info', 'imageConsole');
-        await new Promise(r => setTimeout(r, randomDelay * 1000));
-      }
-    }
-
-    writeConsoleLine('Bulk Generation: Completed all ChatGPT loop operations!', 'success', 'imageConsole');
-    btn.classList.remove('loading');
-    btn.disabled = false;
+    await runMultiRoundGeneration('chatgpt', e.target);
   });
 
   // Step 3 (Download Images)
