@@ -1276,6 +1276,27 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     driver.get(chatgpt_url)
                     log("Waiting 3 seconds for the ChatGPT project page to load...")
                     time.sleep(3.0)
+
+                # Close all other ChatGPT tabs to avoid clutter
+                try:
+                    new_tab_handle = driver.current_window_handle
+                    all_handles = driver.window_handles
+                    closed_count = 0
+                    for handle in all_handles:
+                        if handle != new_tab_handle:
+                            driver.switch_to.window(handle)
+                            if "chatgpt.com" in driver.current_url.lower():
+                                driver.close()
+                                closed_count += 1
+                    driver.switch_to.window(new_tab_handle)
+                    if closed_count > 0:
+                        log(f"Closed {closed_count} old ChatGPT tab(s) to keep workspace clean.")
+                except Exception as ex:
+                    log(f"Warning during tab cleanup: {ex}")
+                    try:
+                        driver.switch_to.window(new_tab_handle)
+                    except Exception:
+                        pass
             else:
                 # Check if ChatGPT is open
                 if not bot.switch_to_tab_containing("chatgpt.com"):
