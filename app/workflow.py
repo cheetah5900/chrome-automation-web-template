@@ -1348,14 +1348,9 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
         
         # 3. Press Right/Down arrow if not the last image to go to the next generated image
         if i < total_images - 1:
-            log("Step 4 ChatGPT: Pressing Arrow Right/Down to go to the next image...")
-            try:
-                driver.switch_to.active_element.send_keys(Keys.RIGHT)
-            except Exception:
-                pass
-            
+            log("Step 4 ChatGPT: Pressing Arrow Right to go to the next image...")
             import subprocess
-            # AppleScript: key code 124 is Right Arrow, key code 125 is Down Arrow
+            # AppleScript: key code 124 is Right Arrow
             subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 124'], check=False)
             
             # Wait for next image to render in viewer (increased delay)
