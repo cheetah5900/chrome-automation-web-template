@@ -1289,14 +1289,21 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 # Close all other ChatGPT tabs to avoid clutter
                 try:
                     new_tab_handle = driver.current_window_handle
-                    all_handles = driver.window_handles
+                    all_handles = driver.window_handles[:]
                     closed_count = 0
+                    log(f"Starting tab cleanup. Total tabs: {len(all_handles)}")
                     for handle in all_handles:
                         if handle != new_tab_handle:
-                            driver.switch_to.window(handle)
-                            if "chatgpt.com" in driver.current_url.lower():
-                                driver.close()
-                                closed_count += 1
+                            try:
+                                driver.switch_to.window(handle)
+                                current_url = driver.current_url.lower()
+                                log(f"Checking tab {handle}: URL is {current_url}")
+                                if "chatgpt.com" in current_url:
+                                    driver.close()
+                                    closed_count += 1
+                                    log(f"Closed old ChatGPT tab: {handle}")
+                            except Exception as ex_single:
+                                log(f"Skipping tab {handle} due to switch/read error: {ex_single}")
                     driver.switch_to.window(new_tab_handle)
                     if closed_count > 0:
                         log(f"Closed {closed_count} old ChatGPT tab(s) to keep workspace clean.")
