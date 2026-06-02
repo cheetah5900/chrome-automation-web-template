@@ -997,6 +997,9 @@ function initWorkflowActionListeners() {
   document.getElementById('btn_step4').addEventListener('click', (e) => {
     executeStep('/api/step/4', {}, e.target, 'ddcmConsole');
   });
+  document.getElementById('btn_step4_chatgpt').addEventListener('click', (e) => {
+    executeStep('/api/step/4-chatgpt', {}, e.target, 'ddcmConsole');
+  });
 
   // Step 4 (Unzip)
   document.getElementById('btn_step12').addEventListener('click', (e) => {

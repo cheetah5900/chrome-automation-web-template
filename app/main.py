@@ -799,6 +799,7 @@ from app.workflow import (
     step2_create_folders,
     step3_gemini_gen_full_bot,
     step4_download_images_bot,
+    step4_chatgpt_download_images_bot,
     step6_classify_resolution,
     step8_downloads_images_to_local,
     step9_elements_to_local,
@@ -1479,6 +1480,16 @@ def step4(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         bot = browser_manager.get()
         step4_download_images_bot(bot, log)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/step/4-chatgpt")
+def step4_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        bot = browser_manager.get()
+        step4_chatgpt_download_images_bot(bot, log)
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

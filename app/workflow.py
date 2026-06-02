@@ -1251,3 +1251,175 @@ def step15_etsy_listing_bot(bot: Any, primary_color: str, secondary_color: str, 
     if not bot.switch_to_tab_containing("ddcm.litarandfriends.uk"):
         raise RuntimeError("DDCM tab not found")
     step15_etsy_listing(bot.driver, primary_color, secondary_color, log)
+
+
+def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
+    import shutil
+    # Assumes we are already on ChatGPT tab.
+    # Count generated images in chat history
+    imgs = driver.find_elements(By.CSS_SELECTOR, "img[alt*='Generated image']")
+    if not imgs:
+        imgs = driver.find_elements(By.XPATH, "//img[contains(@alt, 'Generated image')]")
+        
+    if not imgs:
+        raise RuntimeError("No generated images found in ChatGPT history")
+        
+    total_images = len(imgs)
+    log(f"Step 4 ChatGPT: Found {total_images} generated images.")
+    
+    # Track files before starting downloads
+    downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+    before_files = set(os.listdir(downloads_dir))
+    
+    # 1. Click on the latest generated image to open lightbox
+    latest_img = imgs[-1]
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", latest_img)
+    time.sleep(1.0)
+    
+    clicked = False
+    for _ in range(3):
+        try:
+            latest_img.click()
+            clicked = True
+            break
+        except Exception:
+            try:
+                driver.execute_script("arguments[0].click();", latest_img)
+                clicked = True
+                break
+            except Exception:
+                time.sleep(0.5)
+                
+    if not clicked:
+        raise RuntimeError("Could not click on latest generated image")
+        
+    # Wait 1 second as requested
+    time.sleep(1.0)
+    
+    # Loop over all images
+    for i in range(total_images):
+        log(f"Step 4 ChatGPT: Downloading image {i+1}/{total_images}...")
+        
+        # 2. Wait 1 second, then keep checking Save button
+        save_btn = None
+        for attempt in range(15):
+            try:
+                btns = driver.find_elements(By.CSS_SELECTOR, 'button[aria-label="Save"]')
+                if btns:
+                    save_btn = btns[0]
+                    if save_btn.is_displayed() and save_btn.is_enabled():
+                        break
+            except Exception:
+                pass
+            time.sleep(0.5)
+            
+        if not save_btn:
+            log(f"Step 4 ChatGPT: Save button not found or not clickable for image {i+1}")
+        else:
+            clicked_download = False
+            for attempt in range(3):
+                try:
+                    save_btn.click()
+                    clicked_download = True
+                    break
+                except Exception:
+                    try:
+                        driver.execute_script("arguments[0].click();", save_btn)
+                        clicked_download = True
+                        break
+                    except Exception:
+                        time.sleep(0.5)
+            if clicked_download:
+                log(f"Step 4 ChatGPT: Triggered download for image {i+1}")
+            else:
+                log(f"Step 4 ChatGPT: Failed to trigger download for image {i+1}")
+                
+        # Wait for download to start
+        time.sleep(1.5)
+        
+        # 3. Press Up arrow if not the last image to go to the previous generated image
+        if i < total_images - 1:
+            log("Step 4 ChatGPT: Pressing Arrow Up to go to the previous image...")
+            try:
+                driver.switch_to.active_element.send_keys(Keys.UP)
+            except Exception:
+                pass
+            
+            import subprocess
+            subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 126'], check=False)
+            # Wait for next image to render in viewer
+            time.sleep(1.5)
+            
+    # Close the image viewer
+    try:
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+    except Exception:
+        pass
+        
+    # Wait for all downloads to finish
+    log("Step 4 ChatGPT: Waiting for all downloads to complete...")
+    for _ in range(30):
+        in_progress = any(
+            f.endswith(".crdownload") or f.endswith(".part") or f.startswith(".com.google.Chrome")
+            for f in os.listdir(downloads_dir)
+        )
+        if not in_progress:
+            break
+        time.sleep(1.0)
+        
+    # Get newly downloaded files
+    after_files = set(os.listdir(downloads_dir))
+    new_files = list(after_files - before_files)
+    
+    valid_exts = (".png", ".webp", ".jpg", ".jpeg")
+    downloaded_images = [
+        f for f in new_files
+        if f.lower().endswith(valid_exts) and os.path.isfile(os.path.join(downloads_dir, f))
+    ]
+    
+    # Sort by modification time (ascending: oldest first, meaning first downloaded)
+    downloaded_images.sort(key=lambda f: os.path.getmtime(os.path.join(downloads_dir, f)))
+    
+    if not downloaded_images:
+        # Fallback: scan all image files in Downloads modified in the last 3 minutes
+        now = time.time()
+        for f in os.listdir(downloads_dir):
+            if f.lower().endswith(valid_exts):
+                full_path = os.path.join(downloads_dir, f)
+                if os.path.isfile(full_path) and (now - os.path.getmtime(full_path)) < 180:
+                    downloaded_images.append(f)
+        downloaded_images.sort(key=lambda f: os.path.getmtime(os.path.join(downloads_dir, f)))
+        
+    # 4. Rename each file from 1 to n ordering from first to last download
+    # 5. Move to a new folder call 'images'
+    dest_dir = os.path.join(downloads_dir, "images")
+    os.makedirs(dest_dir, exist_ok=True)
+    
+    log(f"Step 4 ChatGPT: Renaming and moving {len(downloaded_images)} files...")
+    success_count = 0
+    for idx, f in enumerate(downloaded_images):
+        src_path = os.path.join(downloads_dir, f)
+        ext = os.path.splitext(f)[1] or ".png"
+        new_name = f"{idx + 1}{ext}"
+        dst_path = os.path.join(dest_dir, new_name)
+        
+        if os.path.exists(dst_path):
+            try:
+                os.remove(dst_path)
+            except Exception:
+                pass
+                
+        try:
+            shutil.move(src_path, dst_path)
+            success_count += 1
+        except Exception as e:
+            log(f"Step 4 ChatGPT: Failed to rename/move {f}: {e}")
+            
+    log(f"Step 4 ChatGPT: Completed! Moved {success_count} files to 'Downloads/images' folder.")
+
+
+def step4_chatgpt_download_images_bot(bot: Any, log: Callable[[str], None]) -> None:
+    if not bot.switch_to_tab_containing("chatgpt.com"):
+        raise RuntimeError("ChatGPT tab not found")
+    step4_chatgpt_download_images(bot.driver, log)
+
