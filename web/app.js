@@ -790,9 +790,10 @@ async function verifyRefImage() {
 }
 
 async function saveImagePrompts(silent = false) {
+  const isSilent = silent === true;
   commitCurrentRoundFromDOM();
   const msg = document.getElementById('imagePromptMsg');
-  if (!silent) {
+  if (!isSilent) {
     msg.classList.remove('error');
     msg.textContent = 'Saving...';
   }
@@ -815,13 +816,13 @@ async function saveImagePrompts(silent = false) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (!silent) {
+    if (!isSilent) {
       msg.textContent = `Round ${currentPromptRound} and other tabs saved successfully!`;
       writeConsoleLine('Image generation prompts and reference image saved successfully.', 'success', 'imageConsole');
       showToast('Image generation prompts saved successfully!', 'success');
     }
   } catch (e) {
-    if (!silent) {
+    if (!isSilent) {
       msg.textContent = e.message;
       msg.classList.add('error');
       writeConsoleLine(`Failed to save prompts: ${e.message}`, 'error', 'imageConsole');
