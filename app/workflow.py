@@ -1302,8 +1302,8 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     if not clicked:
         raise RuntimeError("Could not click on first generated image")
         
-    # Wait 1 second as requested
-    time.sleep(1.0)
+    # Wait 3 seconds as requested
+    time.sleep(3.0)
     
     # Loop over all images from first to last
     for i in range(total_images):
