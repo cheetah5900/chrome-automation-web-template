@@ -672,7 +672,7 @@ function commitCurrentRoundFromDOM() {
     return { text, status };
   }).filter(x => x.text !== '');
   
-  promptsByRound[currentPromptRound] = prompts.length > 0 ? prompts : [''];
+  promptsByRound[currentPromptRound] = prompts;
   statusesByRound[currentPromptRound] = statuses;
 
   const chatgptUrlInput = document.getElementById('chatgptUrlInput');
@@ -682,7 +682,7 @@ function commitCurrentRoundFromDOM() {
 function renderImagePromptsForRound(round) {
   const list = document.getElementById('imagePromptList');
   list.innerHTML = '';
-  const prompts = promptsByRound[round] || [''];
+  const prompts = promptsByRound[round] || [];
   const savedStatuses = statusesByRound[round] || [];
 
   for (const p of prompts) {
@@ -700,13 +700,13 @@ function renderImagePromptsForRound(round) {
 async function loadImagePrompts() {
   try {
     const config = await jsonFetch('/api/config');
-    promptsByRound[1] = config.image_prompts || [''];
+    promptsByRound[1] = config.image_prompts || [];
     statusesByRound[1] = config.image_prompt_statuses || [];
     
-    promptsByRound[2] = config.image_prompts_2 || [''];
+    promptsByRound[2] = config.image_prompts_2 || [];
     statusesByRound[2] = config.image_prompt_statuses_2 || [];
     
-    promptsByRound[3] = config.image_prompts_3 || [''];
+    promptsByRound[3] = config.image_prompts_3 || [];
     statusesByRound[3] = config.image_prompt_statuses_3 || [];
     
     chatgptUrl = config.chatgpt_url || '';
@@ -837,7 +837,6 @@ async function deleteAllImagePrompts() {
   const list = document.getElementById('imagePromptList');
   if (list) {
     list.innerHTML = '';
-    list.appendChild(imagePromptRowTemplate(''));
   }
   
   commitCurrentRoundFromDOM();
