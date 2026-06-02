@@ -993,6 +993,7 @@ function initWorkflowActionListeners() {
       const rows = Array.from(document.querySelectorAll('#imagePromptList .prompt-row'));
       rows.forEach(row => updateRowStatus(row, 'Not start'));
 
+      let isFirstPrompt = true;
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const p = row.querySelector('.image-prompt-input').value.trim();
@@ -1003,8 +1004,9 @@ function initWorkflowActionListeners() {
 
         const endpoint = target === 'gemini' ? '/api/step/3' : '/api/step/3-chatgpt';
         const payload = { prompt: p, reference_image: refImg };
-        if (target === 'chatgpt' && i === 0 && chatgptUrl) {
+        if (target === 'chatgpt' && isFirstPrompt && chatgptUrl) {
           payload.chatgpt_url = chatgptUrl;
+          isFirstPrompt = false;
         }
         const success = await executeStep(endpoint, payload, null, 'imageConsole');
         if (success) {
