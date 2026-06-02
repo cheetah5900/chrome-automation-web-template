@@ -1256,6 +1256,15 @@ def step15_etsy_listing_bot(bot: Any, primary_color: str, secondary_color: str, 
 def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     import shutil
     # Assumes we are already on ChatGPT tab.
+    
+    # Scroll to the top to load all images (older ones)
+    log("Step 4 ChatGPT: Scrolling to the top to load all chat images...")
+    driver.execute_script("window.scrollTo(0, 0);")
+    scs = driver.find_elements(By.CSS_SELECTOR, ".infinite-scroller, .conversation-container, main")
+    for s in scs:
+        driver.execute_script("arguments[0].scrollTop = 0;", s)
+    time.sleep(2.0)
+    
     # Count generated images in chat history
     imgs = driver.find_elements(By.CSS_SELECTOR, "img[alt*='Generated image']")
     if not imgs:
@@ -1271,32 +1280,32 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
     before_files = set(os.listdir(downloads_dir))
     
-    # 1. Click on the latest generated image to open lightbox
-    latest_img = imgs[-1]
-    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", latest_img)
+    # 1. Click on the first (oldest) generated image to open lightbox
+    first_img = imgs[0]
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", first_img)
     time.sleep(1.0)
     
     clicked = False
     for _ in range(3):
         try:
-            latest_img.click()
+            first_img.click()
             clicked = True
             break
         except Exception:
             try:
-                driver.execute_script("arguments[0].click();", latest_img)
+                driver.execute_script("arguments[0].click();", first_img)
                 clicked = True
                 break
             except Exception:
                 time.sleep(0.5)
                 
     if not clicked:
-        raise RuntimeError("Could not click on latest generated image")
+        raise RuntimeError("Could not click on first generated image")
         
     # Wait 1 second as requested
     time.sleep(1.0)
     
-    # Loop over all images
+    # Loop over all images from first to last
     for i in range(total_images):
         log(f"Step 4 ChatGPT: Downloading image {i+1}/{total_images}...")
         
@@ -1334,21 +1343,23 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
             else:
                 log(f"Step 4 ChatGPT: Failed to trigger download for image {i+1}")
                 
-        # Wait for download to start
-        time.sleep(1.5)
+        # Wait for download to start (increased delay)
+        time.sleep(2.5)
         
-        # 3. Press Up arrow if not the last image to go to the previous generated image
+        # 3. Press Right/Down arrow if not the last image to go to the next generated image
         if i < total_images - 1:
-            log("Step 4 ChatGPT: Pressing Arrow Up to go to the previous image...")
+            log("Step 4 ChatGPT: Pressing Arrow Right/Down to go to the next image...")
             try:
-                driver.switch_to.active_element.send_keys(Keys.UP)
+                driver.switch_to.active_element.send_keys(Keys.RIGHT)
             except Exception:
                 pass
             
             import subprocess
-            subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 126'], check=False)
-            # Wait for next image to render in viewer
-            time.sleep(1.5)
+            # AppleScript: key code 124 is Right Arrow, key code 125 is Down Arrow
+            subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 124'], check=False)
+            
+            # Wait for next image to render in viewer (increased delay)
+            time.sleep(2.5)
             
     # Close the image viewer
     try:
@@ -1377,7 +1388,7 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
         if f.lower().endswith(valid_exts) and os.path.isfile(os.path.join(downloads_dir, f))
     ]
     
-    # Sort by modification time (ascending: oldest first, meaning first downloaded)
+    # Sort by modification time (ascending: oldest first, meaning first downloaded = earliest image)
     downloaded_images.sort(key=lambda f: os.path.getmtime(os.path.join(downloads_dir, f)))
     
     if not downloaded_images:
@@ -1390,7 +1401,13 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
                     downloaded_images.append(f)
         downloaded_images.sort(key=lambda f: os.path.getmtime(os.path.join(downloads_dir, f)))
         
-    # 4. Rename each file from 1 to n ordering from first to last download
+    # Since we downloaded from first (earliest) to last (latest):
+    # downloaded_images[0] is the earliest image
+    # downloaded_images[-1] is the latest image
+    # We want latest as 1 and earliest as the last one, so we reverse the list!
+    downloaded_images.reverse()
+    
+    # 4. Rename each file from 1 to n ordering from first to last download (now reversed)
     # 5. Move to a new folder call 'images'
     dest_dir = os.path.join(downloads_dir, "images")
     os.makedirs(dest_dir, exist_ok=True)
