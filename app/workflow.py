@@ -1404,10 +1404,9 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     # Since we downloaded from first (earliest) to last (latest):
     # downloaded_images[0] is the earliest image
     # downloaded_images[-1] is the latest image
-    # We want latest as 1 and earliest as the last one, so we reverse the list!
-    downloaded_images.reverse()
+    # The earliest must be 1 because we download from the top-most (first to last download).
     
-    # 4. Rename each file from 1 to n ordering from first to last download (now reversed)
+    # 4. Rename each file from 1 to n ordering from first to last download
     # 5. Move to a new folder call 'images'
     dest_dir = os.path.join(downloads_dir, "images")
     os.makedirs(dest_dir, exist_ok=True)
