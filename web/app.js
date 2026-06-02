@@ -818,12 +818,14 @@ async function saveImagePrompts(silent = false) {
     if (!silent) {
       msg.textContent = `Round ${currentPromptRound} and other tabs saved successfully!`;
       writeConsoleLine('Image generation prompts and reference image saved successfully.', 'success', 'imageConsole');
+      showToast('Image generation prompts saved successfully!', 'success');
     }
   } catch (e) {
     if (!silent) {
       msg.textContent = e.message;
       msg.classList.add('error');
       writeConsoleLine(`Failed to save prompts: ${e.message}`, 'error', 'imageConsole');
+      showToast(`Failed to save prompts: ${e.message}`, 'error');
     }
   }
 }

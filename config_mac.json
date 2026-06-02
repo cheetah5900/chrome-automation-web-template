@@ -21,9 +21,6 @@
     ],
     "image_prompt_statuses": [],
     "image_prompts_2": [
-        "Based on the attached image reference. The same white nine-tailed fox stands at a wooden outdoor table at dusk surrounded by lantern paper, brushes, candles, and string lights in a festive courtyard, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same fox fits a delicate lantern frame together on the courtyard table under warm lights, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same fox stretches cream lantern paper across the frame and smooths it into place under evening lights, hyper-realistic cinematic live-action, paper texture detail, vertical 9:16.",
         "Based on the attached image reference. The same fox paints fine red floral motifs onto the lantern paper while warm courtyard lights glow behind, hyper-realistic cinematic live-action, detailed brushwork, vertical 9:16.",
         "Based on the attached image reference. The same fox adds thin gold accents around the painted red floral lantern design in a glowing evening courtyard, hyper-realistic cinematic live-action, vertical 9:16.",
         "Based on the attached image reference. The same fox lights the decorated lantern from below so warm light blooms through the painted paper, hyper-realistic cinematic live-action, vertical 9:16.",
@@ -31,18 +28,6 @@
         "Based on the attached image reference. The same white nine-tailed fox stands proudly in a courtyard filled with glowing lanterns, holding or standing beside the finished floral lantern, hyper-realistic cinematic live-action, vertical 9:16."
     ],
     "image_prompt_statuses_2": [
-        {
-            "text": "Based on the attached image reference. The same white nine-tailed fox stands at a wooden outdoor table at dusk surrounded by lantern paper, brushes, candles, and string lights in a festive courtyard, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Done"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox fits a delicate lantern frame together on the courtyard table under warm lights, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Done"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox stretches cream lantern paper across the frame and smooths it into place under evening lights, hyper-realistic cinematic live-action, paper texture detail, vertical 9:16.",
-            "status": "Not start"
-        },
         {
             "text": "Based on the attached image reference. The same fox paints fine red floral motifs onto the lantern paper while warm courtyard lights glow behind, hyper-realistic cinematic live-action, detailed brushwork, vertical 9:16.",
             "status": "Not start"
@@ -110,5 +95,6 @@
     ],
     "reference_image": "/Users/litarcopperkaikem/Downloads/Character Sheet.jpeg",
     "image_url_2": "",
-    "image_url_3": ""
+    "image_url_3": "",
+    "chatgpt_url": "https://chatgpt.com/g/g-p-6a1d9c7393748191817ff9754f0b3af2-chiitaar/project"
 }
