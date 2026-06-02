@@ -1260,16 +1260,30 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             bot = browser_manager.get()
             driver = bot.driver
             
-            # Check if ChatGPT is open
-            if not bot.switch_to_tab_containing("chatgpt.com"):
-                log("ChatGPT tab not found, opening natively in new tab...")
+            chatgpt_url = payload.get("chatgpt_url")
+            if chatgpt_url:
+                log(f"Round transition: Opening a new tab for ChatGPT project URL: {chatgpt_url}")
                 try:
                     driver.switch_to.new_window('tab')
-                    driver.get("https://chatgpt.com/")
+                    driver.get(chatgpt_url)
+                    log("Waiting 3 seconds for the ChatGPT project tab to fully load...")
                     time.sleep(3.0)
-                except Exception:
-                    driver.get("https://chatgpt.com/")
+                except Exception as e:
+                    log(f"Failed to open project URL in new tab: {e}. Navigating active window instead...")
+                    driver.get(chatgpt_url)
+                    log("Waiting 3 seconds for the ChatGPT project page to load...")
                     time.sleep(3.0)
+            else:
+                # Check if ChatGPT is open
+                if not bot.switch_to_tab_containing("chatgpt.com"):
+                    log("ChatGPT tab not found, opening natively in new tab...")
+                    try:
+                        driver.switch_to.new_window('tab')
+                        driver.get("https://chatgpt.com/")
+                        time.sleep(3.0)
+                    except Exception:
+                        driver.get("https://chatgpt.com/")
+                        time.sleep(3.0)
             
             # Physically switch to the ChatGPT tab in macOS Chrome UI!
             _physical_switch_to_tab("chatgpt.com")

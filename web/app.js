@@ -661,6 +661,7 @@ function imagePromptRowTemplate(text = '') {
 
 let promptsByRound = { 1: [], 2: [], 3: [] };
 let statusesByRound = { 1: [], 2: [], 3: [] };
+let urlsByRound = { 1: '', 2: '', 3: '' };
 let currentPromptRound = 1;
 
 function commitCurrentRoundFromDOM() {
@@ -673,6 +674,11 @@ function commitCurrentRoundFromDOM() {
   
   promptsByRound[currentPromptRound] = prompts.length > 0 ? prompts : [''];
   statusesByRound[currentPromptRound] = statuses;
+
+  const urlInput = document.getElementById('roundUrlInput');
+  if (urlInput && currentPromptRound > 1) {
+    urlsByRound[currentPromptRound] = urlInput.value.trim();
+  }
 }
 
 function renderImagePromptsForRound(round) {
@@ -689,6 +695,20 @@ function renderImagePromptsForRound(round) {
     }
     list.appendChild(row);
   }
+
+  const urlContainer = document.getElementById('roundUrlContainer');
+  const urlLabel = document.getElementById('roundUrlLabel');
+  const urlInput = document.getElementById('roundUrlInput');
+  if (urlContainer && urlLabel && urlInput) {
+    if (round > 1) {
+      urlContainer.style.display = 'block';
+      urlLabel.textContent = `ChatGPT URL for Round ${round}:`;
+      urlInput.value = urlsByRound[round] || '';
+    } else {
+      urlContainer.style.display = 'none';
+    }
+  }
+
   updateImageGenButtonsState();
 }
 
@@ -704,6 +724,10 @@ async function loadImagePrompts() {
     promptsByRound[3] = config.image_prompts_3 || [''];
     statusesByRound[3] = config.image_prompt_statuses_3 || [];
     
+    urlsByRound[1] = '';
+    urlsByRound[2] = config.image_url_2 || '';
+    urlsByRound[3] = config.image_url_3 || '';
+
     renderImagePromptsForRound(currentPromptRound);
     
     const refImgInput = document.getElementById('cfg_reference_image');
@@ -781,6 +805,8 @@ async function saveImagePrompts(silent = false) {
       image_prompt_statuses_2: statusesByRound[2],
       image_prompts_3: promptsByRound[3], 
       image_prompt_statuses_3: statusesByRound[3],
+      image_url_2: urlsByRound[2] || '',
+      image_url_3: urlsByRound[3] || '',
       reference_image: refImg 
     };
     await jsonFetch('/api/config', {
@@ -989,7 +1015,11 @@ function initWorkflowActionListeners() {
         updateRowStatus(row, 'Generating...');
 
         const endpoint = target === 'gemini' ? '/api/step/3' : '/api/step/3-chatgpt';
-        const success = await executeStep(endpoint, { prompt: p, reference_image: refImg }, null, 'imageConsole');
+        const payload = { prompt: p, reference_image: refImg };
+        if (target === 'chatgpt' && r > 1 && urlsByRound[r]) {
+          payload.chatgpt_url = urlsByRound[r];
+        }
+        const success = await executeStep(endpoint, payload, null, 'imageConsole');
         if (success) {
           updateRowStatus(row, 'Done');
           writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Completed successfully!`, 'success', 'imageConsole');
