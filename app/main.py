@@ -1267,8 +1267,16 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             if chatgpt_url:
                 log(f"Round transition: Opening a new tab for ChatGPT project URL: {chatgpt_url}")
                 try:
+                    old_handles = driver.window_handles[:]
                     driver.execute_script("window.open('');")
-                    driver.switch_to.window(driver.window_handles[-1])
+                    time.sleep(0.5)
+                    new_handles = driver.window_handles
+                    diff = list(set(new_handles) - set(old_handles))
+                    if diff:
+                        new_tab_handle = diff[0]
+                    else:
+                        new_tab_handle = new_handles[-1]
+                    driver.switch_to.window(new_tab_handle)
                     driver.get(chatgpt_url)
                     log("Waiting 3 seconds for the ChatGPT project tab to fully load...")
                     time.sleep(3.0)
