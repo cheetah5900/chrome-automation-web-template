@@ -700,13 +700,13 @@ function renderImagePromptsForRound(round) {
 async function loadImagePrompts() {
   try {
     const config = await jsonFetch('/api/config');
-    promptsByRound[1] = config.image_prompts || [];
+    promptsByRound[1] = (config.image_prompts || []).map(x => x.trim()).filter(Boolean);
     statusesByRound[1] = config.image_prompt_statuses || [];
     
-    promptsByRound[2] = config.image_prompts_2 || [];
+    promptsByRound[2] = (config.image_prompts_2 || []).map(x => x.trim()).filter(Boolean);
     statusesByRound[2] = config.image_prompt_statuses_2 || [];
     
-    promptsByRound[3] = config.image_prompts_3 || [];
+    promptsByRound[3] = (config.image_prompts_3 || []).map(x => x.trim()).filter(Boolean);
     statusesByRound[3] = config.image_prompt_statuses_3 || [];
     
     chatgptUrl = config.chatgpt_url || '';
