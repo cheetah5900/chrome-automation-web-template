@@ -1274,8 +1274,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     keep_handle = all_handles[0]
                     driver.switch_to.window(keep_handle)
                     driver.get(chatgpt_url)
-                    log("Waiting 3 seconds for the ChatGPT project page to load...")
-                    time.sleep(3.0)
+                    log("Waiting 7 seconds for the ChatGPT project page to load...")
+                    time.sleep(7.0)
 
                     # Close all other ChatGPT tabs to avoid clutter
                     closed_count = 0
