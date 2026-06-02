@@ -836,6 +836,9 @@ def _default_config() -> dict[str, Any]:
             "image_prompt_statuses_2": [],
             "image_prompts_3": [""],
             "image_prompt_statuses_3": [],
+            "image_url_1": "",
+            "image_url_2": "",
+            "image_url_3": "",
         }
 
     h = os.path.expanduser("~")
@@ -863,6 +866,9 @@ def _default_config() -> dict[str, Any]:
         "image_prompt_statuses_2": [],
         "image_prompts_3": [""],
         "image_prompt_statuses_3": [],
+        "image_url_1": "",
+        "image_url_2": "",
+        "image_url_3": "",
     }
 
 

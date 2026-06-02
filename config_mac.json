@@ -17,9 +17,98 @@
     "focus_browser_tabs": true,
     "canva_design_url_part": "",
     "image_prompts": [
-        "Based on the attached image reference. Hyper-realistic cinematic live-action still frame, vertical 9:16. Fluffie (same main subject) is a young moss dragon: small bipedal creature covered in soft dense green moss-fur with tiny leaf tufts, flexible leafy spikes along the head/back/tail ridge, large glossy teal eyes with deep reflections, and pale stone-like belly scales. Inside an indoor American bobsled start house (Utah/Lake Placid vibe), Fluffie stands beside a glossy black bobsled, one clawed hand resting on the cockpit rim. Cold blue-gray ice floor, faint frosty haze, condensation on metal, sharp arena lights, shallow depth of field, ultra-detailed moss texture and carbon-fiber surfaces, spectators and cameras blurred in the distance. No text, no subtitles, no logos, no readable brand names.",
-        "Based on the attached image reference. Cinematic live-action still, vertical 9:16. Fluffie (young moss dragon) now wears a matte-black full-face helmet with a clear visor; teal eyes visible through reflections. Fluffie sits low inside the glossy black bobsled cockpit, tiny clawed hands gripping the rim. Cold mist in the start chute, overhead lights streak softly, shallow DOF, realistic scuffs on the sled and fine frost specks on the visor edges. No text/logos.",
-        "Based on the attached image reference. Hyper-realistic live-action still, vertical 9:16. Top/three-quarter angle showing the glossy black bobsled entering the ice chute. Fluffie is visible in the cockpit with helmet and visor, centered. Crisp ice texture, cold haze, overhead lights and blue-gray walls, shallow DOF with motion blur beginning at the edges. No text/logos."
+        ""
     ],
-    "reference_image": "/Users/litarcopperkaikem/Downloads/Character Sheet.png"
+    "image_prompt_statuses": [],
+    "image_prompts_2": [
+        "Based on the attached image reference. The same white nine-tailed fox stands at a wooden outdoor table at dusk surrounded by lantern paper, brushes, candles, and string lights in a festive courtyard, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same fox fits a delicate lantern frame together on the courtyard table under warm lights, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same fox stretches cream lantern paper across the frame and smooths it into place under evening lights, hyper-realistic cinematic live-action, paper texture detail, vertical 9:16.",
+        "Based on the attached image reference. The same fox paints fine red floral motifs onto the lantern paper while warm courtyard lights glow behind, hyper-realistic cinematic live-action, detailed brushwork, vertical 9:16.",
+        "Based on the attached image reference. The same fox adds thin gold accents around the painted red floral lantern design in a glowing evening courtyard, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same fox lights the decorated lantern from below so warm light blooms through the painted paper, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same fox lifts the glowing floral lantern into a courtyard strung with other lights and lanterns, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same white nine-tailed fox stands proudly in a courtyard filled with glowing lanterns, holding or standing beside the finished floral lantern, hyper-realistic cinematic live-action, vertical 9:16."
+    ],
+    "image_prompt_statuses_2": [
+        {
+            "text": "Based on the attached image reference. The same white nine-tailed fox stands at a wooden outdoor table at dusk surrounded by lantern paper, brushes, candles, and string lights in a festive courtyard, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Done"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox fits a delicate lantern frame together on the courtyard table under warm lights, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Done"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox stretches cream lantern paper across the frame and smooths it into place under evening lights, hyper-realistic cinematic live-action, paper texture detail, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox paints fine red floral motifs onto the lantern paper while warm courtyard lights glow behind, hyper-realistic cinematic live-action, detailed brushwork, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox adds thin gold accents around the painted red floral lantern design in a glowing evening courtyard, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox lights the decorated lantern from below so warm light blooms through the painted paper, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox lifts the glowing floral lantern into a courtyard strung with other lights and lanterns, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same white nine-tailed fox stands proudly in a courtyard filled with glowing lanterns, holding or standing beside the finished floral lantern, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        }
+    ],
+    "image_prompts_3": [
+        "Based on the attached image reference. The same white nine-tailed fox steps into a cozy independent bookstore at night, surrounded by warm amber lamps, tall wooden shelves, and stacked novels, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same fox stands on hind legs before a warmly lit bookshelf, scanning rows of clothbound and illustrated novels, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same fox gently pulls a clothbound novel from the shelf in the warm bookstore light, hyper-realistic cinematic live-action, rich paper and linen texture, vertical 9:16.",
+        "Based on the attached image reference. The same fox carries the chosen novel toward a plush reading chair beside a lamp and side table in a quiet bookstore nook, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same fox sits in the reading chair and opens the clothbound novel on its lap beneath a warm amber lamp, hyper-realistic cinematic live-action, soft fabric and paper textures, vertical 9:16.",
+        "Based on the attached image reference. The same fox turns a page in the novel while warm bookstore light glows across nearby shelves and the chair fabric, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same fox curls deeper into the plush reading chair with the open book, surrounded by towering bookshelves and a warm lamp, hyper-realistic cinematic live-action, vertical 9:16.",
+        "Based on the attached image reference. The same white nine-tailed fox rests in the reading chair with the open novel, surrounded by warm amber light and towering bookshelves in a quiet bookstore, hyper-realistic cinematic live-action, vertical 9:16."
+    ],
+    "image_prompt_statuses_3": [
+        {
+            "text": "Based on the attached image reference. The same white nine-tailed fox steps into a cozy independent bookstore at night, surrounded by warm amber lamps, tall wooden shelves, and stacked novels, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox stands on hind legs before a warmly lit bookshelf, scanning rows of clothbound and illustrated novels, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox gently pulls a clothbound novel from the shelf in the warm bookstore light, hyper-realistic cinematic live-action, rich paper and linen texture, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox carries the chosen novel toward a plush reading chair beside a lamp and side table in a quiet bookstore nook, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox sits in the reading chair and opens the clothbound novel on its lap beneath a warm amber lamp, hyper-realistic cinematic live-action, soft fabric and paper textures, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox turns a page in the novel while warm bookstore light glows across nearby shelves and the chair fabric, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same fox curls deeper into the plush reading chair with the open book, surrounded by towering bookshelves and a warm lamp, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        },
+        {
+            "text": "Based on the attached image reference. The same white nine-tailed fox rests in the reading chair with the open novel, surrounded by warm amber light and towering bookshelves in a quiet bookstore, hyper-realistic cinematic live-action, vertical 9:16.",
+            "status": "Not start"
+        }
+    ],
+    "reference_image": "/Users/litarcopperkaikem/Downloads/Character Sheet.jpeg",
+    "image_url_2": "",
+    "image_url_3": ""
 }
