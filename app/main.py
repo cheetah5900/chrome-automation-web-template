@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -837,6 +837,9 @@ def _default_config() -> dict[str, Any]:
             "image_prompts_3": [],
             "image_prompt_statuses_3": [],
             "chatgpt_url": "",
+            "video_input_path": "",
+            "image_input_path": "",
+            "video_output_path": "",
         }
 
     h = os.name
@@ -866,6 +869,9 @@ def _default_config() -> dict[str, Any]:
         "image_prompts_3": [],
         "image_prompt_statuses_3": [],
         "chatgpt_url": "",
+        "video_input_path": "",
+        "image_input_path": "",
+        "video_output_path": "",
     }
 
 
@@ -1714,6 +1720,207 @@ def step15(payload: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/video/make-cover")
+def make_video_cover(
+    video: UploadFile | None = File(None),
+    image: UploadFile | None = File(None),
+    video_path: str | None = Form(None),
+    image_path: str | None = Form(None),
+    output_path: str | None = Form(None),
+    prefix: str | None = Form(None),
+    no: str | None = Form(None)
+) -> dict[str, Any]:
+    import subprocess
+    import tempfile
+    import os
+    import json
+    import shutil
+    
+    log("Video Helper: Starting YouTube Cover conversion...")
+    
+    src_video_path = ""
+    video_filename = ""
+    
+    if video and video.filename:
+        log(f"Video Source: Uploaded file '{video.filename}'")
+        video_filename = video.filename
+    elif video_path and video_path.strip():
+        video_path_clean = video_path.strip()
+        if os.path.exists(video_path_clean) and os.path.isfile(video_path_clean):
+            src_video_path = video_path_clean
+            video_filename = os.path.basename(video_path_clean)
+            log(f"Video Source: Local path '{src_video_path}'")
+        else:
+            raise HTTPException(status_code=400, detail=f"Local video path does not exist or is not a file: {video_path_clean}")
+    else:
+        raise HTTPException(status_code=400, detail="Please upload a video file or enter a valid source video path")
+
+    src_image_path = ""
+    image_filename = ""
+    
+    if image and image.filename:
+        log(f"Image Source: Uploaded file '{image.filename}'")
+        image_filename = image.filename
+    elif image_path and image_path.strip():
+        image_path_clean = image_path.strip()
+        if os.path.exists(image_path_clean) and os.path.isfile(image_path_clean):
+            src_image_path = image_path_clean
+            image_filename = os.path.basename(image_path_clean)
+            log(f"Image Source: Local path '{src_image_path}'")
+        else:
+            raise HTTPException(status_code=400, detail=f"Local image path does not exist or is not a file: {image_path_clean}")
+    else:
+        raise HTTPException(status_code=400, detail="Please upload a cover image file or enter a valid cover image path")
+
+    out_dir = ""
+    if output_path and output_path.strip():
+        out_path_clean = output_path.strip()
+        if os.path.isdir(out_path_clean):
+            out_dir = out_path_clean
+        else:
+            out_dir = os.path.dirname(out_path_clean)
+            if not out_dir:
+                out_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+    else:
+        out_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+        
+    if no and no.strip():
+        out_dir = os.path.join(out_dir, no.strip())
+        
+    os.makedirs(out_dir, exist_ok=True)
+    
+    orig_name = os.path.splitext(video_filename)[0]
+    prefix_str = prefix.strip() if prefix else ""
+    final_output_path = os.path.join(out_dir, f"{prefix_str}{orig_name}_with_cover.mp4")
+    log(f"Output Target Path: '{final_output_path}'")
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_input_video = src_video_path
+            temp_input_image = src_image_path
+            
+            if video and video.filename:
+                video_ext = os.path.splitext(video.filename)[1] or ".mp4"
+                temp_input_video = os.path.join(tmpdir, f"uploaded_video{video_ext}")
+                with open(temp_input_video, "wb") as buffer:
+                    shutil.copyfileobj(video.file, buffer)
+                    
+            if image and image.filename:
+                image_ext = os.path.splitext(image.filename)[1] or ".png"
+                temp_input_image = os.path.join(tmpdir, f"uploaded_image{image_ext}")
+                with open(temp_input_image, "wb") as buffer:
+                    shutil.copyfileobj(image.file, buffer)
+            
+            temp_video = os.path.join(tmpdir, "temp_video.mp4")
+            temp_black = os.path.join(tmpdir, "temp_black.mp4")
+            temp_image = os.path.join(tmpdir, "temp_image.mp4")
+            list_txt = os.path.join(tmpdir, "list.txt")
+            
+            # Check if input video has audio
+            has_audio = False
+            try:
+                probe_cmd = [
+                    "/opt/homebrew/bin/ffprobe", "-v", "error", "-select_streams", "a",
+                    "-show_entries", "stream=codec_type", "-of", "json", temp_input_video
+                ]
+                if not os.path.exists(probe_cmd[0]):
+                    probe_cmd[0] = "ffprobe"
+                result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                probe_data = json.loads(result.stdout)
+                has_audio = len(probe_data.get("streams", [])) > 0
+            except Exception as e:
+                log(f"Video Helper Check Audio Warning: {e}")
+                has_audio = False
+                
+            log(f"Video Helper: Input video has audio track: {has_audio}")
+            
+            ffmpeg_bin = "/opt/homebrew/bin/ffmpeg"
+            if not os.path.exists(ffmpeg_bin):
+                ffmpeg_bin = "ffmpeg"
+                
+            # 1. Process Video
+            log("Video Helper [1/4]: Aligning source video to 4K 60fps...")
+            if has_audio:
+                v_cmd = [
+                    ffmpeg_bin, "-y", "-i", temp_input_video,
+                    "-filter_complex", "[0:v]scale=3840:2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
+                ]
+            else:
+                v_cmd = [
+                    ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                    "-filter_complex", "[0:v]scale=3840:2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                    "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
+                ]
+                
+            res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode != 0:
+                raise RuntimeError(f"FFmpeg failed processing video: {res.stderr}")
+                
+            # 2. Process Black Screen (2s)
+            log("Video Helper [2/4]: Generating 2 seconds black screen...")
+            b_cmd = [
+                ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=3840x2160:r=60:d=2",
+                "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=2",
+                "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_black
+            ]
+            res = subprocess.run(b_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode != 0:
+                raise RuntimeError(f"FFmpeg failed generating black screen: {res.stderr}")
+                
+            # 3. Process Cover Image (3s)
+            log("Video Helper [3/4]: Rendering cover image for 3 seconds...")
+            i_cmd = [
+                ffmpeg_bin, "-y", "-loop", "1", "-i", temp_input_image,
+                "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=3",
+                "-filter_complex", "[0:v]scale=3840:2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                "-map", "[v]", "-map", "1:a", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_image
+            ]
+            res = subprocess.run(i_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode != 0:
+                raise RuntimeError(f"FFmpeg failed rendering image: {res.stderr}")
+                
+            # 4. Concatenate
+            log("Video Helper [4/4]: Concatenating clips into final 4K 60fps MP4 video...")
+            with open(list_txt, "w", encoding="utf-8") as f:
+                f.write(f"file '{temp_video}'\n")
+                f.write(f"file '{temp_black}'\n")
+                f.write(f"file '{temp_image}'\n")
+                
+            concat_cmd = [
+                ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                "-c", "copy", final_output_path
+            ]
+            res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode != 0:
+                raise RuntimeError(f"FFmpeg failed concatenating video: {res.stderr}")
+                
+            log(f"Video Helper Success: Saved final video to '{final_output_path}'")
+            return {"ok": True, "output_path": final_output_path}
+    except Exception as e:
+        log(f"Video Helper Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/utils/browse-directory")
+def browse_directory() -> dict[str, Any]:
+    import tkinter as tk
+    from tkinter import filedialog
+    import os
+    
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        directory = filedialog.askdirectory(parent=root, title="Select Output Directory")
+        root.destroy()
+        if directory:
+            return {"ok": True, "path": os.path.normpath(directory)}
+        return {"ok": False, "path": ""}
+    except Exception as e:
+        log(f"Browse Directory Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/")

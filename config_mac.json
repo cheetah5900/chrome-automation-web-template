@@ -1,9 +1,9 @@
 {
-    "folder_name": "4 - Cute Neon Halloween Dog",
+    "folder_name": "12",
     "element_name": "Cute Neon Halloween Dog",
     "element_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/local DDCM/Elements",
-    "local_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/local DDCM",
-    "remote_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/DDCM/Cliparts DDCM",
+    "local_path": "/Users/litarcopperkaikem/Downloads",
+    "remote_path": "/Users/litarcopperkaikem/Downloads",
     "watermark_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/local DDCM/Others/Watermark.png",
     "first_preview_watermark_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/local DDCM/Others/Watermark for first page.png",
     "single_count": "12",
@@ -18,81 +18,16 @@
     "canva_design_url_part": "",
     "image_prompts": [],
     "image_prompt_statuses": [],
-    "image_prompts_2": [
-        "Based on the attached image reference. The same fox paints fine red floral motifs onto the lantern paper while warm courtyard lights glow behind, hyper-realistic cinematic live-action, detailed brushwork, vertical 9:16.",
-        "Based on the attached image reference. The same fox adds thin gold accents around the painted red floral lantern design in a glowing evening courtyard, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same fox lights the decorated lantern from below so warm light blooms through the painted paper, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same fox lifts the glowing floral lantern into a courtyard strung with other lights and lanterns, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same white nine-tailed fox stands proudly in a courtyard filled with glowing lanterns, holding or standing beside the finished floral lantern, hyper-realistic cinematic live-action, vertical 9:16."
-    ],
-    "image_prompt_statuses_2": [
-        {
-            "text": "Based on the attached image reference. The same fox paints fine red floral motifs onto the lantern paper while warm courtyard lights glow behind, hyper-realistic cinematic live-action, detailed brushwork, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox adds thin gold accents around the painted red floral lantern design in a glowing evening courtyard, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox lights the decorated lantern from below so warm light blooms through the painted paper, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox lifts the glowing floral lantern into a courtyard strung with other lights and lanterns, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same white nine-tailed fox stands proudly in a courtyard filled with glowing lanterns, holding or standing beside the finished floral lantern, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        }
-    ],
-    "image_prompts_3": [
-        "Based on the attached image reference. The same white nine-tailed fox steps into a cozy independent bookstore at night, surrounded by warm amber lamps, tall wooden shelves, and stacked novels, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same fox stands on hind legs before a warmly lit bookshelf, scanning rows of clothbound and illustrated novels, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same fox gently pulls a clothbound novel from the shelf in the warm bookstore light, hyper-realistic cinematic live-action, rich paper and linen texture, vertical 9:16.",
-        "Based on the attached image reference. The same fox carries the chosen novel toward a plush reading chair beside a lamp and side table in a quiet bookstore nook, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same fox sits in the reading chair and opens the clothbound novel on its lap beneath a warm amber lamp, hyper-realistic cinematic live-action, soft fabric and paper textures, vertical 9:16.",
-        "Based on the attached image reference. The same fox turns a page in the novel while warm bookstore light glows across nearby shelves and the chair fabric, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same fox curls deeper into the plush reading chair with the open book, surrounded by towering bookshelves and a warm lamp, hyper-realistic cinematic live-action, vertical 9:16.",
-        "Based on the attached image reference. The same white nine-tailed fox rests in the reading chair with the open novel, surrounded by warm amber light and towering bookshelves in a quiet bookstore, hyper-realistic cinematic live-action, vertical 9:16."
-    ],
-    "image_prompt_statuses_3": [
-        {
-            "text": "Based on the attached image reference. The same white nine-tailed fox steps into a cozy independent bookstore at night, surrounded by warm amber lamps, tall wooden shelves, and stacked novels, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox stands on hind legs before a warmly lit bookshelf, scanning rows of clothbound and illustrated novels, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox gently pulls a clothbound novel from the shelf in the warm bookstore light, hyper-realistic cinematic live-action, rich paper and linen texture, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox carries the chosen novel toward a plush reading chair beside a lamp and side table in a quiet bookstore nook, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox sits in the reading chair and opens the clothbound novel on its lap beneath a warm amber lamp, hyper-realistic cinematic live-action, soft fabric and paper textures, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox turns a page in the novel while warm bookstore light glows across nearby shelves and the chair fabric, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same fox curls deeper into the plush reading chair with the open book, surrounded by towering bookshelves and a warm lamp, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        },
-        {
-            "text": "Based on the attached image reference. The same white nine-tailed fox rests in the reading chair with the open novel, surrounded by warm amber light and towering bookshelves in a quiet bookstore, hyper-realistic cinematic live-action, vertical 9:16.",
-            "status": "Not start"
-        }
-    ],
+    "image_prompts_2": [],
+    "image_prompt_statuses_2": [],
+    "image_prompts_3": [],
+    "image_prompt_statuses_3": [],
+    "chatgpt_url": "https://chatgpt.com/g/g-p-6a1d9c7393748191817ff9754f0b3af2-chiitaar/project",
     "reference_image": "/Users/litarcopperkaikem/Downloads/Character Sheet.jpeg",
     "image_url_2": "",
     "image_url_3": "",
-    "chatgpt_url": "https://chatgpt.com/g/g-p-6a1d9c7393748191817ff9754f0b3af2-chiitaar/project"
+    "video_output_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - \u0e1b\u0e32\u0e02\u0e2d\u0e07 - done",
+    "image_input_path": "5-1.png",
+    "video_input_path": "a_silent_motor_glider_flying_low_through_a_canadian_alpine_valley.mov",
+    "video_prefix": "youtube-"
 }

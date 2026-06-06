@@ -510,43 +510,31 @@ function initTabNavigation() {
   const btnBrowser = document.getElementById('tabBrowserBtn');
   const btnImageGen = document.getElementById('tabImageGenBtn');
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
+  const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   
   const viewBrowser = document.getElementById('browserManagerView');
   const viewImageGen = document.getElementById('imageGenView');
   const viewWorkflow = document.getElementById('workflowBotView');
+  const viewVideoHelper = document.getElementById('videoHelperView');
 
-  btnBrowser.addEventListener('click', () => {
-    btnBrowser.classList.add('active');
-    btnImageGen.classList.remove('active');
-    btnWorkflow.classList.remove('active');
-    
-    viewBrowser.classList.remove('hidden');
-    viewImageGen.classList.add('hidden');
-    viewWorkflow.classList.add('hidden');
-  });
+  const tabs = [
+    { btn: btnBrowser, view: viewBrowser, onLoad: null },
+    { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
+    { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
+    { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig }
+  ];
 
-  btnImageGen.addEventListener('click', () => {
-    btnImageGen.classList.add('active');
-    btnBrowser.classList.remove('active');
-    btnWorkflow.classList.remove('active');
-    
-    viewImageGen.classList.remove('hidden');
-    viewBrowser.classList.add('hidden');
-    viewWorkflow.classList.add('hidden');
-    
-    loadImagePrompts();
-  });
-
-  btnWorkflow.addEventListener('click', () => {
-    btnWorkflow.classList.add('active');
-    btnBrowser.classList.remove('active');
-    btnImageGen.classList.remove('active');
-    
-    viewWorkflow.classList.remove('hidden');
-    viewBrowser.classList.add('hidden');
-    viewImageGen.classList.add('hidden');
-    
-    loadConfig();
+  tabs.forEach(tab => {
+    if (!tab.btn) return;
+    tab.btn.addEventListener('click', () => {
+      tabs.forEach(t => {
+        if (t.btn) t.btn.classList.remove('active');
+        if (t.view) t.view.classList.add('hidden');
+      });
+      tab.btn.classList.add('active');
+      if (tab.view) tab.view.classList.remove('hidden');
+      if (tab.onLoad) tab.onLoad();
+    });
   });
 }
 
@@ -557,7 +545,12 @@ async function loadConfig() {
     document.getElementById('cfg_folder_name').value = config.folder_name || '';
     document.getElementById('cfg_local_path').value = config.local_path || '';
     document.getElementById('cfg_remote_path').value = config.remote_path || '';
-    document.getElementById('cfg_focus_browser_tabs').checked = !!config.focus_browser_tabs;
+    
+    const vPref = document.getElementById('videoPrefixText');
+    if (vPref) vPref.value = config.video_prefix || '';
+    
+    const vOut = document.getElementById('videoOutputPathText');
+    if (vOut) vOut.value = config.video_output_path || '';
   } catch (e) {
     writeConsoleLine(`Failed to load config: ${e.message}`, 'error', 'ddcmConsole');
   }
@@ -569,30 +562,7 @@ function gatherConfigData() {
     folder_name: document.getElementById('cfg_folder_name').value.trim(),
     local_path: document.getElementById('cfg_local_path').value.trim(),
     remote_path: document.getElementById('cfg_remote_path').value.trim(),
-    focus_browser_tabs: document.getElementById('cfg_focus_browser_tabs').checked,
   };
-}
-
-// Save config
-async function saveConfig() {
-  const msg = document.getElementById('configMsg');
-  msg.classList.remove('error');
-  msg.textContent = 'Saving...';
-  try {
-    const currentConfig = await jsonFetch('/api/config');
-    const payload = { ...currentConfig, ...gatherConfigData() };
-    await jsonFetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    msg.textContent = 'Config saved successfully!';
-    writeConsoleLine('Configuration saved successfully.', 'success', 'ddcmConsole');
-  } catch (e) {
-    msg.textContent = e.message;
-    msg.classList.add('error');
-    writeConsoleLine(`Failed to save config: ${e.message}`, 'error', 'ddcmConsole');
-  }
 }
 
 function updateImageGenButtonsState() {
@@ -762,6 +732,54 @@ async function setChatgptUrlDefault() {
   }
 }
 
+async function setFolderNameDefault() {
+  const input = document.getElementById('cfg_folder_name');
+  const val = input ? input.value.trim() : '';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'folder_name', value: val })
+    });
+    writeConsoleLine(`Folder name default saved: ${val || 'None'}`, 'success', 'ddcmConsole');
+    alert(`Default Folder Name set to: ${val || 'None'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default Folder Name: ${e.message}`, 'error', 'ddcmConsole');
+  }
+}
+
+async function setLocalPathDefault() {
+  const input = document.getElementById('cfg_local_path');
+  const val = input ? input.value.trim() : '';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'local_path', value: val })
+    });
+    writeConsoleLine(`Local path default saved: ${val || 'None'}`, 'success', 'ddcmConsole');
+    alert(`Default Local Path set to: ${val || 'None'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default Local Path: ${e.message}`, 'error', 'ddcmConsole');
+  }
+}
+
+async function setRemotePathDefault() {
+  const input = document.getElementById('cfg_remote_path');
+  const val = input ? input.value.trim() : '';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'remote_path', value: val })
+    });
+    writeConsoleLine(`Remote path default saved: ${val || 'None'}`, 'success', 'ddcmConsole');
+    alert(`Default Remote Path set to: ${val || 'None'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default Remote Path: ${e.message}`, 'error', 'ddcmConsole');
+  }
+}
+
 async function verifyRefImage() {
   const refImgInput = document.getElementById('cfg_reference_image');
   const path = refImgInput ? refImgInput.value.trim() : '';
@@ -786,6 +804,246 @@ async function verifyRefImage() {
     }
   } catch (e) {
     showToast(`Verification failed: ${e.message}`, 'error');
+  }
+}
+
+function renderVideoHelperBatchRows() {
+  const container = document.getElementById('videoHelperBatchRows');
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (let i = 1; i <= 10; i++) {
+    const row = document.createElement('div');
+    row.className = 'batch-row-pair';
+    row.style.cssText = 'border: 1px solid rgba(255,255,255,0.08); padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;';
+    row.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 5px;">
+        <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">🎬 Set ${i}</span>
+        <span class="status-badge" id="videoSetStatus_${i}" style="font-size: 0.75rem; color: rgba(255,255,255,0.5);">Idle</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 80px 1fr 1fr; gap: 15px;">
+        <!-- No Column -->
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <label style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">No.</label>
+          <input type="text" id="videoNo_${i}" placeholder="${String(i).padStart(2, '0')}" style="font-size: 0.85rem; margin-bottom: 0; text-align: center;" />
+        </div>
+        <!-- Video Column -->
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <label style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Source Video (ไฟล์วีดีโอต้นฉบับ)</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="videoInputPathText_${i}" placeholder="เลือกไฟล์วีดีโอหรือระบุพาท..." style="font-size: 0.85rem; margin-bottom: 0; flex-grow: 1;" />
+            <input type="file" id="videoInputPathFile_${i}" accept="video/*" style="display: none;" />
+            <button id="browseVideoBtn_${i}" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; margin-bottom: 0; border-radius: 8px; white-space: nowrap;">Browse</button>
+          </div>
+        </div>
+        <!-- Image Column -->
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <label style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Cover Image (รูปภาพหน้าปก)</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="imageInputPathText_${i}" placeholder="เลือกรูปภาพหรือระบุพาท..." style="font-size: 0.85rem; margin-bottom: 0; flex-grow: 1;" />
+            <input type="file" id="imageInputPathFile_${i}" accept="image/*" style="display: none;" />
+            <button id="browseImageBtn_${i}" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; margin-bottom: 0; border-radius: 8px; white-space: nowrap;">Browse</button>
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(row);
+
+    // Event listeners
+    const fileVideo = row.querySelector(`#videoInputPathFile_${i}`);
+    const textVideo = row.querySelector(`#videoInputPathText_${i}`);
+    const btnVideo = row.querySelector(`#browseVideoBtn_${i}`);
+    btnVideo.addEventListener('click', () => fileVideo.click());
+    fileVideo.addEventListener('change', () => {
+      if (fileVideo.files.length > 0) {
+        textVideo.value = fileVideo.files[0].name;
+      }
+    });
+
+    const fileImage = row.querySelector(`#imageInputPathFile_${i}`);
+    const textImage = row.querySelector(`#imageInputPathText_${i}`);
+    const btnImage = row.querySelector(`#browseImageBtn_${i}`);
+    btnImage.addEventListener('click', () => fileImage.click());
+    fileImage.addEventListener('change', () => {
+      if (fileImage.files.length > 0) {
+        textImage.value = fileImage.files[0].name;
+      }
+    });
+  }
+}
+
+async function runVideoHelper(btnElement) {
+  const videoPrefix = document.getElementById('videoPrefixText');
+  const prefixVal = videoPrefix ? videoPrefix.value.trim() : '';
+  const videoOutputPath = document.getElementById('videoOutputPathText');
+  const consoleBox = document.getElementById('videoConsole');
+  const outputPathVal = videoOutputPath ? videoOutputPath.value.trim() : '';
+
+  // Collect active sets
+  const activeSets = [];
+  for (let i = 1; i <= 10; i++) {
+    const videoInputFile = document.getElementById(`videoInputPathFile_${i}`);
+    const imageInputFile = document.getElementById(`imageInputPathFile_${i}`);
+    const videoInputText = document.getElementById(`videoInputPathText_${i}`);
+    const imageInputText = document.getElementById(`imageInputPathText_${i}`);
+
+    const setNoInput = document.getElementById(`videoNo_${i}`);
+    const setNoVal = setNoInput ? setNoInput.value.trim() : '';
+
+    const videoFile = videoInputFile ? videoInputFile.files[0] : null;
+    const imageFile = imageInputFile ? imageInputFile.files[0] : null;
+    const videoPathVal = videoInputText ? videoInputText.value.trim() : '';
+    const imagePathVal = imageInputText ? imageInputText.value.trim() : '';
+
+    const hasVideo = videoFile || videoPathVal;
+    const hasImage = imageFile || imagePathVal;
+
+    if (hasVideo || hasImage) {
+      if (!hasVideo) {
+        alert(`Set ${i}: Please select a video file or provide a source video path.`);
+        return;
+      }
+      if (!hasImage) {
+        alert(`Set ${i}: Please select an image file or provide a cover image path.`);
+        return;
+      }
+      activeSets.push({
+        index: i,
+        videoFile,
+        imageFile,
+        videoPathVal,
+        imagePathVal,
+        no: setNoVal
+      });
+    }
+  }
+
+  if (activeSets.length === 0) {
+    alert('Please configure at least one Set of Video and Cover Image to generate.');
+    return;
+  }
+
+  btnElement.disabled = true;
+  btnElement.classList.add('loading');
+  btnElement.textContent = 'Generating Batch...';
+  
+  if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Starting batch cover video rendering process...</div>';
+  writeConsoleLine(`Video Helper: Packaging requests for ${activeSets.length} active sets...`, 'system', 'videoConsole');
+
+  // Reset statuses of all active sets to Idle/Waiting
+  for (let i = 1; i <= 10; i++) {
+    const badge = document.getElementById(`videoSetStatus_${i}`);
+    if (badge) {
+      const isActive = activeSets.some(s => s.index === i);
+      badge.textContent = isActive ? 'Waiting...' : 'Idle';
+      badge.style.color = isActive ? '#ffb020' : 'rgba(255,255,255,0.5)';
+    }
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const set of activeSets) {
+    const { index, videoFile, imageFile, videoPathVal, imagePathVal } = set;
+    const badge = document.getElementById(`videoSetStatus_${index}`);
+    if (badge) {
+      badge.textContent = 'Generating...';
+      badge.style.color = '#8da6ff';
+    }
+
+    writeConsoleLine(`[Set ${index}] Starting rendering...`, 'system', 'videoConsole');
+
+    try {
+      const formData = new FormData();
+      if (videoFile) {
+        formData.append('video', videoFile);
+      }
+      if (imageFile) {
+        formData.append('image', imageFile);
+      }
+      formData.append('video_path', videoPathVal);
+      formData.append('image_path', imagePathVal);
+      formData.append('output_path', outputPathVal);
+      formData.append('prefix', prefixVal);
+      if (set.no) {
+        formData.append('no', set.no);
+      }
+
+      const response = await fetch('/api/video/make-cover', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server error: ${response.status}`);
+      }
+
+      const res = await response.json();
+      
+      if (res.ok) {
+        writeConsoleLine(`[Set ${index}] Success! Output video generated at: ${res.output_path}`, 'success', 'videoConsole');
+        if (badge) {
+          badge.textContent = 'Success';
+          badge.style.color = '#10a37f';
+        }
+        successCount++;
+      } else {
+        const err = res.detail || 'Unknown error';
+        writeConsoleLine(`[Set ${index}] Failed: ${err}`, 'error', 'videoConsole');
+        if (badge) {
+          badge.textContent = 'Failed';
+          badge.style.color = '#ff4a4a';
+        }
+        failCount++;
+      }
+    } catch (e) {
+      writeConsoleLine(`[Set ${index}] Error: ${e.message}`, 'error', 'videoConsole');
+      if (badge) {
+        badge.textContent = 'Error';
+        badge.style.color = '#ff4a4a';
+      }
+      failCount++;
+    }
+  }
+
+  writeConsoleLine(`Batch Complete! Success: ${successCount}, Failed: ${failCount}`, 'system', 'videoConsole');
+  alert(`Batch Process Complete!\nSuccess: ${successCount}\nFailed: ${failCount}`);
+
+  btnElement.disabled = false;
+  btnElement.classList.remove('loading');
+  btnElement.textContent = 'Generate YouTube Covers (Batch Process)';
+}
+
+async function setVideoOutputDefault() {
+  const input = document.getElementById('videoOutputPathText');
+  const val = input ? input.value.trim() : '';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'video_output_path', value: val })
+    });
+    writeConsoleLine(`Video output path default saved: ${val || 'None'}`, 'success', 'videoConsole');
+    alert(`Default video output path set to: ${val || 'None'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default video output path: ${e.message}`, 'error', 'videoConsole');
+  }
+}
+
+async function setVideoPrefixDefault() {
+  const input = document.getElementById('videoPrefixText');
+  const val = input ? input.value.trim() : '';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'video_prefix', value: val })
+    });
+    writeConsoleLine(`Video prefix default saved: ${val || 'None'}`, 'success', 'videoConsole');
+    alert(`Default video prefix set to: ${val || 'None'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default video prefix: ${e.message}`, 'error', 'videoConsole');
   }
 }
 
@@ -879,6 +1137,11 @@ function setupLogStream() {
     if (document.getElementById('imageGenView').classList.contains('active') || !document.getElementById('imageGenView').classList.contains('hidden')) {
       writeConsoleLine(txt, type, 'imageConsole');
     }
+    // Mirror logs to videoConsole if video helper is active
+    const videoHelper = document.getElementById('videoHelperView');
+    if (videoHelper && !videoHelper.classList.contains('hidden')) {
+      writeConsoleLine(txt, type, 'videoConsole');
+    }
   });
 
   logSource.addEventListener('ping', () => {
@@ -922,7 +1185,6 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
 
 // Initialize steps listeners
 function initWorkflowActionListeners() {
-  document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
   document.getElementById('clearConsoleBtn').addEventListener('click', () => {
     const consoleBox = document.getElementById('ddcmConsole');
     if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
@@ -948,6 +1210,53 @@ function initWorkflowActionListeners() {
     setUrlBtn.addEventListener('click', setChatgptUrlDefault);
   }
 
+  const setFolderBtn = document.getElementById('setFolderNameDefaultBtn');
+  if (setFolderBtn) {
+    setFolderBtn.addEventListener('click', setFolderNameDefault);
+  }
+
+  const setLocalBtn = document.getElementById('setLocalPathDefaultBtn');
+  if (setLocalBtn) {
+    setLocalBtn.addEventListener('click', setLocalPathDefault);
+  }
+
+  const setRemoteBtn = document.getElementById('setRemotePathDefaultBtn');
+  if (setRemoteBtn) {
+    setRemoteBtn.addEventListener('click', setRemotePathDefault);
+  }
+  const runVideoBtn = document.getElementById('runVideoHelperBtn');
+  if (runVideoBtn) {
+    runVideoBtn.addEventListener('click', (e) => runVideoHelper(e.target));
+  }
+
+  const clearVideoConsole = document.getElementById('clearVideoConsoleBtn');
+  if (clearVideoConsole) {
+    clearVideoConsole.addEventListener('click', () => {
+      const consoleBox = document.getElementById('videoConsole');
+      if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
+    });
+  }
+
+  const setVideoOutputBtn = document.getElementById('setVideoOutputDefaultBtn');
+  if (setVideoOutputBtn) setVideoOutputBtn.addEventListener('click', setVideoOutputDefault);
+
+  const setVideoPrefixBtn = document.getElementById('setVideoPrefixDefaultBtn');
+  if (setVideoPrefixBtn) setVideoPrefixBtn.addEventListener('click', setVideoPrefixDefault);
+
+  const browseOutputBtn = document.getElementById('browseOutputBtn');
+  const videoOutputPathText = document.getElementById('videoOutputPathText');
+  if (browseOutputBtn && videoOutputPathText) {
+    browseOutputBtn.addEventListener('click', async () => {
+      try {
+        const res = await jsonFetch('/api/utils/browse-directory');
+        if (res.ok && res.path) {
+          videoOutputPathText.value = res.path;
+        }
+      } catch (e) {
+        showToast(`Failed to browse directory: ${e.message}`, 'error');
+      }
+    });
+  }
   // Step 1
   document.getElementById('btn_step2').addEventListener('click', (e) => {
     const config = gatherConfigData();
@@ -1168,6 +1477,7 @@ loadSettings();
 loadProfiles();
 loadPrompts();
 loadImagePrompts();
+renderVideoHelperBatchRows();
 initTabNavigation();
 initWorkflowActionListeners();
 initFileImports();

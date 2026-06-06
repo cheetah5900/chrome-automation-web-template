@@ -68,6 +68,7 @@
         <button id="tabImageGenBtn" class="tab-btn active">🖼️ Image Generation</button>
         <button id="tabWorkflowBtn" class="tab-btn">🤖 Workflow Bot</button>
         <button id="tabBrowserBtn" class="tab-btn">🌐 Browser Manager</button>
+        <button id="tabVideoHelperBtn" class="tab-btn">🎥 Video Helper</button>
       </div>
 
       <!-- VIEW 1: BROWSER MANAGER -->
@@ -180,26 +181,28 @@
             <div class="settings-form">
               <div class="form-group">
                 <label for="cfg_folder_name">Folder Name (ชื่อโฟลเดอร์งาน)</label>
-                <input id="cfg_folder_name" placeholder="เช่น Cute Animal Clipart" />
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <input id="cfg_folder_name" placeholder="เช่น Cute Animal Clipart" style="margin-bottom: 0; flex-grow: 1;" />
+                  <button id="setFolderNameDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
               </div>
 
               <div class="form-group">
                 <label for="cfg_local_path">Local Path (ที่เก็บงานในเครื่อง)</label>
-                <input id="cfg_local_path" placeholder="เช่น C:\Files\Project\local work" />
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <input id="cfg_local_path" placeholder="เช่น C:\Files\Project\local work" style="margin-bottom: 0; flex-grow: 1;" />
+                  <button id="setLocalPathDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
               </div>
 
               <div class="form-group">
                 <label for="cfg_remote_path">Remote Path (ที่เก็บงานบน Drive)</label>
-                <input id="cfg_remote_path" placeholder="เช่น G:\My Drive\Projects\work" />
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <input id="cfg_remote_path" placeholder="เช่น G:\My Drive\Projects\work" style="margin-bottom: 0; flex-grow: 1;" />
+                  <button id="setRemotePathDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
               </div>
 
-              <div class="form-group row" style="align-items: center; margin-top: 10px;">
-                <input id="cfg_focus_browser_tabs" type="checkbox" style="width: auto; margin-bottom: 0; margin-right: 8px;" />
-                <label for="cfg_focus_browser_tabs" style="margin: 0; user-select: none;">Focus Browser Tabs automatically during actions</label>
-              </div>
-
-              <button id="saveConfigBtn" class="primary-btn" style="width: 100%; margin-top: 12px;">Save Config</button>
-              <p id="configMsg" class="msg" style="text-align: center; margin-top: 8px;"></p>
             </div>
           </section>
 
@@ -269,6 +272,58 @@
               </div>
               <div id="ddcmConsole" class="console-box">
                 <div class="console-line system">Waiting for execution to start...</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 4: VIDEO HELPER -->
+      <div id="videoHelperView" class="tab-view hidden">
+        <div class="layout-grid workflow-grid" style="grid-template-columns: 7fr 3fr;">
+          <!-- Configuration Column -->
+          <section class="card">
+            <h2 class="section-title">🎥 Video Helper (Batch Process)</h2>
+            <p class="section-subtitle">Make YouTube Cover By adding cover image to the end of a video</p>
+            
+            <div class="settings-form" style="margin-top: 15px;">
+              <!-- Prefix -->
+              <div class="form-group" style="margin-bottom: 20px; padding-bottom: 10px;">
+                <label for="videoPrefixText" style="font-weight: bold; color: #8da6ff;">Prefix (คำนำหน้าชื่อไฟล์วีดีโอผลลัพธ์)</label>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <input id="videoPrefixText" placeholder="เช่น [Cover]_, 2026_" style="margin-bottom: 0; flex-grow: 1;" />
+                  <button id="setVideoPrefixDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
+              </div>
+
+              <!-- Output Path -->
+              <div class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
+                <label for="videoOutputPathText" style="font-weight: bold; color: #8da6ff;">Output Path (ที่เก็บวีดีโอผลลัพธ์)</label>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <input id="videoOutputPathText" placeholder="เช่น /Users/litarcopperkaikem/Downloads" style="margin-bottom: 0; flex-grow: 1;" />
+                  <button id="browseOutputBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                  <button id="setVideoOutputDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
+              </div>
+
+              <!-- Batch Rows Container -->
+              <div id="videoHelperBatchRows" style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; max-height: 480px; overflow-y: auto; padding-right: 8px;">
+                <!-- Rows will be dynamically created here -->
+              </div>
+
+              <button id="runVideoHelperBtn" class="primary-btn" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">Generate YouTube Covers (Batch Process)</button>
+            </div>
+          </section>
+
+          <!-- Console Column -->
+          <div class="actions-column">
+            <section class="card console-card">
+              <div class="console-header">
+                <h3>📟 Video Processing Console</h3>
+                <button id="clearVideoConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
+              </div>
+              <div id="videoConsole" class="console-box">
+                <div class="console-line system">Waiting for process to start...</div>
               </div>
             </section>
           </div>

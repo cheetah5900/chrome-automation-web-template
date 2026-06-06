@@ -34,9 +34,13 @@ def step8_downloads_images_to_local(folder_name: str, local_path: str, log: Call
     clean_name = clean_name_from_folder_name(folder_name)
     base = os.path.join(local_path, folder_name)
     downloads = os.path.join(os.path.expanduser("~"), "Downloads")
-    img_d = os.path.join(downloads, "images")
+    img_d = os.path.join(base, "Images")
     if not os.path.exists(img_d):
-        raise FileNotFoundError("No 'images' folder in Downloads")
+        img_d = os.path.join(downloads, "Images")
+    if not os.path.exists(img_d):
+        img_d = os.path.join(downloads, "images")
+    if not os.path.exists(img_d):
+        raise FileNotFoundError("No 'Images' folder found in local path or Downloads")
 
     d4000 = os.path.join(base, "4000x4000")
     os.makedirs(d4000, exist_ok=True)
@@ -48,7 +52,7 @@ def step8_downloads_images_to_local(folder_name: str, local_path: str, log: Call
                 img_files.append(os.path.join(root, f))
 
     if not img_files:
-        log("No images found in Downloads/images")
+        log("No images found in Images folder")
         return
 
     for i, fp in enumerate(sorted(img_files)):
@@ -770,6 +774,28 @@ def step11_canva_export_all_bot(
     step11_canva_export_all(bot.driver, png_pages, jpg_pages, pdf_pages, log)
 
 
+def get_config_for_downloads() -> tuple[str, str]:
+    import json
+    config_file = "config_win.json" if os.name == "nt" else "config_mac.json"
+    local_path = ""
+    folder_name = ""
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+                local_path = data.get("local_path", "")
+                folder_name = data.get("folder_name", "")
+        except Exception:
+            pass
+    if not local_path:
+        h = os.path.expanduser("~")
+        if os.name == "nt":
+            local_path = r"C:\Files\Project\local DDCM"
+        else:
+            local_path = os.path.join(h, "Documents/DDCM")
+    return local_path, folder_name
+
+
 def step4_download_images(driver, log: Callable[[str], None]) -> None:
     # Assumes we are already on Gemini tab.
     driver.execute_script("window.scrollTo(0, 0);")
@@ -847,17 +873,43 @@ def step4_download_images(driver, log: Callable[[str], None]) -> None:
         time.sleep(0.8)
 
     downloads = os.path.join(os.path.expanduser("~"), "Downloads")
-    ip = os.path.join(downloads, "images")
+    ip = os.path.join(downloads, "Images")
     os.makedirs(ip, exist_ok=True)
     mc = 0
     for f in os.listdir(downloads):
         if f.lower().endswith(".png"):
             src, dst = os.path.join(downloads, f), os.path.join(ip, f)
             if os.path.exists(dst):
-                trash(dst, log)
-            shutil.move(src, dst)
-            mc += 1
-    log(f"Step 4: Moved {mc} PNG files to 'Downloads/images'.")
+                try:
+                    os.remove(dst)
+                except Exception:
+                    pass
+            try:
+                shutil.move(src, dst)
+                mc += 1
+            except Exception as e:
+                log(f"Step 4: Failed to move {f} to 'Downloads/Images': {e}")
+    log(f"Step 4: Moved {mc} PNG files to 'Downloads/Images'.")
+
+    # Cut the folder to 'Local Path>Foldername'
+    local_path, folder_name = get_config_for_downloads()
+    if local_path and folder_name:
+        dest_parent = os.path.join(local_path, folder_name)
+        os.makedirs(dest_parent, exist_ok=True)
+        dest_folder = os.path.join(dest_parent, "Images")
+        if os.path.exists(dest_folder):
+            log(f"Step 4: Target folder {dest_folder} already exists, trashing it first...")
+            try:
+                trash(dest_folder, log)
+            except Exception as e:
+                log(f"Step 4: Failed to trash existing folder {dest_folder}: {e}")
+        try:
+            shutil.move(ip, dest_folder)
+            log(f"Step 4: Cut 'Downloads/Images' folder to '{dest_folder}'.")
+        except Exception as e:
+            log(f"Step 4: Failed to cut 'Downloads/Images' folder to '{dest_folder}': {e}")
+    else:
+        log("Step 4: Local path or folder name not configured. Left 'Images' folder in Downloads.")
 
 
 def step4_download_images_bot(bot: Any, log: Callable[[str], None]) -> None:
@@ -1406,8 +1458,8 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     # The earliest must be 1 because we download from the top-most (first to last download).
     
     # 4. Rename each file from 1 to n ordering from first to last download
-    # 5. Move to a new folder call 'images'
-    dest_dir = os.path.join(downloads_dir, "images")
+    # 5. Move to a new folder call 'Images'
+    dest_dir = os.path.join(downloads_dir, "Images")
     os.makedirs(dest_dir, exist_ok=True)
     
     log(f"Step 4 ChatGPT: Renaming and moving {len(downloaded_images)} files...")
@@ -1430,7 +1482,27 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
         except Exception as e:
             log(f"Step 4 ChatGPT: Failed to rename/move {f}: {e}")
             
-    log(f"Step 4 ChatGPT: Completed! Moved {success_count} files to 'Downloads/images' folder.")
+    log(f"Step 4 ChatGPT: Completed! Moved {success_count} files to 'Downloads/Images' folder.")
+
+    # Cut the folder to 'Local Path>Foldername'
+    local_path, folder_name = get_config_for_downloads()
+    if local_path and folder_name:
+        dest_parent = os.path.join(local_path, folder_name)
+        os.makedirs(dest_parent, exist_ok=True)
+        dest_folder = os.path.join(dest_parent, "Images")
+        if os.path.exists(dest_folder):
+            log(f"Step 4 ChatGPT: Target folder {dest_folder} already exists, trashing it first...")
+            try:
+                trash(dest_folder, log)
+            except Exception as e:
+                log(f"Step 4 ChatGPT: Failed to trash existing folder {dest_folder}: {e}")
+        try:
+            shutil.move(dest_dir, dest_folder)
+            log(f"Step 4 ChatGPT: Cut 'Downloads/Images' folder to '{dest_folder}'.")
+        except Exception as e:
+            log(f"Step 4 ChatGPT: Failed to cut 'Downloads/Images' folder to '{dest_folder}': {e}")
+    else:
+        log("Step 4 ChatGPT: Local path or folder name not configured. Left 'Images' folder in Downloads.")
 
 
 def step4_chatgpt_download_images_bot(bot: Any, log: Callable[[str], None]) -> None:
