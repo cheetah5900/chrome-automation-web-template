@@ -821,10 +821,10 @@ function renderVideoHelperBatchRows() {
         <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">🎬 Set ${i}</span>
         <span class="status-badge" id="videoSetStatus_${i}" style="font-size: 0.75rem; color: rgba(255,255,255,0.5);">Idle</span>
       </div>
-      <div style="display: grid; grid-template-columns: 80px 1fr 1fr; gap: 15px;">
-        <!-- No Column -->
+      <div style="display: grid; grid-template-columns: 110px 1fr 1fr; gap: 15px;">
+        <!-- Sub folder Column -->
         <div style="display: flex; flex-direction: column; gap: 5px;">
-          <label style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">No.</label>
+          <label style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Sub folder</label>
           <input type="text" id="videoNo_${i}" placeholder="${String(i).padStart(2, '0')}" style="font-size: 0.85rem; margin-bottom: 0; text-align: center;" />
         </div>
         <!-- Video Column -->
