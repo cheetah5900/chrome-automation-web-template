@@ -1730,7 +1730,8 @@ def make_video_cover(
     image_path: str | None = Form(None),
     output_path: str | None = Form(None),
     prefix: str | None = Form(None),
-    no: str | None = Form(None)
+    no: str | None = Form(None),
+    mode: str | None = Form(None)
 ) -> dict[str, Any]:
     import subprocess
     import tempfile
@@ -1738,41 +1739,44 @@ def make_video_cover(
     import json
     import shutil
     
-    log("Video Helper: Starting YouTube Cover conversion...")
+    is_combine_mode = (mode == "combine")
+    mode_label = "Combine Mode" if is_combine_mode else "Cover Mode"
+    log(f"Video Helper: Starting {mode_label} conversion...")
     
     src_video_path = ""
     video_filename = ""
     
     if video and video.filename:
-        log(f"Video Source: Uploaded file '{video.filename}'")
+        log(f"Video 1 Source: Uploaded file '{video.filename}'")
         video_filename = video.filename
     elif video_path and video_path.strip():
         video_path_clean = video_path.strip()
         if os.path.exists(video_path_clean) and os.path.isfile(video_path_clean):
             src_video_path = video_path_clean
             video_filename = os.path.basename(video_path_clean)
-            log(f"Video Source: Local path '{src_video_path}'")
+            log(f"Video 1 Source: Local path '{src_video_path}'")
         else:
-            raise HTTPException(status_code=400, detail=f"Local video path does not exist or is not a file: {video_path_clean}")
+            raise HTTPException(status_code=400, detail=f"Local video 1 path does not exist or is not a file: {video_path_clean}")
     else:
-        raise HTTPException(status_code=400, detail="Please upload a video file or enter a valid source video path")
+        raise HTTPException(status_code=400, detail="Please upload video 1 or enter a valid local path")
 
-    src_image_path = ""
-    image_filename = ""
+    src_second_path = ""
+    second_filename = ""
     
     if image and image.filename:
-        log(f"Image Source: Uploaded file '{image.filename}'")
-        image_filename = image.filename
+        log(f"Second Input Source: Uploaded file '{image.filename}'")
+        second_filename = image.filename
     elif image_path and image_path.strip():
         image_path_clean = image_path.strip()
         if os.path.exists(image_path_clean) and os.path.isfile(image_path_clean):
-            src_image_path = image_path_clean
-            image_filename = os.path.basename(image_path_clean)
-            log(f"Image Source: Local path '{src_image_path}'")
+            src_second_path = image_path_clean
+            second_filename = os.path.basename(image_path_clean)
+            log(f"Second Input Source: Local path '{src_second_path}'")
         else:
-            raise HTTPException(status_code=400, detail=f"Local image path does not exist or is not a file: {image_path_clean}")
+            raise HTTPException(status_code=400, detail=f"Second input path does not exist or is not a file: {image_path_clean}")
     else:
-        raise HTTPException(status_code=400, detail="Please upload a cover image file or enter a valid cover image path")
+        label = "video 2" if is_combine_mode else "cover image"
+        raise HTTPException(status_code=400, detail=f"Please upload a {label} file or enter a valid local path")
 
     out_dir = ""
     if output_path and output_path.strip():
@@ -1793,13 +1797,14 @@ def make_video_cover(
     
     orig_name = os.path.splitext(video_filename)[0]
     prefix_str = prefix.strip() if prefix else ""
-    final_output_path = os.path.join(out_dir, f"{prefix_str}{orig_name}_with_cover.mp4")
+    suffix = "_combined.mp4" if is_combine_mode else "_with_cover.mp4"
+    final_output_path = os.path.join(out_dir, f"{prefix_str}{orig_name}{suffix}")
     log(f"Output Target Path: '{final_output_path}'")
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_input_video = src_video_path
-            temp_input_image = src_image_path
+            temp_input_second = src_second_path
             
             if video and video.filename:
                 video_ext = os.path.splitext(video.filename)[1] or ".mp4"
@@ -1808,17 +1813,17 @@ def make_video_cover(
                     shutil.copyfileobj(video.file, buffer)
                     
             if image and image.filename:
-                image_ext = os.path.splitext(image.filename)[1] or ".png"
-                temp_input_image = os.path.join(tmpdir, f"uploaded_image{image_ext}")
-                with open(temp_input_image, "wb") as buffer:
+                second_ext = os.path.splitext(image.filename)[1] or (".mp4" if is_combine_mode else ".png")
+                temp_input_second = os.path.join(tmpdir, f"uploaded_second{second_ext}")
+                with open(temp_input_second, "wb") as buffer:
                     shutil.copyfileobj(image.file, buffer)
             
             temp_video = os.path.join(tmpdir, "temp_video.mp4")
             temp_black = os.path.join(tmpdir, "temp_black.mp4")
-            temp_image = os.path.join(tmpdir, "temp_image.mp4")
+            temp_second = os.path.join(tmpdir, "temp_second.mp4")
             list_txt = os.path.join(tmpdir, "list.txt")
             
-            # Check if input video has audio
+            # Check if input video 1 has audio
             has_audio = False
             try:
                 probe_cmd = [
@@ -1834,14 +1839,14 @@ def make_video_cover(
                 log(f"Video Helper Check Audio Warning: {e}")
                 has_audio = False
                 
-            log(f"Video Helper: Input video has audio track: {has_audio}")
+            log(f"Video Helper: Input video 1 has audio track: {has_audio}")
             
             ffmpeg_bin = "/opt/homebrew/bin/ffmpeg"
             if not os.path.exists(ffmpeg_bin):
                 ffmpeg_bin = "ffmpeg"
                 
-            # 1. Process Video
-            log("Video Helper [1/4]: Aligning source video to 9:16 vertical 4K 60fps...")
+            # 1. Process Video 1
+            log("Video Helper [1/3]: Aligning first video to 9:16 vertical 4K 60fps...")
             if has_audio:
                 v_cmd = [
                     ffmpeg_bin, "-y", "-i", temp_input_video,
@@ -1857,38 +1862,78 @@ def make_video_cover(
                 
             res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if res.returncode != 0:
-                raise RuntimeError(f"FFmpeg failed processing video: {res.stderr}")
+                raise RuntimeError(f"FFmpeg failed processing first video: {res.stderr}")
                 
-            # 2. Process Black Screen (2s)
-            log("Video Helper [2/4]: Generating 2 seconds black screen...")
-            b_cmd = [
-                ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60:d=2",
-                "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=2",
-                "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_black
-            ]
-            res = subprocess.run(b_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            if res.returncode != 0:
-                raise RuntimeError(f"FFmpeg failed generating black screen: {res.stderr}")
+            if is_combine_mode:
+                # Process Video 2
+                has_audio2 = False
+                try:
+                    probe_cmd = [
+                        "ffprobe", "-v", "error", "-select_streams", "a",
+                        "-show_entries", "stream=codec_type", "-of", "json", temp_input_second
+                    ]
+                    if not os.path.exists(probe_cmd[0]):
+                        probe_cmd[0] = "ffprobe"
+                    result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    probe_data = json.loads(result.stdout)
+                    has_audio2 = len(probe_data.get("streams", [])) > 0
+                except Exception as e:
+                    log(f"Video Helper Check Audio 2 Warning: {e}")
+                    has_audio2 = False
                 
-            # 3. Process Cover Image (3s)
-            log("Video Helper [3/4]: Rendering cover image for 3 seconds...")
-            i_cmd = [
-                ffmpeg_bin, "-y", "-loop", "1", "-i", temp_input_image,
-                "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=3",
-                "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
-                "-map", "[v]", "-map", "1:a", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_image
-            ]
-            res = subprocess.run(i_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            if res.returncode != 0:
-                raise RuntimeError(f"FFmpeg failed rendering image: {res.stderr}")
+                log(f"Video Helper: Input video 2 has audio track: {has_audio2}")
+                log("Video Helper [2/3]: Aligning second video to 9:16 vertical 4K 60fps...")
+                if has_audio2:
+                    v2_cmd = [
+                        ffmpeg_bin, "-y", "-i", temp_input_second,
+                        "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                        "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_second
+                    ]
+                else:
+                    v2_cmd = [
+                        ffmpeg_bin, "-y", "-i", temp_input_second, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                        "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                        "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_second
+                    ]
+                res = subprocess.run(v2_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if res.returncode != 0:
+                    raise RuntimeError(f"FFmpeg failed processing second video: {res.stderr}")
                 
-            # 4. Concatenate
-            log("Video Helper [4/4]: Concatenating clips into final 4K 60fps MP4 video...")
-            with open(list_txt, "w", encoding="utf-8") as f:
-                f.write(f"file '{temp_video}'\n")
-                f.write(f"file '{temp_black}'\n")
-                f.write(f"file '{temp_image}'\n")
-                
+                # Concatenate the two videos
+                log("Video Helper [3/3]: Concatenating videos into final 9:16 60fps MP4 video...")
+                with open(list_txt, "w", encoding="utf-8") as f:
+                    f.write(f"file '{temp_video}'\n")
+                    f.write(f"file '{temp_second}'\n")
+                    
+            else:
+                # Cover Mode: 2s Black Screen + 3s Image
+                log("Video Helper [2/3]: Generating 2 seconds black screen...")
+                b_cmd = [
+                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60:d=2",
+                    "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=2",
+                    "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_black
+                ]
+                res = subprocess.run(b_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if res.returncode != 0:
+                    raise RuntimeError(f"FFmpeg failed generating black screen: {res.stderr}")
+                    
+                log("Video Helper [3/3]: Rendering cover image for 3 seconds...")
+                i_cmd = [
+                    ffmpeg_bin, "-y", "-loop", "1", "-i", temp_input_second,
+                    "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=3",
+                    "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                    "-map", "[v]", "-map", "1:a", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_second
+                ]
+                res = subprocess.run(i_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if res.returncode != 0:
+                    raise RuntimeError(f"FFmpeg failed rendering image: {res.stderr}")
+                    
+                log("Video Helper [4/4]: Concatenating clips into final 9:16 60fps MP4 video...")
+                with open(list_txt, "w", encoding="utf-8") as f:
+                    f.write(f"file '{temp_video}'\n")
+                    f.write(f"file '{temp_black}'\n")
+                    f.write(f"file '{temp_second}'\n")
+                    
             concat_cmd = [
                 ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
                 "-c", "copy", final_output_path

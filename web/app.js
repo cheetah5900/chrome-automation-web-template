@@ -881,16 +881,16 @@ function renderVideoHelperBatchRows() {
         </div>
         <!-- Video Column -->
         <div style="display: flex; flex-direction: column; gap: 5px;">
-          <label style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Source Video (ไฟล์วีดีโอต้นฉบับ)</label>
+          <label id="videoLabel_${i}" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Source Video (ไฟล์วีดีโอต้นฉบับ)</label>
           <div style="display: flex; gap: 8px;">
-            <input type="text" id="videoInputPathText_${i}" placeholder="เลือกไฟล์วีดีโอหรือระบุพาท..." style="font-size: 0.85rem; margin-bottom: 0; flex-grow: 1;" />
+            <input type="text" id="videoInputPathText_${i}" placeholder="เลือกไฟล์วีดีโอหรือระบุพาท..." style="font-size: 0.85rem; margin-grow: 1; margin-bottom: 0; flex-grow: 1;" />
             <input type="file" id="videoInputPathFile_${i}" accept="video/*" style="display: none;" />
             <button id="browseVideoBtn_${i}" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; margin-bottom: 0; border-radius: 8px; white-space: nowrap;">Browse</button>
           </div>
         </div>
         <!-- Image Column -->
         <div style="display: flex; flex-direction: column; gap: 5px;">
-          <label style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Cover Image (รูปภาพหน้าปก)</label>
+          <label id="imageLabel_${i}" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Cover Image (รูปภาพหน้าปก)</label>
           <div style="display: flex; gap: 8px;">
             <input type="text" id="imageInputPathText_${i}" placeholder="เลือกรูปภาพหรือระบุพาท..." style="font-size: 0.85rem; margin-bottom: 0; flex-grow: 1;" />
             <input type="file" id="imageInputPathFile_${i}" accept="image/*" style="display: none;" />
@@ -925,6 +925,8 @@ function renderVideoHelperBatchRows() {
 }
 
 async function runVideoHelper(btnElement) {
+  const videoMode = document.querySelector('input[name="videoHelperMode"]:checked');
+  const modeVal = videoMode ? videoMode.value : 'cover';
   const videoPrefix = document.getElementById('videoPrefixText');
   const prefixVal = videoPrefix ? videoPrefix.value.trim() : '';
   const videoOutputPath = document.getElementById('videoOutputPathText');
@@ -1011,6 +1013,7 @@ async function runVideoHelper(btnElement) {
       formData.append('image_path', imagePathVal);
       formData.append('output_path', outputPathVal);
       formData.append('prefix', prefixVal);
+      formData.append('mode', modeVal);
       if (set.no) {
         formData.append('no', set.no);
       }
@@ -1265,6 +1268,38 @@ function initWorkflowActionListeners() {
   if (runVideoBtn) {
     runVideoBtn.addEventListener('click', (e) => runVideoHelper(e.target));
   }
+
+  document.querySelectorAll('input[name="videoHelperMode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const mode = e.target.value;
+      const isCombine = mode === 'combine';
+      
+      for (let i = 1; i <= 20; i++) {
+        const videoLabel = document.getElementById(`videoLabel_${i}`);
+        const imageLabel = document.getElementById(`imageLabel_${i}`);
+        const fileImage = document.getElementById(`imageInputPathFile_${i}`);
+        const textImage = document.getElementById(`imageInputPathText_${i}`);
+        
+        if (videoLabel) {
+          videoLabel.textContent = isCombine ? 'Video 1 (วีดีโอแรก)' : 'Source Video (ไฟล์วีดีโอต้นฉบับ)';
+        }
+        if (imageLabel) {
+          imageLabel.textContent = isCombine ? 'Video 2 (วีดีโอที่สอง)' : 'Cover Image (รูปภาพหน้าปก)';
+        }
+        if (fileImage) {
+          fileImage.accept = isCombine ? 'video/*' : 'image/*';
+        }
+        if (textImage) {
+          textImage.placeholder = isCombine ? 'เลือกวีดีโอที่สองหรือระบุพาท...' : 'เลือกรูปภาพหรือระบุพาท...';
+        }
+      }
+      
+      const runBtn = document.getElementById('runVideoHelperBtn');
+      if (runBtn) {
+        runBtn.textContent = isCombine ? 'Combine Videos (Batch Process)' : 'Generate YouTube Covers (Batch Process)';
+      }
+    });
+  });
 
   const clearVideoConsole = document.getElementById('clearVideoConsoleBtn');
   if (clearVideoConsole) {

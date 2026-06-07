@@ -287,6 +287,21 @@
             <p class="section-subtitle">Make YouTube Cover By adding cover image to the end of a video</p>
             
             <div class="settings-form" style="margin-top: 15px;">
+              <!-- Mode Selector -->
+              <div class="form-group" style="margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                <label style="font-weight: bold; color: #8da6ff;">Processing Mode (โหมดการทำงาน)</label>
+                <div style="display: flex; gap: 20px; margin-top: 5px;">
+                  <label style="display: flex; align-items: center; gap: 8px; color: #fff; font-size: 0.9rem; cursor: pointer;">
+                    <input type="radio" name="videoHelperMode" value="cover" checked style="margin: 0; accent-color: #8da6ff; width: auto;" />
+                    <span>Cover Mode (วีดีโอ + รูปปก)</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; color: #fff; font-size: 0.9rem; cursor: pointer;">
+                    <input type="radio" name="videoHelperMode" value="combine" style="margin: 0; accent-color: #8da6ff; width: auto;" />
+                    <span>Combine Mode (รวม 2 วีดีโอ)</span>
+                  </label>
+                </div>
+              </div>
+
               <!-- Prefix -->
               <div class="form-group" style="margin-bottom: 20px; padding-bottom: 10px;">
                 <label for="videoPrefixText" style="font-weight: bold; color: #8da6ff;">Prefix (คำนำหน้าชื่อไฟล์วีดีโอผลลัพธ์)</label>
