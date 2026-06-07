@@ -1841,17 +1841,17 @@ def make_video_cover(
                 ffmpeg_bin = "ffmpeg"
                 
             # 1. Process Video
-            log("Video Helper [1/4]: Aligning source video to 4K 60fps...")
+            log("Video Helper [1/4]: Aligning source video to 9:16 vertical 4K 60fps...")
             if has_audio:
                 v_cmd = [
                     ffmpeg_bin, "-y", "-i", temp_input_video,
-                    "-filter_complex", "[0:v]scale=3840:2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                    "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
                     "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
                 ]
             else:
                 v_cmd = [
                     ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                    "-filter_complex", "[0:v]scale=3840:2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                    "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
                     "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
                 ]
                 
@@ -1862,7 +1862,7 @@ def make_video_cover(
             # 2. Process Black Screen (2s)
             log("Video Helper [2/4]: Generating 2 seconds black screen...")
             b_cmd = [
-                ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=3840x2160:r=60:d=2",
+                ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60:d=2",
                 "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=2",
                 "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_black
             ]
@@ -1875,7 +1875,7 @@ def make_video_cover(
             i_cmd = [
                 ffmpeg_bin, "-y", "-loop", "1", "-i", temp_input_image,
                 "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=3",
-                "-filter_complex", "[0:v]scale=3840:2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
                 "-map", "[v]", "-map", "1:a", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_image
             ]
             res = subprocess.run(i_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
