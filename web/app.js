@@ -827,7 +827,7 @@ function renderVideoHelperBatchRows() {
   tabsContainer.innerHTML = '';
   container.innerHTML = '';
 
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 20; i++) {
     // 1. Create Tab Button
     const tabBtn = document.createElement('button');
     tabBtn.type = 'button';
@@ -842,7 +842,7 @@ function renderVideoHelperBatchRows() {
     }
     
     tabBtn.addEventListener('click', () => {
-      for (let j = 1; j <= 10; j++) {
+      for (let j = 1; j <= 20; j++) {
         const r = document.getElementById(`videoSetRow_${j}`);
         if (r) r.style.display = j === i ? 'flex' : 'none';
         
@@ -933,7 +933,7 @@ async function runVideoHelper(btnElement) {
 
   // Collect active sets
   const activeSets = [];
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 20; i++) {
     const videoInputFile = document.getElementById(`videoInputPathFile_${i}`);
     const imageInputFile = document.getElementById(`imageInputPathFile_${i}`);
     const videoInputText = document.getElementById(`videoInputPathText_${i}`);
@@ -983,7 +983,7 @@ async function runVideoHelper(btnElement) {
   writeConsoleLine(`Video Helper: Packaging requests for ${activeSets.length} active sets...`, 'system', 'videoConsole');
 
   // Reset statuses of all active sets to Idle/Waiting
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 20; i++) {
     const isActive = activeSets.some(s => s.index === i);
     const text = isActive ? 'Waiting...' : 'Idle';
     const color = isActive ? '#ffb020' : 'rgba(255,255,255,0.5)';
