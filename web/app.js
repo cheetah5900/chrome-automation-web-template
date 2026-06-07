@@ -807,15 +807,67 @@ async function verifyRefImage() {
   }
 }
 
+function updateVideoSetStatus(index, text, color) {
+  const badge = document.getElementById(`videoSetStatus_${index}`);
+  if (badge) {
+    badge.textContent = text;
+    badge.style.color = color;
+  }
+  const tabBadge = document.getElementById(`videoTabBadge_${index}`);
+  if (tabBadge) {
+    tabBadge.textContent = text === 'Idle' ? '' : ` (${text})`;
+    tabBadge.style.color = color;
+  }
+}
+
 function renderVideoHelperBatchRows() {
+  const tabsContainer = document.getElementById('videoHelperSetTabs');
   const container = document.getElementById('videoHelperBatchRows');
-  if (!container) return;
+  if (!container || !tabsContainer) return;
+  tabsContainer.innerHTML = '';
   container.innerHTML = '';
 
   for (let i = 1; i <= 10; i++) {
+    // 1. Create Tab Button
+    const tabBtn = document.createElement('button');
+    tabBtn.type = 'button';
+    tabBtn.id = `videoSetTabBtn_${i}`;
+    tabBtn.style.cssText = 'padding: 8px 14px; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer; white-space: nowrap; font-weight: 500; transition: all 0.2s ease;';
+    tabBtn.innerHTML = `Set ${i}<span id="videoTabBadge_${i}" style="margin-left: 3px; font-size: 0.75rem; font-weight: bold;"></span>`;
+    
+    if (i === 1) {
+      tabBtn.style.background = 'rgba(141, 166, 255, 0.15)';
+      tabBtn.style.color = '#fff';
+      tabBtn.style.borderColor = '#8da6ff';
+    }
+    
+    tabBtn.addEventListener('click', () => {
+      for (let j = 1; j <= 10; j++) {
+        const r = document.getElementById(`videoSetRow_${j}`);
+        if (r) r.style.display = j === i ? 'flex' : 'none';
+        
+        const b = document.getElementById(`videoSetTabBtn_${j}`);
+        if (b) {
+          if (j === i) {
+            b.style.background = 'rgba(141, 166, 255, 0.15)';
+            b.style.color = '#fff';
+            b.style.borderColor = '#8da6ff';
+          } else {
+            b.style.background = 'transparent';
+            b.style.color = 'rgba(255,255,255,0.6)';
+            b.style.borderColor = 'rgba(255,255,255,0.1)';
+          }
+        }
+      }
+    });
+    
+    tabsContainer.appendChild(tabBtn);
+
+    // 2. Create Row Content Box
     const row = document.createElement('div');
+    row.id = `videoSetRow_${i}`;
     row.className = 'batch-row-pair';
-    row.style.cssText = 'border: 1px solid rgba(255,255,255,0.08); padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;';
+    row.style.cssText = `border: 1px solid rgba(255,255,255,0.08); padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); display: ${i === 1 ? 'flex' : 'none'}; flex-direction: column; gap: 10px;`;
     row.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 5px;">
         <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">🎬 Set ${i}</span>
@@ -932,12 +984,10 @@ async function runVideoHelper(btnElement) {
 
   // Reset statuses of all active sets to Idle/Waiting
   for (let i = 1; i <= 10; i++) {
-    const badge = document.getElementById(`videoSetStatus_${i}`);
-    if (badge) {
-      const isActive = activeSets.some(s => s.index === i);
-      badge.textContent = isActive ? 'Waiting...' : 'Idle';
-      badge.style.color = isActive ? '#ffb020' : 'rgba(255,255,255,0.5)';
-    }
+    const isActive = activeSets.some(s => s.index === i);
+    const text = isActive ? 'Waiting...' : 'Idle';
+    const color = isActive ? '#ffb020' : 'rgba(255,255,255,0.5)';
+    updateVideoSetStatus(i, text, color);
   }
 
   let successCount = 0;
@@ -945,11 +995,7 @@ async function runVideoHelper(btnElement) {
 
   for (const set of activeSets) {
     const { index, videoFile, imageFile, videoPathVal, imagePathVal } = set;
-    const badge = document.getElementById(`videoSetStatus_${index}`);
-    if (badge) {
-      badge.textContent = 'Generating...';
-      badge.style.color = '#8da6ff';
-    }
+    updateVideoSetStatus(index, 'Generating...', '#8da6ff');
 
     writeConsoleLine(`[Set ${index}] Starting rendering...`, 'system', 'videoConsole');
 
@@ -983,26 +1029,17 @@ async function runVideoHelper(btnElement) {
       
       if (res.ok) {
         writeConsoleLine(`[Set ${index}] Success! Output video generated at: ${res.output_path}`, 'success', 'videoConsole');
-        if (badge) {
-          badge.textContent = 'Success';
-          badge.style.color = '#10a37f';
-        }
+        updateVideoSetStatus(index, 'Success', '#10a37f');
         successCount++;
       } else {
         const err = res.detail || 'Unknown error';
         writeConsoleLine(`[Set ${index}] Failed: ${err}`, 'error', 'videoConsole');
-        if (badge) {
-          badge.textContent = 'Failed';
-          badge.style.color = '#ff4a4a';
-        }
+        updateVideoSetStatus(index, 'Failed', '#ff4a4a');
         failCount++;
       }
     } catch (e) {
       writeConsoleLine(`[Set ${index}] Error: ${e.message}`, 'error', 'videoConsole');
-      if (badge) {
-        badge.textContent = 'Error';
-        badge.style.color = '#ff4a4a';
-      }
+      updateVideoSetStatus(index, 'Error', '#ff4a4a');
       failCount++;
     }
   }
