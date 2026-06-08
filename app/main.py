@@ -1950,11 +1950,25 @@ def make_video_cover(
 
 @app.get("/api/utils/browse-directory")
 def browse_directory() -> dict[str, Any]:
-    import tkinter as tk
-    from tkinter import filedialog
+    import sys
+    import subprocess
     import os
     
+    if sys.platform == "darwin":
+        try:
+            cmd = ['osascript', '-e', 'POSIX path of (choose folder with prompt "Select Output Directory")']
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode == 0:
+                path = res.stdout.strip()
+                if path:
+                    return {"ok": True, "path": path}
+            return {"ok": False, "path": ""}
+        except Exception as e:
+            log(f"Browse Directory AppleScript Error: {e}")
+            
     try:
+        import tkinter as tk
+        from tkinter import filedialog
         root = tk.Tk()
         root.withdraw()
         root.attributes('-topmost', True)
