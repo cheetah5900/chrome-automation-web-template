@@ -1851,6 +1851,10 @@ def make_video_cover(
     suffix = "_combined.mp4" if is_combine_mode else "_with_cover.mp4"
     final_output_path = os.path.join(out_dir, f"{prefix_str}{orig_name}{suffix}")
     log(f"Output Target Path: '{final_output_path}'")
+    
+    if os.path.exists(final_output_path):
+        log(f"Set {no or 'default'}: Destination file already exists: '{final_output_path}'. Skipping processing.")
+        return {"ok": True, "output_path": final_output_path, "skipped": True}
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -1063,8 +1063,13 @@ async function runVideoHelper(btnElement) {
       const res = await response.json();
       
       if (res.ok) {
-        writeConsoleLine(`[Set ${index}] Success! Output video generated at: ${res.output_path}`, 'success', 'videoConsole');
-        updateVideoSetStatus(index, 'Success', '#10a37f');
+        if (res.skipped) {
+          writeConsoleLine(`[Set ${index}] Skipped: Output file already exists at: ${res.output_path}`, 'system', 'videoConsole');
+          updateVideoSetStatus(index, 'Skipped', '#ffb020');
+        } else {
+          writeConsoleLine(`[Set ${index}] Success! Output video generated at: ${res.output_path}`, 'success', 'videoConsole');
+          updateVideoSetStatus(index, 'Success', '#10a37f');
+        }
         successCount++;
       } else {
         const err = res.detail || 'Unknown error';
