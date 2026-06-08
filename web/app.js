@@ -807,7 +807,7 @@ async function verifyRefImage() {
   }
 }
 
-function updateVideoSetStatus(index, text, color) {
+function updateVideoSetStatus(index, text, color, errorMsg = '') {
   const badge = document.getElementById(`videoSetStatus_${index}`);
   if (badge) {
     badge.textContent = text;
@@ -817,6 +817,16 @@ function updateVideoSetStatus(index, text, color) {
   if (tabBadge) {
     tabBadge.textContent = text === 'Idle' ? '' : ` (${text})`;
     tabBadge.style.color = color;
+  }
+  const errorEl = document.getElementById(`videoSetError_${index}`);
+  if (errorEl) {
+    if (errorMsg) {
+      errorEl.textContent = errorMsg;
+      errorEl.style.display = 'block';
+    } else {
+      errorEl.textContent = '';
+      errorEl.style.display = 'none';
+    }
   }
 }
 
@@ -876,6 +886,7 @@ function renderVideoHelperBatchRows() {
         <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">🎬 Set ${i}</span>
         <span class="status-badge" id="videoSetStatus_${i}" style="font-size: 0.75rem; color: rgba(255,255,255,0.5);">Idle</span>
       </div>
+      <div id="videoSetError_${i}" style="font-size: 0.8rem; color: #ff4a4a; display: none; margin-bottom: 8px; line-height: 1.4; border-bottom: 1px dashed rgba(255, 74, 74, 0.2); padding-bottom: 6px;"></div>
       <div id="gridRow_${i}" style="display: grid; grid-template-columns: ${isCombine ? '110px 1fr 1fr' : '110px'}; gap: 15px;">
         <!-- Sub folder Column -->
         <div style="display: flex; flex-direction: column; gap: 5px;">
@@ -1058,12 +1069,12 @@ async function runVideoHelper(btnElement) {
       } else {
         const err = res.detail || 'Unknown error';
         writeConsoleLine(`[Set ${index}] Failed: ${err}`, 'error', 'videoConsole');
-        updateVideoSetStatus(index, 'Failed', '#ff4a4a');
+        updateVideoSetStatus(index, 'Failed', '#ff4a4a', err);
         failCount++;
       }
     } catch (e) {
       writeConsoleLine(`[Set ${index}] Error: ${e.message}`, 'error', 'videoConsole');
-      updateVideoSetStatus(index, 'Error', '#ff4a4a');
+      updateVideoSetStatus(index, 'Error', '#ff4a4a', e.message);
       failCount++;
     }
   }
