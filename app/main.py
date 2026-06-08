@@ -1758,36 +1758,47 @@ def make_video_cover(
         sub_no = no.strip()
         subfolder = os.path.join(base_dir, sub_no)
         if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
-            raise HTTPException(status_code=400, detail=f"Subfolder '{subfolder}' does not exist")
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Subfolder '{subfolder}' does not exist")
             
         resolved_video_name = None
+        video_files = []
         for f in os.listdir(subfolder):
             f_lower = f.lower()
             if any(f_lower.endswith(ext) for ext in [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"]):
                 name_part, _ = os.path.splitext(f_lower)
-                if name_part == f"{sub_no.lower()}_upscale" or "_upscale" in name_part:
+                if name_part == f"{sub_no.lower()}_upscale":
                     resolved_video_name = f
                     break
+                elif "_upscale" in name_part:
+                    video_files.append(f)
+                    
+        if not resolved_video_name and video_files:
+            resolved_video_name = video_files[0]
+            
         if not resolved_video_name:
-            raise HTTPException(status_code=400, detail=f"Could not find a video file ending with or containing '_upscale' in '{subfolder}'")
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: No video file containing '{sub_no}_upscale' or '_upscale' found in subfolder '{subfolder}'")
+            
         src_video_path = os.path.join(subfolder, resolved_video_name)
         video_filename = resolved_video_name
         log(f"Cover Mode: Auto-pulled source video '{src_video_path}'")
         
         cover_dir = os.path.join(subfolder, "cover")
         if not os.path.exists(cover_dir) or not os.path.isdir(cover_dir):
-            raise HTTPException(status_code=400, detail=f"Cover folder '{cover_dir}' does not exist")
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Cover folder '{cover_dir}' does not exist")
             
-        resolved_image_name = None
+        image_files = []
         for f in os.listdir(cover_dir):
             f_lower = f.lower()
             if any(f_lower.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp"]):
-                resolved_image_name = f
-                break
-        if not resolved_image_name:
-            raise HTTPException(status_code=400, detail=f"Could not find any image file inside cover folder '{cover_dir}'")
-        src_second_path = os.path.join(cover_dir, resolved_image_name)
-        second_filename = resolved_image_name
+                image_files.append(f)
+                
+        if len(image_files) == 0:
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: No cover image found inside '{cover_dir}' folder")
+        elif len(image_files) > 1:
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Multiple cover images found inside '{cover_dir}' folder. Only 1 image is allowed (Found: {len(image_files)})")
+            
+        src_second_path = os.path.join(cover_dir, image_files[0])
+        second_filename = image_files[0]
         log(f"Cover Mode: Auto-pulled cover image '{src_second_path}'")
     else:
         if video and video.filename:
