@@ -1745,38 +1745,78 @@ def make_video_cover(
     
     src_video_path = ""
     video_filename = ""
-    
-    if video and video.filename:
-        log(f"Video 1 Source: Uploaded file '{video.filename}'")
-        video_filename = video.filename
-    elif video_path and video_path.strip():
-        video_path_clean = video_path.strip()
-        if os.path.exists(video_path_clean) and os.path.isfile(video_path_clean):
-            src_video_path = video_path_clean
-            video_filename = os.path.basename(video_path_clean)
-            log(f"Video 1 Source: Local path '{src_video_path}'")
-        else:
-            raise HTTPException(status_code=400, detail=f"Local video 1 path does not exist or is not a file: {video_path_clean}")
-    else:
-        raise HTTPException(status_code=400, detail="Please upload video 1 or enter a valid local path")
-
     src_second_path = ""
     second_filename = ""
     
-    if image and image.filename:
-        log(f"Second Input Source: Uploaded file '{image.filename}'")
-        second_filename = image.filename
-    elif image_path and image_path.strip():
-        image_path_clean = image_path.strip()
-        if os.path.exists(image_path_clean) and os.path.isfile(image_path_clean):
-            src_second_path = image_path_clean
-            second_filename = os.path.basename(image_path_clean)
-            log(f"Second Input Source: Local path '{src_second_path}'")
-        else:
-            raise HTTPException(status_code=400, detail=f"Second input path does not exist or is not a file: {image_path_clean}")
+    if not is_combine_mode:
+        if not output_path or not output_path.strip():
+            raise HTTPException(status_code=400, detail="Path (output_path) is required in Cover Mode")
+        if not no or not no.strip():
+            raise HTTPException(status_code=400, detail="Sub folder (no) is required in Cover Mode")
+        
+        base_dir = output_path.strip()
+        sub_no = no.strip()
+        subfolder = os.path.join(base_dir, sub_no)
+        if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
+            raise HTTPException(status_code=400, detail=f"Subfolder '{subfolder}' does not exist")
+            
+        resolved_video_name = None
+        for f in os.listdir(subfolder):
+            f_lower = f.lower()
+            if any(f_lower.endswith(ext) for ext in [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"]):
+                name_part, _ = os.path.splitext(f_lower)
+                if name_part == f"{sub_no.lower()}_upscale" or "_upscale" in name_part:
+                    resolved_video_name = f
+                    break
+        if not resolved_video_name:
+            raise HTTPException(status_code=400, detail=f"Could not find a video file ending with or containing '_upscale' in '{subfolder}'")
+        src_video_path = os.path.join(subfolder, resolved_video_name)
+        video_filename = resolved_video_name
+        log(f"Cover Mode: Auto-pulled source video '{src_video_path}'")
+        
+        cover_dir = os.path.join(subfolder, "cover")
+        if not os.path.exists(cover_dir) or not os.path.isdir(cover_dir):
+            raise HTTPException(status_code=400, detail=f"Cover folder '{cover_dir}' does not exist")
+            
+        resolved_image_name = None
+        for f in os.listdir(cover_dir):
+            f_lower = f.lower()
+            if any(f_lower.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp"]):
+                resolved_image_name = f
+                break
+        if not resolved_image_name:
+            raise HTTPException(status_code=400, detail=f"Could not find any image file inside cover folder '{cover_dir}'")
+        src_second_path = os.path.join(cover_dir, resolved_image_name)
+        second_filename = resolved_image_name
+        log(f"Cover Mode: Auto-pulled cover image '{src_second_path}'")
     else:
-        label = "video 2" if is_combine_mode else "cover image"
-        raise HTTPException(status_code=400, detail=f"Please upload a {label} file or enter a valid local path")
+        if video and video.filename:
+            log(f"Video 1 Source: Uploaded file '{video.filename}'")
+            video_filename = video.filename
+        elif video_path and video_path.strip():
+            video_path_clean = video_path.strip()
+            if os.path.exists(video_path_clean) and os.path.isfile(video_path_clean):
+                src_video_path = video_path_clean
+                video_filename = os.path.basename(video_path_clean)
+                log(f"Video 1 Source: Local path '{src_video_path}'")
+            else:
+                raise HTTPException(status_code=400, detail=f"Local video 1 path does not exist or is not a file: {video_path_clean}")
+        else:
+            raise HTTPException(status_code=400, detail="Please upload video 1 or enter a valid local path")
+
+        if image and image.filename:
+            log(f"Second Input Source: Uploaded file '{image.filename}'")
+            second_filename = image.filename
+        elif image_path and image_path.strip():
+            image_path_clean = image_path.strip()
+            if os.path.exists(image_path_clean) and os.path.isfile(image_path_clean):
+                src_second_path = image_path_clean
+                second_filename = os.path.basename(image_path_clean)
+                log(f"Second Input Source: Local path '{src_second_path}'")
+            else:
+                raise HTTPException(status_code=400, detail=f"Second input path does not exist or is not a file: {image_path_clean}")
+        else:
+            raise HTTPException(status_code=400, detail="Please upload video 2 or enter a valid local path")
 
     out_dir = ""
     if output_path and output_path.strip():

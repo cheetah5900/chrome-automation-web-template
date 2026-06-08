@@ -863,6 +863,9 @@ function renderVideoHelperBatchRows() {
     
     tabsContainer.appendChild(tabBtn);
 
+    const modeVal = document.querySelector('input[name="videoHelperMode"]:checked')?.value || 'cover';
+    const isCombine = modeVal === 'combine';
+
     // 2. Create Row Content Box
     const row = document.createElement('div');
     row.id = `videoSetRow_${i}`;
@@ -873,14 +876,14 @@ function renderVideoHelperBatchRows() {
         <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">🎬 Set ${i}</span>
         <span class="status-badge" id="videoSetStatus_${i}" style="font-size: 0.75rem; color: rgba(255,255,255,0.5);">Idle</span>
       </div>
-      <div style="display: grid; grid-template-columns: 110px 1fr 1fr; gap: 15px;">
+      <div id="gridRow_${i}" style="display: grid; grid-template-columns: ${isCombine ? '110px 1fr 1fr' : '110px'}; gap: 15px;">
         <!-- Sub folder Column -->
         <div style="display: flex; flex-direction: column; gap: 5px;">
           <label style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Sub folder</label>
           <input type="text" id="videoNo_${i}" placeholder="${String(i).padStart(2, '0')}" style="font-size: 0.85rem; margin-bottom: 0; text-align: center;" />
         </div>
         <!-- Video Column -->
-        <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div id="videoCol_${i}" style="display: ${isCombine ? 'flex' : 'none'}; flex-direction: column; gap: 5px;">
           <label id="videoLabel_${i}" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Source Video (ไฟล์วีดีโอต้นฉบับ)</label>
           <div style="display: flex; gap: 8px;">
             <input type="text" id="videoInputPathText_${i}" placeholder="เลือกไฟล์วีดีโอหรือระบุพาท..." style="font-size: 0.85rem; margin-grow: 1; margin-bottom: 0; flex-grow: 1;" />
@@ -889,7 +892,7 @@ function renderVideoHelperBatchRows() {
           </div>
         </div>
         <!-- Image Column -->
-        <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div id="imageCol_${i}" style="display: ${isCombine ? 'flex' : 'none'}; flex-direction: column; gap: 5px;">
           <label id="imageLabel_${i}" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Cover Image (รูปภาพหน้าปก)</label>
           <div style="display: flex; gap: 8px;">
             <input type="text" id="imageInputPathText_${i}" placeholder="เลือกรูปภาพหรือระบุพาท..." style="font-size: 0.85rem; margin-bottom: 0; flex-grow: 1;" />
@@ -952,14 +955,28 @@ async function runVideoHelper(btnElement) {
     const hasVideo = videoFile || videoPathVal;
     const hasImage = imageFile || imagePathVal;
 
-    if (hasVideo || hasImage) {
-      if (!hasVideo) {
-        alert(`Set ${i}: Please select a video file or provide a source video path.`);
-        return;
-      }
-      if (!hasImage) {
-        alert(`Set ${i}: Please select an image file or provide a cover image path.`);
-        return;
+    let isActive = false;
+    if (modeVal === 'cover') {
+      isActive = setNoVal !== '';
+    } else {
+      isActive = hasVideo || hasImage;
+    }
+
+    if (isActive) {
+      if (modeVal === 'combine') {
+        if (!hasVideo) {
+          alert(`Set ${i}: Please select video 1 or provide a local path.`);
+          return;
+        }
+        if (!hasImage) {
+          alert(`Set ${i}: Please select video 2 or provide a local path.`);
+          return;
+        }
+      } else {
+        if (!outputPathVal) {
+          alert(`Please configure the Path at the top.`);
+          return;
+        }
       }
       activeSets.push({
         index: i,
@@ -973,7 +990,11 @@ async function runVideoHelper(btnElement) {
   }
 
   if (activeSets.length === 0) {
-    alert('Please configure at least one Set of Video and Cover Image to generate.');
+    if (modeVal === 'cover') {
+      alert('Please enter at least one Sub folder name to process in Cover Mode.');
+    } else {
+      alert('Please configure at least one Set of Video 1 and Video 2 to combine.');
+    }
     return;
   }
 
@@ -1274,7 +1295,33 @@ function initWorkflowActionListeners() {
       const mode = e.target.value;
       const isCombine = mode === 'combine';
       
+      const pathLabel = document.getElementById('videoOutputPathLabel');
+      const pathDesc = document.getElementById('videoOutputPathDesc');
+      const pathInput = document.getElementById('videoOutputPathText');
+      if (pathLabel) {
+        pathLabel.textContent = isCombine ? 'Output Path (ที่เก็บวีดีโอผลลัพธ์)' : 'Path';
+      }
+      if (pathDesc) {
+        pathDesc.textContent = isCombine
+          ? ''
+          : 'This is input and output path. The system will select subfolder here for input and output.';
+        pathDesc.style.display = isCombine ? 'none' : 'block';
+      }
+      if (pathInput) {
+        pathInput.placeholder = isCombine
+          ? 'เช่น /Users/litarcopperkaikem/Downloads'
+          : 'เช่น /Users/litarcopperkaikem/Downloads/my_project_folder';
+      }
+      
       for (let i = 1; i <= 20; i++) {
+        const videoCol = document.getElementById(`videoCol_${i}`);
+        const imageCol = document.getElementById(`imageCol_${i}`);
+        const gridRow = document.getElementById(`gridRow_${i}`);
+        
+        if (videoCol) videoCol.style.display = isCombine ? 'flex' : 'none';
+        if (imageCol) imageCol.style.display = isCombine ? 'flex' : 'none';
+        if (gridRow) gridRow.style.gridTemplateColumns = isCombine ? '110px 1fr 1fr' : '110px';
+
         const videoLabel = document.getElementById(`videoLabel_${i}`);
         const imageLabel = document.getElementById(`imageLabel_${i}`);
         const fileImage = document.getElementById(`imageInputPathFile_${i}`);
@@ -1300,6 +1347,14 @@ function initWorkflowActionListeners() {
       }
     });
   });
+
+  // Trigger initial change event to sync with the checked option on load
+  setTimeout(() => {
+    const activeRadio = document.querySelector('input[name="videoHelperMode"]:checked');
+    if (activeRadio) {
+      activeRadio.dispatchEvent(new Event('change'));
+    }
+  }, 100);
 
   const clearVideoConsole = document.getElementById('clearVideoConsoleBtn');
   if (clearVideoConsole) {

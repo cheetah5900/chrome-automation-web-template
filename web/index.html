@@ -313,7 +313,8 @@
 
               <!-- Output Path -->
               <div class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
-                <label for="videoOutputPathText" style="font-weight: bold; color: #8da6ff;">Output Path (ที่เก็บวีดีโอผลลัพธ์)</label>
+                <label id="videoOutputPathLabel" for="videoOutputPathText" style="font-weight: bold; color: #8da6ff;">Path</label>
+                <div id="videoOutputPathDesc" style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">This is input and output path. The system will select subfolder here for input and output.</div>
                 <div style="display: flex; gap: 10px; width: 100%;">
                   <input id="videoOutputPathText" placeholder="เช่น /Users/litarcopperkaikem/Downloads" style="margin-bottom: 0; flex-grow: 1;" />
                   <button id="browseOutputBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
