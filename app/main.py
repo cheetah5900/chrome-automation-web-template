@@ -807,7 +807,7 @@ from app.workflow import (
 
 log_bus = LogBus()
 
-CONFIG_FILE = "config_win.json" if os.name == "nt" else "config_mac.json"
+CONFIG_FILE = str(BASE_DIR / ("config_win.json" if os.name == "nt" else "config_mac.json"))
 
 
 def _default_config() -> dict[str, Any]:
@@ -1731,7 +1731,8 @@ def make_video_cover(
     output_path: str | None = Form(None),
     prefix: str | None = Form(None),
     no: str | None = Form(None),
-    mode: str | None = Form(None)
+    mode: str | None = Form(None),
+    amount: str | None = Form(None)
 ) -> dict[str, Any]:
     import subprocess
     import tempfile
@@ -1858,107 +1859,110 @@ def make_video_cover(
             temp_input_video = src_video_path
             temp_input_second = src_second_path
             
-            if video and video.filename:
-                video_ext = os.path.splitext(video.filename)[1] or ".mp4"
-                temp_input_video = os.path.join(tmpdir, f"uploaded_video{video_ext}")
-                with open(temp_input_video, "wb") as buffer:
-                    shutil.copyfileobj(video.file, buffer)
-                    
-            if image and image.filename:
-                second_ext = os.path.splitext(image.filename)[1] or (".mp4" if is_combine_mode else ".png")
-                temp_input_second = os.path.join(tmpdir, f"uploaded_second{second_ext}")
-                with open(temp_input_second, "wb") as buffer:
-                    shutil.copyfileobj(image.file, buffer)
-            
-            temp_video = os.path.join(tmpdir, "temp_video.mp4")
-            temp_black = os.path.join(tmpdir, "temp_black.mp4")
-            temp_second = os.path.join(tmpdir, "temp_second.mp4")
-            list_txt = os.path.join(tmpdir, "list.txt")
-            
-            # Check if input video 1 has audio
-            has_audio = False
-            try:
-                probe_cmd = [
-                    "/opt/homebrew/bin/ffprobe", "-v", "error", "-select_streams", "a",
-                    "-show_entries", "stream=codec_type", "-of", "json", temp_input_video
-                ]
-                if not os.path.exists(probe_cmd[0]):
-                    probe_cmd[0] = "ffprobe"
-                result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                probe_data = json.loads(result.stdout)
-                has_audio = len(probe_data.get("streams", [])) > 0
-            except Exception as e:
-                log(f"Video Helper Check Audio Warning: {e}")
-                has_audio = False
-                
-            log(f"Video Helper: Input video 1 has audio track: {has_audio}")
-            
             ffmpeg_bin = "/opt/homebrew/bin/ffmpeg"
             if not os.path.exists(ffmpeg_bin):
                 ffmpeg_bin = "ffmpeg"
                 
-            # 1. Process Video 1
-            log("Video Helper [1/3]: Aligning first video to 9:16 vertical 4K 60fps...")
-            if has_audio:
-                v_cmd = [
-                    ffmpeg_bin, "-y", "-i", temp_input_video,
-                    "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
-                ]
-            else:
-                v_cmd = [
-                    ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                    "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
-                    "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
-                ]
-                
-            res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            if res.returncode != 0:
-                raise RuntimeError(f"FFmpeg failed processing first video: {res.stderr}")
-                
+            list_txt = os.path.join(tmpdir, "list.txt")
+
             if is_combine_mode:
-                # Process Video 2
-                has_audio2 = False
+                try:
+                    amount_val = int(amount) if amount else 2
+                except:
+                    amount_val = 2
+                    
+                log(f"Combine Mode: Will merge {amount_val} videos in subfolder '{sub_no}'")
+                
+                to_process = []
+                for idx in range(1, amount_val + 1):
+                    v_file = os.path.join(subfolder, f"{idx}.mp4")
+                    if not os.path.exists(v_file) or not os.path.isfile(v_file):
+                        raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video {idx} file '{idx}.mp4' not found in subfolder '{subfolder}'")
+                    to_process.append(v_file)
+                    
+                aligned_paths = []
+                for idx, v_path in enumerate(to_process, 1):
+                    has_audio_v = False
+                    try:
+                        probe_cmd = [
+                            "/opt/homebrew/bin/ffprobe", "-v", "error", "-select_streams", "a",
+                            "-show_entries", "stream=codec_type", "-of", "json", v_path
+                        ]
+                        if not os.path.exists(probe_cmd[0]):
+                            probe_cmd[0] = "ffprobe"
+                        result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        probe_data = json.loads(result.stdout)
+                        has_audio_v = len(probe_data.get("streams", [])) > 0
+                    except Exception as e:
+                        log(f"Check Audio Warning on video {idx}: {e}")
+                        has_audio_v = False
+                        
+                    out_aligned = os.path.join(tmpdir, f"aligned_{idx}.mp4")
+                    log(f"Combine Mode [{idx}/{amount_val}]: Aligning video '{idx}.mp4' to 9:16 vertical 4K 60fps...")
+                    
+                    if has_audio_v:
+                        v_cmd = [
+                            ffmpeg_bin, "-y", "-i", v_path,
+                            "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", out_aligned
+                        ]
+                    else:
+                        v_cmd = [
+                            ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                            "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                            "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", out_aligned
+                        ]
+                        
+                    res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if res.returncode != 0:
+                        raise RuntimeError(f"FFmpeg failed aligning video {idx}: {res.stderr}")
+                    aligned_paths.append(out_aligned)
+                    
+                log(f"Combine Mode: Concatenating {amount_val} clips...")
+                with open(list_txt, "w", encoding="utf-8") as f:
+                    for ap in aligned_paths:
+                        f.write(f"file '{ap}'\n")
+                        
+            else:
+                # Cover Mode: Video 1 + 2s Black + 3s Image
+                temp_video = os.path.join(tmpdir, "temp_video.mp4")
+                temp_black = os.path.join(tmpdir, "temp_black.mp4")
+                temp_second = os.path.join(tmpdir, "temp_second.mp4")
+                
+                has_audio = False
                 try:
                     probe_cmd = [
-                        "ffprobe", "-v", "error", "-select_streams", "a",
-                        "-show_entries", "stream=codec_type", "-of", "json", temp_input_second
+                        "/opt/homebrew/bin/ffprobe", "-v", "error", "-select_streams", "a",
+                        "-show_entries", "stream=codec_type", "-of", "json", temp_input_video
                     ]
                     if not os.path.exists(probe_cmd[0]):
                         probe_cmd[0] = "ffprobe"
                     result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     probe_data = json.loads(result.stdout)
-                    has_audio2 = len(probe_data.get("streams", [])) > 0
+                    has_audio = len(probe_data.get("streams", [])) > 0
                 except Exception as e:
-                    log(f"Video Helper Check Audio 2 Warning: {e}")
-                    has_audio2 = False
-                
-                log(f"Video Helper: Input video 2 has audio track: {has_audio2}")
-                log("Video Helper [2/3]: Aligning second video to 9:16 vertical 4K 60fps...")
-                if has_audio2:
-                    v2_cmd = [
-                        ffmpeg_bin, "-y", "-i", temp_input_second,
+                    log(f"Video Helper Check Audio Warning: {e}")
+                    has_audio = False
+                    
+                log(f"Video Helper: Input video 1 has audio track: {has_audio}")
+                log("Video Helper [1/3]: Aligning first video to 9:16 vertical 4K 60fps...")
+                if has_audio:
+                    v_cmd = [
+                        ffmpeg_bin, "-y", "-i", temp_input_video,
                         "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                        "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_second
+                        "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
                     ]
                 else:
-                    v2_cmd = [
-                        ffmpeg_bin, "-y", "-i", temp_input_second, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                    v_cmd = [
+                        ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
                         "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
-                        "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_second
+                        "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
                     ]
-                res = subprocess.run(v2_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                if res.returncode != 0:
-                    raise RuntimeError(f"FFmpeg failed processing second video: {res.stderr}")
-                
-                # Concatenate the two videos
-                log("Video Helper [3/3]: Concatenating videos into final 9:16 60fps MP4 video...")
-                with open(list_txt, "w", encoding="utf-8") as f:
-                    f.write(f"file '{temp_video}'\n")
-                    f.write(f"file '{temp_second}'\n")
                     
-            else:
-                # Cover Mode: 2s Black Screen + 3s Image
+                res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if res.returncode != 0:
+                    raise RuntimeError(f"FFmpeg failed processing first video: {res.stderr}")
+                    
                 log("Video Helper [2/3]: Generating 2 seconds black screen...")
                 b_cmd = [
                     ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60:d=2",

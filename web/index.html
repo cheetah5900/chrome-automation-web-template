@@ -289,24 +289,26 @@
             <div class="settings-form" style="margin-top: 15px;">
               <!-- Mode Selector -->
               <div class="form-group" style="margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-                <label style="font-weight: bold; color: #8da6ff;">Processing Mode (โหมดการทำงาน)</label>
+                <label style="font-weight: bold; color: #8da6ff;">Processing Mode</label>
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Select the processing mode: Cover Mode (video + 2s black + cover image) or Combine Mode (merge multiple videos).</div>
                 <div style="display: flex; gap: 20px; margin-top: 5px;">
                   <label style="display: flex; align-items: center; gap: 8px; color: #fff; font-size: 0.9rem; cursor: pointer;">
                     <input type="radio" name="videoHelperMode" value="cover" checked style="margin: 0; accent-color: #8da6ff; width: auto;" />
-                    <span>Cover Mode (วีดีโอ + รูปปก)</span>
+                    <span>Cover Mode (Video + Cover)</span>
                   </label>
                   <label style="display: flex; align-items: center; gap: 8px; color: #fff; font-size: 0.9rem; cursor: pointer;">
                     <input type="radio" name="videoHelperMode" value="combine" style="margin: 0; accent-color: #8da6ff; width: auto;" />
-                    <span>Combine Mode (รวม 2 วีดีโอ)</span>
+                    <span>Combine Mode (Combine Videos)</span>
                   </label>
                 </div>
               </div>
 
               <!-- Prefix -->
               <div class="form-group" style="margin-bottom: 20px; padding-bottom: 10px;">
-                <label for="videoPrefixText" style="font-weight: bold; color: #8da6ff;">Prefix (คำนำหน้าชื่อไฟล์วีดีโอผลลัพธ์)</label>
+                <label for="videoPrefixText" style="font-weight: bold; color: #8da6ff;">Prefix</label>
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Output file name prefix. Added at the beginning of the generated video filename (optional).</div>
                 <div style="display: flex; gap: 10px; width: 100%;">
-                  <input id="videoPrefixText" placeholder="เช่น [Cover]_, 2026_" style="margin-bottom: 0; flex-grow: 1;" />
+                  <input id="videoPrefixText" placeholder="e.g. [Cover]_, 2026_" style="margin-bottom: 0; flex-grow: 1;" />
                   <button id="setVideoPrefixDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
                 </div>
               </div>
@@ -316,7 +318,7 @@
                 <label id="videoOutputPathLabel" for="videoOutputPathText" style="font-weight: bold; color: #8da6ff;">Path</label>
                 <div id="videoOutputPathDesc" style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">This is input and output path. The system will select subfolder here for input and output.</div>
                 <div style="display: flex; gap: 10px; width: 100%;">
-                  <input id="videoOutputPathText" placeholder="เช่น /Users/litarcopperkaikem/Downloads/my_project_folder" style="margin-bottom: 0; flex-grow: 1;" />
+                  <input id="videoOutputPathText" placeholder="e.g. /Users/litarcopperkaikem/Downloads/my_project_folder" style="margin-bottom: 0; flex-grow: 1;" />
                   <button id="browseOutputBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
                   <button id="setVideoOutputDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
                 </div>
@@ -324,10 +326,18 @@
 
               <!-- Sub folders -->
               <div id="videoHelperCoverFoldersGroup" class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
-                <label for="videoCoverFoldersText" style="font-weight: bold; color: #8da6ff;">Sub folders (เช่น 1,2,3-10 เพื่อระบุโฟลเดอร์ 1 ถึง 10)</label>
-                <input id="videoCoverFoldersText" placeholder="ระบุเลขหรือช่วงโฟลเดอร์ เช่น 1,2,3-10" style="margin-bottom: 0;" />
+                <label for="videoCoverFoldersText" style="font-weight: bold; color: #8da6ff;">Sub folders</label>
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Folder names/ranges to process, e.g. 1,2,3-10 to select subfolders 1 to 10.</div>
+                <input id="videoCoverFoldersText" placeholder="e.g. 1,2,3-10" style="margin-bottom: 0;" />
               </div>
 
+              <!-- Amount (Combine Mode Only) -->
+              <div id="videoHelperAmountGroup" class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px; display: none;">
+                <label for="videoHelperAmountText" style="font-weight: bold; color: #8da6ff;">Amount</label>
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Number of video files to combine inside each subfolder (e.g. 3 will combine 1.mp4, 2.mp4, and 3.mp4).</div>
+                <input type="number" id="videoHelperAmountText" placeholder="e.g. 2, 3, 4" min="2" value="2" style="margin-bottom: 0;" />
+              </div>
+              
               <button id="runVideoHelperBtn" class="primary-btn" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">Generate YouTube Covers (Batch Process)</button>
             </div>
           </section>

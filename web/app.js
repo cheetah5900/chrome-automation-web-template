@@ -976,6 +976,8 @@ async function runVideoHelper(btnElement) {
   const videoOutputPath = document.getElementById('videoOutputPathText');
   const consoleBox = document.getElementById('videoConsole');
   const outputPathVal = videoOutputPath ? videoOutputPath.value.trim() : '';
+  const amountInput = document.getElementById('videoHelperAmountText');
+  const amountVal = amountInput ? amountInput.value.trim() : '2';
 
   // Collect active sets
   const activeSets = [];
@@ -1047,6 +1049,7 @@ async function runVideoHelper(btnElement) {
       formData.append('output_path', outputPathVal);
       formData.append('prefix', prefixVal);
       formData.append('mode', modeVal);
+      formData.append('amount', amountVal);
       if (set.no) {
         formData.append('no', set.no);
       }
@@ -1324,6 +1327,11 @@ function initWorkflowActionListeners() {
       }
       if (pathInput) {
         pathInput.placeholder = 'เช่น /Users/litarcopperkaikem/Downloads/my_project_folder';
+      }
+      
+      const amountGroup = document.getElementById('videoHelperAmountGroup');
+      if (amountGroup) {
+        amountGroup.style.display = isCombine ? 'block' : 'none';
       }
       
       const runBtn = document.getElementById('runVideoHelperBtn');
