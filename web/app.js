@@ -938,6 +938,36 @@ function renderVideoHelperBatchRows() {
   }
 }
 
+function parseFolderRanges(inputStr) {
+  const folders = [];
+  if (!inputStr) return folders;
+  const parts = inputStr.split(',');
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    if (trimmed.includes('-')) {
+      const rangeParts = trimmed.split('-');
+      if (rangeParts.length === 2) {
+        const start = parseInt(rangeParts[0].trim(), 10);
+        const end = parseInt(rangeParts[1].trim(), 10);
+        if (!isNaN(start) && !isNaN(end) && start <= end) {
+          for (let k = start; k <= end; k++) {
+            folders.push(String(k));
+          }
+        }
+      }
+    } else {
+      const num = parseInt(trimmed, 10);
+      if (!isNaN(num)) {
+        folders.push(String(num));
+      } else {
+        folders.push(trimmed);
+      }
+    }
+  }
+  return [...new Set(folders)];
+}
+
 async function runVideoHelper(btnElement) {
   const videoMode = document.querySelector('input[name="videoHelperMode"]:checked');
   const modeVal = videoMode ? videoMode.value : 'cover';
@@ -949,32 +979,47 @@ async function runVideoHelper(btnElement) {
 
   // Collect active sets
   const activeSets = [];
-  for (let i = 1; i <= 20; i++) {
-    const videoInputFile = document.getElementById(`videoInputPathFile_${i}`);
-    const imageInputFile = document.getElementById(`imageInputPathFile_${i}`);
-    const videoInputText = document.getElementById(`videoInputPathText_${i}`);
-    const imageInputText = document.getElementById(`imageInputPathText_${i}`);
-
-    const setNoInput = document.getElementById(`videoNo_${i}`);
-    const setNoVal = setNoInput ? setNoInput.value.trim() : '';
-
-    const videoFile = videoInputFile ? videoInputFile.files[0] : null;
-    const imageFile = imageInputFile ? imageInputFile.files[0] : null;
-    const videoPathVal = videoInputText ? videoInputText.value.trim() : '';
-    const imagePathVal = imageInputText ? imageInputText.value.trim() : '';
-
-    const hasVideo = videoFile || videoPathVal;
-    const hasImage = imageFile || imagePathVal;
-
-    let isActive = false;
-    if (modeVal === 'cover') {
-      isActive = setNoVal !== '';
-    } else {
-      isActive = hasVideo || hasImage;
+  if (modeVal === 'cover') {
+    if (!outputPathVal) {
+      alert('Please configure the Path at the top.');
+      return;
     }
+    const foldersInput = document.getElementById('videoCoverFoldersText');
+    const foldersVal = foldersInput ? foldersInput.value.trim() : '';
+    if (!foldersVal) {
+      alert('Please enter sub folders (e.g. 1,2,3-10) to process.');
+      return;
+    }
+    const folderList = parseFolderRanges(foldersVal);
+    for (const folder of folderList) {
+      activeSets.push({
+        index: folder,
+        videoFile: null,
+        imageFile: null,
+        videoPathVal: '',
+        imagePathVal: '',
+        no: folder
+      });
+    }
+  } else {
+    for (let i = 1; i <= 20; i++) {
+      const videoInputFile = document.getElementById(`videoInputPathFile_${i}`);
+      const imageInputFile = document.getElementById(`imageInputPathFile_${i}`);
+      const videoInputText = document.getElementById(`videoInputPathText_${i}`);
+      const imageInputText = document.getElementById(`imageInputPathText_${i}`);
 
-    if (isActive) {
-      if (modeVal === 'combine') {
+      const setNoInput = document.getElementById(`videoNo_${i}`);
+      const setNoVal = setNoInput ? setNoInput.value.trim() : '';
+
+      const videoFile = videoInputFile ? videoInputFile.files[0] : null;
+      const imageFile = imageInputFile ? imageInputFile.files[0] : null;
+      const videoPathVal = videoInputText ? videoInputText.value.trim() : '';
+      const imagePathVal = imageInputText ? imageInputText.value.trim() : '';
+
+      const hasVideo = videoFile || videoPathVal;
+      const hasImage = imageFile || imagePathVal;
+
+      if (hasVideo || hasImage) {
         if (!hasVideo) {
           alert(`Set ${i}: Please select video 1 or provide a local path.`);
           return;
@@ -983,26 +1028,21 @@ async function runVideoHelper(btnElement) {
           alert(`Set ${i}: Please select video 2 or provide a local path.`);
           return;
         }
-      } else {
-        if (!outputPathVal) {
-          alert(`Please configure the Path at the top.`);
-          return;
-        }
+        activeSets.push({
+          index: i,
+          videoFile,
+          imageFile,
+          videoPathVal,
+          imagePathVal,
+          no: setNoVal
+        });
       }
-      activeSets.push({
-        index: i,
-        videoFile,
-        imageFile,
-        videoPathVal,
-        imagePathVal,
-        no: setNoVal
-      });
     }
   }
 
   if (activeSets.length === 0) {
     if (modeVal === 'cover') {
-      alert('Please enter at least one Sub folder name to process in Cover Mode.');
+      alert('Please enter at least one Sub folder name/range to process in Cover Mode.');
     } else {
       alert('Please configure at least one Set of Video 1 and Video 2 to combine.');
     }
@@ -1018,7 +1058,7 @@ async function runVideoHelper(btnElement) {
 
   // Reset statuses of all active sets to Idle/Waiting
   for (let i = 1; i <= 20; i++) {
-    const isActive = activeSets.some(s => s.index === i);
+    const isActive = activeSets.some(s => String(s.index) === String(i));
     const text = isActive ? 'Waiting...' : 'Idle';
     const color = isActive ? '#ffb020' : 'rgba(255,255,255,0.5)';
     updateVideoSetStatus(i, text, color);
@@ -1329,6 +1369,20 @@ function initWorkflowActionListeners() {
           : 'เช่น /Users/litarcopperkaikem/Downloads/my_project_folder';
       }
       
+      const coverFoldersGroup = document.getElementById('videoHelperCoverFoldersGroup');
+      const setTabs = document.getElementById('videoHelperSetTabs');
+      const batchRows = document.getElementById('videoHelperBatchRows');
+
+      if (coverFoldersGroup) {
+        coverFoldersGroup.style.display = isCombine ? 'none' : 'block';
+      }
+      if (setTabs) {
+        setTabs.style.display = isCombine ? 'flex' : 'none';
+      }
+      if (batchRows) {
+        batchRows.style.display = isCombine ? 'block' : 'none';
+      }
+
       for (let i = 1; i <= 20; i++) {
         const videoCol = document.getElementById(`videoCol_${i}`);
         const imageCol = document.getElementById(`imageCol_${i}`);
