@@ -2160,7 +2160,7 @@ def make_video_cover(
                             
                     caption_content = normal_eng
                     if unique_tags:
-                        caption_content += "\n" + " ".join(unique_tags)
+                        caption_content += "\n" + " ".join(unique_tags[:5])
                         
                     with open(caption_file_path, "w", encoding="utf-8") as cf:
                         cf.write(caption_content)
