@@ -2142,6 +2142,17 @@ def make_video_cover(
             if res.returncode != 0:
                 raise RuntimeError(f"FFmpeg failed concatenating video: {res.stderr}")
                 
+            if is_combine_mode:
+                try:
+                    caption_file_path = os.path.join(out_dir, "caption.md")
+                    normal_eng = seo_name.replace("-", " ").replace("_", " ").strip()
+                    normal_eng = " ".join(word.capitalize() for word in normal_eng.split())
+                    with open(caption_file_path, "w", encoding="utf-8") as cf:
+                        cf.write(normal_eng)
+                    log(f"Combine Mode: Created caption file '{caption_file_path}' with text: '{normal_eng}'")
+                except Exception as ce:
+                    log(f"Combine Mode Warning: Failed to write caption.md: {ce}")
+
             log(f"Video Helper Success: Saved final video to '{final_output_path}'")
             return {"ok": True, "output_path": final_output_path}
     except Exception as e:
