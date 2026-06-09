@@ -2209,6 +2209,45 @@ def browse_directory() -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/utils/browse-file")
+def browse_file() -> dict[str, Any]:
+    import sys
+    import subprocess
+    import os
+    
+    if sys.platform == "darwin":
+        try:
+            cmd = ['osascript', '-e', 'POSIX path of (choose file of type {"png", "jpg", "jpeg", "webp", "bmp"} with prompt "Select Reference Image")']
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode == 0:
+                path = res.stdout.strip()
+                if path:
+                    return {"ok": True, "path": path}
+            return {"ok": False, "path": ""}
+        except Exception as e:
+            log(f"Browse File AppleScript Error: {e}")
+            
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        file_path = filedialog.askopenfilename(
+            parent=root,
+            title="Select Reference Image",
+            filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.webp;*.bmp"), ("All files", "*.*")]
+        )
+        root.destroy()
+        if file_path:
+            return {"ok": True, "path": os.path.normpath(file_path)}
+        return {"ok": False, "path": ""}
+    except Exception as e:
+        log(f"Browse File Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 @app.get("/")
 def index():
     return FileResponse(BASE_DIR / "web" / "index.html")

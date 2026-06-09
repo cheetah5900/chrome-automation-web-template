@@ -1565,6 +1565,26 @@ function initWorkflowActionListeners() {
       }
     });
   }
+
+  const setupRefImageBrowser = (btnId, inputId) => {
+    const btn = document.getElementById(btnId);
+    const input = document.getElementById(inputId);
+    if (btn && input) {
+      btn.addEventListener('click', async () => {
+        try {
+          const res = await jsonFetch('/api/utils/browse-file');
+          if (res.ok && res.path) {
+            input.value = res.path;
+          }
+        } catch (e) {
+          showToast(`Failed to browse file: ${e.message}`, 'error');
+        }
+      });
+    }
+  };
+  setupRefImageBrowser('browseRefImgBtn', 'cfg_reference_image');
+  setupRefImageBrowser('browseRefImgBtn2', 'cfg_reference_image_2');
+  setupRefImageBrowser('browseRefImgBtn3', 'cfg_reference_image_3');
   // Step 1
   document.getElementById('btn_step2').addEventListener('click', (e) => {
     const config = gatherConfigData();
