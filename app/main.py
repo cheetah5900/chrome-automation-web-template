@@ -1813,18 +1813,18 @@ def make_video_cover(
         if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
             raise HTTPException(status_code=400, detail=f"Set {sub_no}: Subfolder '{subfolder}' does not exist")
             
-        v1_path = os.path.join(subfolder, "1.mp4")
-        v2_path = os.path.join(subfolder, "2.mp4")
+        v1_path = os.path.join(subfolder, "1_upscale.mp4")
+        v2_path = os.path.join(subfolder, "2_upscale.mp4")
         
         if not os.path.exists(v1_path) or not os.path.isfile(v1_path):
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video 1 file '1.mp4' not found in subfolder '{subfolder}'")
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video 1 file '1_upscale.mp4' not found in subfolder '{subfolder}'")
         if not os.path.exists(v2_path) or not os.path.isfile(v2_path):
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video 2 file '2.mp4' not found in subfolder '{subfolder}'")
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video 2 file '2_upscale.mp4' not found in subfolder '{subfolder}'")
             
         src_video_path = v1_path
-        video_filename = "1.mp4"
+        video_filename = "1_upscale.mp4"
         src_second_path = v2_path
-        second_filename = "2.mp4"
+        second_filename = "2_upscale.mp4"
         log(f"Combine Mode: Auto-pulled '{v1_path}' and '{v2_path}'")
 
     out_dir = ""
@@ -1875,9 +1875,9 @@ def make_video_cover(
                 
                 to_process = []
                 for idx in range(1, amount_val + 1):
-                    v_file = os.path.join(subfolder, f"{idx}.mp4")
+                    v_file = os.path.join(subfolder, f"{idx}_upscale.mp4")
                     if not os.path.exists(v_file) or not os.path.isfile(v_file):
-                        raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video {idx} file '{idx}.mp4' not found in subfolder '{subfolder}'")
+                        raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video {idx} file '{idx}_upscale.mp4' not found in subfolder '{subfolder}'")
                     to_process.append(v_file)
                     
                 aligned_paths = []
@@ -1898,7 +1898,7 @@ def make_video_cover(
                         has_audio_v = False
                         
                     out_aligned = os.path.join(tmpdir, f"aligned_{idx}.mp4")
-                    log(f"Combine Mode [{idx}/{amount_val}]: Aligning video '{idx}.mp4' to 9:16 vertical 4K 60fps...")
+                    log(f"Combine Mode [{idx}/{amount_val}]: Aligning video '{idx}_upscale.mp4' to 9:16 vertical 4K 60fps...")
                     
                     if has_audio_v:
                         v_cmd = [
