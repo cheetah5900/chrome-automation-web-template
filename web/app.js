@@ -976,8 +976,6 @@ async function runVideoHelper(btnElement) {
   const videoOutputPath = document.getElementById('videoOutputPathText');
   const consoleBox = document.getElementById('videoConsole');
   const outputPathVal = videoOutputPath ? videoOutputPath.value.trim() : '';
-  const amountInput = document.getElementById('videoHelperAmountText');
-  const amountVal = amountInput ? amountInput.value.trim() : '2';
 
   // Collect active sets
   const activeSets = [];
@@ -985,29 +983,52 @@ async function runVideoHelper(btnElement) {
     alert('Please configure the Path at the top.');
     return;
   }
+
   const foldersInput = document.getElementById('videoCoverFoldersText');
   const foldersVal = foldersInput ? foldersInput.value.trim() : '';
   if (!foldersVal) {
-    alert('Please enter sub folders (e.g. 1,2,3-10) to process.');
+    alert('Please enter sub folders (e.g. 1,2,3-10 or 1-3) to process.');
     return;
   }
   const folderList = parseFolderRanges(foldersVal);
-  for (const folder of folderList) {
-    activeSets.push({
-      index: folder,
-      videoFile: null,
-      imageFile: null,
-      videoPathVal: '',
-      imagePathVal: '',
-      no: folder
-    });
+
+  if (modeVal === 'cover') {
+    for (const folder of folderList) {
+      activeSets.push({
+        index: folder,
+        videoFile: null,
+        imageFile: null,
+        videoPathVal: '',
+        imagePathVal: '',
+        no: folder,
+        amount: '2'
+      });
+    }
+  } else {
+    // Combine Mode: calculate amount dynamically from the maximum number in range
+    let amountVal = '2';
+    const numbers = folderList.map(f => parseInt(f, 10)).filter(n => !isNaN(n));
+    if (numbers.length > 0) {
+      amountVal = String(Math.max(...numbers));
+    }
+    for (const folder of folderList) {
+      activeSets.push({
+        index: folder,
+        videoFile: null,
+        imageFile: null,
+        videoPathVal: '',
+        imagePathVal: '',
+        no: folder,
+        amount: amountVal
+      });
+    }
   }
 
   if (activeSets.length === 0) {
     if (modeVal === 'cover') {
       alert('Please enter at least one Sub folder name/range to process in Cover Mode.');
     } else {
-      alert('Please configure at least one Set of Video 1 and Video 2 to combine.');
+      alert('Please configure at least one combine set with a Subfolder and Amount.');
     }
     return;
   }
@@ -1020,21 +1041,18 @@ async function runVideoHelper(btnElement) {
   writeConsoleLine(`Video Helper: Packaging requests for ${activeSets.length} active sets...`, 'system', 'videoConsole');
 
   // Reset statuses of all active sets to Idle/Waiting
-  for (let i = 1; i <= 20; i++) {
-    const isActive = activeSets.some(s => String(s.index) === String(i));
-    const text = isActive ? 'Waiting...' : 'Idle';
-    const color = isActive ? '#ffb020' : 'rgba(255,255,255,0.5)';
-    updateVideoSetStatus(i, text, color);
+  for (const set of activeSets) {
+    updateVideoSetStatus(set.index, 'Waiting...', '#ffb020');
   }
 
   let successCount = 0;
   let failCount = 0;
 
   for (const set of activeSets) {
-    const { index, videoFile, imageFile, videoPathVal, imagePathVal } = set;
+    const { index, videoFile, imageFile, videoPathVal, imagePathVal, amount } = set;
     updateVideoSetStatus(index, 'Generating...', '#8da6ff');
 
-    writeConsoleLine(`[Set ${index}] Starting rendering...`, 'system', 'videoConsole');
+    writeConsoleLine(`[Set ${index}] Starting rendering (Amount: ${amount})...`, 'system', 'videoConsole');
 
     try {
       const formData = new FormData();
@@ -1049,7 +1067,7 @@ async function runVideoHelper(btnElement) {
       formData.append('output_path', outputPathVal);
       formData.append('prefix', prefixVal);
       formData.append('mode', modeVal);
-      formData.append('amount', amountVal);
+      formData.append('amount', amount);
       if (set.no) {
         formData.append('no', set.no);
       }
@@ -1327,11 +1345,6 @@ function initWorkflowActionListeners() {
       }
       if (pathInput) {
         pathInput.placeholder = 'เช่น /Users/litarcopperkaikem/Downloads/my_project_folder';
-      }
-      
-      const amountGroup = document.getElementById('videoHelperAmountGroup');
-      if (amountGroup) {
-        amountGroup.style.display = isCombine ? 'block' : 'none';
       }
       
       const runBtn = document.getElementById('runVideoHelperBtn');

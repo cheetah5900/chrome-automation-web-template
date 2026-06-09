@@ -327,15 +327,13 @@
               <!-- Sub folders -->
               <div id="videoHelperCoverFoldersGroup" class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
                 <label for="videoCoverFoldersText" style="font-weight: bold; color: #8da6ff;">Sub folders</label>
-                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Folder names/ranges to process, e.g. 1,2,3-10 to select subfolders 1 to 10.</div>
-                <input id="videoCoverFoldersText" placeholder="e.g. 1,2,3-10" style="margin-bottom: 0;" />
-              </div>
-
-              <!-- Amount (Combine Mode Only) -->
-              <div id="videoHelperAmountGroup" class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px; display: none;">
-                <label for="videoHelperAmountText" style="font-weight: bold; color: #8da6ff;">Amount</label>
-                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Number of video files to combine inside each subfolder (e.g. 3 will combine 1.mp4, 2.mp4, and 3.mp4).</div>
-                <input type="number" id="videoHelperAmountText" placeholder="e.g. 2, 3, 4" min="2" value="2" style="margin-bottom: 0;" />
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Folder names/ranges to process, e.g. 1-3. In Combine Mode, the upper limit of the range (e.g. 3) defines how many sequential video files (1.mp4, 2.mp4, 3.mp4) will be combined inside each subfolder.</div>
+                <input id="videoCoverFoldersText" placeholder="e.g. 1,2,3-10 or 1-3" style="margin-bottom: 8px;" />
+                <div style="font-size: 0.78rem; color: #8da6ff; background: rgba(141, 166, 255, 0.05); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(141, 166, 255, 0.15); line-height: 1.4;">
+                  <strong>Expected Filenames & Structures:</strong><br>
+                  • <strong>Cover Mode:</strong> Video named <code>[folder_name]_upscale.mp4</code> and an image inside <code>cover/</code> subfolder.<br>
+                  • <strong>Combine Mode:</strong> Videos sequentially numbered from 1 (e.g. <code>1.mp4</code>, <code>2.mp4</code>, <code>3.mp4</code>) inside each subfolder.
+                </div>
               </div>
               
               <button id="runVideoHelperBtn" class="primary-btn" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">Generate YouTube Covers (Batch Process)</button>
