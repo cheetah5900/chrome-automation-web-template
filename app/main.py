@@ -2147,9 +2147,24 @@ def make_video_cover(
                     caption_file_path = os.path.join(out_dir, "caption.md")
                     normal_eng = seo_name.replace("-", " ").replace("_", " ").strip()
                     normal_eng = " ".join(word.capitalize() for word in normal_eng.split())
+                    
+                    # Extract unique hashtags from the combined caption text
+                    import re
+                    hashtags = re.findall(r'#\w+', combined_caption)
+                    seen = set()
+                    unique_tags = []
+                    for tag in hashtags:
+                        if tag.lower() not in seen:
+                            seen.add(tag.lower())
+                            unique_tags.append(tag)
+                            
+                    caption_content = normal_eng
+                    if unique_tags:
+                        caption_content += "\n" + " ".join(unique_tags)
+                        
                     with open(caption_file_path, "w", encoding="utf-8") as cf:
-                        cf.write(normal_eng)
-                    log(f"Combine Mode: Created caption file '{caption_file_path}' with text: '{normal_eng}'")
+                        cf.write(caption_content)
+                    log(f"Combine Mode: Created caption file '{caption_file_path}' with hashtags")
                 except Exception as ce:
                     log(f"Combine Mode Warning: Failed to write caption.md: {ce}")
 
