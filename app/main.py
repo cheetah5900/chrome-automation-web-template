@@ -1732,7 +1732,10 @@ def make_video_cover(
     prefix: str | None = Form(None),
     no: str | None = Form(None),
     mode: str | None = Form(None),
-    amount: str | None = Form(None)
+    amount: str | None = Form(None),
+    suffix: str | None = Form(None),
+    folders_json: str | None = Form(None),
+    folder_range: str | None = Form(None)
 ) -> dict[str, Any]:
     import subprocess
     import tempfile
@@ -1743,11 +1746,66 @@ def make_video_cover(
     is_combine_mode = (mode == "combine")
     mode_label = "Combine Mode" if is_combine_mode else "Cover Mode"
     log(f"Video Helper: Starting {mode_label} conversion...")
-    
+
+    video_exts = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"]
+    combine_media_exts = video_exts + [".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"]
+    suffix_val = (suffix or "").strip()
+
+    def resolve_named_media_file(directory: str, folder_name: str, allowed_exts: list[str]) -> str | None:
+        if not os.path.isdir(directory):
+            return None
+
+        target = f"{folder_name}{suffix_val}".lower()
+        suffix_has_extension = bool(suffix_val and os.path.splitext(suffix_val)[1])
+
+        for file_name in os.listdir(directory):
+            lower_name = file_name.lower()
+            stem, ext = os.path.splitext(lower_name)
+            if suffix_has_extension:
+                if lower_name == target and ext in allowed_exts:
+                    return file_name
+            elif ext in allowed_exts and stem == target:
+                return file_name
+        return None
+
+    def probe_media_streams(path: str) -> tuple[bool, bool]:
+        has_video = False
+        has_audio = False
+        try:
+            probe_cmd = [
+                "/opt/homebrew/bin/ffprobe", "-v", "error", "-show_streams", "-of", "json", path
+            ]
+            if not os.path.exists(probe_cmd[0]):
+                probe_cmd[0] = "ffprobe"
+            result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            probe_data = json.loads(result.stdout or "{}")
+            for stream in probe_data.get("streams", []):
+                codec_type = stream.get("codec_type")
+                if codec_type == "video":
+                    has_video = True
+                elif codec_type == "audio":
+                    has_audio = True
+        except Exception as e:
+            log(f"Media probe warning for '{path}': {e}")
+        return has_video, has_audio
+
+    def build_folder_label(folder_names: list[str]) -> str:
+        if not folder_names:
+            return "combined"
+        if len(folder_names) == 1:
+            return folder_names[0]
+
+        nums = [int(name) for name in folder_names if str(name).isdigit()]
+        if len(nums) == len(folder_names) and nums == list(range(nums[0], nums[-1] + 1)):
+            return f"{folder_names[0]}-{folder_names[-1]}"
+        return "_".join(folder_names)
+
     src_video_path = ""
     video_filename = ""
     src_second_path = ""
     second_filename = ""
+    combine_sources: list[tuple[str, str, str]] = []
+    combine_label = ""
     
     if not is_combine_mode:
         if not output_path or not output_path.strip():
@@ -1761,23 +1819,11 @@ def make_video_cover(
         if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
             raise HTTPException(status_code=400, detail=f"Set {sub_no}: Subfolder '{subfolder}' does not exist")
             
-        resolved_video_name = None
-        video_files = []
-        for f in os.listdir(subfolder):
-            f_lower = f.lower()
-            if any(f_lower.endswith(ext) for ext in [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"]):
-                name_part, _ = os.path.splitext(f_lower)
-                if name_part == f"{sub_no.lower()}_upscale":
-                    resolved_video_name = f
-                    break
-                elif "_upscale" in name_part:
-                    video_files.append(f)
-                    
-        if not resolved_video_name and video_files:
-            resolved_video_name = video_files[0]
-            
+        resolved_video_name = resolve_named_media_file(subfolder, sub_no, video_exts)
         if not resolved_video_name:
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: No video file containing '{sub_no}_upscale' or '_upscale' found in subfolder '{subfolder}'")
+            if suffix_val:
+                raise HTTPException(status_code=400, detail=f"Set {sub_no}: No video file matching '{sub_no}{suffix_val}' found in subfolder '{subfolder}'")
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: No video file named '{sub_no}' found in subfolder '{subfolder}'")
             
         src_video_path = os.path.join(subfolder, resolved_video_name)
         video_filename = resolved_video_name
@@ -1804,28 +1850,44 @@ def make_video_cover(
     else:
         if not output_path or not output_path.strip():
             raise HTTPException(status_code=400, detail="Path (output_path) is required in Combine Mode")
-        if not no or not no.strip():
-            raise HTTPException(status_code=400, detail="Sub folder (no) is required in Combine Mode")
-        
+
         base_dir = output_path.strip()
-        sub_no = no.strip()
-        subfolder = os.path.join(base_dir, sub_no)
-        if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Subfolder '{subfolder}' does not exist")
-            
-        v1_path = os.path.join(subfolder, "1_upscale.mp4")
-        v2_path = os.path.join(subfolder, "2_upscale.mp4")
-        
-        if not os.path.exists(v1_path) or not os.path.isfile(v1_path):
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video 1 file '1_upscale.mp4' not found in subfolder '{subfolder}'")
-        if not os.path.exists(v2_path) or not os.path.isfile(v2_path):
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video 2 file '2_upscale.mp4' not found in subfolder '{subfolder}'")
-            
-        src_video_path = v1_path
-        video_filename = "1_upscale.mp4"
-        src_second_path = v2_path
-        second_filename = "2_upscale.mp4"
-        log(f"Combine Mode: Auto-pulled '{v1_path}' and '{v2_path}'")
+
+        combine_folders: list[str] = []
+        if folders_json and folders_json.strip():
+            try:
+                parsed_folders = json.loads(folders_json)
+                if isinstance(parsed_folders, list):
+                    combine_folders = [str(item).strip() for item in parsed_folders if str(item).strip()]
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid combine folder list: {e}")
+        elif no and no.strip():
+            combine_folders = [part.strip() for part in no.split(",") if part.strip()]
+
+        if not combine_folders:
+            raise HTTPException(status_code=400, detail="At least one sub folder is required in Combine Mode")
+
+        combine_label = build_folder_label(combine_folders)
+
+        for folder_name in combine_folders:
+            subfolder = os.path.join(base_dir, folder_name)
+            if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
+                raise HTTPException(status_code=400, detail=f"Set {folder_name}: Subfolder '{subfolder}' does not exist")
+
+            resolved_media_name = resolve_named_media_file(subfolder, folder_name, combine_media_exts)
+            if not resolved_media_name:
+                if suffix_val:
+                    raise HTTPException(status_code=400, detail=f"Set {folder_name}: No media file matching '{folder_name}{suffix_val}' found in subfolder '{subfolder}'")
+                raise HTTPException(status_code=400, detail=f"Set {folder_name}: No media file named '{folder_name}' found in subfolder '{subfolder}'")
+
+            resolved_media_path = os.path.join(subfolder, resolved_media_name)
+            combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
+
+        src_video_path = combine_sources[0][1]
+        video_filename = combine_sources[0][2]
+        src_second_path = combine_sources[0][1]
+        second_filename = combine_sources[0][2]
+        log(f"Combine Mode: Auto-pulled {len(combine_sources)} matching files for folders '{combine_label}'")
 
     out_dir = ""
     if output_path and output_path.strip():
@@ -1838,16 +1900,116 @@ def make_video_cover(
                 out_dir = os.path.join(os.path.expanduser("~"), "Downloads")
     else:
         out_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-        
-    if no and no.strip():
-        out_dir = os.path.join(out_dir, no.strip())
-        
-    os.makedirs(out_dir, exist_ok=True)
-    
-    orig_name = os.path.splitext(video_filename)[0]
+
     prefix_str = prefix.strip() if prefix else ""
-    suffix = "_combined.mp4" if is_combine_mode else "_with_cover.mp4"
-    final_output_path = os.path.join(out_dir, f"{prefix_str}{orig_name}{suffix}")
+
+    if is_combine_mode:
+        # 1. Create a folder for the output video with a filename '[Prefix][folder range.]'
+        folder_range_name = f"{prefix_str}{combine_label}."
+        out_dir = os.path.join(out_dir, folder_range_name)
+        
+        # 2. Extract and combine Caption.md files from all combined folders
+        combined_caption = ""
+        for folder_name in combine_folders:
+            caption_file = os.path.join(base_dir, folder_name, "Caption.md")
+            if os.path.exists(caption_file):
+                try:
+                    with open(caption_file, "r", encoding="utf-8") as f:
+                        text = f.read().strip()
+                        if text:
+                            combined_caption += text + "\n\n"
+                except Exception as e:
+                    log(f"Combine Mode Warning: Failed reading caption in {folder_name}: {e}")
+        
+        combined_caption = combined_caption.strip()
+        seo_name = ""
+        if combined_caption:
+            settings = {}
+            if SETTINGS_FILE.exists():
+                try:
+                    settings = json.loads(SETTINGS_FILE.read_text())
+                except:
+                    pass
+            
+            gemini_key = settings.get("gemini_api_key")
+            openai_key = settings.get("openai_api_key")
+            
+            if gemini_key:
+                import httpx
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                prompt = (
+                    "Based on the following caption text (which is a combination of multiple captions), "
+                    "generate a single, clean, short SEO-friendly filename (3 to 6 words). "
+                    "Use only lowercase letters, numbers, and hyphens (no spaces, no special characters, no file extension). "
+                    "Do not include any other text or explanation. Content:\n\n" + combined_caption
+                )
+                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                try:
+                    res = httpx.post(url, json=payload, timeout=10)
+                    if res.status_code == 200:
+                        data = res.json()
+                        txt = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                        txt = txt.replace('"', '').replace("'", "").strip()
+                        import re
+                        txt = re.sub(r'[^a-z0-9\-]', '', txt.lower())
+                        if txt:
+                            seo_name = txt
+                except Exception as e:
+                    log(f"Gemini SEO name generation error: {e}")
+                    
+            if not seo_name and openai_key:
+                import httpx
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"}
+                prompt = (
+                    "Based on the following caption text (which is a combination of multiple captions), "
+                    "generate a single, clean, short SEO-friendly filename (3 to 6 words). "
+                    "Use only lowercase letters, numbers, and hyphens (no spaces, no special characters, no file extension). "
+                    "Do not include any other text or explanation. Content:\n\n" + combined_caption
+                )
+                payload = {
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.3
+                }
+                try:
+                    res = httpx.post(url, json=payload, headers=headers, timeout=10)
+                    if res.status_code == 200:
+                        data = res.json()
+                        txt = data["choices"][0]["message"]["content"].strip()
+                        txt = txt.replace('"', '').replace("'", "").strip()
+                        import re
+                        txt = re.sub(r'[^a-z0-9\-]', '', txt.lower())
+                        if txt:
+                            seo_name = txt
+                except Exception as e:
+                    log(f"OpenAI SEO name generation error: {e}")
+                    
+            if not seo_name:
+                # Local fallback slug parser
+                lines = [line.strip() for line in combined_caption.split("\n") if line.strip()]
+                if lines:
+                    import re
+                    first_line = lines[0]
+                    first_line = re.sub(r'[#\*_`\[\]\(\)]', '', first_line)
+                    first_line = re.sub(r'[^a-zA-Z0-9\s\-]', '', first_line)
+                    slug = "-".join(first_line.lower().split())
+                    slug = re.sub(r'-+', '-', slug).strip('-')
+                    if slug:
+                        seo_name = slug
+                        
+        if not seo_name:
+            seo_name = f"{combine_label}_combined"
+            
+        video_filename = f"{seo_name}.mp4"
+        final_output_path = os.path.join(out_dir, video_filename)
+    else:
+        if no and no.strip():
+            out_dir = os.path.join(out_dir, no.strip())
+        orig_name = os.path.splitext(video_filename)[0]
+        final_output_path = os.path.join(out_dir, f"{prefix_str}{orig_name}_with_cover.mp4")
+
+    os.makedirs(out_dir, exist_ok=True)
     log(f"Output Target Path: '{final_output_path}'")
     
     if os.path.exists(final_output_path):
@@ -1866,53 +2028,35 @@ def make_video_cover(
             list_txt = os.path.join(tmpdir, "list.txt")
 
             if is_combine_mode:
-                try:
-                    amount_val = int(amount) if amount else 2
-                except:
-                    amount_val = 2
-                    
-                log(f"Combine Mode: Will merge {amount_val} videos in subfolder '{sub_no}'")
-                
-                to_process = []
-                for idx in range(1, amount_val + 1):
-                    v_file = os.path.join(subfolder, f"{idx}_upscale.mp4")
-                    if not os.path.exists(v_file) or not os.path.isfile(v_file):
-                        raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video {idx} file '{idx}_upscale.mp4' not found in subfolder '{subfolder}'")
-                    to_process.append(v_file)
-                    
+                amount_val = len(combine_sources)
+                log(f"Combine Mode: Will merge {amount_val} matched files for '{combine_label}'")
+
                 aligned_paths = []
-                for idx, v_path in enumerate(to_process, 1):
-                    has_audio_v = False
-                    try:
-                        probe_cmd = [
-                            "/opt/homebrew/bin/ffprobe", "-v", "error", "-select_streams", "a",
-                            "-show_entries", "stream=codec_type", "-of", "json", v_path
-                        ]
-                        if not os.path.exists(probe_cmd[0]):
-                            probe_cmd[0] = "ffprobe"
-                        result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                        probe_data = json.loads(result.stdout)
-                        has_audio_v = len(probe_data.get("streams", [])) > 0
-                    except Exception as e:
-                        log(f"Check Audio Warning on video {idx}: {e}")
-                        has_audio_v = False
-                        
+                for idx, (folder_name, v_path, resolved_media_name) in enumerate(combine_sources, 1):
+                    has_video_v, has_audio_v = probe_media_streams(v_path)
                     out_aligned = os.path.join(tmpdir, f"aligned_{idx}.mp4")
-                    log(f"Combine Mode [{idx}/{amount_val}]: Aligning video '{idx}_upscale.mp4' to 9:16 vertical 4K 60fps...")
-                    
-                    if has_audio_v:
+                    log(f"Combine Mode [{idx}/{amount_val}]: Aligning '{folder_name}/{resolved_media_name}' to 9:16 vertical 4K 60fps...")
+
+                    if has_video_v and has_audio_v:
                         v_cmd = [
                             ffmpeg_bin, "-y", "-i", v_path,
                             "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
                             "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", out_aligned
                         ]
-                    else:
+                    elif has_video_v:
                         v_cmd = [
                             ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
                             "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
                             "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", out_aligned
                         ]
-                        
+                    elif has_audio_v:
+                        v_cmd = [
+                            ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
+                            "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", out_aligned
+                        ]
+                    else:
+                        raise RuntimeError(f"Matched file '{resolved_media_name}' has no usable audio or video stream")
+
                     res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     if res.returncode != 0:
                         raise RuntimeError(f"FFmpeg failed aligning video {idx}: {res.stderr}")

@@ -326,17 +326,50 @@
 
               <!-- Sub folders -->
               <div id="videoHelperCoverFoldersGroup" class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
-                <label for="videoCoverFoldersText" style="font-weight: bold; color: #8da6ff;">Sub folders</label>
-                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Folder names/ranges to process, e.g. 1-3. In Combine Mode, the upper limit of the range (e.g. 3) defines how many sequential video files (1_upscale.mp4, 2_upscale.mp4, 3_upscale.mp4) will be combined inside each subfolder.</div>
-                <input id="videoCoverFoldersText" placeholder="e.g. 1,2,3-10 or 1-3" style="margin-bottom: 8px;" />
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                  <label for="videoCoverFoldersText" style="font-weight: bold; color: #8da6ff; margin: 0;">Sub folders</label>
+                </div>
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Folder names/ranges to process, e.g. 1-3.</div>
+                <div style="display: flex; gap: 10px; width: 100%; margin-bottom: 8px;">
+                  <input id="videoCoverFoldersText" placeholder="e.g. 1,2,3-10 or 1-3" style="margin-bottom: 0; flex: 1 1 100%;" />
+                </div>
                 <div style="font-size: 0.78rem; color: #8da6ff; background: rgba(141, 166, 255, 0.05); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(141, 166, 255, 0.15); line-height: 1.4;">
                   <strong>Expected Filenames & Structures:</strong><br>
-                  • <strong>Cover Mode:</strong> Video named <code>[folder_name]_upscale.mp4</code> and an image inside <code>cover/</code> subfolder.<br>
-                  • <strong>Combine Mode:</strong> Videos sequentially numbered from 1 (e.g. <code>1_upscale.mp4</code>, <code>2_upscale.mp4</code>, <code>3_upscale.mp4</code>) inside each subfolder.
+                  • <strong>Cover Mode:</strong> Video named <code>[folder_name][suffix]</code> or <code>[folder_name][suffix].mp4</code> and an image inside <code>cover/</code> subfolder.
                 </div>
               </div>
-              
-              <button id="runVideoHelperBtn" class="primary-btn" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">Generate YouTube Covers (Batch Process)</button>
+
+              <div id="videoCombineBatchGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 10px; flex-wrap: wrap;">
+                  <label style="font-weight: bold; color: #8da6ff; margin: 0;">Combine Batch Sets</label>
+                  <div style="display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;">
+                    <div style="display: flex; flex-direction: column; gap: 5px; min-width: 170px;">
+                      <label for="videoSuffixText" style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">Suffix</label>
+                      <input id="videoSuffixText" aria-label="Suffix" placeholder="e.g. _upscale or .mp4" style="margin-bottom: 0;" />
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 5px; min-width: 110px;">
+                      <label for="videoCombineStartText" style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">Start number</label>
+                      <input id="videoCombineStartText" type="number" min="1" placeholder="e.g. 4" style="margin-bottom: 0;" />
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 5px; min-width: 130px;">
+                      <label for="videoCombineAmountText" style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">Amount in a set</label>
+                      <input id="videoCombineAmountText" type="number" min="1" placeholder="e.g. 3" style="margin-bottom: 0;" />
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 5px; min-width: 90px;">
+                      <label for="videoCombineLoopText" style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">Loop</label>
+                      <input id="videoCombineLoopText" type="number" min="1" placeholder="e.g. 2" style="margin-bottom: 0;" />
+                    </div>
+                    <button id="addVideoCombineSetBtn" type="button" class="secondary" style="padding: 8px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">+ Add Set</button>
+                  </div>
+                </div>
+                <div id="videoCombineRangeSummary" style="font-size: 0.8rem; color: #8da6ff; background: rgba(141, 166, 255, 0.05); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(141, 166, 255, 0.12); margin: 0 0 10px 0; line-height: 1.4;">
+                  End number: <span id="videoCombineEndNumber">-</span>
+                </div>
+                <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 0 0 10px 0; line-height: 1.4;">Each row is one combine set. Add manual rows or auto-generate multiple sets from the inputs above.</div>
+                <div id="videoCombineSetRows" style="display: flex; flex-direction: column; gap: 10px;"></div>
+              </div>
+               
+              <button id="runVideoHelperBtn" class="primary-btn" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">Run</button>
             </div>
           </section>
 

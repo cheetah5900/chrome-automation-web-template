@@ -813,6 +813,11 @@ function updateVideoSetStatus(index, text, color, errorMsg = '') {
     badge.textContent = text;
     badge.style.color = color;
   }
+  const combineBadge = document.getElementById(`videoCombineSetStatus_${index}`);
+  if (combineBadge) {
+    combineBadge.textContent = text;
+    combineBadge.style.color = color;
+  }
   const tabBadge = document.getElementById(`videoTabBadge_${index}`);
   if (tabBadge) {
     tabBadge.textContent = text === 'Idle' ? '' : ` (${text})`;
@@ -968,11 +973,118 @@ function parseFolderRanges(inputStr) {
   return [...new Set(folders)];
 }
 
+function createVideoCombineSetRow(value = '') {
+  const row = document.createElement('div');
+  row.className = 'video-combine-set-row';
+  row.style.cssText = 'display: flex; align-items: flex-end; gap: 10px;';
+  row.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 5px; flex: 1 1 auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+        <label class="video-combine-set-label" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Set</label>
+        <span class="status-badge video-combine-set-status" style="font-size: 0.75rem; color: rgba(255,255,255,0.5);">Idle</span>
+      </div>
+      <input type="text" class="video-combine-set-input" placeholder="e.g. 4-6 or 8,9,10" value="${value.replace(/"/g, '&quot;')}" style="margin-bottom: 0;" />
+    </div>
+    <button type="button" class="secondary video-combine-set-remove" style="padding: 8px 12px; font-size: 0.8rem; margin-bottom: 0; border-radius: 10px; white-space: nowrap;">Remove</button>
+  `;
+
+  row.querySelector('.video-combine-set-remove').addEventListener('click', () => {
+    row.remove();
+    refreshVideoCombineSetLabels();
+  });
+
+  return row;
+}
+
+function refreshVideoCombineSetLabels() {
+  document.querySelectorAll('#videoCombineSetRows .video-combine-set-row').forEach((row, index) => {
+    const label = row.querySelector('.video-combine-set-label');
+    const status = row.querySelector('.video-combine-set-status');
+    if (label) {
+      label.textContent = `Set ${index + 1}`;
+    }
+    if (status) {
+      status.id = `videoCombineSetStatus_combine_${index + 1}`;
+    }
+  });
+}
+
+function collectVideoCombineBatchSets() {
+  const sets = [];
+
+  document.querySelectorAll('#videoCombineSetRows .video-combine-set-input').forEach((input) => {
+    const parsed = parseFolderRanges(input.value.trim());
+    if (parsed.length > 0) {
+      sets.push(parsed);
+    }
+  });
+
+  return sets;
+}
+
+function toggleVideoCombineBatchUI(isCombine) {
+  const batchGroup = document.getElementById('videoCombineBatchGroup');
+  const coverGroup = document.getElementById('videoHelperCoverFoldersGroup');
+  if (!batchGroup) return;
+  batchGroup.classList.toggle('hidden', !isCombine);
+  if (coverGroup) {
+    coverGroup.classList.toggle('hidden', isCombine);
+  }
+
+  if (isCombine) {
+    const rows = document.getElementById('videoCombineSetRows');
+    if (rows && rows.children.length === 0) {
+      rows.appendChild(createVideoCombineSetRow(''));
+      refreshVideoCombineSetLabels();
+    }
+  }
+}
+
+function buildVideoCombineSetValue(startNumber, amountInSet) {
+  if (amountInSet <= 1) return String(startNumber);
+  return `${startNumber}-${startNumber + amountInSet - 1}`;
+}
+
+function ensureVideoCombineSetRowCount(count) {
+  const rows = document.getElementById('videoCombineSetRows');
+  if (!rows) return [];
+
+  while (rows.children.length < count) {
+    rows.appendChild(createVideoCombineSetRow(''));
+  }
+  while (rows.children.length > count) {
+    rows.lastElementChild?.remove();
+  }
+
+  refreshVideoCombineSetLabels();
+  return Array.from(rows.querySelectorAll('.video-combine-set-row'));
+}
+
+function updateVideoCombineEndNumber() {
+  const startInput = document.getElementById('videoCombineStartText');
+  const amountInput = document.getElementById('videoCombineAmountText');
+  const loopInput = document.getElementById('videoCombineLoopText');
+  const endEl = document.getElementById('videoCombineEndNumber');
+  if (!endEl) return;
+
+  const startVal = parseInt(startInput?.value || '', 10);
+  const amountVal = parseInt(amountInput?.value || '', 10);
+  const loopVal = parseInt(loopInput?.value || '', 10);
+
+  if (Number.isInteger(startVal) && startVal > 0 && Number.isInteger(amountVal) && amountVal > 0 && Number.isInteger(loopVal) && loopVal > 0) {
+    endEl.textContent = String(startVal + (amountVal * loopVal) - 1);
+  } else {
+    endEl.textContent = '-';
+  }
+}
+
 async function runVideoHelper(btnElement) {
   const videoMode = document.querySelector('input[name="videoHelperMode"]:checked');
   const modeVal = videoMode ? videoMode.value : 'cover';
   const videoPrefix = document.getElementById('videoPrefixText');
   const prefixVal = videoPrefix ? videoPrefix.value.trim() : '';
+  const videoSuffix = document.getElementById('videoSuffixText');
+  const suffixVal = videoSuffix ? videoSuffix.value.trim() : '';
   const videoOutputPath = document.getElementById('videoOutputPathText');
   const consoleBox = document.getElementById('videoConsole');
   const outputPathVal = videoOutputPath ? videoOutputPath.value.trim() : '';
@@ -984,15 +1096,15 @@ async function runVideoHelper(btnElement) {
     return;
   }
 
-  const foldersInput = document.getElementById('videoCoverFoldersText');
-  const foldersVal = foldersInput ? foldersInput.value.trim() : '';
-  if (!foldersVal) {
-    alert('Please enter sub folders (e.g. 1,2,3-10 or 1-3) to process.');
-    return;
-  }
-  const folderList = parseFolderRanges(foldersVal);
-
   if (modeVal === 'cover') {
+    const foldersInput = document.getElementById('videoCoverFoldersText');
+    const foldersVal = foldersInput ? foldersInput.value.trim() : '';
+    if (!foldersVal) {
+      alert('Please enter sub folders (e.g. 1,2,3-10 or 1-3) to process.');
+      return;
+    }
+    const folderList = parseFolderRanges(foldersVal);
+
     for (const folder of folderList) {
       activeSets.push({
         index: folder,
@@ -1001,34 +1113,34 @@ async function runVideoHelper(btnElement) {
         videoPathVal: '',
         imagePathVal: '',
         no: folder,
-        amount: '2'
+        amount: '2',
+        suffix: suffixVal,
+        foldersJson: ''
       });
     }
   } else {
-    // Combine Mode: calculate amount dynamically from the maximum number in range
-    let amountVal = '2';
-    const numbers = folderList.map(f => parseInt(f, 10)).filter(n => !isNaN(n));
-    if (numbers.length > 0) {
-      amountVal = String(Math.max(...numbers));
-    }
-    for (const folder of folderList) {
+    const combineSets = collectVideoCombineBatchSets();
+    combineSets.forEach((folders, idx) => {
       activeSets.push({
-        index: folder,
+        index: `combine_${idx + 1}`,
+        label: `Set ${idx + 1}`,
         videoFile: null,
         imageFile: null,
         videoPathVal: '',
         imagePathVal: '',
-        no: folder,
-        amount: amountVal
+        no: folders[0] || '',
+        amount: String(folders.length || 1),
+        suffix: suffixVal,
+        foldersJson: JSON.stringify(folders)
       });
-    }
+    });
   }
 
   if (activeSets.length === 0) {
     if (modeVal === 'cover') {
       alert('Please enter at least one Sub folder name/range to process in Cover Mode.');
     } else {
-      alert('Please configure at least one combine set with a Subfolder and Amount.');
+      alert('Please enter at least one Sub folder name/range to process in Combine Mode.');
     }
     return;
   }
@@ -1050,9 +1162,10 @@ async function runVideoHelper(btnElement) {
 
   for (const set of activeSets) {
     const { index, videoFile, imageFile, videoPathVal, imagePathVal, amount } = set;
+    const setLabel = set.label || `Set ${index}`;
     updateVideoSetStatus(index, 'Generating...', '#8da6ff');
 
-    writeConsoleLine(`[Set ${index}] Starting rendering (Amount: ${amount})...`, 'system', 'videoConsole');
+    writeConsoleLine(`[${setLabel}] Starting rendering...`, 'system', 'videoConsole');
 
     try {
       const formData = new FormData();
@@ -1068,8 +1181,12 @@ async function runVideoHelper(btnElement) {
       formData.append('prefix', prefixVal);
       formData.append('mode', modeVal);
       formData.append('amount', amount);
+      formData.append('suffix', set.suffix || '');
       if (set.no) {
         formData.append('no', set.no);
+      }
+      if (set.foldersJson) {
+        formData.append('folders_json', set.foldersJson);
       }
 
       const response = await fetch('/api/video/make-cover', {
@@ -1086,21 +1203,21 @@ async function runVideoHelper(btnElement) {
       
       if (res.ok) {
         if (res.skipped) {
-          writeConsoleLine(`[Set ${index}] Skipped: Output file already exists at: ${res.output_path}`, 'system', 'videoConsole');
-          updateVideoSetStatus(index, 'Skipped', '#ffb020');
+          writeConsoleLine(`[${setLabel}] Skipped: Output file already exists at: ${res.output_path}`, 'system', 'videoConsole');
+          updateVideoSetStatus(index, 'Done', '#10a37f');
         } else {
-          writeConsoleLine(`[Set ${index}] Success! Output video generated at: ${res.output_path}`, 'success', 'videoConsole');
-          updateVideoSetStatus(index, 'Success', '#10a37f');
+          writeConsoleLine(`[${setLabel}] Success! Output video generated at: ${res.output_path}`, 'success', 'videoConsole');
+          updateVideoSetStatus(index, 'Done', '#10a37f');
         }
         successCount++;
       } else {
         const err = res.detail || 'Unknown error';
-        writeConsoleLine(`[Set ${index}] Failed: ${err}`, 'error', 'videoConsole');
+        writeConsoleLine(`[${setLabel}] Failed: ${err}`, 'error', 'videoConsole');
         updateVideoSetStatus(index, 'Failed', '#ff4a4a', err);
         failCount++;
       }
     } catch (e) {
-      writeConsoleLine(`[Set ${index}] Error: ${e.message}`, 'error', 'videoConsole');
+      writeConsoleLine(`[${setLabel}] Error: ${e.message}`, 'error', 'videoConsole');
       updateVideoSetStatus(index, 'Error', '#ff4a4a', e.message);
       failCount++;
     }
@@ -1111,7 +1228,7 @@ async function runVideoHelper(btnElement) {
 
   btnElement.disabled = false;
   btnElement.classList.remove('loading');
-  btnElement.textContent = 'Generate YouTube Covers (Batch Process)';
+  btnElement.textContent = 'Run';
 }
 
 async function setVideoOutputDefault() {
@@ -1346,10 +1463,11 @@ function initWorkflowActionListeners() {
       if (pathInput) {
         pathInput.placeholder = 'เช่น /Users/litarcopperkaikem/Downloads/my_project_folder';
       }
+      toggleVideoCombineBatchUI(isCombine);
       
       const runBtn = document.getElementById('runVideoHelperBtn');
       if (runBtn) {
-        runBtn.textContent = isCombine ? 'Combine Videos (Batch Process)' : 'Generate YouTube Covers (Batch Process)';
+        runBtn.textContent = 'Run';
       }
     });
   });
@@ -1375,6 +1493,46 @@ function initWorkflowActionListeners() {
 
   const setVideoPrefixBtn = document.getElementById('setVideoPrefixDefaultBtn');
   if (setVideoPrefixBtn) setVideoPrefixBtn.addEventListener('click', setVideoPrefixDefault);
+
+  const addVideoCombineSetBtn = document.getElementById('addVideoCombineSetBtn');
+  const videoCombineSetRows = document.getElementById('videoCombineSetRows');
+  const videoCombineStartText = document.getElementById('videoCombineStartText');
+  const videoCombineAmountText = document.getElementById('videoCombineAmountText');
+  const videoCombineLoopText = document.getElementById('videoCombineLoopText');
+  if (addVideoCombineSetBtn && videoCombineSetRows) {
+    addVideoCombineSetBtn.addEventListener('click', () => {
+      const startInput = document.getElementById('videoCombineStartText');
+      const amountInput = document.getElementById('videoCombineAmountText');
+      const loopInput = document.getElementById('videoCombineLoopText');
+
+      const startVal = parseInt(startInput?.value || '', 10);
+      const amountVal = parseInt(amountInput?.value || '', 10);
+      const loopVal = parseInt(loopInput?.value || '', 10);
+
+      if (Number.isInteger(startVal) && startVal > 0 && Number.isInteger(amountVal) && amountVal > 0 && Number.isInteger(loopVal) && loopVal > 0) {
+        let currentStart = startVal;
+        const rows = ensureVideoCombineSetRowCount(loopVal);
+        for (let i = 0; i < loopVal; i++) {
+          const row = rows[i];
+          const input = row?.querySelector('.video-combine-set-input');
+          if (input) {
+            input.value = buildVideoCombineSetValue(currentStart, amountVal);
+          }
+          currentStart += amountVal;
+        }
+      } else {
+        videoCombineSetRows.appendChild(createVideoCombineSetRow(''));
+        refreshVideoCombineSetLabels();
+      }
+    });
+  }
+
+  [videoCombineStartText, videoCombineAmountText, videoCombineLoopText].forEach((input) => {
+    if (input) {
+      input.addEventListener('input', updateVideoCombineEndNumber);
+    }
+  });
+  updateVideoCombineEndNumber();
 
   const browseOutputBtn = document.getElementById('browseOutputBtn');
   const videoOutputPathText = document.getElementById('videoOutputPathText');
@@ -1618,5 +1776,3 @@ setupLogStream();
 
 // Start periodic real-time status check every 3 seconds
 setInterval(updatePortStatus, 3000);
-
-
