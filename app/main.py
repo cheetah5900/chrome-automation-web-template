@@ -1904,8 +1904,8 @@ def make_video_cover(
     prefix_str = prefix.strip() if prefix else ""
 
     if is_combine_mode:
-        # 1. Create a folder for the output video with a filename '[Prefix][folder range.]'
-        folder_range_name = f"{prefix_str}{combine_label}."
+        # 1. Create a folder for the output video with a filename '[Prefix][folder range]'
+        folder_range_name = f"{prefix_str}{combine_label}"
         out_dir = os.path.join(out_dir, folder_range_name)
         
         # 2. Extract and combine Caption.md files from all combined folders
