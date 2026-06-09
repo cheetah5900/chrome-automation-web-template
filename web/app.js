@@ -687,13 +687,18 @@ async function loadImagePrompts() {
     renderImagePromptsForRound(currentPromptRound);
     
     const refImgInput = document.getElementById('cfg_reference_image');
+    const refImgInput2 = document.getElementById('cfg_reference_image_2');
+    const refImgInput3 = document.getElementById('cfg_reference_image_3');
+    const defaultData = await jsonFetch('/api/config/reference-image/default');
+
     if (refImgInput) {
-      if (config.reference_image) {
-        refImgInput.value = config.reference_image;
-      } else {
-        const defaultData = await jsonFetch('/api/config/reference-image/default');
-        refImgInput.value = defaultData.reference_image || '';
-      }
+      refImgInput.value = config.reference_image !== undefined ? config.reference_image : (defaultData.reference_image || '');
+    }
+    if (refImgInput2) {
+      refImgInput2.value = config.reference_image_2 !== undefined ? config.reference_image_2 : (defaultData.reference_image_2 || '');
+    }
+    if (refImgInput3) {
+      refImgInput3.value = config.reference_image_3 !== undefined ? config.reference_image_3 : (defaultData.reference_image_3 || '');
     }
   } catch (e) {
     writeConsoleLine(`Failed to load prompts: ${e.message}`, 'error', 'imageConsole');
@@ -701,18 +706,19 @@ async function loadImagePrompts() {
 }
 
 async function setRefImageDefault() {
-  const refImgInput = document.getElementById('cfg_reference_image');
-  const path = refImgInput ? refImgInput.value.trim() : '';
+  const path1 = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
+  const path2 = document.getElementById('cfg_reference_image_2') ? document.getElementById('cfg_reference_image_2').value.trim() : '';
+  const path3 = document.getElementById('cfg_reference_image_3') ? document.getElementById('cfg_reference_image_3').value.trim() : '';
   try {
     await jsonFetch('/api/config/reference-image/default', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reference_image: path })
+      body: JSON.stringify({ reference_image: path1, reference_image_2: path2, reference_image_3: path3 })
     });
-    writeConsoleLine(`Reference image default saved: ${path || 'None'}`, 'success', 'imageConsole');
-    alert(`Default reference image path set to: ${path || 'None'}`);
+    writeConsoleLine(`Reference image defaults saved: [1]: ${path1 || 'None'}, [2]: ${path2 || 'None'}, [3]: ${path3 || 'None'}`, 'success', 'imageConsole');
+    alert(`Default reference image paths set.`);
   } catch (e) {
-    writeConsoleLine(`Failed to set default: ${e.message}`, 'error', 'imageConsole');
+    writeConsoleLine(`Failed to set defaults: ${e.message}`, 'error', 'imageConsole');
   }
 }
 
@@ -781,29 +787,36 @@ async function setRemotePathDefault() {
 }
 
 async function verifyRefImage() {
-  const refImgInput = document.getElementById('cfg_reference_image');
-  const path = refImgInput ? refImgInput.value.trim() : '';
-  if (!path) {
-    showToast('Please enter a reference image path first.', 'error');
+  const paths = [
+    document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '',
+    document.getElementById('cfg_reference_image_2') ? document.getElementById('cfg_reference_image_2').value.trim() : '',
+    document.getElementById('cfg_reference_image_3') ? document.getElementById('cfg_reference_image_3').value.trim() : ''
+  ].filter(Boolean);
+
+  if (paths.length === 0) {
+    showToast('Please enter at least one reference image path first.', 'error');
     return;
   }
 
-  try {
-    const res = await jsonFetch('/api/config/reference-image/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path })
-    });
-    
-    if (res.exists) {
-      showToast(res.message, 'success');
-      writeConsoleLine(res.message, 'success', 'imageConsole');
-    } else {
-      showToast(res.message, 'error');
-      writeConsoleLine(res.message, 'error', 'imageConsole');
+  for (const path of paths) {
+    try {
+      const res = await jsonFetch('/api/config/reference-image/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path })
+      });
+      
+      if (res.exists) {
+        showToast(res.message, 'success');
+        writeConsoleLine(res.message, 'success', 'imageConsole');
+      } else {
+        showToast(res.message, 'error');
+        writeConsoleLine(res.message, 'error', 'imageConsole');
+      }
+    } catch (e) {
+      showToast(`Verification failed: ${e.message}`, 'error');
+      writeConsoleLine(`Failed to verify ${path}: ${e.message}`, 'error', 'imageConsole');
     }
-  } catch (e) {
-    showToast(`Verification failed: ${e.message}`, 'error');
   }
 }
 
@@ -1273,6 +1286,8 @@ async function saveImagePrompts(silent = false) {
   }
   try {
     const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
+    const refImg2 = document.getElementById('cfg_reference_image_2') ? document.getElementById('cfg_reference_image_2').value.trim() : '';
+    const refImg3 = document.getElementById('cfg_reference_image_3') ? document.getElementById('cfg_reference_image_3').value.trim() : '';
     const currentConfig = await jsonFetch('/api/config');
     const payload = { 
       ...currentConfig, 
@@ -1283,7 +1298,9 @@ async function saveImagePrompts(silent = false) {
       image_prompts_3: promptsByRound[3], 
       image_prompt_statuses_3: statusesByRound[3],
       chatgpt_url: chatgptUrl,
-      reference_image: refImg 
+      reference_image: refImg,
+      reference_image_2: refImg2,
+      reference_image_3: refImg3
     };
     await jsonFetch('/api/config', {
       method: 'POST',
@@ -1584,6 +1601,8 @@ function initWorkflowActionListeners() {
     btn.disabled = true;
     commitCurrentRoundFromDOM();
     const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
+    const refImg2 = document.getElementById('cfg_reference_image_2') ? document.getElementById('cfg_reference_image_2').value.trim() : '';
+    const refImg3 = document.getElementById('cfg_reference_image_3') ? document.getElementById('cfg_reference_image_3').value.trim() : '';
 
     writeConsoleLine(`Bulk Generation: Starting multi-round generation on ${target === 'gemini' ? 'Gemini' : 'ChatGPT'}...`, 'system', 'imageConsole');
 
@@ -1626,7 +1645,12 @@ function initWorkflowActionListeners() {
         updateRowStatus(row, 'Generating...');
 
         const endpoint = target === 'gemini' ? '/api/step/3' : '/api/step/3-chatgpt';
-        const payload = { prompt: p, reference_image: refImg };
+        const payload = { 
+          prompt: p, 
+          reference_image: refImg,
+          reference_image_2: refImg2,
+          reference_image_3: refImg3
+        };
         if (target === 'chatgpt' && isFirstPrompt && chatgptUrl) {
           payload.chatgpt_url = chatgptUrl;
           isFirstPrompt = false;

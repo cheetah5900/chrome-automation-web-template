@@ -96,13 +96,24 @@
           <div style="display: flex; flex-direction: column; gap: 20px;">
             <!-- Reference Image Section (Dedicated card) -->
             <section class="card" style="padding: 20px;">
-              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 4px;">🖼️ Reference Image</h2>
-              <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">ระบุพาทของรูปภาพอ้างอิงเพื่อส่งไปพร้อมกับพรอพต์สร้างภาพ (ถ้ามี)</p>
+              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 4px;">🖼️ Reference Images (Up to 3)</h2>
+              <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">ระบุพาทของรูปภาพอ้างอิงสูงสุด 3 รูปเพื่อส่งสร้างทีละรูปก่อนไปพรอพต์ถัดไป</p>
               <div class="form-group" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 10px;">
-                <input id="cfg_reference_image" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; width: 100%;" />
-                <div style="display: flex; gap: 10px; width: 100%;">
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <label for="cfg_reference_image" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Image 1</label>
+                  <input id="cfg_reference_image" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet 1.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; width: 100%;" />
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <label for="cfg_reference_image_2" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Image 2</label>
+                  <input id="cfg_reference_image_2" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet 2.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; width: 100%;" />
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <label for="cfg_reference_image_3" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Image 3</label>
+                  <input id="cfg_reference_image_3" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet 3.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; width: 100%;" />
+                </div>
+                <div style="display: flex; gap: 10px; width: 100%; margin-top: 4px;">
                   <button id="setRefImageDefaultBtn" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">Set Default</button>
-                  <button id="verifyRefImageBtn" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">🔍 Verify File</button>
+                  <button id="verifyRefImageBtn" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">🔍 Verify Files</button>
                 </div>
               </div>
             </section>
@@ -335,7 +346,7 @@
                 </div>
                 <div style="font-size: 0.78rem; color: #8da6ff; background: rgba(141, 166, 255, 0.05); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(141, 166, 255, 0.15); line-height: 1.4;">
                   <strong>Expected Filenames & Structures:</strong><br>
-                  • <strong>Cover Mode:</strong> Video file location is in <code>[numberic_folder_name]/[any.mp4 file]</code> (just a video, if more, it'll error) and cover image inside folder <code>'cover/'</code>.<br>
+                  • <strong>Cover Mode:</strong> Video file location is in <code>[numberic_folder_name]/[any .mp4 or .mov file]</code> (just a video, if more, it'll error) and cover image inside folder <code>'cover/'</code>.<br>
                   • <strong>Combine Mode:</strong> Videos sequentially numbered from 1 (e.g. <code>1_upscale.mp4</code>, <code>2_upscale.mp4</code>, <code>3_upscale.mp4</code>) inside each subfolder.
                 </div>
               </div>
