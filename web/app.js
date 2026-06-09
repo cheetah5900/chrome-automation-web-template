@@ -1140,7 +1140,7 @@ async function runVideoHelper(btnElement) {
     if (modeVal === 'cover') {
       alert('Please enter at least one Sub folder name/range to process in Cover Mode.');
     } else {
-      alert('Please enter at least one Sub folder name/range to process in Combine Mode.');
+      alert('Please enter at least one Sub folder name/range to process in Combine Across Folder.');
     }
     return;
   }
