@@ -1819,12 +1819,18 @@ def make_video_cover(
         if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
             raise HTTPException(status_code=400, detail=f"Set {sub_no}: Subfolder '{subfolder}' does not exist")
             
-        resolved_video_name = resolve_named_media_file(subfolder, sub_no, video_exts)
-        if not resolved_video_name:
-            if suffix_val:
-                raise HTTPException(status_code=400, detail=f"Set {sub_no}: No video file matching '{sub_no}{suffix_val}' found in subfolder '{subfolder}'")
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: No video file named '{sub_no}' found in subfolder '{subfolder}'")
+        video_files = []
+        for f in os.listdir(subfolder):
+            f_lower = f.lower()
+            if any(f_lower.endswith(ext) for ext in video_exts) and os.path.isfile(os.path.join(subfolder, f)):
+                video_files.append(f)
+                
+        if len(video_files) == 0:
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: No video file found in subfolder '{subfolder}'")
+        elif len(video_files) > 1:
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Multiple video files found in subfolder '{subfolder}'. Only 1 video is allowed (Found: {len(video_files)})")
             
+        resolved_video_name = video_files[0]
         src_video_path = os.path.join(subfolder, resolved_video_name)
         video_filename = resolved_video_name
         log(f"Cover Mode: Auto-pulled source video '{src_video_path}'")
