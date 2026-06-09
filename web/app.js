@@ -979,65 +979,26 @@ async function runVideoHelper(btnElement) {
 
   // Collect active sets
   const activeSets = [];
-  if (modeVal === 'cover') {
-    if (!outputPathVal) {
-      alert('Please configure the Path at the top.');
-      return;
-    }
-    const foldersInput = document.getElementById('videoCoverFoldersText');
-    const foldersVal = foldersInput ? foldersInput.value.trim() : '';
-    if (!foldersVal) {
-      alert('Please enter sub folders (e.g. 1,2,3-10) to process.');
-      return;
-    }
-    const folderList = parseFolderRanges(foldersVal);
-    for (const folder of folderList) {
-      activeSets.push({
-        index: folder,
-        videoFile: null,
-        imageFile: null,
-        videoPathVal: '',
-        imagePathVal: '',
-        no: folder
-      });
-    }
-  } else {
-    for (let i = 1; i <= 20; i++) {
-      const videoInputFile = document.getElementById(`videoInputPathFile_${i}`);
-      const imageInputFile = document.getElementById(`imageInputPathFile_${i}`);
-      const videoInputText = document.getElementById(`videoInputPathText_${i}`);
-      const imageInputText = document.getElementById(`imageInputPathText_${i}`);
-
-      const setNoInput = document.getElementById(`videoNo_${i}`);
-      const setNoVal = setNoInput ? setNoInput.value.trim() : '';
-
-      const videoFile = videoInputFile ? videoInputFile.files[0] : null;
-      const imageFile = imageInputFile ? imageInputFile.files[0] : null;
-      const videoPathVal = videoInputText ? videoInputText.value.trim() : '';
-      const imagePathVal = imageInputText ? imageInputText.value.trim() : '';
-
-      const hasVideo = videoFile || videoPathVal;
-      const hasImage = imageFile || imagePathVal;
-
-      if (hasVideo || hasImage) {
-        if (!hasVideo) {
-          alert(`Set ${i}: Please select video 1 or provide a local path.`);
-          return;
-        }
-        if (!hasImage) {
-          alert(`Set ${i}: Please select video 2 or provide a local path.`);
-          return;
-        }
-        activeSets.push({
-          index: i,
-          videoFile,
-          imageFile,
-          videoPathVal,
-          imagePathVal,
-          no: setNoVal
-        });
-      }
-    }
+  if (!outputPathVal) {
+    alert('Please configure the Path at the top.');
+    return;
+  }
+  const foldersInput = document.getElementById('videoCoverFoldersText');
+  const foldersVal = foldersInput ? foldersInput.value.trim() : '';
+  if (!foldersVal) {
+    alert('Please enter sub folders (e.g. 1,2,3-10) to process.');
+    return;
+  }
+  const folderList = parseFolderRanges(foldersVal);
+  for (const folder of folderList) {
+    activeSets.push({
+      index: folder,
+      videoFile: null,
+      imageFile: null,
+      videoPathVal: '',
+      imagePathVal: '',
+      no: folder
+    });
   }
 
   if (activeSets.length === 0) {
@@ -1355,60 +1316,14 @@ function initWorkflowActionListeners() {
       const pathDesc = document.getElementById('videoOutputPathDesc');
       const pathInput = document.getElementById('videoOutputPathText');
       if (pathLabel) {
-        pathLabel.textContent = isCombine ? 'Output Path (ที่เก็บวีดีโอผลลัพธ์)' : 'Path';
+        pathLabel.textContent = 'Path';
       }
       if (pathDesc) {
-        pathDesc.textContent = isCombine
-          ? ''
-          : 'This is input and output path. The system will select subfolder here for input and output.';
-        pathDesc.style.display = isCombine ? 'none' : 'block';
+        pathDesc.textContent = 'This is input and output path. The system will select subfolder here for input and output.';
+        pathDesc.style.display = 'block';
       }
       if (pathInput) {
-        pathInput.placeholder = isCombine
-          ? 'เช่น /Users/litarcopperkaikem/Downloads'
-          : 'เช่น /Users/litarcopperkaikem/Downloads/my_project_folder';
-      }
-      
-      const coverFoldersGroup = document.getElementById('videoHelperCoverFoldersGroup');
-      const setTabs = document.getElementById('videoHelperSetTabs');
-      const batchRows = document.getElementById('videoHelperBatchRows');
-
-      if (coverFoldersGroup) {
-        coverFoldersGroup.style.display = isCombine ? 'none' : 'block';
-      }
-      if (setTabs) {
-        setTabs.style.display = isCombine ? 'flex' : 'none';
-      }
-      if (batchRows) {
-        batchRows.style.display = isCombine ? 'block' : 'none';
-      }
-
-      for (let i = 1; i <= 20; i++) {
-        const videoCol = document.getElementById(`videoCol_${i}`);
-        const imageCol = document.getElementById(`imageCol_${i}`);
-        const gridRow = document.getElementById(`gridRow_${i}`);
-        
-        if (videoCol) videoCol.style.display = isCombine ? 'flex' : 'none';
-        if (imageCol) imageCol.style.display = isCombine ? 'flex' : 'none';
-        if (gridRow) gridRow.style.gridTemplateColumns = isCombine ? '110px 1fr 1fr' : '110px';
-
-        const videoLabel = document.getElementById(`videoLabel_${i}`);
-        const imageLabel = document.getElementById(`imageLabel_${i}`);
-        const fileImage = document.getElementById(`imageInputPathFile_${i}`);
-        const textImage = document.getElementById(`imageInputPathText_${i}`);
-        
-        if (videoLabel) {
-          videoLabel.textContent = isCombine ? 'Video 1 (วีดีโอแรก)' : 'Source Video (ไฟล์วีดีโอต้นฉบับ)';
-        }
-        if (imageLabel) {
-          imageLabel.textContent = isCombine ? 'Video 2 (วีดีโอที่สอง)' : 'Cover Image (รูปภาพหน้าปก)';
-        }
-        if (fileImage) {
-          fileImage.accept = isCombine ? 'video/*' : 'image/*';
-        }
-        if (textImage) {
-          textImage.placeholder = isCombine ? 'เลือกวีดีโอที่สองหรือระบุพาท...' : 'เลือกรูปภาพหรือระบุพาท...';
-        }
+        pathInput.placeholder = 'เช่น /Users/litarcopperkaikem/Downloads/my_project_folder';
       }
       
       const runBtn = document.getElementById('runVideoHelperBtn');

@@ -316,26 +316,16 @@
                 <label id="videoOutputPathLabel" for="videoOutputPathText" style="font-weight: bold; color: #8da6ff;">Path</label>
                 <div id="videoOutputPathDesc" style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">This is input and output path. The system will select subfolder here for input and output.</div>
                 <div style="display: flex; gap: 10px; width: 100%;">
-                  <input id="videoOutputPathText" placeholder="เช่น /Users/litarcopperkaikem/Downloads" style="margin-bottom: 0; flex-grow: 1;" />
+                  <input id="videoOutputPathText" placeholder="เช่น /Users/litarcopperkaikem/Downloads/my_project_folder" style="margin-bottom: 0; flex-grow: 1;" />
                   <button id="browseOutputBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
                   <button id="setVideoOutputDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
                 </div>
               </div>
 
-              <!-- Sub folders for Cover Mode -->
+              <!-- Sub folders -->
               <div id="videoHelperCoverFoldersGroup" class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
                 <label for="videoCoverFoldersText" style="font-weight: bold; color: #8da6ff;">Sub folders (เช่น 1,2,3-10 เพื่อระบุโฟลเดอร์ 1 ถึง 10)</label>
                 <input id="videoCoverFoldersText" placeholder="ระบุเลขหรือช่วงโฟลเดอร์ เช่น 1,2,3-10" style="margin-bottom: 0;" />
-              </div>
-
-              <!-- Tabs for Sets 1-10 -->
-              <div id="videoHelperSetTabs" style="display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch;">
-                <!-- Tab buttons will be dynamically created here -->
-              </div>
-
-              <!-- Batch Rows Container -->
-              <div id="videoHelperBatchRows" style="margin-bottom: 20px; min-height: 200px; padding-right: 8px;">
-                <!-- Rows will be dynamically created here -->
               </div>
 
               <button id="runVideoHelperBtn" class="primary-btn" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">Generate YouTube Covers (Batch Process)</button>

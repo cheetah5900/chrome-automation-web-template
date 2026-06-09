@@ -1801,33 +1801,30 @@ def make_video_cover(
         second_filename = image_files[0]
         log(f"Cover Mode: Auto-pulled cover image '{src_second_path}'")
     else:
-        if video and video.filename:
-            log(f"Video 1 Source: Uploaded file '{video.filename}'")
-            video_filename = video.filename
-        elif video_path and video_path.strip():
-            video_path_clean = video_path.strip()
-            if os.path.exists(video_path_clean) and os.path.isfile(video_path_clean):
-                src_video_path = video_path_clean
-                video_filename = os.path.basename(video_path_clean)
-                log(f"Video 1 Source: Local path '{src_video_path}'")
-            else:
-                raise HTTPException(status_code=400, detail=f"Local video 1 path does not exist or is not a file: {video_path_clean}")
-        else:
-            raise HTTPException(status_code=400, detail="Please upload video 1 or enter a valid local path")
-
-        if image and image.filename:
-            log(f"Second Input Source: Uploaded file '{image.filename}'")
-            second_filename = image.filename
-        elif image_path and image_path.strip():
-            image_path_clean = image_path.strip()
-            if os.path.exists(image_path_clean) and os.path.isfile(image_path_clean):
-                src_second_path = image_path_clean
-                second_filename = os.path.basename(image_path_clean)
-                log(f"Second Input Source: Local path '{src_second_path}'")
-            else:
-                raise HTTPException(status_code=400, detail=f"Second input path does not exist or is not a file: {image_path_clean}")
-        else:
-            raise HTTPException(status_code=400, detail="Please upload video 2 or enter a valid local path")
+        if not output_path or not output_path.strip():
+            raise HTTPException(status_code=400, detail="Path (output_path) is required in Combine Mode")
+        if not no or not no.strip():
+            raise HTTPException(status_code=400, detail="Sub folder (no) is required in Combine Mode")
+        
+        base_dir = output_path.strip()
+        sub_no = no.strip()
+        subfolder = os.path.join(base_dir, sub_no)
+        if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Subfolder '{subfolder}' does not exist")
+            
+        v1_path = os.path.join(subfolder, "1.mp4")
+        v2_path = os.path.join(subfolder, "2.mp4")
+        
+        if not os.path.exists(v1_path) or not os.path.isfile(v1_path):
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video 1 file '1.mp4' not found in subfolder '{subfolder}'")
+        if not os.path.exists(v2_path) or not os.path.isfile(v2_path):
+            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Video 2 file '2.mp4' not found in subfolder '{subfolder}'")
+            
+        src_video_path = v1_path
+        video_filename = "1.mp4"
+        src_second_path = v2_path
+        second_filename = "2.mp4"
+        log(f"Combine Mode: Auto-pulled '{v1_path}' and '{v2_path}'")
 
     out_dir = ""
     if output_path and output_path.strip():
