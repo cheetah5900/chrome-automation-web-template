@@ -3270,11 +3270,32 @@ function initVideoGenListeners() {
   }
 
   if (btnStopVideoGeneration) {
-    btnStopVideoGeneration.addEventListener('click', () => {
+    btnStopVideoGeneration.addEventListener('click', async () => {
       shouldStopVideoGeneration = true;
       btnStopVideoGeneration.textContent = 'กำลังหยุดการทำงาน...';
       btnStopVideoGeneration.disabled = true;
       stopVideoCooldown();
+
+      writeConsoleLine('Force Stop: Requesting immediate cancellation...', 'warning', 'videoConsole');
+
+      const select = document.getElementById('profileSelect');
+      const selected = (profileCache || []).find(x => x.name === select?.value);
+      const port = selected ? Number(selected.debug_port || 9222) : 9222;
+
+      try {
+        writeConsoleLine(`Force Stop: Closing Chrome browser on port ${port}...`, 'warning', 'videoConsole');
+        const res = await jsonFetch('/api/profiles/force-kill', {
+          method: 'POST',
+          body: JSON.stringify({ port: port })
+        });
+        if (res && res.ok) {
+          writeConsoleLine(`Force Stop: Successfully terminated Chrome browser on port ${port}.`, 'success', 'videoConsole');
+        } else {
+          writeConsoleLine(`Force Stop: Browser was already closed or not found on port ${port}.`, 'info', 'videoConsole');
+        }
+      } catch (err) {
+        writeConsoleLine(`Force Stop: Error calling force-kill endpoint: ${err.message}`, 'error', 'videoConsole');
+      }
     });
   }
 }

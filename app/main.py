@@ -3307,13 +3307,14 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     time.sleep(1.0) # Wait 1.0s after typing @
 
     # Type round number using ActionChains keyboard events
-    log(f"[ป้อนข้อมูล] พิมพ์หมายเลข Round ด้วยคีย์บอร์ดเสมือน: {round_idx}")
+    text_to_type = f"{round_idx}.png"
+    log(f"[ป้อนข้อมูล] พิมพ์หมายเลข Round + .png ด้วยคีย์บอร์ดเสมือน: {text_to_type}")
     try:
         actions = ActionChains(driver)
-        actions.send_keys(str(round_idx)).perform()
+        actions.send_keys(text_to_type).perform()
     except Exception as e:
-        log(f"พิมพ์ตัวเลขด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
-        box.send_keys(str(round_idx))
+        log(f"พิมพ์ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
+        box.send_keys(text_to_type)
     time.sleep(1.0) # Wait 1.0s for autocomplete
 
     # Press Enter using ActionChains keyboard events
@@ -3345,6 +3346,16 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     except Exception as e:
         log(f"วางผ่าน Clipboard ล้มเหลว, ใช้ send_keys สำรอง: {e}")
         box.send_keys(prompt)
+    time.sleep(1.0)
+
+    # Press Enter to submit the prompt
+    log("[ป้อนข้อมูล] กด Enter เพื่อส่ง prompt")
+    try:
+        actions = ActionChains(driver)
+        actions.send_keys(Keys.ENTER).perform()
+    except Exception as e:
+        log(f"ส่ง Enter ล้มเหลว, ใช้ box.send_keys: {e}")
+        box.send_keys(Keys.ENTER)
     time.sleep(1.0)
 
     # 5. Click settings button to check/verify settings if specified
