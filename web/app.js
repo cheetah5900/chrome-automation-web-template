@@ -53,6 +53,11 @@ window.alert = function (message) {
 };
 
 async function jsonFetch(url, options = {}) {
+  const headers = options.headers || {};
+  if (options.body && typeof options.body === 'string' && !headers['Content-Type'] && !headers['content-type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  options.headers = headers;
   const res = await fetch(url, options);
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || data.message || 'Request failed');
@@ -210,96 +215,7 @@ async function launchProfile() {
   } catch (e) { msg.textContent = e.message; msg.classList.add('error'); }
 }
 
-function promptRowTemplate(text = '') {
-  const row = document.createElement('div');
-  row.className = 'prompt-row';
-  row.innerHTML = `
-    <textarea class="prompt-input" rows="3" placeholder="พิมพ์ prompt...">${text.replace(/</g, '&lt;')}</textarea>
-    <div class="row wrap">
-      <button class="send-btn" data-target="chatgpt">ChatGPT</button>
-      <button class="send-btn" data-target="gemini">Gemini</button>
-      <button class="send-btn" data-target="claude">Claude</button>
-      <button class="secondary delete-btn" type="button">Delete</button>
-    </div>
-  `;
 
-  const textarea = row.querySelector('.prompt-input');
-  const sendBtns = row.querySelectorAll('.send-btn');
-
-  const updateBtnState = () => {
-    const hasText = textarea.value.trim().length > 0;
-    sendBtns.forEach(btn => {
-      btn.disabled = !hasText;
-    });
-  };
-
-  textarea.addEventListener('input', updateBtnState);
-  updateBtnState(); // Initial call
-
-  row.querySelector('.delete-btn').addEventListener('click', () => row.remove());
-  sendBtns.forEach(btn => btn.addEventListener('click', () => dispatchSinglePrompt(row, btn.dataset.target, btn)));
-  return row;
-}
-
-function collectPrompts() {
-  return Array.from(document.querySelectorAll('.prompt-input')).map(x => x.value);
-}
-
-async function loadPrompts() {
-  const data = await jsonFetch('/api/prompts');
-  const list = document.getElementById('promptList');
-  list.innerHTML = '';
-  const prompts = (data.prompts || []).length ? data.prompts : [''];
-  for (const p of prompts) list.appendChild(promptRowTemplate(p));
-}
-
-async function savePrompts() {
-  const msg = document.getElementById('dispatchMsg'); msg.classList.remove('error');
-  try {
-    const prompts = collectPrompts();
-    await jsonFetch('/api/prompts', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompts }),
-    });
-    msg.textContent = 'บันทึก prompt ลง JSON แล้ว';
-    showToast('บันทึก prompt ลง JSON สำเร็จ', 'success');
-  } catch (e) {
-    msg.textContent = e.message;
-    msg.classList.add('error');
-    showToast(e.message, 'error');
-  }
-}
-
-async function dispatchSinglePrompt(row, target, clickedBtn) {
-  const msg = document.getElementById('dispatchMsg'); msg.classList.remove('error');
-  const prompt = row.querySelector('.prompt-input').value.trim();
-
-  const rowButtons = row.querySelectorAll('button');
-  rowButtons.forEach(b => b.disabled = true);
-  clickedBtn.classList.add('loading');
-
-  try {
-    const data = await jsonFetch('/api/prompt/dispatch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, targets: [target] }),
-    });
-    
-    if (data.fallback && data.fallback.length > 0) {
-      for (const item of data.fallback) {
-        window.open(item.url, '_blank');
-      }
-      msg.textContent = `เปิด ${target} ในแท็บใหม่แล้ว`;
-    } else if (data.already_open && data.already_open.includes(target)) {
-      msg.textContent = `ตรวจพบแท็บ ${target} เปิดอยู่แล้ว (ทำการสลับหน้าจอ)`;
-    } else {
-      msg.textContent = `เปิด ${target} ใน Chrome Profile สำเร็จ`;
-    }
-  } catch (e) {
-    msg.textContent = e.message; msg.classList.add('error');
-  } finally {
-    clickedBtn.classList.remove('loading');
-    rowButtons.forEach(b => b.disabled = false);
-  }
-}
 
 async function updatePortStatus() {
   const badge = document.getElementById('portStatusBadge');
@@ -495,8 +411,6 @@ document.getElementById('updateProfile').addEventListener('click', updateProfile
 document.getElementById('setProfile').addEventListener('click', setDefaultProfile);
 document.getElementById('launchProfile').addEventListener('click', launchProfile);
 document.getElementById('deleteProfileBtn').addEventListener('click', deleteProfile);
-document.getElementById('addPrompt').addEventListener('click', () => document.getElementById('promptList').appendChild(promptRowTemplate('')));
-document.getElementById('savePrompts').addEventListener('click', savePrompts);
 document.getElementById('profileSelect').addEventListener('change', () => {
   const selected = profileCache.find(x => x.name === document.getElementById('profileSelect').value);
   fillProfileForm(selected);
@@ -507,18 +421,15 @@ document.getElementById('profileSelect').addEventListener('change', () => {
 
 // Tab Switching
 function initTabNavigation() {
-  const btnBrowser = document.getElementById('tabBrowserBtn');
   const btnImageGen = document.getElementById('tabImageGenBtn');
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   
-  const viewBrowser = document.getElementById('browserManagerView');
   const viewImageGen = document.getElementById('imageGenView');
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
 
   const tabs = [
-    { btn: btnBrowser, view: viewBrowser, onLoad: null },
     { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig }
@@ -542,28 +453,37 @@ function initTabNavigation() {
 async function loadConfig() {
   try {
     const config = await jsonFetch('/api/config');
-    document.getElementById('cfg_folder_name').value = config.folder_name || '';
-    document.getElementById('cfg_local_path').value = config.local_path || '';
-    document.getElementById('cfg_remote_path').value = config.remote_path || '';
+    const folderInput = document.getElementById('cfg_folder_name');
+    if (folderInput) folderInput.value = config.folder_name || '';
+    const localInput = document.getElementById('cfg_local_path');
+    if (localInput) localInput.value = config.local_path || '';
+    const remoteInput = document.getElementById('cfg_remote_path');
+    if (remoteInput) remoteInput.value = config.remote_path || '';
+    
+    videoPrefixCover = config.video_prefix_cover !== undefined ? config.video_prefix_cover : (config.video_prefix || '');
+    videoPrefixCombine = config.video_prefix_combine !== undefined ? config.video_prefix_combine : (config.video_prefix || '');
+    
+    const activeRadio = document.querySelector('input[name="videoHelperMode"]:checked');
+    activeVideoMode = activeRadio ? activeRadio.value : 'cover';
     
     const vPref = document.getElementById('videoPrefixText');
-    if (vPref) vPref.value = config.video_prefix || '';
+    if (vPref) {
+      vPref.value = activeVideoMode === 'cover' ? videoPrefixCover : videoPrefixCombine;
+    }
     
     const vOut = document.getElementById('videoOutputPathText');
     if (vOut) vOut.value = config.video_output_path || '';
+
+    const lakornPathInput = document.getElementById('cfg_lakorn_path');
+    if (lakornPathInput) lakornPathInput.value = config.lakorn_path || '';
+    const lakornEpInput = document.getElementById('cfg_lakorn_ep');
+    if (lakornEpInput) lakornEpInput.value = config.lakorn_ep || '';
   } catch (e) {
-    writeConsoleLine(`Failed to load config: ${e.message}`, 'error', 'ddcmConsole');
+    writeConsoleLine(`Failed to load config: ${e.message}`, 'error', 'imageConsole');
   }
 }
 
-// Gather config values from inputs
-function gatherConfigData() {
-  return {
-    folder_name: document.getElementById('cfg_folder_name').value.trim(),
-    local_path: document.getElementById('cfg_local_path').value.trim(),
-    remote_path: document.getElementById('cfg_remote_path').value.trim(),
-  };
-}
+
 
 function updateImageGenButtonsState() {
   const inputs = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
@@ -589,10 +509,14 @@ function updateRowStatus(row, status) {
     badge.style.background = 'rgba(255, 255, 255, 0.05)';
     badge.style.borderColor = 'rgba(255, 255, 255, 0.1)';
     badge.style.color = 'rgba(255, 255, 255, 0.6)';
-  } else if (status === 'Generating...') {
+  } else if (status === 'Generating...' || status === 'Preparing...') {
     badge.style.background = 'rgba(58, 160, 255, 0.15)';
     badge.style.borderColor = 'rgba(58, 160, 255, 0.25)';
     badge.style.color = '#8da6ff';
+  } else if (status === 'Prepared') {
+    badge.style.background = 'rgba(237, 137, 54, 0.18)';
+    badge.style.borderColor = 'rgba(237, 137, 54, 0.3)';
+    badge.style.color = '#ed8936';
   } else if (status === 'Done') {
     badge.style.background = 'rgba(72, 187, 120, 0.18)';
     badge.style.borderColor = 'rgba(72, 187, 120, 0.3)';
@@ -609,17 +533,19 @@ function imagePromptRowTemplate(text = '') {
   const row = document.createElement('div');
   row.className = 'prompt-row';
   row.style.display = 'flex';
-  row.style.gap = '10px';
-  row.style.alignItems = 'center';
+  row.style.flexDirection = 'column';
+  row.style.gap = '8px';
   row.style.background = 'rgba(15, 21, 48, 0.4)';
   row.style.border = '1px solid rgba(255, 255, 255, 0.08)';
-  row.style.borderRadius = '10px';
-  row.style.padding = '8px 12px';
+  row.style.borderRadius = '12px';
+  row.style.padding = '12px';
   
   row.innerHTML = `
-    <textarea class="image-prompt-input" rows="2" style="margin-bottom:0; flex-grow:1;" placeholder="เช่น A cute baby lion, isolated background...">${text.replace(/</g, '&lt;')}</textarea>
-    <span class="row-status" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; font-weight: bold; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); min-width: 95px; text-align: center; white-space: nowrap; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.25s ease;">Not start</span>
-    <button class="secondary delete-btn" style="padding: 8px 12px; margin-bottom: 0;" type="button">Delete</button>
+    <textarea class="image-prompt-input" rows="4" style="margin-bottom:0; width: 100%;" placeholder="เช่น A cute baby lion, isolated background...">${text.replace(/</g, '&lt;')}</textarea>
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 4px;">
+      <span class="row-status" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; font-weight: bold; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); min-width: 95px; text-align: center; white-space: nowrap; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.25s ease;">Not start</span>
+      <button class="secondary delete-btn" style="padding: 6px 12px; font-size: 0.85rem; margin-bottom: 0;" type="button">Delete</button>
+    </div>
   `;
   row.querySelector('.delete-btn').addEventListener('click', () => {
     row.remove();
@@ -629,10 +555,167 @@ function imagePromptRowTemplate(text = '') {
   return row;
 }
 
-let promptsByRound = { 1: [], 2: [], 3: [] };
-let statusesByRound = { 1: [], 2: [], 3: [] };
+let promptsByRound = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
+let statusesByRound = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
+let refImagesByRound = { 
+  1: ["", "", "", "", "", "", ""], 2: ["", "", "", "", "", "", ""], 3: ["", "", "", "", "", "", ""], 4: ["", "", "", "", "", "", ""], 5: ["", "", "", "", "", "", ""],
+  6: ["", "", "", "", "", "", ""], 7: ["", "", "", "", "", "", ""], 8: ["", "", "", "", "", "", ""], 9: ["", "", "", "", "", "", ""], 10: ["", "", "", "", "", "", ""] 
+};
+let refImagesDirByRound = {
+  1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 10: ""
+};
 let chatgptUrl = '';
 let currentPromptRound = 1;
+let shouldStopGeneration = false;
+let videoPrefixCover = '';
+let videoPrefixCombine = '';
+let activeVideoMode = 'cover';
+
+function getDirectoryOfFile(filePath) {
+  if (!filePath || typeof filePath !== 'string') return '';
+  const idx = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  if (idx !== -1) {
+    return filePath.substring(0, idx);
+  }
+  return '';
+}
+
+let lastScannedImagesList = [];
+
+function renderDropdownOptions() {
+  const dropdown = document.getElementById('cfg_ref_image_dropdown');
+  if (!dropdown) return;
+  
+  const dirInput = document.getElementById('cfg_ref_images_dir');
+  const dirPath = dirInput ? dirInput.value.trim() : '';
+  
+  if (!dirPath) {
+    dropdown.innerHTML = '<option value="">-- กรุณาระบุหรือเลือกโฟลเดอร์ --</option>';
+    return;
+  }
+  
+  if (!lastScannedImagesList || lastScannedImagesList.length === 0) {
+    dropdown.innerHTML = '<option value="">-- ไม่พบไฟล์รูปภาพในโฟลเดอร์นี้ --</option>';
+    return;
+  }
+  
+  const currentRefs = (refImagesByRound[currentPromptRound] || []).filter(Boolean);
+  const availableImages = lastScannedImagesList.filter(img => !currentRefs.includes(img.path));
+  
+  if (availableImages.length === 0) {
+    dropdown.innerHTML = '<option value="">-- เลือกรูปครบทุกไฟล์ในโฟลเดอร์แล้ว --</option>';
+    return;
+  }
+  
+  let html = '<option value="">-- เลือกรูปภาพเพื่อเพิ่มเข้าลิสต์ (สูงสุด 7 รูป) --</option>';
+  availableImages.forEach(img => {
+    html += `<option value="${img.path.replace(/"/g, '&quot;')}">${img.name}</option>`;
+  });
+  dropdown.innerHTML = html;
+}
+
+async function scanDirectoryForImages(dirPath, isRenderingRound = false) {
+  const dropdown = document.getElementById('cfg_ref_image_dropdown');
+  if (!dropdown) return;
+  
+  if (!dirPath) {
+    lastScannedImagesList = [];
+    renderDropdownOptions();
+    return;
+  }
+  
+  try {
+    const res = await jsonFetch(`/api/utils/list-images?dir_path=${encodeURIComponent(dirPath)}`);
+    if (res && Array.isArray(res.images)) {
+      lastScannedImagesList = res.images;
+    } else {
+      lastScannedImagesList = [];
+    }
+    renderDropdownOptions();
+  } catch (e) {
+    dropdown.innerHTML = '<option value="">-- เกิดข้อผิดพลาดในการสแกนโฟลเดอร์ --</option>';
+  }
+}
+
+function renderSelectedRefImagesList() {
+  const container = document.getElementById('selectedRefImagesContainer');
+  const badge = document.getElementById('refImagesCountBadge');
+  if (!container) return;
+  
+  const currentRefs = (refImagesByRound[currentPromptRound] || []).filter(Boolean);
+  
+  if (badge) {
+    badge.textContent = `${currentRefs.length}/7 Images`;
+  }
+  
+  if (currentRefs.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: rgba(255,255,255,0.4); font-size: 0.85rem; padding: 10px;">No images selected for this round</div>';
+    return;
+  }
+  
+  container.innerHTML = '';
+  currentRefs.forEach((path, index) => {
+    const row = document.createElement('div');
+    row.className = 'selected-ref-img-row';
+    row.style = 'display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; gap: 10px; transition: background 0.2s; margin-bottom: 4px;';
+    
+    const pathStr = (typeof path === 'string') ? path : '';
+    const filename = pathStr ? pathStr.substring(Math.max(pathStr.lastIndexOf('/'), pathStr.lastIndexOf('\\')) + 1) : '';
+    
+    row.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; flex: 1;">
+        <span style="display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: #7f5cff; border-radius: 50%; font-size: 0.8rem; font-weight: bold; color: #fff;">${index + 1}</span>
+        <img src="/api/utils/view-image?path=${encodeURIComponent(pathStr)}" style="width: 45px; height: 45px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);" />
+        <span style="font-size: 0.85rem; color: #f5f7ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${pathStr}">${filename}</span>
+      </div>
+      <button class="remove-btn" style="background: transparent; border: none; color: rgba(255,255,255,0.5); padding: 4px 8px; font-size: 1.1rem; line-height: 1; cursor: pointer; transition: color 0.2s; box-shadow: none;">×</button>
+    `;
+    
+    const removeBtn = row.querySelector('.remove-btn');
+    removeBtn.addEventListener('mouseover', () => removeBtn.style.color = '#f56565');
+    removeBtn.addEventListener('mouseout', () => removeBtn.style.color = 'rgba(255,255,255,0.5)');
+    removeBtn.addEventListener('click', () => {
+      removeRefImage(index);
+    });
+    
+    container.appendChild(row);
+  });
+}
+
+function removeRefImage(index) {
+  const currentRefs = (refImagesByRound[currentPromptRound] || []).filter(Boolean);
+  currentRefs.splice(index, 1);
+  // Pad to length of 7 with empty strings
+  while (currentRefs.length < 7) {
+    currentRefs.push("");
+  }
+  refImagesByRound[currentPromptRound] = currentRefs;
+  renderSelectedRefImagesList();
+  renderDropdownOptions();
+  saveImagePrompts(true);
+}
+
+// Global function to update reference image preview (kept for compatibility)
+function updatePreview(inputEl, previewId) {
+  const previewEl = document.getElementById(previewId);
+  if (!previewEl) return;
+  const path = inputEl ? inputEl.value.trim() : '';
+  if (path) {
+    const lowerPath = path.toLowerCase();
+    const validExtensions = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"];
+    const isValidImg = validExtensions.some(ext => lowerPath.endsWith(ext));
+    if (isValidImg) {
+      previewEl.src = `/api/utils/view-image?path=${encodeURIComponent(path)}`;
+      previewEl.style.display = 'block';
+    } else {
+      previewEl.style.display = 'none';
+      previewEl.src = '';
+    }
+  } else {
+    previewEl.style.display = 'none';
+    previewEl.src = '';
+  }
+}
 
 function commitCurrentRoundFromDOM() {
   const prompts = Array.from(document.querySelectorAll('.image-prompt-input')).map(x => x.value.trim()).filter(Boolean);
@@ -645,8 +728,28 @@ function commitCurrentRoundFromDOM() {
   promptsByRound[currentPromptRound] = prompts;
   statusesByRound[currentPromptRound] = statuses;
 
+  // Save reference images folder path for current round
+  const dirInput = document.getElementById('cfg_ref_images_dir');
+  if (dirInput) {
+    refImagesDirByRound[currentPromptRound] = dirInput.value.trim();
+  }
+
+  // Selected images list is already stored in refImagesByRound[currentPromptRound]
+  if (!refImagesByRound[currentPromptRound]) {
+    refImagesByRound[currentPromptRound] = ["", "", "", "", "", "", ""];
+  }
+
   const chatgptUrlInput = document.getElementById('chatgptUrlInput');
   if (chatgptUrlInput) chatgptUrl = chatgptUrlInput.value.trim();
+}
+
+function renderRefImagesForRound(round) {
+  const dirInput = document.getElementById('cfg_ref_images_dir');
+  if (dirInput) {
+    dirInput.value = refImagesDirByRound[round] || '';
+  }
+  scanDirectoryForImages(refImagesDirByRound[round] || '', true);
+  renderSelectedRefImagesList();
 }
 
 function renderImagePromptsForRound(round) {
@@ -664,63 +767,91 @@ function renderImagePromptsForRound(round) {
     list.appendChild(row);
   }
 
+  // Also load/render the reference images for this round
+  renderRefImagesForRound(round);
+
   updateImageGenButtonsState();
 }
 
 async function loadImagePrompts() {
   try {
     const config = await jsonFetch('/api/config');
-    promptsByRound[1] = (config.image_prompts || []).map(x => x.trim()).filter(Boolean);
-    statusesByRound[1] = config.image_prompt_statuses || [];
-    
-    promptsByRound[2] = (config.image_prompts_2 || []).map(x => x.trim()).filter(Boolean);
-    statusesByRound[2] = config.image_prompt_statuses_2 || [];
-    
-    promptsByRound[3] = (config.image_prompts_3 || []).map(x => x.trim()).filter(Boolean);
-    statusesByRound[3] = config.image_prompt_statuses_3 || [];
+    const defaultData = await jsonFetch('/api/config/reference-image/default');
+
+    for (let r = 1; r <= 10; r++) {
+      const p_key = r === 1 ? 'image_prompts' : `image_prompts_${r}`;
+      const s_key = r === 1 ? 'image_prompt_statuses' : `image_prompt_statuses_${r}`;
+      
+      promptsByRound[r] = (config[p_key] || []).map(x => x.trim()).filter(Boolean);
+      statusesByRound[r] = config[s_key] || [];
+
+      // Set active checkbox value
+      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
+      if (roundCheckbox) {
+        roundCheckbox.checked = config[`round_active_${r}`] !== false; // Default is true if undefined
+      }
+
+      // Load 7 reference images per round
+      const refImgs = [];
+      let detectedDir = '';
+      for (let i = 1; i <= 7; i++) {
+        const ref_key = `reference_image_round_${r}_${i}`;
+        let val = config[ref_key];
+        if (val === undefined || val === null) {
+          // Fallback to global/default images
+          const global_key = i === 1 ? 'reference_image' : `reference_image_${i}`;
+          val = config[global_key] || defaultData[global_key] || '';
+        }
+        refImgs.push(val);
+        if (val && !detectedDir) {
+          detectedDir = getDirectoryOfFile(val);
+        }
+      }
+      refImagesByRound[r] = refImgs;
+
+      // Load folder path
+      let folderVal = config[`reference_images_dir_round_${r}`];
+      if (folderVal === undefined || folderVal === null) {
+        folderVal = defaultData.reference_images_dir || detectedDir || '';
+      }
+      refImagesDirByRound[r] = folderVal;
+    }
     
     chatgptUrl = config.chatgpt_url || '';
 
     const chatgptUrlInput = document.getElementById('chatgptUrlInput');
     if (chatgptUrlInput) chatgptUrlInput.value = chatgptUrl;
 
-    renderImagePromptsForRound(currentPromptRound);
-    
-    const refImgInput = document.getElementById('cfg_reference_image');
-    const refImgInput2 = document.getElementById('cfg_reference_image_2');
-    const refImgInput3 = document.getElementById('cfg_reference_image_3');
-    const defaultData = await jsonFetch('/api/config/reference-image/default');
+    const chatgptChatModeSelect = document.getElementById('chatgptChatModeSelect');
+    if (chatgptChatModeSelect) chatgptChatModeSelect.value = config.chatgpt_chat_mode || 'new';
 
-    if (refImgInput) {
-      refImgInput.value = config.reference_image !== undefined ? config.reference_image : (defaultData.reference_image || '');
-    }
-    if (refImgInput2) {
-      refImgInput2.value = config.reference_image_2 !== undefined ? config.reference_image_2 : (defaultData.reference_image_2 || '');
-    }
-    if (refImgInput3) {
-      refImgInput3.value = config.reference_image_3 !== undefined ? config.reference_image_3 : (defaultData.reference_image_3 || '');
-    }
+    const checkIntervalInput = document.getElementById('checkIntervalInput');
+    if (checkIntervalInput) checkIntervalInput.value = config.check_interval_seconds || 60;
+
+    const firstTimeWaitingInput = document.getElementById('firstTimeWaitingInput');
+    if (firstTimeWaitingInput) firstTimeWaitingInput.value = config.first_time_waiting || 60;
+
+    const maxChecksInput = document.getElementById('maxChecksInput');
+    if (maxChecksInput) maxChecksInput.value = config.max_checks || 3;
+
+    currentPromptRound = 1;
+    document.querySelectorAll('.prompt-tab-btn').forEach(b => {
+      const isRound1 = b.dataset.round === '1';
+      b.classList.toggle('active', isRound1);
+      b.style.background = isRound1 ? 'rgba(255,255,255,0.05)' : 'transparent';
+      b.style.color = isRound1 ? '#fff' : 'rgba(255,255,255,0.6)';
+      b.style.border = isRound1 ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(255,255,255,0.1)';
+      b.style.fontWeight = isRound1 ? 'bold' : 'normal';
+    });
+    
+    renderImagePromptsForRound(1);
+
   } catch (e) {
     writeConsoleLine(`Failed to load prompts: ${e.message}`, 'error', 'imageConsole');
   }
 }
 
-async function setRefImageDefault() {
-  const path1 = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
-  const path2 = document.getElementById('cfg_reference_image_2') ? document.getElementById('cfg_reference_image_2').value.trim() : '';
-  const path3 = document.getElementById('cfg_reference_image_3') ? document.getElementById('cfg_reference_image_3').value.trim() : '';
-  try {
-    await jsonFetch('/api/config/reference-image/default', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reference_image: path1, reference_image_2: path2, reference_image_3: path3 })
-    });
-    writeConsoleLine(`Reference image defaults saved: [1]: ${path1 || 'None'}, [2]: ${path2 || 'None'}, [3]: ${path3 || 'None'}`, 'success', 'imageConsole');
-    alert(`Default reference image paths set.`);
-  } catch (e) {
-    writeConsoleLine(`Failed to set defaults: ${e.message}`, 'error', 'imageConsole');
-  }
-}
+
 
 async function setChatgptUrlDefault() {
   const urlInput = document.getElementById('chatgptUrlInput');
@@ -735,6 +866,52 @@ async function setChatgptUrlDefault() {
     alert(`Default ChatGPT Project/Chat URL set to: ${url || 'None'}`);
   } catch (e) {
     writeConsoleLine(`Failed to set default ChatGPT URL: ${e.message}`, 'error', 'imageConsole');
+  }
+}
+
+async function setChatgptChatModeDefault() {
+  const selectEl = document.getElementById('chatgptChatModeSelect');
+  const val = selectEl ? selectEl.value : 'new';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'chatgpt_chat_mode', value: val })
+    });
+    writeConsoleLine(`ChatGPT chat mode default saved: ${val}`, 'success', 'imageConsole');
+    alert(`Default ChatGPT Mode set to: ${val === 'new' ? 'New Chat' : 'Active Chat'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default ChatGPT Chat Mode: ${e.message}`, 'error', 'imageConsole');
+  }
+}
+
+async function setCheckSettingsDefault() {
+  const intervalInput = document.getElementById('checkIntervalInput');
+  const firstTimeWaitingInput = document.getElementById('firstTimeWaitingInput');
+  const maxChecksInput = document.getElementById('maxChecksInput');
+  const interval = (intervalInput && intervalInput.value) ? parseInt(intervalInput.value, 10) || 60 : 60;
+  const firstTimeWaiting = (firstTimeWaitingInput && firstTimeWaitingInput.value) ? parseInt(firstTimeWaitingInput.value, 10) || 60 : 60;
+  const maxChecks = (maxChecksInput && maxChecksInput.value) ? parseInt(maxChecksInput.value, 10) || 3 : 3;
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'check_interval_seconds', value: interval })
+    });
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'first_time_waiting', value: firstTimeWaiting })
+    });
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'max_checks', value: maxChecks })
+    });
+    writeConsoleLine(`Check settings default saved: Interval=${interval}s, FirstTimeWaiting=${firstTimeWaiting}s, MaxChecks=${maxChecks}`, 'success', 'imageConsole');
+    alert(`Default Check Settings set to: Interval=${interval}s, First Time Waiting=${firstTimeWaiting}s, Max Checks=${maxChecks}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default Check Settings: ${e.message}`, 'error', 'imageConsole');
   }
 }
 
@@ -786,39 +963,7 @@ async function setRemotePathDefault() {
   }
 }
 
-async function verifyRefImage() {
-  const paths = [
-    document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '',
-    document.getElementById('cfg_reference_image_2') ? document.getElementById('cfg_reference_image_2').value.trim() : '',
-    document.getElementById('cfg_reference_image_3') ? document.getElementById('cfg_reference_image_3').value.trim() : ''
-  ].filter(Boolean);
 
-  if (paths.length === 0) {
-    showToast('Please enter at least one reference image path first.', 'error');
-    return;
-  }
-
-  for (const path of paths) {
-    try {
-      const res = await jsonFetch('/api/config/reference-image/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path })
-      });
-      
-      if (res.exists) {
-        showToast(res.message, 'success');
-        writeConsoleLine(res.message, 'success', 'imageConsole');
-      } else {
-        showToast(res.message, 'error');
-        writeConsoleLine(res.message, 'error', 'imageConsole');
-      }
-    } catch (e) {
-      showToast(`Verification failed: ${e.message}`, 'error');
-      writeConsoleLine(`Failed to verify ${path}: ${e.message}`, 'error', 'imageConsole');
-    }
-  }
-}
 
 function updateVideoSetStatus(index, text, color, errorMsg = '') {
   const badge = document.getElementById(`videoSetStatus_${index}`);
@@ -1263,14 +1408,20 @@ async function setVideoOutputDefault() {
 async function setVideoPrefixDefault() {
   const input = document.getElementById('videoPrefixText');
   const val = input ? input.value.trim() : '';
+  const key = activeVideoMode === 'cover' ? 'video_prefix_cover' : 'video_prefix_combine';
+  if (activeVideoMode === 'cover') {
+    videoPrefixCover = val;
+  } else {
+    videoPrefixCombine = val;
+  }
   try {
     await jsonFetch('/api/config/set-default', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'video_prefix', value: val })
+      body: JSON.stringify({ key: key, value: val })
     });
-    writeConsoleLine(`Video prefix default saved: ${val || 'None'}`, 'success', 'videoConsole');
-    alert(`Default video prefix set to: ${val || 'None'}`);
+    writeConsoleLine(`Video prefix default (${activeVideoMode}) saved: ${val || 'None'}`, 'success', 'videoConsole');
+    alert(`Default video prefix for ${activeVideoMode} mode set to: ${val || 'None'}`);
   } catch (e) {
     writeConsoleLine(`Failed to set default video prefix: ${e.message}`, 'error', 'videoConsole');
   }
@@ -1285,31 +1436,75 @@ async function saveImagePrompts(silent = false) {
     msg.textContent = 'Saving...';
   }
   try {
-    const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
-    const refImg2 = document.getElementById('cfg_reference_image_2') ? document.getElementById('cfg_reference_image_2').value.trim() : '';
-    const refImg3 = document.getElementById('cfg_reference_image_3') ? document.getElementById('cfg_reference_image_3').value.trim() : '';
     const currentConfig = await jsonFetch('/api/config');
     const payload = { 
       ...currentConfig, 
-      image_prompts: promptsByRound[1], 
-      image_prompt_statuses: statusesByRound[1],
-      image_prompts_2: promptsByRound[2], 
-      image_prompt_statuses_2: statusesByRound[2],
-      image_prompts_3: promptsByRound[3], 
-      image_prompt_statuses_3: statusesByRound[3],
       chatgpt_url: chatgptUrl,
-      reference_image: refImg,
-      reference_image_2: refImg2,
-      reference_image_3: refImg3
     };
+    
+    // Populate all 10 rounds of prompts and statuses
+    for (let r = 1; r <= 10; r++) {
+      const p_key = r === 1 ? 'image_prompts' : `image_prompts_${r}`;
+      const s_key = r === 1 ? 'image_prompt_statuses' : `image_prompt_statuses_${r}`;
+      payload[p_key] = promptsByRound[r] || [];
+      payload[s_key] = statusesByRound[r] || [];
+
+      // Populate active state per round
+      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
+      payload[`round_active_${r}`] = roundCheckbox ? roundCheckbox.checked : true;
+      
+      // Populate folder path per round
+      payload[`reference_images_dir_round_${r}`] = refImagesDirByRound[r] || '';
+
+      // Populate all reference images per round
+      const refImgs = refImagesByRound[r] || ["", "", "", "", "", "", ""];
+      for (let i = 1; i <= 7; i++) {
+        payload[`reference_image_round_${r}_${i}`] = refImgs[i - 1] || '';
+      }
+    }
+    
+    // Also populate root level reference images (for backward compatibility / default behavior, we use Round 1's)
+    const round1Refs = refImagesByRound[1] || ["", "", "", "", "", "", ""];
+    payload.reference_image = round1Refs[0] || '';
+    payload.reference_image_2 = round1Refs[1] || '';
+    payload.reference_image_3 = round1Refs[2] || '';
+    payload.reference_image_4 = round1Refs[3] || '';
+    payload.reference_image_5 = round1Refs[4] || '';
+    payload.reference_image_6 = round1Refs[5] || '';
+    payload.reference_image_7 = round1Refs[6] || '';
+    payload.reference_images_dir = refImagesDirByRound[1] || '';
+    
     await jsonFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+
+    // Save active round's reference images as defaults automatically
+    const currentRefs = refImagesByRound[currentPromptRound] || ["", "", "", "", "", "", ""];
+    const folderPath = refImagesDirByRound[currentPromptRound] || '';
+    try {
+      await jsonFetch('/api/config/reference-image/default', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          reference_image: currentRefs[0] || '', 
+          reference_image_2: currentRefs[1] || '', 
+          reference_image_3: currentRefs[2] || '',
+          reference_image_4: currentRefs[3] || '',
+          reference_image_5: currentRefs[4] || '',
+          reference_image_6: currentRefs[5] || '',
+          reference_image_7: currentRefs[6] || '',
+          reference_images_dir: folderPath
+        })
+      });
+    } catch (defaultErr) {
+      console.warn("Failed to automatically save default reference images:", defaultErr);
+    }
+    
     if (!isSilent) {
       msg.textContent = `Round ${currentPromptRound} and other tabs saved successfully!`;
-      writeConsoleLine('Image generation prompts and reference image saved successfully.', 'success', 'imageConsole');
+      writeConsoleLine('Image generation prompts and reference images saved successfully.', 'success', 'imageConsole');
       showToast('Image generation prompts saved successfully!', 'success');
     }
   } catch (e) {
@@ -1418,11 +1613,6 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
 
 // Initialize steps listeners
 function initWorkflowActionListeners() {
-  document.getElementById('clearConsoleBtn').addEventListener('click', () => {
-    const consoleBox = document.getElementById('ddcmConsole');
-    if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
-  });
-
   document.getElementById('clearImageConsoleBtn').addEventListener('click', () => {
     const consoleBox = document.getElementById('imageConsole');
     if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
@@ -1435,27 +1625,49 @@ function initWorkflowActionListeners() {
 
   document.getElementById('saveImagePromptsBtn').addEventListener('click', saveImagePrompts);
   document.getElementById('deleteAllImagePromptsBtn').addEventListener('click', deleteAllImagePrompts);
-  document.getElementById('setRefImageDefaultBtn').addEventListener('click', setRefImageDefault);
-  document.getElementById('verifyRefImageBtn').addEventListener('click', verifyRefImage);
   
   const setUrlBtn = document.getElementById('setChatgptUrlDefaultBtn');
   if (setUrlBtn) {
     setUrlBtn.addEventListener('click', setChatgptUrlDefault);
   }
 
-  const setFolderBtn = document.getElementById('setFolderNameDefaultBtn');
-  if (setFolderBtn) {
-    setFolderBtn.addEventListener('click', setFolderNameDefault);
+  const setChatgptChatModeBtn = document.getElementById('setChatgptChatModeDefaultBtn');
+  if (setChatgptChatModeBtn) {
+    setChatgptChatModeBtn.addEventListener('click', setChatgptChatModeDefault);
   }
 
-  const setLocalBtn = document.getElementById('setLocalPathDefaultBtn');
-  if (setLocalBtn) {
-    setLocalBtn.addEventListener('click', setLocalPathDefault);
+  const setCheckSettingsBtn = document.getElementById('setCheckSettingsDefaultBtn');
+  if (setCheckSettingsBtn) {
+    setCheckSettingsBtn.addEventListener('click', setCheckSettingsDefault);
   }
 
-  const setRemoteBtn = document.getElementById('setRemotePathDefaultBtn');
-  if (setRemoteBtn) {
-    setRemoteBtn.addEventListener('click', setRemotePathDefault);
+  const stopGenerationBtn = document.getElementById('btn_stop_generation');
+  if (stopGenerationBtn) {
+    stopGenerationBtn.addEventListener('click', async () => {
+      shouldStopGeneration = true;
+      writeConsoleLine('Force Stop: Requesting immediate cancellation...', 'warning', 'imageConsole');
+      stopGenerationBtn.disabled = true;
+      stopGenerationBtn.textContent = 'Stopping...';
+
+      const select = document.getElementById('profileSelect');
+      const selected = (profileCache || []).find(x => x.name === select?.value);
+      const port = selected ? Number(selected.debug_port || 9222) : 9222;
+
+      try {
+        writeConsoleLine(`Force Stop: Closing Chrome browser on port ${port}...`, 'warning', 'imageConsole');
+        const res = await jsonFetch('/api/profiles/force-kill', {
+          method: 'POST',
+          body: JSON.stringify({ port: port })
+        });
+        if (res && res.ok) {
+          writeConsoleLine(`Force Stop: Successfully terminated Chrome browser on port ${port}.`, 'success', 'imageConsole');
+        } else {
+          writeConsoleLine(`Force Stop: Browser was already closed or not found on port ${port}.`, 'info', 'imageConsole');
+        }
+      } catch (err) {
+        writeConsoleLine(`Force Stop: Error calling force-kill endpoint: ${err.message}`, 'error', 'imageConsole');
+      }
+    });
   }
   const runVideoBtn = document.getElementById('runVideoHelperBtn');
   if (runVideoBtn) {
@@ -1466,6 +1678,22 @@ function initWorkflowActionListeners() {
     radio.addEventListener('change', (e) => {
       const mode = e.target.value;
       const isCombine = mode === 'combine';
+      
+      // Save current input value to the previous mode
+      const currentInputVal = document.getElementById('videoPrefixText')?.value || '';
+      if (activeVideoMode === 'cover') {
+        videoPrefixCover = currentInputVal;
+      } else {
+        videoPrefixCombine = currentInputVal;
+      }
+      
+      activeVideoMode = mode;
+      
+      // Update prefix input text value to the new mode's value
+      const vPref = document.getElementById('videoPrefixText');
+      if (vPref) {
+        vPref.value = mode === 'cover' ? videoPrefixCover : videoPrefixCombine;
+      }
       
       const pathLabel = document.getElementById('videoOutputPathLabel');
       const pathDesc = document.getElementById('videoOutputPathDesc');
@@ -1482,6 +1710,17 @@ function initWorkflowActionListeners() {
       }
       toggleVideoCombineBatchUI(isCombine);
       
+      const coverDesc = document.getElementById('videoHelperCoverDesc');
+      const combineDesc = document.getElementById('videoHelperCombineDesc');
+      if (coverDesc) {
+        if (mode === 'cover') coverDesc.classList.remove('hidden');
+        else coverDesc.classList.add('hidden');
+      }
+      if (combineDesc) {
+        if (mode === 'combine') combineDesc.classList.remove('hidden');
+        else combineDesc.classList.add('hidden');
+      }
+
       const runBtn = document.getElementById('runVideoHelperBtn');
       if (runBtn) {
         runBtn.textContent = 'Run';
@@ -1566,34 +1805,201 @@ function initWorkflowActionListeners() {
     });
   }
 
-  const setupRefImageBrowser = (btnId, inputId) => {
-    const btn = document.getElementById(btnId);
-    const input = document.getElementById(inputId);
-    if (btn && input) {
-      btn.addEventListener('click', async () => {
-        try {
-          const res = await jsonFetch('/api/utils/browse-file');
-          if (res.ok && res.path) {
-            input.value = res.path;
-          }
-        } catch (e) {
-          showToast(`Failed to browse file: ${e.message}`, 'error');
+  // Reference Images Folder & Dropdown bindings
+  const browseRefImagesDirBtn = document.getElementById('browseRefImagesDirBtn');
+  const cfgRefImagesDirInput = document.getElementById('cfg_ref_images_dir');
+  const cfgRefImageDropdown = document.getElementById('cfg_ref_image_dropdown');
+
+  if (browseRefImagesDirBtn && cfgRefImagesDirInput) {
+    browseRefImagesDirBtn.addEventListener('click', async () => {
+      try {
+        const res = await jsonFetch('/api/utils/browse-directory');
+        if (res.ok && res.path) {
+          cfgRefImagesDirInput.value = res.path;
+          refImagesDirByRound[currentPromptRound] = res.path;
+          scanDirectoryForImages(res.path);
+          saveImagePrompts(true);
         }
+      } catch (e) {
+        showToast(`Failed to browse directory: ${e.message}`, 'error');
+      }
+    });
+
+    const setRefImagesDirForAllBtn = document.getElementById('setRefImagesDirForAllBtn');
+    if (setRefImagesDirForAllBtn) {
+      setRefImagesDirForAllBtn.addEventListener('click', () => {
+        const path = cfgRefImagesDirInput.value.trim();
+        if (!path) {
+          showToast('กรุณาระบุหรือเลือกโฟลเดอร์ภาพอ้างอิงก่อน', 'error');
+          return;
+        }
+        const currentRefs = refImagesByRound[currentPromptRound] || ["", "", "", "", "", "", ""];
+        for (let r = 1; r <= 10; r++) {
+          refImagesDirByRound[r] = path;
+          refImagesByRound[r] = [...currentRefs];
+        }
+        scanDirectoryForImages(path);
+        saveImagePrompts(true);
+        showToast('ตั้งค่าโฟลเดอร์และรูปภาพอ้างอิงให้กับทุก Round เรียบร้อยแล้ว', 'success');
       });
     }
-  };
-  setupRefImageBrowser('browseRefImgBtn', 'cfg_reference_image');
-  setupRefImageBrowser('browseRefImgBtn2', 'cfg_reference_image_2');
-  setupRefImageBrowser('browseRefImgBtn3', 'cfg_reference_image_3');
-  // Step 1
-  document.getElementById('btn_step2').addEventListener('click', (e) => {
-    const config = gatherConfigData();
-    executeStep('/api/step/2', {
-      folder_name: config.folder_name,
-      local_path: config.local_path,
-      remote_path: config.remote_path
-    }, e.target, 'ddcmConsole');
-  });
+
+    const handleDirChange = () => {
+      const path = cfgRefImagesDirInput.value.trim();
+      refImagesDirByRound[currentPromptRound] = path;
+      scanDirectoryForImages(path);
+      saveImagePrompts(true);
+    };
+    cfgRefImagesDirInput.addEventListener('input', handleDirChange);
+    cfgRefImagesDirInput.addEventListener('change', handleDirChange);
+  }
+
+  if (cfgRefImageDropdown) {
+    cfgRefImageDropdown.addEventListener('change', () => {
+      const selectedPath = cfgRefImageDropdown.value;
+      if (!selectedPath) return;
+
+      const currentRefs = (refImagesByRound[currentPromptRound] || []).filter(Boolean);
+      if (currentRefs.length >= 7) {
+        showToast('คุณสามารถแนบรูปภาพอ้างอิงได้สูงสุด 7 รูปเท่านั้น', 'error');
+        cfgRefImageDropdown.value = '';
+        return;
+      }
+
+      currentRefs.push(selectedPath);
+      // Pad to length of 7 with empty strings
+      while (currentRefs.length < 7) {
+        currentRefs.push("");
+      }
+      refImagesByRound[currentPromptRound] = currentRefs;
+      renderSelectedRefImagesList();
+      renderDropdownOptions();
+      cfgRefImageDropdown.value = ''; // Reset dropdown to placeholder
+      saveImagePrompts(true);
+    });
+  }
+
+
+  // Drama config listeners
+  const browseLakornPathBtn = document.getElementById('browseLakornPathBtn');
+  const cfgLakornPathInput = document.getElementById('cfg_lakorn_path');
+  const setLakornPathDefaultBtn = document.getElementById('setLakornPathDefaultBtn');
+  const lakornEpInput = document.getElementById('cfg_lakorn_ep');
+  const btnImportLakornAuto = document.getElementById('btnImportLakornAuto');
+
+  if (browseLakornPathBtn && cfgLakornPathInput) {
+    browseLakornPathBtn.addEventListener('click', async () => {
+      try {
+        const res = await jsonFetch('/api/utils/browse-directory');
+        if (res.ok && res.path) {
+          cfgLakornPathInput.value = res.path;
+        }
+      } catch (e) {
+        showToast(`Failed to browse directory: ${e.message}`, 'error');
+      }
+    });
+  }
+
+  if (setLakornPathDefaultBtn && cfgLakornPathInput) {
+    setLakornPathDefaultBtn.addEventListener('click', async () => {
+      const path = cfgLakornPathInput.value.trim();
+      try {
+        const res = await jsonFetch('/api/config/set-default', {
+          method: 'POST',
+          body: JSON.stringify({ key: 'lakorn_path', value: path })
+        });
+        if (res.ok) {
+          showToast('ตั้งค่า ละคร Path เป็นค่าเริ่มต้นเรียบร้อยแล้ว', 'success');
+        }
+      } catch (e) {
+        showToast(`Failed to set default ละคร Path: ${e.message}`, 'error');
+      }
+    });
+  }
+
+  if (lakornEpInput) {
+    lakornEpInput.addEventListener('input', (e) => {
+      let val = e.target.value;
+      val = val.replace(/[^0-9]/g, '');
+      if (val.length > 1) {
+        val = val.charAt(0);
+      }
+      e.target.value = val;
+      jsonFetch('/api/config/set-default', {
+        method: 'POST',
+        body: JSON.stringify({ key: 'lakorn_ep', value: val })
+      }).catch(err => console.error('Failed to save lakorn_ep:', err));
+    });
+  }
+
+  if (btnImportLakornAuto) {
+    btnImportLakornAuto.addEventListener('click', async () => {
+      const path = cfgLakornPathInput?.value.trim();
+      const epVal = lakornEpInput?.value.trim();
+      
+      if (!path) {
+        showToast('กรุณาระบุหรือเลือก ละคร Path ก่อน', 'error');
+        if (cfgLakornPathInput) cfgLakornPathInput.focus();
+        return;
+      }
+      if (!epVal) {
+        showToast('กรุณาระบุเลขตอนละครก่อน (ตัวเลขตัวเดียว)', 'error');
+        if (lakornEpInput) lakornEpInput.focus();
+        return;
+      }
+
+      btnImportLakornAuto.disabled = true;
+      btnImportLakornAuto.textContent = 'กำลังนำเข้า...';
+
+      try {
+        writeConsoleLine(`Drama Import: Starting auto import for Episode ${epVal} from path: ${path}...`, 'info', 'imageConsole');
+        const res = await jsonFetch('/api/utils/import-lakorn-auto', {
+          method: 'POST',
+          body: JSON.stringify({
+            lakorn_path: path,
+            ep_num: parseInt(epVal, 10)
+          })
+        });
+
+        if (res && res.ok) {
+          promptsByRound = res.prompts_by_round;
+          refImagesByRound = res.ref_images_by_round;
+
+          if (res.ref_images_dir) {
+            // Update refImagesDirByRound for all rounds
+            for (let r = 1; r <= 10; r++) {
+              refImagesDirByRound[r] = res.ref_images_dir;
+            }
+            // Update the UI field
+            const dirInput = document.getElementById('cfg_ref_images_dir');
+            if (dirInput) {
+              dirInput.value = res.ref_images_dir;
+            }
+            // Scan the directory so the dropdown gets populated
+            await scanDirectoryForImages(res.ref_images_dir);
+          }
+
+          renderImagePromptsForRound(currentPromptRound);
+          renderSelectedRefImagesList();
+          renderDropdownOptions();
+          
+          await saveImagePrompts(true);
+
+          writeConsoleLine(`Drama Import Success: ${res.message}`, 'success', 'imageConsole');
+          showToast(res.message, 'success');
+        } else {
+          showToast(res.detail || 'การนำเข้าข้อมูลล้มเหลว', 'error');
+        }
+      } catch (err) {
+        writeConsoleLine(`Drama Import Error: ${err.message}`, 'error', 'imageConsole');
+        showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
+      } finally {
+        btnImportLakornAuto.disabled = false;
+        btnImportLakornAuto.textContent = '📥 เพิ่มข้อมูลละคร Auto';
+      }
+    });
+  }
+
 
   // Prompt Tabs Click Listeners
   document.querySelectorAll('.prompt-tab-btn').forEach(btn => {
@@ -1620,16 +2026,55 @@ function initWorkflowActionListeners() {
     btn.classList.add('loading');
     btn.disabled = true;
     commitCurrentRoundFromDOM();
-    const refImg = document.getElementById('cfg_reference_image') ? document.getElementById('cfg_reference_image').value.trim() : '';
-    const refImg2 = document.getElementById('cfg_reference_image_2') ? document.getElementById('cfg_reference_image_2').value.trim() : '';
-    const refImg3 = document.getElementById('cfg_reference_image_3') ? document.getElementById('cfg_reference_image_3').value.trim() : '';
+
+    shouldStopGeneration = false;
+    const stopGenerationBtn = document.getElementById('btn_stop_generation');
+    if (stopGenerationBtn) {
+      stopGenerationBtn.style.display = 'block';
+      stopGenerationBtn.disabled = false;
+      stopGenerationBtn.textContent = 'Force Stop Generation';
+    }
 
     writeConsoleLine(`Bulk Generation: Starting multi-round generation on ${target === 'gemini' ? 'Gemini' : 'ChatGPT'}...`, 'system', 'imageConsole');
 
     let hasProcessedAnyRound = false;
 
-    for (let r = 1; r <= 3; r++) {
+    for (let r = 1; r <= 10; r++) {
+      if (shouldStopGeneration) {
+        break;
+      }
+      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
+      const isRoundActive = roundCheckbox ? roundCheckbox.checked : true;
+      if (!isRoundActive) {
+        writeConsoleLine(`Round ${r}: Skip processing (Round is inactive/disabled).`, 'info', 'imageConsole');
+        continue;
+      }
       const tabBtn = document.querySelector(`.prompt-tab-btn[data-round="${r}"]`);
+      let waitSeconds = 0;
+      if (hasProcessedAnyRound) {
+        const intervalInput = document.getElementById('checkIntervalInput');
+        const intervalVal = (intervalInput && intervalInput.value) ? parseInt(intervalInput.value, 10) : 60;
+        waitSeconds = intervalVal;
+        writeConsoleLine(`Cooldown: Round transition delay will be ${waitSeconds} seconds...`, 'system', 'imageConsole');
+        
+        const tracker = document.getElementById('cooldownTracker');
+        const rSpan = document.getElementById('cooldownRound');
+        const tSpan = document.getElementById('cooldownTime');
+        if (tracker) {
+          tracker.style.display = 'block';
+          if (rSpan) rSpan.textContent = `${r} (Interval รอบที่ ${r - 1} - Preparing)`;
+        }
+
+        // Wait 10 seconds first
+        writeConsoleLine(`Cooldown: Waiting 10 seconds after previous round before preparing Round ${r}...`, 'info', 'imageConsole');
+        for (let s = 10; s > 0; s--) {
+          if (shouldStopGeneration) break;
+          if (tSpan) tSpan.textContent = `${s} วินาที`;
+          await new Promise(res => setTimeout(res, 1000));
+        }
+        if (shouldStopGeneration) break;
+      }
+
       if (tabBtn) tabBtn.click();
 
       // Check if there are active prompts in this round
@@ -1639,17 +2084,15 @@ function initWorkflowActionListeners() {
         continue;
       }
 
-      // If we have processed a previous round, wait in random time starting from 1-2 mins (60 to 120 seconds)
-      if (hasProcessedAnyRound) {
-        const waitSeconds = Math.floor(Math.random() * (120 - 60 + 1)) + 60;
-        writeConsoleLine(`Cooldown: Waiting ${waitSeconds} seconds (1-2 mins) before processing Round ${r}...`, 'system', 'imageConsole');
-        for (let s = waitSeconds; s > 0; s--) {
-          if (s % 10 === 0 || s <= 5) {
-            writeConsoleLine(`Cooldown: ${s} seconds remaining...`, 'info', 'imageConsole');
-          }
-          await new Promise(res => setTimeout(res, 1000));
-        }
-      }
+      // Gather reference images for this round
+      const currentRefs = refImagesByRound[r] || ["", "", "", "", "", "", ""];
+      const refImg1 = currentRefs[0] || '';
+      const refImg2 = currentRefs[1] || '';
+      const refImg3 = currentRefs[2] || '';
+      const refImg4 = currentRefs[3] || '';
+      const refImg5 = currentRefs[4] || '';
+      const refImg6 = currentRefs[5] || '';
+      const refImg7 = currentRefs[6] || '';
 
       writeConsoleLine(`Round ${r}: Starting loop over ${activePrompts.length} prompts...`, 'system', 'imageConsole');
       const rows = Array.from(document.querySelectorAll('#imagePromptList .prompt-row'));
@@ -1657,47 +2100,140 @@ function initWorkflowActionListeners() {
 
       let isFirstPrompt = true;
       for (let i = 0; i < rows.length; i++) {
+        if (shouldStopGeneration) {
+          break;
+        }
         const row = rows[i];
         const p = row.querySelector('.image-prompt-input').value.trim();
         if (!p) continue;
 
-        writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
-        updateRowStatus(row, 'Generating...');
-
         const endpoint = target === 'gemini' ? '/api/step/3' : '/api/step/3-chatgpt';
-        const payload = { 
+        const basePayload = { 
           prompt: p, 
-          reference_image: refImg,
+          reference_image: refImg1,
           reference_image_2: refImg2,
-          reference_image_3: refImg3
+          reference_image_3: refImg3,
+          reference_image_4: refImg4,
+          reference_image_5: refImg5,
+          reference_image_6: refImg6,
+          reference_image_7: refImg7
         };
-        if (target === 'chatgpt' && isFirstPrompt && chatgptUrl) {
-          payload.chatgpt_url = chatgptUrl;
-          isFirstPrompt = false;
+        if (target === 'chatgpt') {
+          const selectEl = document.getElementById('chatgptChatModeSelect');
+          basePayload.chatgpt_chat_mode = selectEl ? selectEl.value : 'new';
+          if (isFirstPrompt && chatgptUrl) {
+            basePayload.chatgpt_url = chatgptUrl;
+          }
         }
-        const success = await executeStep(endpoint, payload, null, 'imageConsole');
-        if (success) {
-          updateRowStatus(row, 'Done');
-          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Completed successfully!`, 'success', 'imageConsole');
+
+        const shouldSplit = hasProcessedAnyRound && isFirstPrompt && (waitSeconds > 10);
+
+        if (shouldSplit) {
+          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Preparing references and typing prompt (Prepare Only)...`, 'info', 'imageConsole');
+          updateRowStatus(row, 'Preparing...');
+          const prepPayload = { ...basePayload, prepare_only: true };
+          const prepSuccess = await executeStep(endpoint, prepPayload, null, 'imageConsole');
+          if (!prepSuccess) {
+            updateRowStatus(row, 'Failed');
+            writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Failed to prepare. Aborting loop.`, 'error', 'imageConsole');
+            await saveImagePrompts(true);
+            const tracker = document.getElementById('cooldownTracker');
+            if (tracker) tracker.style.display = 'none';
+            if (stopGenerationBtn) stopGenerationBtn.style.display = 'none';
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            return;
+          }
+          updateRowStatus(row, 'Prepared');
+
+          // Wait the remaining cooldown seconds
+          const remainingSeconds = waitSeconds - 10;
+          writeConsoleLine(`Cooldown: Waiting remaining ${remainingSeconds} seconds before sending...`, 'system', 'imageConsole');
+          const rSpan = document.getElementById('cooldownRound');
+          const tSpan = document.getElementById('cooldownTime');
+          if (rSpan) rSpan.textContent = `${r} (Interval รอบที่ ${r - 1} - Prepared)`;
+          for (let s = remainingSeconds; s > 0; s--) {
+            if (shouldStopGeneration) break;
+            if (tSpan) tSpan.textContent = `${s} วินาที`;
+            if (s % 10 === 0 || s <= 5) {
+              writeConsoleLine(`Cooldown: ${s} seconds remaining before submit...`, 'info', 'imageConsole');
+            }
+            await new Promise(res => setTimeout(res, 1000));
+          }
+          if (shouldStopGeneration) {
+            const tracker = document.getElementById('cooldownTracker');
+            if (tracker) tracker.style.display = 'none';
+            break;
+          }
+          const tracker = document.getElementById('cooldownTracker');
+          if (tracker) tracker.style.display = 'none';
+
+          // Now execute the submit
+          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Submitting prompt (Submit Only)...`, 'info', 'imageConsole');
+          updateRowStatus(row, 'Generating...');
+          const submitPayload = { ...basePayload, submit_only: true };
+          const submitSuccess = await executeStep(endpoint, submitPayload, null, 'imageConsole');
+          if (!submitSuccess) {
+            updateRowStatus(row, 'Failed');
+            writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Failed to submit. Aborting loop.`, 'error', 'imageConsole');
+            await saveImagePrompts(true);
+            const tracker = document.getElementById('cooldownTracker');
+            if (tracker) tracker.style.display = 'none';
+            if (stopGenerationBtn) stopGenerationBtn.style.display = 'none';
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            return;
+          }
         } else {
-          updateRowStatus(row, 'Failed');
-          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Failed to execute.`, 'error', 'imageConsole');
+          // Normal direct execution
+          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
+          updateRowStatus(row, 'Generating...');
+          const success = await executeStep(endpoint, basePayload, null, 'imageConsole');
+          if (!success) {
+            updateRowStatus(row, 'Failed');
+            writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Failed to execute. Aborting loop.`, 'error', 'imageConsole');
+            await saveImagePrompts(true);
+            const tracker = document.getElementById('cooldownTracker');
+            if (tracker) tracker.style.display = 'none';
+            if (stopGenerationBtn) stopGenerationBtn.style.display = 'none';
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            return;
+          }
         }
+
+        isFirstPrompt = false;
+        updateRowStatus(row, 'Done');
+        writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Completed successfully!`, 'success', 'imageConsole');
         await saveImagePrompts(true);
 
-        // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt inside same round
-        if (i < rows.length - 1) {
+        // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt inside same round (Gemini only)
+        if (target === 'gemini' && i < rows.length - 1) {
           const randomDelay = Math.floor(Math.random() * (15 - 3 + 1)) + 3;
           writeConsoleLine(`Human simulation: Waiting ${randomDelay} seconds before the next prompt...`, 'info', 'imageConsole');
-          await new Promise(res => setTimeout(res, randomDelay * 1000));
+          for (let s = randomDelay; s > 0; s--) {
+            if (shouldStopGeneration) break;
+            await new Promise(res => setTimeout(res, 1000));
+          }
+          if (shouldStopGeneration) break;
         }
       }
       writeConsoleLine(`Round ${r}: Completed all loop operations!`, 'success', 'imageConsole');
+      hasProcessedAnyRound = true;
     }
 
-    writeConsoleLine('Bulk Generation: Completed all rounds successfully!', 'success', 'imageConsole');
+    if (shouldStopGeneration) {
+      writeConsoleLine('Bulk Generation: Stopped by user via Force Stop.', 'error', 'imageConsole');
+    } else {
+      writeConsoleLine('Bulk Generation: Completed all rounds successfully!', 'success', 'imageConsole');
+    }
+    const tracker = document.getElementById('cooldownTracker');
+    if (tracker) tracker.style.display = 'none';
+    if (stopGenerationBtn) stopGenerationBtn.style.display = 'none';
     btn.classList.remove('loading');
     btn.disabled = false;
+    const firstTabBtn = document.querySelector(`.prompt-tab-btn[data-round="1"]`);
+    if (firstTabBtn) firstTabBtn.click();
   };
 
   // Step 2 Gemini (Bulk loop)
@@ -1710,37 +2246,6 @@ function initWorkflowActionListeners() {
     await runMultiRoundGeneration('chatgpt', e.target);
   });
 
-  // Step 3 (Download Images)
-  document.getElementById('btn_step4').addEventListener('click', (e) => {
-    executeStep('/api/step/4', {}, e.target, 'ddcmConsole');
-  });
-  document.getElementById('btn_step4_chatgpt').addEventListener('click', (e) => {
-    executeStep('/api/step/4-chatgpt', {}, e.target, 'ddcmConsole');
-  });
-
-  // Step 4 (Unzip)
-  document.getElementById('btn_step12').addEventListener('click', (e) => {
-    executeStep('/api/step/12', {}, e.target, 'ddcmConsole');
-  });
-
-  // Step 5 (Reroute files)
-  document.getElementById('btn_step13').addEventListener('click', (e) => {
-    const config = gatherConfigData();
-    executeStep('/api/step/13', {
-      folder_name: config.folder_name,
-      local_path: config.local_path
-    }, e.target, 'ddcmConsole');
-  });
-
-  // Step 6 (Backup files)
-  document.getElementById('btn_step14').addEventListener('click', (e) => {
-    const config = gatherConfigData();
-    executeStep('/api/step/14-no-elements', {
-      folder_name: config.folder_name,
-      local_path: config.local_path,
-      remote_path: config.remote_path
-    }, e.target, 'ddcmConsole');
-  });
 }
 
 // Parse batch import file content (TXT only, newline separated)
@@ -1753,64 +2258,296 @@ function initFileImports() {
     const input = document.getElementById(inputId);
     if (!input) return;
 
-    input.addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
+    input.addEventListener('change', async (event) => {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
 
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const text = e.target.result;
-        const prompts = parseImportedPrompts(text);
+      const list = document.getElementById(listId);
+      if (!list) return;
 
-        if (prompts.length === 0) {
-          showToast('No valid prompts found in the file.', 'error');
-          input.value = '';
-          return;
-        }
-
-        const list = document.getElementById(listId);
-        if (!list) return;
-
-        // Clear existing empty prompts
-        const currentInputs = list.querySelectorAll(isImageTab ? '.image-prompt-input' : '.prompt-input');
-        const allEmpty = Array.from(currentInputs).every(inp => inp.value.trim() === '');
-        if (allEmpty) {
-          list.innerHTML = '';
-        }
-
-        // Add new prompt rows
-        prompts.forEach(p => {
-          list.appendChild(rowCreator(p));
+      if (isImageTab) {
+        // Read multiple files (.txt, .md)
+        const filePromises = Array.from(files).map(file => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = () => reject(new Error(`Error reading file ${file.name}`));
+            reader.readAsText(file);
+          });
         });
 
-        // Trigger updates & save
-        if (isImageTab) {
+        try {
+          const contents = await Promise.all(filePromises);
+          const validPrompts = contents.map(c => c.trim()).filter(Boolean);
+
+          if (validPrompts.length === 0) {
+            showToast('No valid prompts found in selected files.', 'error');
+            input.value = '';
+            return;
+          }
+
+          // Clear existing empty prompts
+          const currentInputs = list.querySelectorAll('.image-prompt-input');
+          const allEmpty = Array.from(currentInputs).every(inp => inp.value.trim() === '');
+          if (allEmpty) {
+            list.innerHTML = '';
+          }
+
+          // Add each file content as one prompt row
+          validPrompts.forEach(p => {
+            list.appendChild(rowCreator(p));
+          });
+
           updateImageGenButtonsState();
+          await saveFunc();
+
+          showToast(`Imported ${validPrompts.length} prompts successfully!`, 'success');
+        } catch (err) {
+          showToast(err.message || 'Error reading the files.', 'error');
+        } finally {
+          input.value = '';
         }
-        await saveFunc();
+      } else {
+        // Original behavior for dispatcher prompts (single file, line-by-line)
+        const file = files[0];
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const text = e.target.result;
+          const prompts = parseImportedPrompts(text);
 
-        showToast(`Imported ${prompts.length} prompts successfully!`, 'success');
-        input.value = ''; // Reset input
-      };
+          if (prompts.length === 0) {
+            showToast('No valid prompts found in the file.', 'error');
+            input.value = '';
+            return;
+          }
 
-      reader.onerror = () => {
-        showToast('Error reading the file.', 'error');
-        input.value = '';
-      };
+          // Clear existing empty prompts
+          const currentInputs = list.querySelectorAll('.prompt-input');
+          const allEmpty = Array.from(currentInputs).every(inp => inp.value.trim() === '');
+          if (allEmpty) {
+            list.innerHTML = '';
+          }
 
-      reader.readAsText(file);
+          prompts.forEach(p => {
+            list.appendChild(rowCreator(p));
+          });
+
+          await saveFunc();
+
+          showToast(`Imported ${prompts.length} prompts successfully!`, 'success');
+          input.value = '';
+        };
+
+        reader.onerror = () => {
+          showToast('Error reading the file.', 'error');
+          input.value = '';
+        };
+
+        reader.readAsText(file);
+      }
     });
   };
 
-  setupImport('importPromptsFile', 'promptList', promptRowTemplate, savePrompts, 'dispatchMsg', false);
   setupImport('importImagePromptsFile', 'imagePromptList', imagePromptRowTemplate, saveImagePrompts, 'imagePromptMsg', true);
+
+  const importCharBatchFile = document.getElementById('importCharBatchFile');
+  if (importCharBatchFile) {
+    importCharBatchFile.addEventListener('change', async (e) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const file = files[0];
+      
+      const dirInput = document.getElementById('cfg_ref_images_dir');
+      const dirPath = dirInput ? dirInput.value.trim() : '';
+      if (!dirPath) {
+        showToast('กรุณาระบุหรือเลือก Reference Images Folder ก่อนทำการ Import Batch', 'error');
+        importCharBatchFile.value = '';
+        if (dirInput) dirInput.focus();
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const text = evt.target.result;
+        const lines = text.split(/\r?\n/);
+        
+        try {
+          const res = await jsonFetch(`/api/utils/list-images?dir_path=${encodeURIComponent(dirPath)}`);
+          if (!res || !Array.isArray(res.images)) {
+            showToast('ไม่สามารถสแกนหาไฟล์รูปภาพในโฟลเดอร์ดังกล่าวได้', 'error');
+            importCharBatchFile.value = '';
+            return;
+          }
+          
+          const images = res.images;
+          const importedNames = [];
+          lines.forEach(line => {
+            let cleaned = line.trim();
+            if (!cleaned) return;
+            // Clean markdown bullet points
+            cleaned = cleaned.replace(/^[\s\-\*\+\d\.\#]+/, '').trim();
+            // Handle markdown link brackets: e.g. [Character Name](...)
+            const bracketMatch = cleaned.match(/\[([^\]]+)\]/);
+            if (bracketMatch) {
+              cleaned = bracketMatch[1].trim();
+            }
+            if (cleaned) {
+              importedNames.push(cleaned);
+            }
+          });
+
+          if (importedNames.length === 0) {
+            showToast('ไม่พบรายชื่อในไฟล์ที่อิมพอร์ตเข้ามา', 'error');
+            importCharBatchFile.value = '';
+            return;
+          }
+
+          const matchedPaths = [];
+          importedNames.forEach(name => {
+            const nameLower = name.toLowerCase();
+            let matchedImage = images.find(img => img.name.toLowerCase() === nameLower);
+            if (!matchedImage) {
+              matchedImage = images.find(img => {
+                const dotIdx = img.name.lastIndexOf('.');
+                const baseName = dotIdx !== -1 ? img.name.substring(0, dotIdx) : img.name;
+                return baseName.toLowerCase() === nameLower;
+              });
+            }
+            if (matchedImage) {
+              matchedPaths.push(matchedImage.path);
+            }
+          });
+
+          if (matchedPaths.length === 0) {
+            showToast('ไม่พบไฟล์รูปภาพที่ตรงกับรายชื่อใดๆ ในไฟล์ที่อิมพอร์ตเลย', 'error');
+            importCharBatchFile.value = '';
+            return;
+          }
+
+          // Replace/add current round reference images list (up to 7)
+          const currentRefs = [];
+          for (let i = 0; i < Math.min(matchedPaths.length, 7); i++) {
+            currentRefs.push(matchedPaths[i]);
+          }
+          while (currentRefs.length < 7) {
+            currentRefs.push("");
+          }
+          refImagesByRound[currentPromptRound] = currentRefs;
+          
+          renderSelectedRefImagesList();
+          renderDropdownOptions();
+          saveImagePrompts(true);
+          
+          showToast(`อิมพอร์ตรายชื่อสำเร็จ! แมตช์รูปภาพได้ทั้งหมด ${matchedPaths.length} รูป (แนบเข้าลิสต์ ${Math.min(matchedPaths.length, 7)} รูป)`, 'success');
+        } catch (err) {
+          showToast(`เกิดข้อผิดพลาดในการนำเข้า: ${err.message}`, 'error');
+        } finally {
+          importCharBatchFile.value = '';
+        }
+      };
+      
+      reader.onerror = () => {
+        showToast('เกิดข้อผิดพลาดในการอ่านไฟล์นำเข้า', 'error');
+        importCharBatchFile.value = '';
+      };
+      
+      reader.readAsText(file);
+    });
+  }
+
+  const importGenerationPromptsBatchFile = document.getElementById('importGenerationPromptsBatchFile');
+  if (importGenerationPromptsBatchFile) {
+    importGenerationPromptsBatchFile.addEventListener('change', async (e) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      const remainingRounds = 10 - currentPromptRound + 1;
+      if (files.length > remainingRounds) {
+        showToast(`ไม่สามารถนำเข้าได้ เนื่องจากจำนวนไฟล์ (${files.length} ไฟล์) เกินจำนวน Round ที่เหลืออยู่ (เหลือ ${remainingRounds} Round ตั้งแต่ Round ${currentPromptRound} ถึง 10)`, 'error');
+        importGenerationPromptsBatchFile.value = '';
+        return;
+      }
+
+      // Overwrite confirmation is implicit as we replace target rounds
+      commitCurrentRoundFromDOM();
+
+      const filePromises = Array.from(files).map(file => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const text = evt.target.result;
+            const prompts = [text.trim()].filter(Boolean);
+            resolve({ filename: file.name, prompts });
+          };
+          reader.onerror = () => reject(new Error(`Failed to read file ${file.name}`));
+          reader.readAsText(file);
+        });
+      });
+
+      try {
+        const results = await Promise.all(filePromises);
+        
+        results.forEach((res, index) => {
+          const targetRound = currentPromptRound + index;
+          promptsByRound[targetRound] = res.prompts;
+          statusesByRound[targetRound] = res.prompts.map(p => ({ text: p, status: 'Not start' }));
+        });
+
+        // Re-render the active round
+        renderImagePromptsForRound(currentPromptRound);
+        await saveImagePrompts(true);
+
+        showToast(`นำเข้าพรอพต์สำเร็จทั้งหมด ${results.length} รอบ!`, 'success');
+      } catch (err) {
+        showToast(`เกิดข้อผิดพลาดในการนำเข้า: ${err.message}`, 'error');
+      } finally {
+        importGenerationPromptsBatchFile.value = '';
+      }
+    });
+  }
+
+  const resetAllRoundsBtn = document.getElementById('resetAllRoundsBtn');
+  if (resetAllRoundsBtn) {
+    resetAllRoundsBtn.addEventListener('click', async () => {
+      const confirmReset = confirm("คุณต้องการล้างข้อมูลพรอพต์และรูปภาพอ้างอิงทั้งหมดในทุก Round ใช่หรือไม่?");
+      if (!confirmReset) return;
+
+      for (let r = 1; r <= 10; r++) {
+        promptsByRound[r] = [];
+        statusesByRound[r] = [];
+        refImagesByRound[r] = ["", "", "", "", "", "", ""];
+        refImagesDirByRound[r] = "";
+      }
+
+      // Reset DOM elements of directory path input & dropdown
+      const dirInput = document.getElementById('cfg_ref_images_dir');
+      if (dirInput) dirInput.value = "";
+      
+      const dropdown = document.getElementById('cfg_ref_image_dropdown');
+      if (dropdown) dropdown.innerHTML = '<option value="">-- No folder scanned yet --</option>';
+
+      lastScannedImagesList = [];
+
+      // Re-render and Save
+      renderImagePromptsForRound(currentPromptRound);
+      renderDropdownOptions();
+      await saveImagePrompts(true);
+
+      showToast('ล้างข้อมูลทุก Round และรูปภาพแนบเรียบร้อยแล้ว', 'success');
+    });
+  }
+
+  document.querySelectorAll('.round-active-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      saveImagePrompts(true);
+    });
+  });
 }
 
 // Initial setup on load
 initModal();
 loadSettings();
 loadProfiles();
-loadPrompts();
 loadImagePrompts();
 renderVideoHelperBatchRows();
 initTabNavigation();

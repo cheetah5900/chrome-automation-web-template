@@ -28,8 +28,15 @@ class BrowserBot:
             options.add_experimental_option("detach", True)
 
         try:
-            # Explicitly manage service to avoid version mismatch issues
-            service = Service(ChromeDriverManager().install())
+            driver_path = ChromeDriverManager().install()
+            # Automatically codesign the chromedriver on macOS to prevent SIGKILL (status code -9) crashes
+            import subprocess
+            try:
+                subprocess.run(["codesign", "--force", "--deep", "--sign", "-", driver_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+            service = Service(driver_path)
             
             # Add retry logic for connection
             for attempt in range(3):
@@ -127,6 +134,8 @@ class BrowserBot:
 
         except Exception as e:
             print(f"Critical error during tab switch: {e}")
+            if "invalid session id" in str(e).lower():
+                raise
             return False
             
         print(f"Tab containing '{url_part}' NOT found.")

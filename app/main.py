@@ -32,9 +32,10 @@ _ensure_json(DEFAULTS_FILE, {"selected_profile": "", "theme": "sunset-glass"})
 _ensure_json(PROFILES_FILE, {"selected_profile": "", "profiles": []})
 _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openrouter_api_key": ""})
 _ensure_json(PROMPTS_FILE, {"prompts": [""]})
-_ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2": "", "reference_image_3": ""})
+_ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2": "", "reference_image_3": "", "reference_image_4": "", "reference_image_5": "", "reference_image_6": "", "reference_image_7": "", "reference_images_dir": ""})
 
 app = FastAPI(title="Chrome Automation Template")
+last_submit_time = 0.0
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -78,6 +79,17 @@ class DeleteProfilePayload(BaseModel):
 
 class LaunchProfilePayload(BaseModel):
     name: str
+
+
+class ForceKillPayload(BaseModel):
+    port: int
+
+
+class ImportLakornPayload(BaseModel):
+    lakorn_path: str
+    ep_num: int
+    ref_images_dir: str = ""
+
 
 
 class PromptDispatchPayload(BaseModel):
@@ -183,11 +195,14 @@ def _physical_switch_to_tab(url_part):
 
 
 def _macos_file_exists(file_path):
+    import os
+    if os.path.exists(file_path):
+        return True
     import subprocess
     escaped_path = file_path.replace('"', '\\"')
     script = f"""
     tell application "System Events"
-        exists file "{escaped_path}"
+        exists POSIX file "{escaped_path}"
     end tell
     """
     try:
@@ -223,6 +238,11 @@ class RefImageDefaultPayload(BaseModel):
     reference_image: str = ""
     reference_image_2: str = ""
     reference_image_3: str = ""
+    reference_image_4: str = ""
+    reference_image_5: str = ""
+    reference_image_6: str = ""
+    reference_image_7: str = ""
+    reference_images_dir: str = ""
 
 
 @app.post("/api/config/reference-image/default")
@@ -244,7 +264,11 @@ def verify_reference_image(payload: RefImageVerifyPayload):
     
     import os
     if os.path.exists(path) and os.path.isfile(path):
-        return {"exists": True, "message": f"Success: Reference file exists at: {path}"}
+        lower_path = path.lower()
+        valid_extensions = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"]
+        if not any(lower_path.endswith(ext) for ext in valid_extensions):
+            return {"exists": False, "message": f"Error: Selected file is not a valid image format: {path}"}
+        return {"exists": True, "message": f"Success: Reference file exists and is a valid image at: {path}"}
     else:
         return {"exists": False, "message": f"Error: Reference file does not exist at: {path}"}
 
@@ -477,6 +501,56 @@ def close_profile():
         return {"ok": True, "message": "Browser profile disconnected successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed closing browser: {e}")
+
+
+@app.post("/api/profiles/force-kill")
+def force_kill_profile(payload: ForceKillPayload):
+    import subprocess
+    import signal
+    import os
+
+    port = payload.port
+    killed_any = False
+
+    # 1. Close current Selenium connection
+    try:
+        browser_manager.close()
+    except Exception as e:
+        print(f"Error closing browser manager: {e}")
+
+    # 2. Terminate process listening on TCP port
+    try:
+        output = subprocess.check_output(["lsof", "-t", "-i", f"tcp:{port}"], text=True)
+        pids = [int(pid.strip()) for pid in output.strip().split("\n") if pid.strip()]
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed_any = True
+                print(f"Killed process {pid} on port {port}")
+            except Exception as e:
+                print(f"Failed to kill PID {pid}: {e}")
+    except Exception as e:
+        print(f"lsof failed or no process listening on port {port}: {e}")
+
+    # 3. Terminate process with remote-debugging-port argument matching the port
+    try:
+        output = subprocess.check_output(["ps", "aux"], text=True)
+        for line in output.splitlines():
+            if f"--remote-debugging-port={port}" in line and "Google Chrome" in line:
+                parts = line.split()
+                if len(parts) > 1:
+                    try:
+                        pid = int(parts[1])
+                        os.kill(pid, signal.SIGKILL)
+                        killed_any = True
+                        print(f"Killed Chrome process {pid} matching debugging port")
+                    except Exception as e:
+                        print(f"Failed to kill PID {pid} from ps list: {e}")
+    except Exception as e:
+        print(f"ps scan failed: {e}")
+
+    return {"ok": True, "killed": killed_any, "message": f"Closed Chrome browser on port {port}"}
+
 
 
 
@@ -814,7 +888,7 @@ CONFIG_FILE = str(BASE_DIR / ("config_win.json" if os.name == "nt" else "config_
 
 def _default_config() -> dict[str, Any]:
     if os.name == "nt":
-        return {
+        res = {
             "folder_name": "",
             "element_name": "Songkran",
             "element_path": r"C:\Files\Project\local DDCM\Elements",
@@ -845,42 +919,67 @@ def _default_config() -> dict[str, Any]:
             "reference_image": "",
             "reference_image_2": "",
             "reference_image_3": "",
+            "video_prefix_cover": "",
+            "video_prefix_combine": "",
+        }
+    else:
+        h = os.path.expanduser("~")
+        res = {
+            "folder_name": "",
+            "element_name": "Songkran",
+            "element_path": os.path.join(h, "Documents/DDCM/Elements"),
+            "local_path": os.path.join(h, "Documents/DDCM"),
+            "remote_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/DDCM/Cliparts DDCM",
+            "watermark_path": os.path.join(h, "Documents/DDCM/Watermark.png"),
+            "first_preview_watermark_path": "",
+            "single_count": "12",
+            "companion_count": "12",
+            "elements_count": "5",
+            "png_pages": "1-4",
+            "jpg_pages": "6-9",
+            "pdf_pages": "10",
+            "primary_color": "Red",
+            "secondary_color": "Gray",
+            "focus_browser_tabs": False,
+            "canva_design_url_part": "",
+            "image_prompts": [],
+            "image_prompt_statuses": [],
+            "image_prompts_2": [],
+            "image_prompt_statuses_2": [],
+            "image_prompts_3": [],
+            "image_prompt_statuses_3": [],
+            "chatgpt_url": "",
+            "video_input_path": "",
+            "image_input_path": "",
+            "video_output_path": "",
+            "reference_image": "",
+            "reference_image_2": "",
+            "reference_image_3": "",
+            "video_prefix_cover": "",
+            "video_prefix_combine": "",
         }
 
-    h = os.name
-    h = os.path.expanduser("~")
-    return {
-        "folder_name": "",
-        "element_name": "Songkran",
-        "element_path": os.path.join(h, "Documents/DDCM/Elements"),
-        "local_path": os.path.join(h, "Documents/DDCM"),
-        "remote_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/DDCM/Cliparts DDCM",
-        "watermark_path": os.path.join(h, "Documents/DDCM/Watermark.png"),
-        "first_preview_watermark_path": "",
-        "single_count": "12",
-        "companion_count": "12",
-        "elements_count": "5",
-        "png_pages": "1-4",
-        "jpg_pages": "6-9",
-        "pdf_pages": "10",
-        "primary_color": "Red",
-        "secondary_color": "Gray",
-        "focus_browser_tabs": False,
-        "canva_design_url_part": "",
-        "image_prompts": [],
-        "image_prompt_statuses": [],
-        "image_prompts_2": [],
-        "image_prompt_statuses_2": [],
-        "image_prompts_3": [],
-        "image_prompt_statuses_3": [],
-        "chatgpt_url": "",
-        "video_input_path": "",
-        "image_input_path": "",
-        "video_output_path": "",
-        "reference_image": "",
-        "reference_image_2": "",
-        "reference_image_3": "",
-    }
+    # Dynamically ensure all 10 rounds are initialized in config
+    for r in range(1, 11):
+        p_key = "image_prompts" if r == 1 else f"image_prompts_{r}"
+        s_key = "image_prompt_statuses" if r == 1 else f"image_prompt_statuses_{r}"
+        if p_key not in res:
+            res[p_key] = []
+        if s_key not in res:
+            res[s_key] = []
+            
+        for i in range(1, 8):
+            ref_key = f"reference_image_round_{r}_{i}"
+            if ref_key not in res:
+                res[ref_key] = ""
+                
+    # Also add default reference image 4 to 7 globally for defaults
+    for i in range(4, 8):
+        global_key = f"reference_image_{i}"
+        if global_key not in res:
+            res[global_key] = ""
+
+    return res
 
 
 def log(msg: str) -> None:
@@ -1040,102 +1139,90 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
             if "gemini.google.com" not in driver.current_url:
                 raise RuntimeError("Failed to switch to Gemini tab. Please open it manually.")
 
-            ref_images = []
-            for k in ["reference_image", "reference_image_2", "reference_image_3"]:
-                img = (payload.get(k) or "").strip()
-                if img:
-                    ref_images.append(img)
-            
-            if not ref_images:
-                ref_images = [""]
+            prepare_only = payload.get("prepare_only", False)
+            submit_only = payload.get("submit_only", False)
 
-            for run_idx, reference_image in enumerate(ref_images):
-                run_no = run_idx + 1
-                total_runs = len(ref_images)
-                log(f"Gemini Run {run_no}/{total_runs}: Starting generation using reference image: {reference_image or 'None'}")
-                
-                input_strats = [
-                    "//div[contains(@class, 'ql-editor') and @contenteditable='true']",
-                    "//rich-textarea//div[@contenteditable='true']",
-                    "//div[@contenteditable='true' and @role='textbox']",
-                ]
-                box = None
-                for s in input_strats:
-                    try:
-                        tmp = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, s)))
-                        if tmp.is_displayed():
-                            box = tmp
-                            break
-                    except Exception:
-                        continue
-                if not box:
-                    raise RuntimeError("Could not find Gemini input box. Please make sure you are logged into Gemini.")
-                
+            # Find the input box first to ensure tab is ready
+            input_strats = [
+                "//div[contains(@class, 'ql-editor') and @contenteditable='true']",
+                "//rich-textarea//div[@contenteditable='true']",
+                "//div[@contenteditable='true' and @role='textbox']",
+            ]
+            box = None
+            for s in input_strats:
                 try:
-                    box.click()
+                    tmp = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, s)))
+                    if tmp.is_displayed():
+                        box = tmp
+                        break
                 except Exception:
-                    driver.execute_script("arguments[0].click();", box)
-                    
-                driver.execute_script(
-                    "if(arguments[0].textContent !== undefined) { arguments[0].textContent = ''; } else { arguments[0].innerText = ''; }",
-                    box
-                )
-                driver.execute_script("arguments[0].focus();", box)
-                box.send_keys(custom_prompt)
-                driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
-                
-                import os
-                if reference_image:
-                    if not _macos_file_exists(reference_image):
-                        raise RuntimeError(f"Reference image file not found on macOS: {reference_image}")
-                        
-                    # Helper local function to click upload menu button with 3 retries and 1.5s interval
-                    def click_element_with_retry(selectors, name):
-                        combined_selector = ", ".join(selectors)
-                        for attempt in range(3):
-                            log(f"Attempt {attempt + 1}/3 to locate and click {name}...")
-                            try:
-                                el = WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.CSS_SELECTOR, combined_selector)))
-                                if el.is_displayed():
-                                    try:
-                                        el.click()
-                                    except Exception:
-                                        driver.execute_script("arguments[0].click();", el)
-                                    log(f"Successfully clicked {name}!")
-                                    return True
-                            except Exception:
-                                pass
-                            if attempt < 2:
-                                log(f"Failed to click {name}. Waiting 1.5 seconds before next attempt...")
-                                time.sleep(1.5)
-                        log(f"CRITICAL ERROR: Failed to click {name} after 3 attempts.")
+                    continue
+            if not box:
+                raise RuntimeError("Could not find Gemini input box. Please make sure you are logged into Gemini.")
+
+            if not submit_only:
+                ref_images = []
+                for k in ["reference_image", "reference_image_2", "reference_image_3", "reference_image_4", "reference_image_5", "reference_image_6", "reference_image_7"]:
+                    img = (payload.get(k) or "").strip()
+                    if img:
+                        ref_images.append(img)
+
+                # Helper functions for uploading
+                def click_element_with_retry(selectors, name):
+                    combined_selector = ", ".join(selectors)
+                    for attempt in range(3):
+                        log(f"Attempt {attempt + 1}/3 to locate and click {name}...")
+                        try:
+                            el = WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.CSS_SELECTOR, combined_selector)))
+                            if el.is_displayed():
+                                try:
+                                    el.click()
+                                except Exception:
+                                    driver.execute_script("arguments[0].click();", el)
+                                log(f"Successfully clicked {name}!")
+                                return True
+                        except Exception:
+                            pass
+                        if attempt < 2:
+                            log(f"Failed to click {name}. Waiting 1.5 seconds before next attempt...")
+                            time.sleep(1.5)
+                    log(f"CRITICAL ERROR: Failed to click {name} after 3 attempts.")
+                    return False
+
+                def upload_macos_file_dialog(file_path):
+                    import subprocess
+                    escaped_path = file_path.replace('"', '\\"')
+                    script = f"""
+                    set the clipboard to "{escaped_path}"
+                    delay 0.5
+                    tell application "System Events"
+                        key code 5 using {{command down, shift down}}
+                        delay 0.75
+                        key code 9 using {{command down}}
+                        delay 1.0
+                        keystroke return
+                        delay 1.5
+                        keystroke return
+                    end tell
+                    """
+                    try:
+                        subprocess.run(["osascript", "-e", script], check=False)
+                        return True
+                    except Exception as e:
+                        log(f"AppleScript dialog input failed: {e}")
                         return False
 
-                    def upload_macos_file_dialog(file_path):
-                        import subprocess
-                        escaped_path = file_path.replace('"', '\\"')
-                        script = f"""
-                        set the clipboard to "{escaped_path}"
-                        delay 0.5
-                        tell application "System Events"
-                            keystroke "g" using {{command down, shift down}}
-                            delay 1.0
-                            keystroke "v" using {{command down}}
-                            delay 1.0
-                            keystroke return
-                            delay 1.0
-                            keystroke return
-                        end tell
-                        """
-                        try:
-                            subprocess.run(["osascript", "-e", script], check=False)
-                            return True
-                        except Exception as e:
-                            log(f"AppleScript dialog input failed: {e}")
-                            return False
-
+                # Upload all reference images sequentially
+                for run_idx, reference_image in enumerate(ref_images):
+                    if not reference_image:
+                        continue
+                    log(f"Uploading Gemini reference image {run_idx + 1}/{len(ref_images)}: {reference_image}")
+                    if not _macos_file_exists(reference_image):
+                        raise RuntimeError(f"Reference image file not found on macOS: {reference_image}")
+                    
                     # Step 1: Click upload menu button
-                    time.sleep(1.0)
+                    _activate_chrome()
+                    time.sleep(2.0)
                     sel1_exact = "#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div > div > div > chat-window > div > input-container > fieldset > input-area-v2 > div > div > div.leading-actions-wrapper.ng-tns-c5435433-4.has-model-picker.ng-star-inserted > simplified-input-menu > div > span > gem-icon-button > button"
                     sel1_fallbacks = [
                         sel1_exact,
@@ -1173,8 +1260,8 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                             time.sleep(0.5)
                             if upload_macos_file_dialog(reference_image):
                                 log("Reference image uploaded successfully via macOS File Dialog AppleScript automation!")
-                                log("Waiting 5 seconds for file attachment processing...")
-                                time.sleep(5.0)
+                                log("Waiting 2.5 seconds for file attachment processing...")
+                                time.sleep(2.5)
                             else:
                                 log("Warning: AppleScript keys injection encountered an issue.")
                         else:
@@ -1182,66 +1269,71 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     else:
                         log("Warning: Failed to open Gemini upload menu after 3 attempts.")
 
-                active_selector = "#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div > div > div > chat-window > div > input-container > fieldset > input-area-v2 > div > div > div.trailing-actions-wrapper.ng-tns-c5435433-4.with-model-picker > div.input-buttons-wrapper-bottom.ng-tns-c5435433-4.persistent-mic > div.mat-mdc-tooltip-trigger.send-button-container.ng-tns-c5435433-4.inner.lm-enabled.persistent-mic.ng-star-inserted.visible"
-                log("Waiting for the Send button to become active...")
-                stop_button_xpath = (
-                    "//button[@aria-label='หยุดคำตอบ'] | "
-                    "//button[contains(@aria-label, 'Stop')] | "
-                    "//button[.//mat-icon[@fonticon='stop' or @data-mat-icon-name='stop' or contains(@class, 'stop')]]"
+                # Paste prompt, but do not click send
+                try:
+                    box.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", box)
+                    
+                driver.execute_script(
+                    "if(arguments[0].textContent !== undefined) { arguments[0].textContent = ''; } else { arguments[0].innerText = ''; }",
+                    box
                 )
-                
-                send_success = False
-                for click_attempt in range(3):
+                driver.execute_script("arguments[0].focus();", box)
+                time.sleep(0.5)
+
+                # Copy prompt to macOS clipboard and paste it via System Events
+                import subprocess
+                try:
+                    process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, text=True)
+                    process.communicate(input=custom_prompt)
+                    
+                    paste_script = """
+                    tell application "Google Chrome" to activate
+                    delay 0.3
+                    tell application "System Events"
+                        keystroke "v" using command down
+                    end tell
+                    """
+                    subprocess.run(["osascript", "-e", paste_script], check=False)
+                    log("Pasted multiline prompt successfully using macOS clipboard.")
+                except Exception as e:
+                    log(f"Clipboard paste failed, falling back to send_keys: {e}")
+                    box.send_keys(custom_prompt)
+                    driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
+
+                if prepare_only:
+                    log("Prepare-only mode requested. Prompt pasted. Returning success without submitting.")
+                    return {"ok": True, "status": "prepared"}
+
+            active_selector = "#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div > div > div > chat-window > div > input-container > fieldset > input-area-v2 > div > div > div.trailing-actions-wrapper.ng-tns-c5435433-4.with-model-picker > div.input-buttons-wrapper-bottom.ng-tns-c5435433-4.persistent-mic > div.mat-mdc-tooltip-trigger.send-button-container.ng-tns-c5435433-4.inner.lm-enabled.persistent-mic.ng-star-inserted.visible"
+            log("Waiting for the Send button to become active...")
+            stop_button_xpath = (
+                "//button[@aria-label='หยุดคำตอบ'] | "
+                "//button[contains(@aria-label, 'Stop')] | "
+                "//button[.//mat-icon[@fonticon='stop' or @data-mat-icon-name='stop' or contains(@class, 'stop')]]"
+            )
+            
+            send_success = False
+            for click_attempt in range(3):
+                try:
+                    send_btn = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, active_selector))
+                    )
+                    log(f"Send button found! Click attempt {click_attempt + 1}/3...")
                     try:
-                        send_btn = WebDriverWait(driver, 10).until(
-                            EC.element_to_be_clickable((By.CSS_SELECTOR, active_selector))
-                        )
-                        log(f"Send button found! Click attempt {click_attempt + 1}/3...")
-                        try:
-                            send_btn.click()
-                        except Exception:
-                            driver.execute_script("arguments[0].click();", send_btn)
-                        log("Send button clicked, verifying start of generation...")
-                    except Exception as click_err:
-                        log(f"Send button click failed or not clickable: {click_err}. Trying Enter key on input box...")
-                        try:
-                            box.send_keys(Keys.ENTER)
-                        except Exception:
-                            pass
-                    
-                    for sec in range(5):
-                        try:
-                            stop_buttons = driver.find_elements(By.XPATH, stop_button_xpath)
-                            visible_stop_button = False
-                            for btn in stop_buttons:
-                                if btn.is_displayed():
-                                    visible_stop_button = True
-                                    break
-                            if visible_stop_button:
-                                log("Confirmed: Generation is onprocess!")
-                                send_success = True
-                                break
-                        except Exception:
-                            pass
-                        time.sleep(1.0)
-                    
-                    if send_success:
-                        break
-                    else:
-                        log("Warning: Generation did not start yet. Retrying send...")
-                        
-                if not send_success:
-                    raise RuntimeError("Failed to start generation: Send button clicked but 'onprocess' stop button did not appear within 5 seconds.")
-                    
-                import random
-                delay_seconds = random.uniform(60.0, 135.0)
-                log(f"Waiting {delay_seconds:.1f} seconds (random 1.00 - 2.15 mins) before starting status checks...")
-                time.sleep(delay_seconds)
-                log("Checking if Stop button has disappeared...")
-                start_time = time.time()
-                generation_timeout = 180.0
+                        send_btn.click()
+                    except Exception:
+                        driver.execute_script("arguments[0].click();", send_btn)
+                    log("Send button clicked, verifying start of generation...")
+                except Exception as click_err:
+                    log(f"Send button click failed or not clickable: {click_err}. Trying Enter key on input box...")
+                    try:
+                        box.send_keys(Keys.ENTER)
+                    except Exception:
+                        pass
                 
-                while time.time() - start_time < generation_timeout:
+                for sec in range(5):
                     try:
                         stop_buttons = driver.find_elements(By.XPATH, stop_button_xpath)
                         visible_stop_button = False
@@ -1249,40 +1341,99 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                             if btn.is_displayed():
                                 visible_stop_button = True
                                 break
-                        if not visible_stop_button:
-                            log(f"Stop button has disappeared! Generation completed for Run {run_no}/{total_runs}.")
+                        if visible_stop_button:
+                            log("Confirmed: Generation is onprocess!")
+                            send_success = True
                             break
                     except Exception:
-                        log(f"Stop button no longer found. Generation completed for Run {run_no}/{total_runs}.")
+                        pass
+                    time.sleep(1.0)
+                
+                if send_success:
+                    break
+                else:
+                    log("Warning: Generation did not start yet. Retrying send...")
+                    
+            if not send_success:
+                raise RuntimeError("Failed to start generation: Send button clicked but 'onprocess' stop button did not appear within 5 seconds.")
+                
+            check_interval = int(_get_config_value("check_interval_seconds", 60))
+            max_checks = int(_get_config_value("max_checks", 3))
+            first_time_waiting = int(_get_config_value("first_time_waiting", check_interval))
+            log(f"Starting status checks: first wait of {first_time_waiting}s, interval of {check_interval}s, max {max_checks} checks...")
+            
+            generation_completed = False
+            for check_idx in range(1, max_checks + 1):
+                wait_time = first_time_waiting if check_idx == 1 else check_interval
+                log(f"Check {check_idx}/{max_checks}: Starting wait of {wait_time} seconds...")
+                for s in range(wait_time, 0, -1):
+                    if s % 10 == 0 or s <= 5:
+                        log(f"Check {check_idx}/{max_checks}: {s} seconds remaining before checking...")
+                    time.sleep(1)
+                
+                try:
+                    stop_buttons = driver.find_elements(By.XPATH, stop_button_xpath)
+                    visible_stop_button = False
+                    for btn in stop_buttons:
+                        if btn.is_displayed():
+                            visible_stop_button = True
+                            break
+                    if not visible_stop_button:
+                        log("Stop button has disappeared! Gemini generation completed successfully.")
+                        generation_completed = True
                         break
-                    time.sleep(1.5)
-                
-                if run_idx < total_runs - 1:
-                    log("Waiting 10 seconds before next reference image generation...")
-                    time.sleep(10.0)
-                
+                    else:
+                        log("Gemini is still generating... Stop button is still visible.")
+                except Exception:
+                    log("Stop button no longer found. Gemini generation completed successfully.")
+                    generation_completed = True
+                    break
+                    
+            if not generation_completed:
+                raise RuntimeError(f"Gemini generation timeout: Stop button did not disappear after {max_checks} checks of {check_interval}s interval.")
+            
             return {"ok": True}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/api/step/3-chatgpt")
 def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
+    global last_submit_time
     _activate_chrome()
     custom_prompt = payload.get("prompt")
     if custom_prompt:
         try:
             import time
+            import random
+            if last_submit_time > 0.0:
+                random_delay = random.randint(1, 10)
+                log(f"จำลองการทำงานมนุษย์: สุ่มรอ {random_delay} วินาที ก่อนเริ่มอัปโหลดรูปและวาง Prompt ถัดไป...")
+                time.sleep(random_delay)
+            
             from selenium.webdriver.common.by import By
             from selenium.webdriver.common.keys import Keys
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
             
-            bot = browser_manager.get()
+            bot = None
+            try:
+                bot = browser_manager.get()
+                # Test the session validity by fetching handles
+                _ = bot.driver.window_handles
+            except Exception as e:
+                log(f"Warning: Browser session check failed ({e}). Recreating browser session...")
+                browser_manager.close()
+                bot = browser_manager.get()
+                
             driver = bot.driver
             
+            chatgpt_chat_mode = payload.get("chatgpt_chat_mode", "new")
             chatgpt_url = payload.get("chatgpt_url")
-            if chatgpt_url:
+            
+            if chatgpt_chat_mode == "new" and chatgpt_url:
                 log(f"Round transition: Redirecting first tab to ChatGPT project URL: {chatgpt_url}")
                 try:
                     all_handles = driver.window_handles
@@ -1292,8 +1443,26 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     keep_handle = all_handles[0]
                     driver.switch_to.window(keep_handle)
                     driver.get(chatgpt_url)
-                    log("Waiting 7 seconds for the ChatGPT project page to load...")
-                    time.sleep(7.0)
+                    log("Waiting for ChatGPT input element to be ready...")
+                    input_strats = [
+                        "//div[@id='prompt-textarea']",
+                        "//textarea[@id='prompt-textarea']",
+                        "//div[@contenteditable='true']",
+                    ]
+                    box_loaded = False
+                    for wait_sec in range(10):
+                        for s in input_strats:
+                            try:
+                                el = driver.find_element(By.XPATH, s)
+                                if el.is_displayed():
+                                    box_loaded = True
+                                    break
+                            except Exception:
+                                pass
+                        if box_loaded:
+                            break
+                        time.sleep(1.0)
+                    log("ChatGPT project page input box is ready!")
  
                     # Close all other ChatGPT tabs to avoid clutter
                     closed_count = 0
@@ -1311,6 +1480,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 except Exception as e:
                     log(f"Failed to navigate and clean tabs: {e}")
             else:
+                log("Reusing currently active/open ChatGPT tab...")
                 # Check if ChatGPT is open
                 if not bot.switch_to_tab_containing("chatgpt.com"):
                     log("ChatGPT tab not found, opening natively in new tab...")
@@ -1332,25 +1502,162 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             if "chatgpt.com" not in driver.current_url:
                 raise RuntimeError("Failed to switch to ChatGPT tab. Please open it manually.")
 
-            ref_images = []
-            for k in ["reference_image", "reference_image_2", "reference_image_3"]:
-                img = (payload.get(k) or "").strip()
-                if img:
-                    ref_images.append(img)
-            
-            if not ref_images:
-                ref_images = [""]
+            prepare_only = payload.get("prepare_only", False)
+            submit_only = payload.get("submit_only", False)
 
-            for run_idx, reference_image in enumerate(ref_images):
-                run_no = run_idx + 1
-                total_runs = len(ref_images)
-                log(f"ChatGPT Run {run_no}/{total_runs}: Starting generation using reference image: {reference_image or 'None'}")
-                
-                input_strats = [
-                    "//div[@id='prompt-textarea']",
-                    "//textarea[@id='prompt-textarea']",
-                    "//div[@contenteditable='true']",
-                ]
+            ref_images = []
+            if not submit_only:
+                for k in ["reference_image", "reference_image_2", "reference_image_3", "reference_image_4", "reference_image_5", "reference_image_6", "reference_image_7"]:
+                    img = (payload.get(k) or "").strip()
+                    if img:
+                        ref_images.append(img)
+            
+            # Find the input box first to ensure tab is ready
+            input_strats = [
+                "//div[@id='prompt-textarea']//p",
+                "//div[@id='prompt-textarea']",
+                "//textarea[@id='prompt-textarea']",
+                "//div[@contenteditable='true']",
+            ]
+            box = None
+            for s in input_strats:
+                try:
+                    tmp = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, s)))
+                    if tmp.is_displayed():
+                        box = tmp
+                        break
+                except Exception:
+                    continue
+            if not box:
+                raise RuntimeError("Could not find ChatGPT input box. Please make sure the tab is fully loaded.")
+
+            if not submit_only:
+                def click_chatgpt_attach_button() -> bool:
+                    for attempt in range(3):
+                        log(f"Attempt {attempt + 1}/3 to open ChatGPT add-files menu...")
+                        try:
+                            plus_btn = WebDriverWait(driver, 3).until(
+                                EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-plus-btn, button[data-testid='composer-plus-btn']"))
+                            )
+                            try:
+                                plus_btn.click()
+                            except Exception:
+                                driver.execute_script("arguments[0].click();", plus_btn)
+                            log("Clicked ChatGPT composer plus button.")
+
+                            add_files_item = WebDriverWait(driver, 3).until(
+                                EC.element_to_be_clickable((
+                                    By.XPATH,
+                                    "//div[@role='menuitem' and .//div[normalize-space()='Add photos & files']]",
+                                ))
+                            )
+                            try:
+                                add_files_item.click()
+                            except Exception:
+                                driver.execute_script("arguments[0].click();", add_files_item)
+                            log("Clicked ChatGPT 'Add photos & files' menu item.")
+                            return True
+                        except Exception:
+                            pass
+
+                        fallback_selectors = [
+                            "button[aria-label*='Attach' i]",
+                            "button[aria-label*='Upload' i]",
+                            "button[data-testid*='attach' i]",
+                            "button[data-testid*='upload' i]",
+                            "label[for*='file']",
+                        ]
+                        for selector in fallback_selectors:
+                            try:
+                                el = WebDriverWait(driver, 2).until(
+                                    EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                                )
+                                if not el.is_displayed():
+                                    continue
+                                try:
+                                    el.click()
+                                except Exception:
+                                    driver.execute_script("arguments[0].click();", el)
+                                log(f"Clicked ChatGPT fallback attach control using selector: {selector}")
+                                return True
+                            except Exception:
+                                continue
+                        time.sleep(1.0)
+                    log("Failed to locate a visible ChatGPT attach control.")
+                    return False
+
+                def upload_macos_file_dialog(file_path):
+                    import subprocess
+                    escaped_path = file_path.replace('"', '\\"')
+                    script = f"""
+                    set the clipboard to "{escaped_path}"
+                    delay 0.5
+                    tell application "System Events"
+                        key code 5 using {{command down, shift down}}
+                        delay 0.75
+                        key code 9 using {{command down}}
+                        delay 1.0
+                        keystroke return
+                        delay 1.5
+                        keystroke return
+                    end tell
+                    """
+                    try:
+                        subprocess.run(["osascript", "-e", script], check=False)
+                        return True
+                    except Exception as e:
+                        log(f"AppleScript dialog input failed: {e}")
+                        return False
+
+                # Upload all reference images sequentially
+                for run_idx, reference_image in enumerate(ref_images):
+                    if not reference_image:
+                        continue
+                    log(f"Uploading ChatGPT reference image {run_idx + 1}/{len(ref_images)}: {reference_image}")
+                    if not _macos_file_exists(reference_image):
+                        raise RuntimeError(f"Reference image file not found on macOS: {reference_image}")
+                    
+                    _activate_chrome()
+                    time.sleep(1.0)
+                    
+                    # Try clicking ChatGPT attach button first (UI-based flow)
+                    attach_triggered = False
+                    try:
+                        attach_triggered = click_chatgpt_attach_button()
+                    except Exception as click_err:
+                        log(f"UI attach trigger failed: {click_err}")
+                    
+                    if not attach_triggered:
+                        # press Cmd + U directly to open file modal
+                        log("Fallback: Sending Cmd + U keystroke via System Events directly to trigger file modal...")
+                        _activate_chrome()
+                        time.sleep(2.5)
+                        
+                        import subprocess
+                        cmd_u_script = """
+                        tell application "Google Chrome" to activate
+                        delay 1.0
+                        tell application "System Events"
+                            keystroke "u" using command down
+                        end tell
+                        """
+                        try:
+                            subprocess.run(["osascript", "-e", cmd_u_script], check=False)
+                        except Exception as e:
+                            log(f"Fallback Keystroke Cmd + U failed: {e}")
+                        
+                    log("Waiting 1.5 seconds for file modal to fully open...")
+                    time.sleep(1.5)
+                    
+                    log("Triggering AppleScript folder path sheet to select file...")
+                    if upload_macos_file_dialog(reference_image):
+                        log("Reference image uploaded successfully via macOS File Dialog AppleScript automation!")
+                        log("Waiting 2.5 seconds for file upload to settle...")
+                        time.sleep(2.5)
+                    else:
+                        log("Warning: AppleScript file-dialog automation encountered an issue.")
+
+                # Re-resolve the input box after files have finished uploading, as DOM updates may make the old reference stale
                 box = None
                 for s in input_strats:
                     try:
@@ -1361,145 +1668,197 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     except Exception:
                         continue
                 if not box:
-                    raise RuntimeError("Could not find ChatGPT input box. Please make sure the tab is fully loaded.")
-                
+                    raise RuntimeError("Could not re-locate ChatGPT input box after file upload.")
+
+                # Paste the prompt, but do not click send
                 try:
                     box.click()
                 except Exception:
                     driver.execute_script("arguments[0].click();", box)
                     
-                driver.execute_script(
-                    "if(arguments[0].textContent !== undefined) { arguments[0].textContent = ''; } else { arguments[0].innerText = ''; }",
-                    box,
-                )
                 driver.execute_script("arguments[0].focus();", box)
-                box.send_keys(custom_prompt)
-                driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
+                time.sleep(0.5)
                 
-                import os
-                if reference_image:
-                    if not _macos_file_exists(reference_image):
-                        raise RuntimeError(f"Reference image file not found on macOS: {reference_image}")
-         
-                    # press Cmd + U directly to open file modal
-                    log("Sending Cmd + U keystroke via System Events directly to trigger file modal...")
-                    _activate_chrome()
-                    time.sleep(1.0)
-                    
+                # Focus the input area before pasting
+                driver.execute_script("arguments[0].focus();", box)
+                time.sleep(0.5)
+
+                # Primary: Use document.execCommand('insertText') to insert prompt without triggering Enter key submits
+                input_success = False
+                try:
+                    driver.execute_script("document.execCommand('insertText', false, arguments[0]);", custom_prompt)
+                    time.sleep(0.5)
+                    entered_text = driver.execute_script("return arguments[0].innerText || arguments[0].textContent;", box)
+                    if entered_text and entered_text.strip() != "":
+                        log("Prompt input populated successfully via browser insertText command.")
+                        input_success = True
+                except Exception as e:
+                    log(f"Browser insertText command failed: {e}")
+
+                # Secondary Fallback: Copy prompt to macOS clipboard and paste it via System Events
+                if not input_success:
                     import subprocess
-                    cmd_u_script = """
-                    tell application "System Events"
-                        key code 32 using command down
-                    end tell
-                    """
                     try:
-                        subprocess.run(["osascript", "-e", cmd_u_script], check=False)
-                    except Exception as e:
-                        log(f"Keystroke Cmd + U failed: {e}")
+                        process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, text=True)
+                        process.communicate(input=custom_prompt)
                         
-                    log("Waiting 1.0 second for file modal to fully open...")
-                    time.sleep(1.0)
-                    
-                    # use the same flow to select a file like the Gemini one
-                    def upload_macos_file_dialog(file_path):
-                        escaped_path = file_path.replace('"', '\\"')
-                        script = f"""
-                        set the clipboard to "{escaped_path}"
+                        paste_script = """
+                        tell application "Google Chrome" to activate
+                        delay 0.3
                         tell application "System Events"
-                            keystroke "g" using {{command down, shift down}}
-                            delay 1.0
-                            keystroke "v" using {{command down}}
-                            delay 1.0
-                            keystroke return
-                            delay 1.0
-                            keystroke return
+                            keystroke "v" using command down
                         end tell
                         """
-                        try:
-                            subprocess.run(["osascript", "-e", script], check=False)
-                            return True
-                        except Exception as e:
-                            log(f"AppleScript dialog input failed: {e}")
-                            return False
- 
-                    log("Triggering AppleScript folder path sheet to select file...")
-                    if upload_macos_file_dialog(reference_image):
-                        log("Reference image uploaded successfully via macOS File Dialog AppleScript automation!")
-                    else:
-                        log("Warning: AppleScript keys injection encountered an issue.")
-                        
-                    log("Waiting 5 seconds for file upload to settle...")
-                    time.sleep(5.0)
-                    
-                # Click at '#composer-submit-button' to submit
-                log("Locating and clicking ChatGPT submit button (#composer-submit-button)...")
-                submit_success = False
+                        subprocess.run(["osascript", "-e", paste_script], check=False)
+                        time.sleep(1.0)
+                        entered_text = driver.execute_script("return arguments[0].innerText || arguments[0].textContent;", box)
+                        if entered_text and entered_text.strip() != "":
+                            log("Pasted prompt successfully using macOS clipboard.")
+                            input_success = True
+                    except Exception as e:
+                        log(f"Clipboard paste failed: {e}")
+
+                # Tertiary Fallback: Native send_keys, but replacing newlines with SHIFT+ENTER to prevent auto-submission!
+                if not input_success:
+                    log("All paste methods failed. Typing prompt via native send_keys with SHIFT+ENTER for newlines...")
+                    try:
+                        box.click()
+                        # Type character by character or chunk by chunk to handle newlines safely
+                        parts = custom_prompt.split('\n')
+                        for idx, part in enumerate(parts):
+                            if part:
+                                box.send_keys(part)
+                            if idx < len(parts) - 1:
+                                box.send_keys(Keys.SHIFT + Keys.ENTER)
+                        driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
+                        log("Typed prompt successfully via safe send_keys.")
+                    except Exception as fallback_err:
+                        log(f"Safe send_keys typing failed: {fallback_err}")
+
+                if prepare_only:
+                    log("Prepare-only mode requested. Prompt pasted. Returning success without submitting.")
+                    return {"ok": True, "status": "prepared"}
+
+            # Click at '#composer-submit-button' to submit
+            bypass_submit = False
+            if not bypass_submit:
                 stop_xpath = (
                     "//button[@id='composer-submit-button' and (@aria-label='Stop answering' or @data-testid='stop-button')]"
                 )
+                
+                check_interval = int(_get_config_value("check_interval_seconds", 60))
+                max_checks = int(_get_config_value("max_checks", 3))
+                first_time_waiting = int(_get_config_value("first_time_waiting", check_interval))
+                
+                # Check if ChatGPT is currently generating (Stop button visible)
+                is_generating = False
+                try:
+                    stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                    is_generating = any(b.is_displayed() for b in stop_btns)
+                except Exception:
+                    pass
+                
+                if is_generating:
+                    import time
+                    elapsed = time.time() - last_submit_time if last_submit_time > 0 else 0.0
+                    remaining_wait = first_time_waiting - elapsed
+                    
+                    log(f"ตรวจพบว่า ChatGPT กำลังทำงานอยู่จากรอบก่อนหน้า (รันมาแล้ว {elapsed:.1f} วินาที)...")
+                    
+                    if remaining_wait > 0:
+                        log(f"เริ่มนับถอยหลัง First Time Waiting ทุกๆ 1 วินาที (เหลืออีก {int(remaining_wait)} วินาที จาก {first_time_waiting} วินาที)...")
+                        for s in range(int(remaining_wait), 0, -1):
+                            log(f"First Time Waiting: เหลืออีก {s} วินาที จะเริ่มตรวจสอบปุ่ม Send")
+                            time.sleep(1)
+                    
+                    generation_completed = False
+                    # Check immediately after First Time Waiting completes
+                    try:
+                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                        visible = any(b.is_displayed() for b in stop_btns)
+                        if not visible:
+                            log("ตรวจพบปุ่ม Send พร้อมใช้งานแล้ว (หลังครบ First Time Waiting)")
+                            generation_completed = True
+                    except Exception:
+                        generation_completed = True
+
+                    if not generation_completed:
+                        check_count = 1
+                        for check_idx in range(1, max_checks + 1):
+                            log(f"เริ่มตรวจรอบที่ {check_count} (Interval {check_interval} วินาที)...")
+                            for s in range(check_interval, 0, -1):
+                                log(f"Interval Check ครั้งที่ {check_count}: เหลืออีก {s} วินาที")
+                                time.sleep(1)
+                            
+                            check_count += 1
+                            try:
+                                stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                                visible = any(b.is_displayed() for b in stop_btns)
+                                if not visible:
+                                    log(f"ตรวจพบปุ่ม Send พร้อมใช้งานแล้ว (ในการตรวจสอบครั้งที่ {check_count-1})")
+                                    generation_completed = True
+                                    break
+                                else:
+                                    log(f"ChatGPT ยังคงเจเนอเรตอยู่ (ปุ่ม Stop ยังแสดงอยู่) ผ่านการตรวจสอบแล้ว {check_count-1} ครั้ง")
+                            except Exception:
+                                log("ไม่พบปุ่ม Stop แล้ว ChatGPT เจเนอเรตเสร็จสิ้น")
+                                generation_completed = True
+                                break
+                                
+                        if not generation_completed:
+                            log("เตือน: ตรวจสอบครบตามโควตาแล้วแต่ ChatGPT ยังไม่เสร็จสิ้น จะเริ่มส่ง prompt ถัดไปเลย...")
+                else:
+                    log("ChatGPT ว่างอยู่ (ไม่มีการเจเนอเรตค้างไว้) ดำเนินการส่งได้ทันที...")
+
+                # Now click submit button
+                log("กำลังคลิกปุ่มส่ง prompt (#composer-submit-button)...")
+                submit_success = False
                 for click_attempt in range(3):
                     try:
                         submit_btn = WebDriverWait(driver, 10).until(
                             EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-submit-button"))
                         )
                         submit_btn.click()
+                        submit_success = True
+                        break
                     except Exception:
                         try:
                             driver.execute_script("document.querySelector('#composer-submit-button').click();")
+                            submit_success = True
+                            break
                         except Exception:
                             pass
-                    
-                    # Check for onprocess state for 5 seconds
-                    for sec in range(5):
-                        try:
-                            stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                            visible = any(b.is_displayed() for b in stop_btns)
-                            if visible:
-                                log("Confirmed: ChatGPT generation is onprocess!")
-                                submit_success = True
-                                break
-                        except Exception:
-                            pass
-                        time.sleep(1.0)
-                    
-                    if submit_success:
-                        break
-                    else:
-                        log("Warning: ChatGPT generation did not start yet. Retrying submit...")
-                        
-                if not submit_success:
-                    log("Warning: Submit button click did not transition to onprocess state. Forcing ENTER key...")
+                    time.sleep(1.0)
+
+                # Check if it transitioned to active generation
+                started = False
+                for sec in range(3):
+                    try:
+                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                        if any(b.is_displayed() for b in stop_btns):
+                            started = True
+                            break
+                    except Exception:
+                        pass
+                    time.sleep(1.0)
+
+                if started or submit_success:
+                    log("ยืนยัน: ส่ง prompt เรียบร้อยแล้ว (ChatGPT กำลังทำการเจเนอเรตคำตอบ)!")
+                else:
+                    log("ไม่พบการตอบสนองของปุ่มส่ง กำลังลองส่งด้วยการเคาะปุ่ม Enter...")
                     try:
                         box.send_keys(Keys.ENTER)
                     except Exception:
                         pass
                 
-                # Wait until generation is completed (Stop button disappears)
-                import random
-                delay_seconds = random.uniform(60.0, 135.0)
-                log(f"Waiting {delay_seconds:.1f} seconds (random 1.00 - 2.15 mins) before starting status checks...")
-                time.sleep(delay_seconds)
-                log("Checking if Stop button has disappeared...")
-                start_time = time.time()
-                generation_timeout = 90.0
-                
-                while time.time() - start_time < generation_timeout:
-                    try:
-                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                        visible = any(b.is_displayed() for b in stop_btns)
-                        if not visible:
-                            log(f"ChatGPT generation completed successfully for Run {run_no}/{total_runs}!")
-                            break
-                    except Exception:
-                        log(f"ChatGPT generation completed successfully for Run {run_no}/{total_runs}!")
-                        break
-                    time.sleep(1.5)
-                
-                if run_idx < total_runs - 1:
-                    log("Waiting 10 seconds before next reference image generation...")
-                    time.sleep(10.0)
+                # Update last submit timestamp immediately
+                import time
+                last_submit_time = time.time()
+            else:
+                log("Submit button click and generation wait bypassed for this debug session as requested.")
+                raise RuntimeError("Bypassed submit for debug session. Aborting bulk prompt loop.")
 
-            return {"ok": True}
+            return {"ok": True, "status": "submitted"}
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
             
@@ -2246,6 +2605,291 @@ def browse_file() -> dict[str, Any]:
         log(f"Browse File Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+@app.get("/api/utils/view-image")
+def view_image(path: str) -> FileResponse:
+    import os
+    path = path.strip()
+    if not path or not os.path.exists(path) or not os.path.isfile(path):
+        raise HTTPException(status_code=400, detail="Invalid image path")
+    
+    lower_path = path.lower()
+    valid_extensions = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"]
+    if not any(lower_path.endswith(ext) for ext in valid_extensions):
+        raise HTTPException(status_code=400, detail="File is not a valid image format")
+        
+    return FileResponse(path)
+
+
+@app.get("/api/utils/list-images")
+def list_images(dir_path: str) -> dict[str, Any]:
+    dir_path = dir_path.strip()
+    if not dir_path:
+        return {"images": []}
+    
+    import os
+    if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
+        raise HTTPException(status_code=400, detail="Invalid directory path")
+    
+    valid_extensions = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"]
+    images = []
+    try:
+        for item in sorted(os.listdir(dir_path)):
+            full_path = os.path.join(dir_path, item)
+            if os.path.isfile(full_path) and any(item.lower().endswith(ext) for ext in valid_extensions):
+                images.append({
+                    "name": item,
+                    "path": full_path
+                })
+        return {"images": images}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/utils/import-lakorn-auto")
+def import_lakorn_auto(payload: ImportLakornPayload):
+    import os
+    import re
+    from pathlib import Path
+
+    lakorn_path = payload.lakorn_path.strip()
+    ep_num = payload.ep_num
+    ref_images_dir = payload.ref_images_dir.strip()
+
+    if not lakorn_path or not os.path.exists(lakorn_path) or not os.path.isdir(lakorn_path):
+        raise HTTPException(status_code=400, detail="ไม่พบ Drama Path ที่ระบุ")
+    
+    # 1. Find episode folder inside lakorn_path
+    ep_dir = None
+    # Check different potential naming formats for episode folder
+    for candidate in [str(ep_num), f"{ep_num:02d}", f"EP{ep_num}", f"EP{ep_num:02d}", f"ep{ep_num}", f"ep{ep_num:02d}"]:
+        path = Path(lakorn_path) / candidate
+        if path.exists() and path.is_dir():
+            ep_dir = path
+            break
+            
+    if not ep_dir:
+        # Check folders inside lakorn_path containing the episode number
+        dirs = [d for d in Path(lakorn_path).iterdir() if d.is_dir()]
+        for d in dirs:
+            # Match number exactly or with leading zeroes
+            if re.search(rf"\b0*{ep_num}\b", d.name) or f"ep{ep_num}" in d.name.lower() or f"ep0{ep_num}" in d.name.lower():
+                ep_dir = d
+                break
+                
+    if not ep_dir:
+        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยเลข {ep_num})")
+
+    # 1.5. Find/resolve character sheet directory (2 - Character Sheet)
+    resolved_ref_dir = None
+    ref_candidates = [
+        "2 - Character Sheet", "2-Character Sheet", "Character Sheet", "character sheet", 
+        "2 - CharacterSheet", "2-CharacterSheet", "2_Character_Sheet", "2 - character sheet",
+        "2 - Character_Sheet", "2_Character Sheet"
+    ]
+    # Check inside ep_dir first
+    for candidate in ref_candidates:
+        path = ep_dir / candidate
+        if path.exists() and path.is_dir():
+            resolved_ref_dir = path
+            break
+            
+    # Fallback: scan subdirs of ep_dir for anything containing 'character sheet' case-insensitively
+    if not resolved_ref_dir:
+        try:
+            dirs = [d for d in ep_dir.iterdir() if d.is_dir()]
+            for d in dirs:
+                name_clean = d.name.lower().replace(" ", "").replace("-", "").replace("_", "")
+                if "charactersheet" in name_clean:
+                    resolved_ref_dir = d
+                    break
+        except Exception:
+            pass
+
+    # Fallback: Check inside lakorn_path directly
+    if not resolved_ref_dir:
+        for candidate in ref_candidates:
+            path = Path(lakorn_path) / candidate
+            if path.exists() and path.is_dir():
+                resolved_ref_dir = path
+                break
+
+    # Fallback: scan subdirs of lakorn_path for anything containing 'character sheet' case-insensitively
+    if not resolved_ref_dir:
+        try:
+            dirs = [d for d in Path(lakorn_path).iterdir() if d.is_dir()]
+            for d in dirs:
+                name_clean = d.name.lower().replace(" ", "").replace("-", "").replace("_", "")
+                if "charactersheet" in name_clean:
+                    resolved_ref_dir = d
+                    break
+        except Exception:
+            pass
+
+    if not resolved_ref_dir:
+        raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์รูปภาพตัวละคร (2 - Character Sheet) ในตอนหรือโฟลเดอร์ละคร")
+
+    ref_images_dir = str(resolved_ref_dir)
+
+    # 2. Find prompt directory inside episode folder
+    prompt_dir = None
+    for candidate in ["4 - Image Prompt", "4-Image Prompt", "Image Prompt", "image prompt"]:
+        path = ep_dir / candidate
+        if path.exists() and path.is_dir():
+            prompt_dir = path
+            break
+            
+    if not prompt_dir:
+        # Fallback: scan subdirs for anything containing 'prompt'
+        dirs = [d for d in ep_dir.iterdir() if d.is_dir()]
+        for d in dirs:
+            if "prompt" in d.name.lower():
+                prompt_dir = d
+                break
+                
+    if not prompt_dir:
+        raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์พรอพต์ภาพ (4 - Image Prompt)")
+
+    # Find specific EP subfolder under prompt_dir (e.g. EP01)
+    ep_str = f"EP{ep_num:02d}"
+    ep_prompt_dir = prompt_dir / ep_str
+    if not (ep_prompt_dir.exists() and ep_prompt_dir.is_dir()):
+        ep_prompt_dir = prompt_dir / f"EP{ep_num}"
+    if not (ep_prompt_dir.exists() and ep_prompt_dir.is_dir()):
+        # Try finding folder containing the episode name or number
+        dirs = [d for d in prompt_dir.iterdir() if d.is_dir()]
+        for d in dirs:
+            if f"{ep_num}" in d.name or f"ep" in d.name.lower():
+                ep_prompt_dir = d
+                break
+                
+    if not ep_prompt_dir or not ep_prompt_dir.exists():
+        ep_prompt_dir = prompt_dir # fall back to base prompt dir if no EP subdir
+
+    # List all prompt files
+    prompt_files = sorted([
+        f for f in ep_prompt_dir.iterdir() 
+        if f.is_file() and f.suffix.lower() in (".md", ".txt")
+    ], key=lambda x: x.name)
+
+    # 3. Find character directory inside episode folder
+    char_dir = None
+    for candidate in ["4 - Character Each Scene", "4-Character Each Scene", "Character Each Scene", "character each scene"]:
+        path = ep_dir / candidate
+        if path.exists() and path.is_dir():
+            char_dir = path
+            break
+            
+    if not char_dir:
+        # Fallback: scan subdirs for anything containing 'character' or 'scene'
+        dirs = [d for d in ep_dir.iterdir() if d.is_dir()]
+        for d in dirs:
+            if "character" in d.name.lower() or "scene" in d.name.lower():
+                char_dir = d
+                break
+                
+    if not char_dir:
+        raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์พรอพต์ตัวละครรายฉาก (4 - Character Each Scene)")
+
+    # Find specific EP subfolder under char_dir (e.g. EP01)
+    ep_char_dir = char_dir / ep_str
+    if not (ep_char_dir.exists() and ep_char_dir.is_dir()):
+        ep_char_dir = char_dir / f"EP{ep_num}"
+    if not (ep_char_dir.exists() and ep_char_dir.is_dir()):
+        # Try finding folder containing the episode name or number
+        dirs = [d for d in char_dir.iterdir() if d.is_dir()]
+        for d in dirs:
+            if f"{ep_num}" in d.name or f"ep" in d.name.lower():
+                ep_char_dir = d
+                break
+                
+    if not ep_char_dir or not ep_char_dir.exists():
+        ep_char_dir = char_dir # fall back to base char dir if no EP subdir
+
+    # List all character files
+    char_files = sorted([
+        f for f in ep_char_dir.iterdir() 
+        if f.is_file() and f.suffix.lower() in (".md", ".txt")
+    ], key=lambda x: x.name)
+
+    # 4. Scan the reference images folder to map names to actual paths
+    images = []
+    if ref_images_dir and os.path.exists(ref_images_dir) and os.path.isdir(ref_images_dir):
+        valid_extensions = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
+        for item in sorted(os.listdir(ref_images_dir)):
+            full_path = os.path.join(ref_images_dir, item)
+            if os.path.isfile(full_path) and item.lower().endswith(valid_extensions):
+                images.append({
+                    "name": item,
+                    "path": full_path
+                })
+
+    # Prepare rounds (up to 10 rounds maximum, matching UI limit)
+    prompts_by_round = {str(r): [] for r in range(1, 11)}
+    ref_images_by_round = {str(r): ["", "", "", "", "", "", ""] for r in range(1, 11)}
+
+    # Process prompt files and insert into corresponding rounds
+    for idx, p_file in enumerate(prompt_files):
+        round_num = idx + 1
+        if round_num > 10:
+            break
+        try:
+            content = p_file.read_text(encoding="utf-8")
+            prompts_by_round[str(round_num)] = [content.strip()]
+        except Exception as e:
+            log(f"Error reading prompt file {p_file.name}: {e}")
+
+    # Process character files and match reference images
+    for idx, c_file in enumerate(char_files):
+        round_num = idx + 1
+        if round_num > 10:
+            break
+        try:
+            content = c_file.read_text(encoding="utf-8")
+            lines = content.splitlines()
+            imported_names = []
+            for line in lines:
+                cleaned = line.strip()
+                if not cleaned:
+                    continue
+                # Clean markdown bullet points/numbers
+                cleaned = re.sub(r"^[\s\-\*\+\d\.\#]+", "", cleaned).strip()
+                # Handle markdown link brackets: e.g. [Character Name](...)
+                bracket_match = re.search(r"\[([^\]]+)\]", cleaned)
+                if bracket_match:
+                    cleaned = bracket_match.group(1).strip()
+                if cleaned:
+                    imported_names.append(cleaned)
+
+            # Match names with images
+            matched_paths = []
+            for name in imported_names:
+                name_lower = name.lower()
+                # 1. Exact match with extension
+                matched_img = next((img for img in images if img["name"].lower() == name_lower), None)
+                # 2. Match without extension
+                if not matched_img:
+                    matched_img = next((img for img in images if Path(img["name"]).stem.lower() == name_lower), None)
+                if matched_img:
+                    matched_paths.append(matched_img["path"])
+
+            # Save up to 7 reference images for the round
+            round_refs = matched_paths[:7]
+            while len(round_refs) < 7:
+                round_refs.append("")
+            
+            ref_images_by_round[str(round_num)] = round_refs
+        except Exception as e:
+            log(f"Error reading character file {c_file.name}: {e}")
+
+    return {
+        "ok": True,
+        "prompts_by_round": prompts_by_round,
+        "ref_images_by_round": ref_images_by_round,
+        "ref_images_dir": ref_images_dir,
+        "message": f"นำเข้าข้อมูลและจับคู่ตัวละครสำหรับตอนที่ {ep_num} เรียบร้อยแล้ว (จำนวน {len(prompt_files)} ฉาก)"
+    }
 
 
 @app.get("/")

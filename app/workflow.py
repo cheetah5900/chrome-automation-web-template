@@ -227,15 +227,13 @@ def step2_create_folders(
     if not folder_name or not local_path or not remote_path:
         raise ValueError("folder_name/local_path/remote_path required")
     configs = [
-        {"path": local_path, "folder": folder_name, "subfolders": ["4000x4000", "Download file", "Original", "Preview", "Sticker Set"]},
-        {"path": remote_path, "folder": folder_name, "subfolders": ["4000x4000", "Sticker Set"]},
+        {"path": local_path, "folder": folder_name},
+        {"path": remote_path, "folder": folder_name},
     ]
     for i, c in enumerate(configs):
-        base, name, subs = c["path"], c["folder"], c["subfolders"]
+        base, name = c["path"], c["folder"]
         f = os.path.join(base, name)
         os.makedirs(f, exist_ok=True)
-        for sub in subs:
-            os.makedirs(os.path.join(f, sub), exist_ok=True)
         log(f"Step 2: Path {i+1} ready")
 
 

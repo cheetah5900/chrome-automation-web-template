@@ -66,237 +66,229 @@
 
       <div class="tabs-container">
         <button id="tabImageGenBtn" class="tab-btn active">🖼️ Image Generation</button>
-        <button id="tabWorkflowBtn" class="tab-btn">🤖 Workflow Bot</button>
-        <button id="tabBrowserBtn" class="tab-btn">🌐 Browser Manager</button>
         <button id="tabVideoHelperBtn" class="tab-btn">🎥 Video Helper</button>
-      </div>
-
-      <!-- VIEW 1: BROWSER MANAGER -->
-      <div id="browserManagerView" class="tab-view hidden">
-        <div style="display: flex; flex-direction: column; gap: 20px;">
-          <section class="card" style="width: 100%;">
-            <h2>Custom Prompt Dispatcher</h2>
-            <p class="section-subtitle">พิมพ์คำสั่งของคุณเพื่อสั่งการแท็บเบราว์เซอร์ที่เปิดอยู่อย่างรวดเร็ว</p>
-            <div id="promptList" class="prompt-list"></div>
-            <div class="row" style="align-items: center; flex-wrap: wrap; gap: 10px;">
-              <button id="addPrompt" class="secondary">+ Add Prompt</button>
-              <button id="savePrompts">Save Prompts</button>
-              <label for="importPromptsFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 11px 16px; margin: 0; font-size: 0.9rem; font-weight: 500; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; transition: all 0.2s ease;">📥 Import (.txt)</label>
-              <input type="file" id="importPromptsFile" accept=".txt" style="display: none;" />
-            </div>
-            <p id="dispatchMsg" class="msg"></p>
-          </section>
-        </div>
       </div>
 
       <!-- VIEW 2: IMAGE GENERATION -->
       <div id="imageGenView" class="tab-view">
-        <div class="layout-grid workflow-grid">
-          <!-- Configuration Column -->
-          <div style="display: flex; flex-direction: column; gap: 20px;">
-            <!-- Reference Image Section (Dedicated card) -->
-            <section class="card" style="padding: 20px;">
-              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 4px;">🖼️ Reference Images (Up to 3)</h2>
-              <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">ระบุพาทของรูปภาพอ้างอิงสูงสุด 3 รูปเพื่อส่งสร้างทีละรูปก่อนไปพรอพต์ถัดไป</p>
-              <div class="form-group" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 10px;">
-                <div style="display: flex; flex-direction: column; gap: 6px;">
-                  <label for="cfg_reference_image" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Image 1</label>
-                  <div style="display: flex; gap: 8px; width: 100%;">
-                    <input id="cfg_reference_image" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet 1.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex: 1;" />
-                    <button id="browseRefImgBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Browse...</button>
-                  </div>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 6px;">
-                  <label for="cfg_reference_image_2" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Image 2</label>
-                  <div style="display: flex; gap: 8px; width: 100%;">
-                    <input id="cfg_reference_image_2" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet 2.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex: 1;" />
-                    <button id="browseRefImgBtn2" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Browse...</button>
-                  </div>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 6px;">
-                  <label for="cfg_reference_image_3" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Image 3</label>
-                  <div style="display: flex; gap: 8px; width: 100%;">
-                    <input id="cfg_reference_image_3" placeholder="เช่น /Users/litarcopperkaikem/Downloads/Character Sheet 3.png" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex: 1;" />
-                    <button id="browseRefImgBtn3" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Browse...</button>
-                  </div>
-                </div>
-                <div style="display: flex; gap: 10px; width: 100%; margin-top: 4px;">
-                  <button id="setRefImageDefaultBtn" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">Set Default</button>
-                  <button id="verifyRefImageBtn" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap;">🔍 Verify Files</button>
-                </div>
-              </div>
-            </section>
-
-            <!-- Generation Prompts Section -->
-            <section class="card">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <h2 class="section-title" style="margin-bottom: 0;">🎨 Generation Prompts</h2>
-                <span id="imagePromptCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Prompts</span>
-              </div>
-              <p class="section-subtitle">เพิ่ม/ลด พรอพต์ที่ต้องการส่งไปเจเนอเรทภาพเป็นชุด</p>
-              
-              <!-- Round Selection Tabs -->
-              <div class="prompt-tabs" style="display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
-                <button class="prompt-tab-btn active" data-round="1" style="padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: #fff; cursor: pointer; font-weight: bold;">Round 1</button>
-                <button class="prompt-tab-btn" data-round="2" style="padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">Round 2</button>
-                <button class="prompt-tab-btn" data-round="3" style="padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">Round 3</button>
-              </div>
-              
-              <div id="imagePromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
-              <div class="row" style="align-items: center; flex-wrap: wrap; gap: 10px;">
-                <button id="addImagePromptBtn" class="secondary">+ Add Prompt</button>
-                <button id="saveImagePromptsBtn">Save Prompts</button>
-                <button id="deleteAllImagePromptsBtn" class="secondary" style="background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">🗑️ Delete All</button>
-                <label for="importImagePromptsFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 11px 16px; margin: 0; font-size: 0.9rem; font-weight: 500; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; transition: all 0.2s ease;">📥 Import (.txt)</label>
-                <input type="file" id="importImagePromptsFile" accept=".txt" style="display: none;" />
-              </div>
-              <p id="imagePromptMsg" class="msg"></p>
-            </section>
+        <!-- Drama Auto Import Card -->
+        <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+            <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
+              🎬 ระบบนำเข้าข้อมูลละครอัตโนมัติ (Drama Auto Import)
+            </h2>
           </div>
-
-          <!-- Actions Column -->
-          <div class="actions-column">
-            <section class="card steps-card">
-              <h2 class="section-title">🤖 Image Generation Cockpit</h2>
-              <p class="section-subtitle">รันการเจเนอเรทภาพเป็นชุดบน Gemini หรือจำลองด้วย ChatGPT</p>
-
-              <!-- ChatGPT project links inputs -->
-              <div style="margin: 14px 0; display: flex; flex-direction: column; gap: 10px;">
-                <div>
-                  <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">ChatGPT Project/Chat URL:</label>
-                  <div style="display: flex; gap: 10px; width: 100%;">
-                    <input type="text" id="chatgptUrlInput" placeholder="https://chatgpt.com/g/g-..." style="padding: 10px 14px; flex-grow: 1; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0;" />
-                    <button id="setChatgptUrlDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
-                  </div>
-                </div>
+          <p class="section-subtitle" style="margin-bottom: 16px; font-size: 0.8rem; color: #94a3b8;">
+            ระบบจะดึงพรอพต์จาก "4 - Image Prompt", รายชื่อตัวละครจาก "4 - Character Each Scene" และสแกนรูปภาพจาก "2 - Character Sheet" ภายในโฟลเดอร์ตอนที่ระบุโดยอัตโนมัติ
+          </p>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+            <!-- ละคร Path -->
+            <div style="flex: 2; min-width: 280px; display: flex; flex-direction: column; gap: 6px;">
+              <label for="cfg_lakorn_path" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">ละคร Path</label>
+              <div style="display: flex; gap: 8px;">
+                <input id="cfg_lakorn_path" placeholder="เช่น /Users/litarcopperkaikem/Downloads/drama_data" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; flex: 1;" />
+                <button id="browseLakornPathBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                <button id="setLakornPathDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set default</button>
               </div>
-
-              <div style="display: flex; gap: 12px; margin-top: 12px;">
-                <button class="step-action-btn gemini-btn" id="btn_step3_gemini" style="width: 50%; padding: 14px; font-size: 1rem;">Gemini</button>
-                <button class="step-action-btn secondary" id="btn_step3_chatgpt" style="width: 50%; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366);">ChatGPT</button>
-              </div>
-            </section>
-
-            <!-- Console Card -->
-            <section class="card console-card">
-              <div class="console-header">
-                <h3>📟 Generation Logs Console</h3>
-                <button id="clearImageConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
-              </div>
-              <div id="imageConsole" class="console-box">
-                <div class="console-line system">Waiting for generation to start...</div>
-              </div>
-            </section>
+            </div>
+            <!-- เลขตอนละคร -->
+            <div style="width: 130px; display: flex; flex-direction: column; gap: 6px;">
+              <label for="cfg_lakorn_ep" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">ตอนละคร (เลขเดี่ยว)</label>
+              <input id="cfg_lakorn_ep" placeholder="1" maxlength="1" pattern="[0-9]" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; text-align: center;" />
+            </div>
+            <!-- ปุ่มนำเข้า -->
+            <div style="display: flex; align-items: flex-end;">
+              <button id="btnImportLakornAuto" class="primary" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
+                📥 เพิ่มข้อมูลละคร Auto
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
+        </section>
 
-      <!-- VIEW 3: WORKFLOW BOT -->
-      <div id="workflowBotView" class="tab-view hidden">
-        <div class="layout-grid workflow-grid">
-          <!-- Configuration Column -->
-          <section class="card">
-            <h2 class="section-title">⚙️ Settings</h2>
+        <!-- Row 1: Reference Images & Generation Prompts -->
+        <div class="layout-grid workflow-grid" style="margin-bottom: 20px;">
+          <!-- Reference Image Section (Dedicated card) -->
+          <section class="card" style="padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
+              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0;">🖼️ Reference Images (Up to 7)</h2>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="importCharBatchFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 0; font-size: 0.8rem; font-weight: bold; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; transition: all 0.2s ease;">
+                  📥 Import Batch (.md, .txt)
+                </label>
+                <input type="file" id="importCharBatchFile" accept=".txt,.md" style="display: none;" />
+                <span id="refImagesCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0/7 Images</span>
+              </div>
+            </div>
+            <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">ชี้ไปยังโฟลเดอร์เดียว แล้วเลือกรูปตามลำดับที่ต้องการแนบเข้าไปในระบบ</p>
             
-            <div class="settings-form">
-              <div class="form-group">
-                <label for="cfg_folder_name">Folder Name (ชื่อโฟลเดอร์งาน)</label>
-                <div style="display: flex; gap: 10px; width: 100%;">
-                  <input id="cfg_folder_name" placeholder="เช่น Cute Animal Clipart" style="margin-bottom: 0; flex-grow: 1;" />
-                  <button id="setFolderNameDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+            <div class="form-group" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 12px;">
+              <!-- Folder Path Selector -->
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label for="cfg_ref_images_dir" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Images Folder</label>
+                <div style="display: flex; gap: 8px; width: 100%;">
+                  <input id="cfg_ref_images_dir" placeholder="เช่น /Users/litarcopperkaikem/Downloads/my_ref_images" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex: 1;" />
+                  <button id="browseRefImagesDirBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Browse...</button>
+                  <button id="setRefImagesDirForAllBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Set for all</button>
                 </div>
               </div>
 
-              <div class="form-group">
-                <label for="cfg_local_path">Local Path (ที่เก็บงานในเครื่อง)</label>
-                <div style="display: flex; gap: 10px; width: 100%;">
-                  <input id="cfg_local_path" placeholder="เช่น C:\Files\Project\local work" style="margin-bottom: 0; flex-grow: 1;" />
-                  <button id="setLocalPathDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
-                </div>
+              <!-- Dropdown Image Selector -->
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label for="cfg_ref_image_dropdown" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Select Image to Add</label>
+                <select id="cfg_ref_image_dropdown" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0;">
+                  <option value="">-- No folder scanned yet --</option>
+                </select>
               </div>
 
-              <div class="form-group">
-                <label for="cfg_remote_path">Remote Path (ที่เก็บงานบน Drive)</label>
-                <div style="display: flex; gap: 10px; width: 100%;">
-                  <input id="cfg_remote_path" placeholder="เช่น G:\My Drive\Projects\work" style="margin-bottom: 0; flex-grow: 1;" />
-                  <button id="setRemotePathDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+              <!-- Selected Images Container -->
+              <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
+                <span style="font-size: 0.8rem; color: #c9d1ff; font-weight: 500;">Selected Images (Sequence Order)</span>
+                <div id="selectedRefImagesContainer" style="display: flex; flex-direction: column; gap: 8px; background: rgba(10, 12, 28, 0.4); border: 1px dashed rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 12px; min-height: 80px; justify-content: center;">
+                  <div style="text-align: center; color: rgba(255,255,255,0.4); font-size: 0.85rem; padding: 10px;">No images selected for this round</div>
                 </div>
               </div>
 
             </div>
           </section>
 
-          <!-- Actions Column -->
-          <div class="actions-column">
-            <!-- Automation Stepper Card -->
-            <section class="card steps-card">
-              <h2 class="section-title">🤖 Automation Control Cockpit</h2>
-              <p class="section-subtitle">กดคลิกเพื่อรันขั้นตอนต่างๆ ตามลำดับ workflow ของคุณ</p>
+          <!-- Generation Prompts Section -->
+          <section class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
+              <h2 class="section-title" style="margin-bottom: 0;">🎨 Generation Prompts</h2>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="importGenerationPromptsBatchFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 0; font-size: 0.8rem; font-weight: bold; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; transition: all 0.2s ease;">
+                  📥 Import Batch Rounds (.md, .txt)
+                </label>
+                <input type="file" id="importGenerationPromptsBatchFile" accept=".txt,.md" multiple style="display: none;" />
+                <button id="resetAllRoundsBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; font-weight: bold; border-radius: 20px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0; cursor: pointer; transition: all 0.2s ease;">
+                  🔄 RESET
+                </button>
+                <span id="imagePromptCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Prompts</span>
+              </div>
+            </div>
+            <p class="section-subtitle">เพิ่ม/ลด พรอพต์ที่ต้องการส่งไปเจเนอเรทภาพเป็นชุด</p>
+            
+            <!-- Round Selection Tabs -->
+            <div class="prompt-tabs" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+              <button class="prompt-tab-btn active" data-round="1" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: #fff; cursor: pointer; font-weight: bold;">
+                <input type="checkbox" class="round-active-checkbox" data-round="1" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 1
+              </button>
+              <button class="prompt-tab-btn" data-round="2" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="2" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 2
+              </button>
+              <button class="prompt-tab-btn" data-round="3" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="3" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 3
+              </button>
+              <button class="prompt-tab-btn" data-round="4" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="4" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 4
+              </button>
+              <button class="prompt-tab-btn" data-round="5" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="5" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 5
+              </button>
+              <button class="prompt-tab-btn" data-round="6" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="6" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 6
+              </button>
+              <button class="prompt-tab-btn" data-round="7" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="7" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 7
+              </button>
+              <button class="prompt-tab-btn" data-round="8" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="8" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 8
+              </button>
+              <button class="prompt-tab-btn" data-round="9" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="9" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 9
+              </button>
+              <button class="prompt-tab-btn" data-round="10" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="10" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 10
+              </button>
+            </div>
+            
+            <div id="imagePromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
+            <div class="row" style="align-items: center; flex-wrap: wrap; gap: 10px;">
+              <button id="addImagePromptBtn" class="secondary">+ Add Prompt</button>
+              <button id="saveImagePromptsBtn">Save Prompts</button>
+              <button id="deleteAllImagePromptsBtn" class="secondary" style="background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">🗑️ Delete All</button>
+              <label for="importImagePromptsFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 11px 16px; margin: 0; font-size: 0.9rem; font-weight: 500; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; transition: all 0.2s ease;">📥 Import (.txt, .md)</label>
+              <input type="file" id="importImagePromptsFile" accept=".txt,.md" multiple style="display: none;" />
+            </div>
+            <p id="imagePromptMsg" class="msg"></p>
+          </section>
+        </div>
 
-              <div class="steps-container">
-                <!-- Group 1: Setup and Gen -->
-                <div class="steps-group">
-                  <div class="group-header">🎨 Phase 1: Setup & Data Ingestion</div>
-                  <div class="steps-inner-grid">
-                    <!-- Step 1 -->
-                    <div class="step-box">
-                      <span class="step-num">Step 1</span>
-                      <h4>สร้างโฟลเดอร์</h4>
-                      <button class="step-action-btn" id="btn_step2">Create Folders</button>
-                    </div>
-                    <!-- Step 2 -->
-                    <div class="step-box step-span-2">
-                      <span class="step-num">Step 2</span>
-                      <h4>จัดเก็บรูปภาพ</h4>
-                      <div style="display: flex; gap: 8px; width: 100%;">
-                        <button class="step-action-btn" id="btn_step4" style="flex: 1;">Gemini</button>
-                        <button class="step-action-btn" id="btn_step4_chatgpt" style="flex: 1; background: linear-gradient(135deg, #10a37f, #0d8063);">ChatGPT</button>
-                      </div>
-                    </div>
-                  </div>
+        <!-- Row 2: Controls & Console -->
+        <div class="layout-grid workflow-grid">
+          <!-- Image Generation Cockpit -->
+          <section class="card steps-card">
+            <h2 class="section-title">🤖 Image Generation Cockpit</h2>
+            <p class="section-subtitle">รันการเจเนอเรทภาพเป็นชุดบน Gemini หรือจำลองด้วย ChatGPT</p>
+
+             <!-- ChatGPT project links inputs -->
+            <div style="margin: 14px 0; display: flex; flex-direction: column; gap: 10px;">
+              <div>
+                <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">ChatGPT Project/Chat URL:</label>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <input type="text" id="chatgptUrlInput" placeholder="https://chatgpt.com/g/g-..." style="padding: 10px 14px; flex-grow: 1; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0;" />
+                  <button id="setChatgptUrlDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
                 </div>
-
-                <!-- Group 2: Downloads & Extraction -->
-                <div class="steps-group">
-                  <div class="group-header">📂 Phase 2: Processing & Integration</div>
-                  <div class="steps-inner-grid">
-                    <!-- Step 3 -->
-                    <div class="step-box">
-                      <span class="step-num">Step 3</span>
-                      <h4>แตกไฟล์ Zip</h4>
-                      <button class="step-action-btn" id="btn_step12">Unzip Downloads</button>
-                    </div>
-                    <!-- Step 4 -->
-                    <div class="step-box">
-                      <span class="step-num">Step 4</span>
-                      <h4>รวบรวมไฟล์</h4>
-                      <button class="step-action-btn" id="btn_step13">Download to Local</button>
-                    </div>
-                    <!-- Step 5 -->
-                    <div class="step-box">
-                      <span class="step-num">Step 5</span>
-                      <h4>สำรองไฟล์ขึ้น Drive</h4>
-                      <button class="step-action-btn drive-btn" id="btn_step14">Local to Remote</button>
-                    </div>
-                  </div>
+              </div>
+              <div style="display: flex; gap: 10px; width: 100%; margin-top: 4px;">
+                <div style="flex: 1;">
+                  <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">ChatGPT Mode:</label>
+                  <select id="chatgptChatModeSelect" style="padding: 10px 14px; width: 100%; border-radius: 10px; background: rgba(22, 26, 50, 0.95); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; height: 38px; box-sizing: border-box; cursor: pointer;">
+                    <option value="new">เปิด Project URL เพื่อสร้างแชทใหม่ (New Chat)</option>
+                    <option value="existing">ใช้แชท ChatGPT ที่เปิดใช้งานอยู่เดิม (Active Chat)</option>
+                  </select>
                 </div>
+                <div style="display: flex; align-items: flex-end;">
+                  <button id="setChatgptChatModeDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; height: 38px;">Set Default</button>
+                </div>
+              </div>
+              <div style="display: flex; gap: 10px; width: 100%; margin-top: 4px;">
+                <div style="flex: 1;">
+                  <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">First Time Waiting (วินาที):</label>
+                  <input type="number" id="firstTimeWaitingInput" placeholder="เช่น 60" style="padding: 10px 14px; width: 100%; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; box-sizing: border-box;" />
+                </div>
+                <div style="flex: 1;">
+                  <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Interval (วินาที):</label>
+                  <input type="number" id="checkIntervalInput" placeholder="เช่น 60" style="padding: 10px 14px; width: 100%; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; box-sizing: border-box;" />
+                </div>
+                <div style="flex: 1;">
+                  <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Max Checks (ครั้ง):</label>
+                  <input type="number" id="maxChecksInput" placeholder="เช่น 3" style="padding: 10px 14px; width: 100%; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; box-sizing: border-box;" />
+                </div>
+                <div style="display: flex; align-items: flex-end;">
+                  <button id="setCheckSettingsDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; height: 38px;">Set Default</button>
+                </div>
+              </div>
+            </div>
 
-              </div>
-            </section>
+            <div style="display: flex; gap: 12px; margin-top: 12px;">
+              <button class="step-action-btn gemini-btn" id="btn_step3_gemini" style="width: 50%; padding: 14px; font-size: 1rem;">Gemini</button>
+              <button class="step-action-btn secondary" id="btn_step3_chatgpt" style="width: 50%; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366);">ChatGPT</button>
+            </div>
 
-            <!-- Console Card -->
-            <section class="card console-card">
-              <div class="console-header">
-                <h3>📟 Real-Time Logs Console</h3>
-                <button id="clearConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
-              </div>
-              <div id="ddcmConsole" class="console-box">
-                <div class="console-line system">Waiting for execution to start...</div>
-              </div>
-            </section>
-          </div>
+            <!-- Force Stop Button -->
+            <button class="step-action-btn" id="btn_stop_generation" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">Force Stop Generation</button>
+
+            <!-- Cooldown Tracker Banner -->
+            <div id="cooldownTracker" style="display: none; margin-top: 12px; padding: 12px; border-radius: 10px; background: rgba(237, 137, 54, 0.1); border: 1px solid rgba(237, 137, 54, 0.25); text-align: center; color: #ed8936; font-size: 0.9rem;">
+              ⏳ <b>Cooldown:</b> Round <span id="cooldownRound">-</span> | Remaining: <span id="cooldownTime">-</span> before submitting
+            </div>
+          </section>
+
+          <!-- Console Card -->
+          <section class="card console-card">
+            <div class="console-header">
+              <h3>📟 Generation Logs Console</h3>
+              <button id="clearImageConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
+            </div>
+            <div id="imageConsole" class="console-box">
+              <div class="console-line system">Waiting for generation to start...</div>
+            </div>
+          </section>
         </div>
       </div>
+
+
 
       <!-- VIEW 4: VIDEO HELPER -->
       <div id="videoHelperView" class="tab-view hidden">
@@ -355,8 +347,8 @@
                 </div>
                 <div style="font-size: 0.78rem; color: #8da6ff; background: rgba(141, 166, 255, 0.05); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(141, 166, 255, 0.15); line-height: 1.4;">
                   <strong>Expected Filenames & Structures:</strong><br>
-                  • <strong>Cover Mode:</strong> Video file location is in <code>[numberic_folder_name]/[any .mp4 or .mov file]</code> (just a video, if more, it'll error) and cover image inside folder <code>'cover/'</code>.<br>
-                  • <strong>Combine Mode:</strong> Videos sequentially numbered from 1 (e.g. <code>1_upscale.mp4</code>, <code>2_upscale.mp4</code>, <code>3_upscale.mp4</code>) inside each subfolder.
+                  <span id="videoHelperCoverDesc">Video file location is in <code>[numberic_folder_name]/[any .mp4 or .mov file]</code> (just a video, if more, it'll error) and cover image inside folder <code>'cover/'</code>.</span>
+                  <span id="videoHelperCombineDesc" class="hidden">Videos sequentially numbered from 1 (e.g. <code>1_upscale.mp4</code>, <code>2_upscale.mp4</code>, <code>3_upscale.mp4</code>) inside each subfolder.</span>
                 </div>
               </div>
 

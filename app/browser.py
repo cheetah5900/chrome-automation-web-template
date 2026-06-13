@@ -14,6 +14,18 @@ class BrowserManager:
 
     def get(self) -> BrowserBot:
         with self._lock:
+            if self._bot is not None:
+                try:
+                    # Test session validity
+                    _ = self._bot.driver.window_handles
+                except Exception:
+                    print("Cached BrowserBot session is invalid. Re-creating...")
+                    try:
+                        self._bot.close_browser()
+                    except Exception:
+                        pass
+                    self._bot = None
+
             if self._bot is None:
                 # Find current selected profile's debug port dynamically
                 port = 9222
