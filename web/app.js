@@ -567,6 +567,68 @@ let refImagesDirByRound = {
 let chatgptUrl = '';
 let currentPromptRound = 1;
 let shouldStopGeneration = false;
+
+let countdownInterval = null;
+let cooldownTimeLeft = 0;
+let cooldownMaxTime = 60;
+let cooldownStage = 'idle'; // 'first_wait', 'interval', 'idle'
+let cooldownIntervalVal = 30;
+let cooldownMaxChecks = 3;
+let cooldownCheckCount = 0;
+
+function startFrontendCooldown(firstWait, interval, maxChecks) {
+  stopFrontendCooldown();
+  
+  cooldownTimeLeft = firstWait;
+  cooldownMaxTime = firstWait;
+  cooldownStage = 'first_wait';
+  cooldownIntervalVal = interval;
+  cooldownMaxChecks = maxChecks;
+  cooldownCheckCount = 0;
+  
+  const tracker = document.getElementById('cooldownTracker');
+  const rSpan = document.getElementById('cooldownRound');
+  const tSpan = document.getElementById('cooldownTime');
+  
+  if (tracker) tracker.style.display = 'block';
+  if (rSpan) rSpan.textContent = `First Time Waiting`;
+  if (tSpan) tSpan.textContent = `${cooldownTimeLeft} วินาที`;
+  
+  countdownInterval = setInterval(() => {
+    if (cooldownTimeLeft > 0) {
+      cooldownTimeLeft--;
+      if (tSpan) tSpan.textContent = `${cooldownTimeLeft} วินาที`;
+    } else {
+      if (cooldownStage === 'first_wait') {
+        cooldownStage = 'interval';
+        cooldownCheckCount = 1;
+        cooldownTimeLeft = cooldownIntervalVal;
+        if (rSpan) rSpan.textContent = `Interval (เช็ครอบที่ ${cooldownCheckCount}/${cooldownMaxChecks})`;
+        if (tSpan) tSpan.textContent = `${cooldownTimeLeft} วินาที`;
+      } else if (cooldownStage === 'interval') {
+        if (cooldownCheckCount < cooldownMaxChecks) {
+          cooldownCheckCount++;
+          cooldownTimeLeft = cooldownIntervalVal;
+          if (rSpan) rSpan.textContent = `Interval (เช็ครอบที่ ${cooldownCheckCount}/${cooldownMaxChecks})`;
+          if (tSpan) tSpan.textContent = `${cooldownTimeLeft} วินาที`;
+        } else {
+          if (rSpan) rSpan.textContent = `Interval (เช็ครอบที่ ${cooldownCheckCount}/${cooldownMaxChecks} - เกินเวลา)`;
+          stopFrontendCooldown();
+        }
+      }
+    }
+  }, 1000);
+}
+
+function stopFrontendCooldown() {
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+  cooldownStage = 'idle';
+  const tracker = document.getElementById('cooldownTracker');
+  if (tracker) tracker.style.display = 'none';
+}
 let videoPrefixCover = '';
 let videoPrefixCombine = '';
 let activeVideoMode = 'cover';
@@ -1570,6 +1632,40 @@ function setupLogStream() {
     if (videoHelper && !videoHelper.classList.contains('hidden')) {
       writeConsoleLine(txt, type, 'videoConsole');
     }
+
+    // Cooldown parser and sync
+    if (txt.includes("First Time Waiting: เหลืออีก")) {
+      const match = txt.match(/เหลืออีก\s+(\d+)\s+วินาที/);
+      if (match) {
+        const secs = parseInt(match[1], 10);
+        cooldownStage = 'first_wait';
+        cooldownTimeLeft = secs;
+        const tracker = document.getElementById('cooldownTracker');
+        const rSpan = document.getElementById('cooldownRound');
+        const tSpan = document.getElementById('cooldownTime');
+        if (tracker) tracker.style.display = 'block';
+        if (rSpan) rSpan.textContent = `First Time Waiting`;
+        if (tSpan) tSpan.textContent = `${secs} วินาที`;
+      }
+    } else if (txt.includes("Interval Check ครั้งที่")) {
+      const matchRound = txt.match(/ครั้งที่\s+(\d+)/);
+      const matchSecs = txt.match(/เหลืออีก\s+(\d+)\s+วินาที/);
+      if (matchSecs) {
+        const secs = parseInt(matchSecs[1], 10);
+        const rnd = matchRound ? parseInt(matchRound[1], 10) : cooldownCheckCount;
+        cooldownStage = 'interval';
+        cooldownCheckCount = rnd;
+        cooldownTimeLeft = secs;
+        const tracker = document.getElementById('cooldownTracker');
+        const rSpan = document.getElementById('cooldownRound');
+        const tSpan = document.getElementById('cooldownTime');
+        if (tracker) tracker.style.display = 'block';
+        if (rSpan) rSpan.textContent = `Interval (เช็ครอบที่ ${rnd}/${cooldownMaxChecks})`;
+        if (tSpan) tSpan.textContent = `${secs} วินาที`;
+      }
+    } else if (txt.includes("ตรวจพบปุ่ม Send พร้อมใช้งานแล้ว") || txt.includes("เจเนอเรตเสร็จสิ้น") || txt.includes("ส่ง prompt เรียบร้อยแล้ว") || txt.includes("Completed successfully!") || txt.includes("หยุดการทำงาน")) {
+      stopFrontendCooldown();
+    }
   });
 
   logSource.addEventListener('ping', () => {
@@ -1645,6 +1741,7 @@ function initWorkflowActionListeners() {
   if (stopGenerationBtn) {
     stopGenerationBtn.addEventListener('click', async () => {
       shouldStopGeneration = true;
+      stopFrontendCooldown();
       writeConsoleLine('Force Stop: Requesting immediate cancellation...', 'warning', 'imageConsole');
       stopGenerationBtn.disabled = true;
       stopGenerationBtn.textContent = 'Stopping...';
@@ -2069,7 +2166,7 @@ function initWorkflowActionListeners() {
         writeConsoleLine(`Cooldown: Waiting 10 seconds after previous round before preparing Round ${r}...`, 'info', 'imageConsole');
         for (let s = 10; s > 0; s--) {
           if (shouldStopGeneration) break;
-          if (tSpan) tSpan.textContent = `${s} วินาที`;
+          // if (tSpan) tSpan.textContent = `${s} วินาที`; -- DO NOT OVERWRITE COOLDOWN TIMER
           await new Promise(res => setTimeout(res, 1000));
         }
         if (shouldStopGeneration) break;
@@ -2126,64 +2223,10 @@ function initWorkflowActionListeners() {
           }
         }
 
-        const shouldSplit = hasProcessedAnyRound && isFirstPrompt && (waitSeconds > 10);
+        const shouldSplit = false; // Disable frontend split to let backend handle waiting natively
 
         if (shouldSplit) {
-          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Preparing references and typing prompt (Prepare Only)...`, 'info', 'imageConsole');
-          updateRowStatus(row, 'Preparing...');
-          const prepPayload = { ...basePayload, prepare_only: true };
-          const prepSuccess = await executeStep(endpoint, prepPayload, null, 'imageConsole');
-          if (!prepSuccess) {
-            updateRowStatus(row, 'Failed');
-            writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Failed to prepare. Aborting loop.`, 'error', 'imageConsole');
-            await saveImagePrompts(true);
-            const tracker = document.getElementById('cooldownTracker');
-            if (tracker) tracker.style.display = 'none';
-            if (stopGenerationBtn) stopGenerationBtn.style.display = 'none';
-            btn.classList.remove('loading');
-            btn.disabled = false;
-            return;
-          }
-          updateRowStatus(row, 'Prepared');
-
-          // Wait the remaining cooldown seconds
-          const remainingSeconds = waitSeconds - 10;
-          writeConsoleLine(`Cooldown: Waiting remaining ${remainingSeconds} seconds before sending...`, 'system', 'imageConsole');
-          const rSpan = document.getElementById('cooldownRound');
-          const tSpan = document.getElementById('cooldownTime');
-          if (rSpan) rSpan.textContent = `${r} (Interval รอบที่ ${r - 1} - Prepared)`;
-          for (let s = remainingSeconds; s > 0; s--) {
-            if (shouldStopGeneration) break;
-            if (tSpan) tSpan.textContent = `${s} วินาที`;
-            if (s % 10 === 0 || s <= 5) {
-              writeConsoleLine(`Cooldown: ${s} seconds remaining before submit...`, 'info', 'imageConsole');
-            }
-            await new Promise(res => setTimeout(res, 1000));
-          }
-          if (shouldStopGeneration) {
-            const tracker = document.getElementById('cooldownTracker');
-            if (tracker) tracker.style.display = 'none';
-            break;
-          }
-          const tracker = document.getElementById('cooldownTracker');
-          if (tracker) tracker.style.display = 'none';
-
-          // Now execute the submit
-          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Submitting prompt (Submit Only)...`, 'info', 'imageConsole');
-          updateRowStatus(row, 'Generating...');
-          const submitPayload = { ...basePayload, submit_only: true };
-          const submitSuccess = await executeStep(endpoint, submitPayload, null, 'imageConsole');
-          if (!submitSuccess) {
-            updateRowStatus(row, 'Failed');
-            writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Failed to submit. Aborting loop.`, 'error', 'imageConsole');
-            await saveImagePrompts(true);
-            const tracker = document.getElementById('cooldownTracker');
-            if (tracker) tracker.style.display = 'none';
-            if (stopGenerationBtn) stopGenerationBtn.style.display = 'none';
-            btn.classList.remove('loading');
-            btn.disabled = false;
-            return;
-          }
+          // Dead code, skipped
         } else {
           // Normal direct execution
           writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
@@ -2193,12 +2236,24 @@ function initWorkflowActionListeners() {
             updateRowStatus(row, 'Failed');
             writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Failed to execute. Aborting loop.`, 'error', 'imageConsole');
             await saveImagePrompts(true);
-            const tracker = document.getElementById('cooldownTracker');
-            if (tracker) tracker.style.display = 'none';
+            stopFrontendCooldown();
             if (stopGenerationBtn) stopGenerationBtn.style.display = 'none';
             btn.classList.remove('loading');
             btn.disabled = false;
             return;
+          }
+
+          // Start frontend cooldown tracker on successful submit
+          if (target === 'chatgpt') {
+            const firstWaitInput = document.getElementById('firstTimeWaitingInput');
+            const intervalInput = document.getElementById('checkIntervalInput');
+            const maxChecksInput = document.getElementById('maxChecksInput');
+
+            const firstWait = firstWaitInput ? parseInt(firstWaitInput.value, 10) || 60 : 60;
+            const interval = intervalInput ? parseInt(intervalInput.value, 10) || 30 : 30;
+            const maxChecks = maxChecksInput ? parseInt(maxChecksInput.value, 10) || 3 : 3;
+
+            startFrontendCooldown(firstWait, interval, maxChecks);
           }
         }
 
@@ -2227,8 +2282,7 @@ function initWorkflowActionListeners() {
     } else {
       writeConsoleLine('Bulk Generation: Completed all rounds successfully!', 'success', 'imageConsole');
     }
-    const tracker = document.getElementById('cooldownTracker');
-    if (tracker) tracker.style.display = 'none';
+    stopFrontendCooldown();
     if (stopGenerationBtn) stopGenerationBtn.style.display = 'none';
     btn.classList.remove('loading');
     btn.disabled = false;

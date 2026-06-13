@@ -1806,7 +1806,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                                 break
                                 
                         if not generation_completed:
-                            log("เตือน: ตรวจสอบครบตามโควตาแล้วแต่ ChatGPT ยังไม่เสร็จสิ้น จะเริ่มส่ง prompt ถัดไปเลย...")
+                            log("ข้อผิดพลาด: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ ChatGPT ยังทำงานไม่เสร็จสิ้น")
+                            raise RuntimeError("หยุดการทำงาน: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ปุ่มยังไม่พร้อมใช้งาน")
                 else:
                     log("ChatGPT ว่างอยู่ (ไม่มีการเจเนอเรตค้างไว้) ดำเนินการส่งได้ทันที...")
 
