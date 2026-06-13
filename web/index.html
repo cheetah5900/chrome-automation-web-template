@@ -575,35 +575,29 @@
 
 
   <div id="settingsModal" class="modal hidden">
-    <div class="modal-card">
+    <div class="modal-card" style="max-width: 500px;">
       <div class="modal-head">
-        <h3>API Settings</h3>
+        <h3>ตั้งค่าเว็บไซต์เริ่มต้น Browser 9222</h3>
         <button id="closeSettings" class="secondary">Close</button>
       </div>
 
-      <div class="provider">
-        <label>OpenAI API Key</label>
-        <input id="openaiKey" type="password" placeholder="sk-..." />
-        <button onclick="testProvider('openai', 'openaiKey', 'openaiMsg')">Test OpenAI</button>
-        <p id="openaiMsg" class="msg"></p>
+      <div style="display: flex; flex-direction: column; gap: 12px; margin: 15px 0;">
+        <div>
+          <label style="font-size: 0.85rem; color: #8da6ff; font-weight: 600; display: block; margin-bottom: 4px;">เว็บไซต์เริ่มต้นที่ 1</label>
+          <input id="startupUrl1" type="text" placeholder="เช่น https://google.com" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;" />
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; color: #8da6ff; font-weight: 600; display: block; margin-bottom: 4px;">เว็บไซต์เริ่มต้นที่ 2</label>
+          <input id="startupUrl2" type="text" placeholder="เช่น https://chatgpt.com" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;" />
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; color: #8da6ff; font-weight: 600; display: block; margin-bottom: 4px;">เว็บไซต์เริ่มต้นที่ 3</label>
+          <input id="startupUrl3" type="text" placeholder="เช่น https://gemini.google.com" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;" />
+        </div>
       </div>
 
-      <div class="provider">
-        <label>Gemini API Key</label>
-        <input id="geminiKey" type="password" placeholder="AIza..." />
-        <button onclick="testProvider('gemini', 'geminiKey', 'geminiMsg2')">Test Gemini</button>
-        <p id="geminiMsg2" class="msg"></p>
-      </div>
-
-      <div class="provider">
-        <label>OpenRouter API Key</label>
-        <input id="openrouterKey" type="password" placeholder="sk-or-v1-..." />
-        <button onclick="testProvider('openrouter', 'openrouterKey', 'openrouterMsg')">Test OpenRouter</button>
-        <p id="openrouterMsg" class="msg"></p>
-      </div>
-
-      <button id="saveSettings">Save Settings</button>
-      <p id="settingsMsg" class="msg"></p>
+      <button id="saveSettings" style="width: 100%; padding: 12px; border-radius: 10px; font-weight: bold; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer;">บันทึกการตั้งค่า</button>
+      <p id="settingsMsg" class="msg" style="margin-top: 10px; text-align: center; font-size: 0.9rem;"></p>
     </div>
   </div>
 

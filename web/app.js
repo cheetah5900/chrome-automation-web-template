@@ -69,25 +69,37 @@ let profileCache = [];
 
 async function loadSettings() {
   const data = await jsonFetch('/api/settings');
-  document.getElementById('openaiKey').value = data.openai_api_key || '';
-  document.getElementById('geminiKey').value = data.gemini_api_key || '';
-  document.getElementById('openrouterKey').value = data.openrouter_api_key || '';
+  const urls = data.urls || ['', '', ''];
+  document.getElementById('startupUrl1').value = urls[0] || '';
+  document.getElementById('startupUrl2').value = urls[1] || '';
+  document.getElementById('startupUrl3').value = urls[2] || '';
 }
 
 async function saveSettings() {
   const msg = document.getElementById('settingsMsg');
   msg.classList.remove('error');
+  msg.textContent = '';
   try {
-    await jsonFetch('/api/settings', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const url1 = document.getElementById('startupUrl1').value.trim();
+    const url2 = document.getElementById('startupUrl2').value.trim();
+    const url3 = document.getElementById('startupUrl3').value.trim();
+    const res = await jsonFetch('/api/settings', {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        openai_api_key: document.getElementById('openaiKey').value.trim(),
-        gemini_api_key: document.getElementById('geminiKey').value.trim(),
-        openrouter_api_key: document.getElementById('openrouterKey').value.trim(),
+        urls: [url1, url2, url3]
       }),
     });
-    msg.textContent = 'Settings saved';
-  } catch (e) { msg.textContent = e.message; msg.classList.add('error'); }
+    if (res.ok) {
+      msg.textContent = 'บันทึกเว็บไซต์เริ่มต้นเรียบร้อยแล้ว';
+      await loadProfiles();
+    } else {
+      throw new Error(res.detail || 'บันทึกไม่สำเร็จ');
+    }
+  } catch (e) { 
+    msg.textContent = e.message; 
+    msg.classList.add('error'); 
+  }
 }
 
 function splitUrls(text) { return text.split('\n').map(x => x.trim()).filter(Boolean); }

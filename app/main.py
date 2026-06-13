@@ -51,9 +51,7 @@ class ProviderPayload(BaseModel):
 
 
 class SaveSettingsPayload(BaseModel):
-    openai_api_key: str = ""
-    gemini_api_key: str = ""
-    openrouter_api_key: str = ""
+    urls: list[str] = []
 
 
 class CreateProfilePayload(BaseModel):
@@ -236,14 +234,26 @@ def get_defaults():
 
 @app.get("/api/settings")
 def get_settings():
-    return _read_json(SETTINGS_FILE)
+    data = _profiles_data()
+    profile = next((p for p in data["profiles"] if int(p.get("debug_port", 0)) == 9222), None)
+    urls = profile.get("startup_urls", []) if profile else []
+    while len(urls) < 3:
+        urls.append("")
+    return {"urls": urls[:3]}
 
 
 @app.post("/api/settings")
 def save_settings(payload: SaveSettingsPayload):
-    data = payload.model_dump()
-    _write_json(SETTINGS_FILE, data)
-    return {"ok": True, "message": "Saved runtime/settings.json", "data": data}
+    data = _profiles_data()
+    profile = next((p for p in data["profiles"] if int(p.get("debug_port", 0)) == 9222), None)
+    if not profile:
+        raise HTTPException(status_code=400, detail="ไม่พบ Profile ที่ใช้ debug port 9222")
+    
+    # Clean and normalize urls
+    urls = [u.strip() for u in payload.urls if u.strip()]
+    profile["startup_urls"] = _normalize_urls(urls)
+    _write_json(PROFILES_FILE, data)
+    return {"ok": True, "message": "บันทึกเว็บไซต์เริ่มต้นเรียบร้อยแล้ว", "urls": profile["startup_urls"]}
 
 
 @app.get("/api/config/reference-image/default")
