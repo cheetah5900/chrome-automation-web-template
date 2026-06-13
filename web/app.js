@@ -422,15 +422,18 @@ document.getElementById('profileSelect').addEventListener('change', () => {
 // Tab Switching
 function initTabNavigation() {
   const btnImageGen = document.getElementById('tabImageGenBtn');
+  const btnVideoGen = document.getElementById('tabVideoGenBtn');
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   
   const viewImageGen = document.getElementById('imageGenView');
+  const viewVideoGen = document.getElementById('videoGenView');
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
 
   const tabs = [
     { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
+    { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig }
   ];
@@ -895,6 +898,12 @@ async function loadImagePrompts() {
 
     const maxChecksInput = document.getElementById('maxChecksInput');
     if (maxChecksInput) maxChecksInput.value = config.max_checks || 3;
+
+    // Load lakorn config values
+    const lakornPathInput = document.getElementById('cfg_lakorn_path');
+    if (lakornPathInput) lakornPathInput.value = config.lakorn_path || '';
+    const lakornEpInput = document.getElementById('cfg_lakorn_ep');
+    if (lakornEpInput) lakornEpInput.value = config.lakorn_ep || '';
 
     currentPromptRound = 1;
     document.querySelectorAll('.prompt-tab-btn').forEach(b => {
@@ -2341,10 +2350,18 @@ function initFileImports() {
           }
 
           // Clear existing empty prompts
-          const currentInputs = list.querySelectorAll('.image-prompt-input');
+          const inputSelector = listId === 'videoPromptList' ? '.video-prompt-input' : '.image-prompt-input';
+          const currentInputs = list.querySelectorAll(inputSelector);
           const allEmpty = Array.from(currentInputs).every(inp => inp.value.trim() === '');
           if (allEmpty) {
             list.innerHTML = '';
+            // If it's video and we cleared it, also clear the in-memory array
+            if (listId === 'videoPromptList') {
+              videoPromptsByRound[currentVideoPromptRound] = [];
+              if (videoStatusesByRound[currentVideoPromptRound]) {
+                videoStatusesByRound[currentVideoPromptRound] = [];
+              }
+            }
           }
 
           // Add each file content as one prompt row
@@ -2352,7 +2369,11 @@ function initFileImports() {
             list.appendChild(rowCreator(p));
           });
 
-          updateImageGenButtonsState();
+          if (listId === 'videoPromptList') {
+            updateVideoPromptsBadge();
+          } else {
+            updateImageGenButtonsState();
+          }
           await saveFunc();
 
           showToast(`Imported ${validPrompts.length} prompts successfully!`, 'success');
@@ -2403,6 +2424,7 @@ function initFileImports() {
   };
 
   setupImport('importImagePromptsFile', 'imagePromptList', imagePromptRowTemplate, saveImagePrompts, 'imagePromptMsg', true);
+  setupImport('importVideoPromptsFile', 'videoPromptList', videoPromptRowTemplate, saveVideoPrompts, 'videoPromptMsg', true);
 
   const importCharBatchFile = document.getElementById('importCharBatchFile');
   if (importCharBatchFile) {
@@ -2560,6 +2582,56 @@ function initFileImports() {
     });
   }
 
+  const importVideoPromptsBatchFile = document.getElementById('importVideoPromptsBatchFile');
+  if (importVideoPromptsBatchFile) {
+    importVideoPromptsBatchFile.addEventListener('change', async (e) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      const remainingRounds = 10 - currentVideoPromptRound + 1;
+      if (files.length > remainingRounds) {
+        showToast(`ไม่สามารถนำเข้าได้ เนื่องจากจำนวนไฟล์ (${files.length} ไฟล์) เกินจำนวน Round ที่เหลืออยู่ (เหลือ ${remainingRounds} Round ตั้งแต่ Round ${currentVideoPromptRound} ถึง 10)`, 'error');
+        importVideoPromptsBatchFile.value = '';
+        return;
+      }
+
+      commitCurrentVideoRoundFromDOM();
+
+      const filePromises = Array.from(files).map(file => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const text = evt.target.result;
+            const prompts = [text.trim()].filter(Boolean);
+            resolve({ filename: file.name, prompts });
+          };
+          reader.onerror = () => reject(new Error(`Failed to read file ${file.name}`));
+          reader.readAsText(file);
+        });
+      });
+
+      try {
+        const results = await Promise.all(filePromises);
+        
+        results.forEach((res, index) => {
+          const targetRound = currentVideoPromptRound + index;
+          videoPromptsByRound[targetRound] = res.prompts;
+          videoStatusesByRound[targetRound] = res.prompts.map(() => 'Idle');
+        });
+
+        // Re-render the active round
+        renderVideoPromptsForRound(currentVideoPromptRound);
+        await saveVideoPrompts(true);
+
+        showToast(`นำเข้าพรอพต์สำเร็จทั้งหมด ${results.length} รอบ!`, 'success');
+      } catch (err) {
+        showToast(`เกิดข้อผิดพลาดในการนำเข้า: ${err.message}`, 'error');
+      } finally {
+        importVideoPromptsBatchFile.value = '';
+      }
+    });
+  }
+
   const resetAllRoundsBtn = document.getElementById('resetAllRoundsBtn');
   if (resetAllRoundsBtn) {
     resetAllRoundsBtn.addEventListener('click', async () => {
@@ -2598,6 +2670,549 @@ function initFileImports() {
   });
 }
 
+let videoPromptsByRound = {};
+let videoStatusesByRound = {};
+let currentVideoPromptRound = 1;
+let shouldStopVideoGeneration = false;
+let videoCooldownInterval = null;
+
+async function loadVideoPrompts() {
+  try {
+    const config = await jsonFetch('/api/config');
+
+    for (let r = 1; r <= 10; r++) {
+      const p_key = r === 1 ? 'video_prompts' : `video_prompts_${r}`;
+      const s_key = r === 1 ? 'video_prompt_statuses' : `video_prompt_statuses_${r}`;
+      
+      videoPromptsByRound[r] = (config[p_key] || []).map(x => x.trim()).filter(Boolean);
+      videoStatusesByRound[r] = config[s_key] || [];
+
+      const roundCheckbox = document.querySelector(`.video-round-active-checkbox[data-round="${r}"]`);
+      if (roundCheckbox) {
+        roundCheckbox.checked = config[`video_round_active_${r}`] !== false;
+      }
+    }
+    
+    const flowPath = document.getElementById('cfg_google_flow_path');
+    if (flowPath) flowPath.value = config.google_flow_path || '';
+
+    const waitSecs = document.getElementById('cfg_video_wait_seconds');
+    if (waitSecs) waitSecs.value = config.video_wait_seconds || 60;
+
+    const inputSel = document.getElementById('cfg_video_input_selector');
+    if (inputSel) inputSel.value = config.video_input_selector || '';
+
+    const settingsSel = document.getElementById('cfg_video_settings_selector');
+    if (settingsSel) settingsSel.value = config.video_settings_selector || '';
+
+    const submitSel = document.getElementById('cfg_video_submit_selector');
+    if (submitSel) submitSel.value = config.video_submit_selector || '';
+
+    const lakornPath = document.getElementById('cfg_video_lakorn_path');
+    if (lakornPath) lakornPath.value = config.video_lakorn_path || '';
+
+    const lakornEp = document.getElementById('cfg_video_lakorn_ep');
+    if (lakornEp) lakornEp.value = config.video_lakorn_ep || '';
+
+    currentVideoPromptRound = 1;
+    document.querySelectorAll('.video-prompt-tab-btn').forEach(b => {
+      const isRound1 = b.dataset.round === '1';
+      b.classList.toggle('active', isRound1);
+      b.style.background = isRound1 ? 'rgba(255,255,255,0.05)' : 'transparent';
+      b.style.color = isRound1 ? '#fff' : 'rgba(255,255,255,0.6)';
+      b.style.border = isRound1 ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(255,255,255,0.1)';
+      b.style.fontWeight = isRound1 ? 'bold' : 'normal';
+    });
+    
+    renderVideoPromptsForRound(1);
+  } catch (e) {
+    writeConsoleLine(`Failed to load video prompts: ${e.message}`, 'error', 'videoConsole');
+  }
+}
+
+function renderVideoPromptsForRound(roundNum) {
+  const container = document.getElementById('videoPromptList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const prompts = videoPromptsByRound[roundNum] || [];
+  const statuses = videoStatusesByRound[roundNum] || [];
+
+  if (prompts.length === 0) {
+    prompts.push('');
+    videoPromptsByRound[roundNum] = prompts;
+  }
+
+  prompts.forEach((p, idx) => {
+    const status = statuses[idx] || 'Idle';
+    let statusClass = 'idle';
+    if (status.toLowerCase().includes('failed') || status.toLowerCase().includes('error')) statusClass = 'error';
+    if (status.toLowerCase().includes('success') || status.toLowerCase().includes('done')) statusClass = 'success';
+    if (status.toLowerCase().includes('generating') || status.toLowerCase().includes('running')) statusClass = 'running';
+
+    const row = document.createElement('div');
+    row.className = 'prompt-row';
+    row.style = 'display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; width: 100%;';
+    row.innerHTML = `
+      <div style="padding: 10px; font-weight: bold; font-size: 0.85rem; color: #8da6ff; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; min-width: 30px; text-align: center; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">
+        ${idx + 1}
+      </div>
+      <textarea class="video-prompt-input" placeholder="วาง Animation Prompt ตรงนี้..." style="flex: 1; padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); color: #fff; min-height: 80px; resize: vertical; margin-bottom: 0;">${p}</textarea>
+      <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
+        <span class="status-badge ${statusClass}" style="padding: 6px 12px; font-size: 0.78rem; font-weight: bold; border-radius: 8px; min-width: 90px; text-align: center;">${status}</span>
+        <button class="secondary delete-video-prompt-btn" data-idx="${idx}" style="padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; background: rgba(245, 101, 101, 0.08); border-color: rgba(245, 101, 101, 0.15); color: #f56565; margin: 0; height: auto;">Delete</button>
+      </div>
+    `;
+    
+    const ta = row.querySelector('.video-prompt-input');
+    ta.addEventListener('input', (e) => {
+      videoPromptsByRound[roundNum][idx] = e.target.value;
+    });
+
+    const delBtn = row.querySelector('.delete-video-prompt-btn');
+    delBtn.addEventListener('click', () => {
+      videoPromptsByRound[roundNum].splice(idx, 1);
+      videoStatusesByRound[roundNum].splice(idx, 1);
+      renderVideoPromptsForRound(roundNum);
+    });
+
+    container.appendChild(row);
+  });
+
+  updateVideoPromptsBadge();
+}
+
+function updateVideoPromptsBadge() {
+  const container = document.getElementById('videoPromptList');
+  if (!container) return;
+  const inputs = Array.from(container.querySelectorAll('.video-prompt-input')).map(x => x.value.trim()).filter(Boolean);
+  const badge = document.getElementById('videoPromptsCountBadge');
+  if (badge) {
+    badge.textContent = `${inputs.length} Prompts`;
+  }
+}
+
+async function saveVideoPrompts(silent = false) {
+  const isSilent = silent === true;
+  commitCurrentVideoRoundFromDOM();
+  const msg = document.getElementById('videoPromptMsg');
+  if (!isSilent && msg) {
+    msg.classList.remove('error');
+    msg.textContent = 'Saving...';
+  }
+  try {
+    const currentConfig = await jsonFetch('/api/config');
+    const payload = { 
+      ...currentConfig, 
+    };
+    
+    for (let r = 1; r <= 10; r++) {
+      const p_key = r === 1 ? 'video_prompts' : `video_prompts_${r}`;
+      const s_key = r === 1 ? 'video_prompt_statuses' : `video_prompt_statuses_${r}`;
+      payload[p_key] = videoPromptsByRound[r] || [];
+      payload[s_key] = videoStatusesByRound[r] || [];
+
+      const roundCheckbox = document.querySelector(`.video-round-active-checkbox[data-round="${r}"]`);
+      payload[`video_round_active_${r}`] = roundCheckbox ? roundCheckbox.checked : true;
+    }
+    
+    await jsonFetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!isSilent && msg) {
+      msg.textContent = 'Saved successfully';
+      setTimeout(() => { msg.textContent = ''; }, 2000);
+    }
+  } catch (e) {
+    if (msg) {
+      msg.textContent = `Error: ${e.message}`;
+      msg.classList.add('error');
+    }
+  }
+}
+
+function commitCurrentVideoRoundFromDOM() {
+  const container = document.getElementById('videoPromptList');
+  if (!container) return;
+  const inputs = Array.from(container.querySelectorAll('.video-prompt-input'));
+  videoPromptsByRound[currentVideoPromptRound] = inputs.map(x => x.value);
+}
+
+function videoPromptRowTemplate(val, status = 'Idle') {
+  const row = document.createElement('div');
+  row.className = 'prompt-row';
+  row.style = 'display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; width: 100%;';
+  
+  const roundNum = currentVideoPromptRound;
+  if (!videoPromptsByRound[roundNum]) {
+    videoPromptsByRound[roundNum] = [];
+  }
+  const idx = videoPromptsByRound[roundNum].length;
+  videoPromptsByRound[roundNum].push(val);
+  if (!videoStatusesByRound[roundNum]) {
+    videoStatusesByRound[roundNum] = [];
+  }
+  videoStatusesByRound[roundNum].push(status);
+
+  let statusClass = 'idle';
+  if (status.toLowerCase().includes('failed') || status.toLowerCase().includes('error')) statusClass = 'error';
+  if (status.toLowerCase().includes('success') || status.toLowerCase().includes('done')) statusClass = 'success';
+  if (status.toLowerCase().includes('generating') || status.toLowerCase().includes('running')) statusClass = 'running';
+
+  row.innerHTML = `
+    <div style="padding: 10px; font-weight: bold; font-size: 0.85rem; color: #8da6ff; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; min-width: 30px; text-align: center; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">
+      ${idx + 1}
+    </div>
+    <textarea class="video-prompt-input" placeholder="วาง Animation Prompt ตรงนี้..." style="flex: 1; padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); color: #fff; min-height: 80px; resize: vertical; margin-bottom: 0;">${val}</textarea>
+    <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
+      <span class="status-badge ${statusClass}" style="padding: 6px 12px; font-size: 0.78rem; font-weight: bold; border-radius: 8px; min-width: 90px; text-align: center;">${status}</span>
+      <button class="secondary delete-video-prompt-btn" data-idx="${idx}" style="padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; background: rgba(245, 101, 101, 0.08); border-color: rgba(245, 101, 101, 0.15); color: #f56565; margin: 0; height: auto;">Delete</button>
+    </div>
+  `;
+
+  const ta = row.querySelector('.video-prompt-input');
+  ta.addEventListener('input', (e) => {
+    videoPromptsByRound[roundNum][idx] = e.target.value;
+  });
+
+  const delBtn = row.querySelector('.delete-video-prompt-btn');
+  delBtn.addEventListener('click', () => {
+    videoPromptsByRound[roundNum].splice(idx, 1);
+    videoStatusesByRound[roundNum].splice(idx, 1);
+    renderVideoPromptsForRound(roundNum);
+  });
+
+  return row;
+}
+
+function runVideoCooldown(roundNum, seconds) {
+  return new Promise((resolve) => {
+    stopVideoCooldown();
+    let timeLeft = seconds;
+    const tracker = document.getElementById('videoCooldownTracker');
+    const rSpan = document.getElementById('videoCooldownRound');
+    const tSpan = document.getElementById('videoCooldownTime');
+
+    if (tracker) tracker.style.display = 'block';
+    if (rSpan) rSpan.textContent = roundNum;
+    if (tSpan) tSpan.textContent = `${timeLeft} วินาที`;
+
+    videoCooldownInterval = setInterval(() => {
+      timeLeft--;
+      if (tSpan) tSpan.textContent = `${timeLeft} วินาที`;
+      if (timeLeft <= 0 || shouldStopVideoGeneration) {
+        stopVideoCooldown();
+        resolve();
+      }
+    }, 1000);
+  });
+}
+
+function stopVideoCooldown() {
+  if (videoCooldownInterval) {
+    clearInterval(videoCooldownInterval);
+    videoCooldownInterval = null;
+  }
+  const tracker = document.getElementById('videoCooldownTracker');
+  if (tracker) tracker.style.display = 'none';
+}
+
+function initVideoGenListeners() {
+  document.querySelectorAll('.video-prompt-tab-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      if (e.target.tagName === 'INPUT') return;
+
+      commitCurrentVideoRoundFromDOM();
+      
+      document.querySelectorAll('.video-prompt-tab-btn').forEach(b => {
+        b.classList.remove('active');
+        b.style.background = 'transparent';
+        b.style.color = 'rgba(255,255,255,0.6)';
+        b.style.border = '1px solid rgba(255,255,255,0.1)';
+        b.style.fontWeight = 'normal';
+      });
+
+      btn.classList.add('active');
+      btn.style.background = 'rgba(255,255,255,0.05)';
+      btn.style.color = '#fff';
+      btn.style.border = '1px solid rgba(255,255,255,0.15)';
+      btn.style.fontWeight = 'bold';
+
+      const roundNum = parseInt(btn.dataset.round, 10);
+      currentVideoPromptRound = roundNum;
+      
+      renderVideoPromptsForRound(roundNum);
+    });
+  });
+
+  document.querySelectorAll('.video-round-active-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      saveVideoPrompts(true);
+    });
+  });
+
+  const saveBtn = document.getElementById('saveVideoPromptsBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => saveVideoPrompts(false));
+  }
+
+  const addBtn = document.getElementById('addVideoPromptBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      commitCurrentVideoRoundFromDOM();
+      if (!videoPromptsByRound[currentVideoPromptRound]) {
+        videoPromptsByRound[currentVideoPromptRound] = [];
+      }
+      videoPromptsByRound[currentVideoPromptRound].push('');
+      renderVideoPromptsForRound(currentVideoPromptRound);
+    });
+  }
+
+  const delAllBtn = document.getElementById('deleteAllVideoPromptsBtn');
+  if (delAllBtn) {
+    delAllBtn.addEventListener('click', async () => {
+      const proceed = confirm("คุณต้องการลบพรอพต์ทั้งหมดใน Round ปัจจุบันใช่หรือไม่?");
+      if (!proceed) return;
+      videoPromptsByRound[currentVideoPromptRound] = [];
+      videoStatusesByRound[currentVideoPromptRound] = [];
+      renderVideoPromptsForRound(currentVideoPromptRound);
+      await saveVideoPrompts(true);
+    });
+  }
+
+  const resetBtn = document.getElementById('resetAllVideoRoundsBtn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', async () => {
+      const confirmReset = confirm("คุณต้องการล้างข้อมูลพรอพต์ทั้งหมดในทุก Round ใช่หรือไม่?");
+      if (!confirmReset) return;
+
+      for (let r = 1; r <= 10; r++) {
+        videoPromptsByRound[r] = [];
+        videoStatusesByRound[r] = [];
+      }
+
+      renderVideoPromptsForRound(currentVideoPromptRound);
+      await saveVideoPrompts(true);
+      showToast('ล้างข้อมูลพรอพต์วิดีโอเรียบร้อยแล้ว', 'success');
+    });
+  }
+
+  const clearConsoleBtn = document.getElementById('clearVideoConsoleBtn');
+  if (clearConsoleBtn) {
+    clearConsoleBtn.addEventListener('click', () => {
+      const consoleBox = document.getElementById('videoConsole');
+      if (consoleBox) {
+        consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
+      }
+    });
+  }
+
+  const browseVideoLakornPathBtn = document.getElementById('browseVideoLakornPathBtn');
+  const cfgVideoLakornPathInput = document.getElementById('cfg_video_lakorn_path');
+  if (browseVideoLakornPathBtn && cfgVideoLakornPathInput) {
+    browseVideoLakornPathBtn.addEventListener('click', async () => {
+      try {
+        const res = await jsonFetch('/api/utils/browse-directory');
+        if (res.ok && res.path) {
+          cfgVideoLakornPathInput.value = res.path;
+        }
+      } catch (e) {
+        showToast(`Failed to browse directory: ${e.message}`, 'error');
+      }
+    });
+  }
+
+  const btnImportVideoLakornAuto = document.getElementById('btnImportVideoLakornAuto');
+  if (btnImportVideoLakornAuto) {
+    btnImportVideoLakornAuto.addEventListener('click', async () => {
+      const path = cfgVideoLakornPathInput?.value.trim();
+      const epVal = document.getElementById('cfg_video_lakorn_ep')?.value.trim();
+      if (!path) {
+        showToast('กรุณาระบุ ละคร Path (Video)', 'error');
+        if (cfgVideoLakornPathInput) cfgVideoLakornPathInput.focus();
+        return;
+      }
+      const epNum = parseInt(epVal, 10);
+      if (isNaN(epNum)) {
+        showToast('กรุณาระบุ ตอนละคร (Video)', 'error');
+        const epEl = document.getElementById('cfg_video_lakorn_ep');
+        if (epEl) epEl.focus();
+        return;
+      }
+
+      btnImportVideoLakornAuto.disabled = true;
+      btnImportVideoLakornAuto.textContent = 'กำลังนำเข้า...';
+
+      try {
+        const res = await jsonFetch('/api/utils/import-lakorn-video-auto', {
+          method: 'POST',
+          body: JSON.stringify({ lakorn_path: path, ep_num: epNum })
+        });
+        if (res.ok && res.prompts_by_round) {
+          for (let r = 1; r <= 10; r++) {
+            videoPromptsByRound[r] = res.prompts_by_round[r] || [];
+            videoStatusesByRound[r] = [];
+          }
+          renderVideoPromptsForRound(currentVideoPromptRound);
+          await saveVideoPrompts(true);
+          showToast(res.message || 'นำเข้าพรอพต์วิดีโอสำเร็จ', 'success');
+        }
+      } catch (e) {
+        showToast(`นำเข้าพรอพต์วิดีโอไม่สำเร็จ: ${e.message}`, 'error');
+      } finally {
+        btnImportVideoLakornAuto.disabled = false;
+        btnImportVideoLakornAuto.textContent = '📥 เพิ่มข้อมูลละคร Auto';
+      }
+    });
+  }
+
+  const setupSetDefaultBtn = (btnId, inputId, configKey, successMsg) => {
+    const btn = document.getElementById(btnId);
+    const input = document.getElementById(inputId);
+    if (btn && input) {
+      btn.addEventListener('click', async () => {
+        const val = input.value.trim();
+        try {
+          const res = await jsonFetch('/api/config/set-default', {
+            method: 'POST',
+            body: JSON.stringify({ key: configKey, value: val })
+          });
+          if (res.ok) {
+            showToast(successMsg, 'success');
+          }
+        } catch (e) {
+          showToast(`Failed to set default: ${e.message}`, 'error');
+        }
+      });
+    }
+  };
+
+  setupSetDefaultBtn('setGoogleFlowPathDefaultBtn', 'cfg_google_flow_path', 'google_flow_path', 'ตั้งค่า Google Flow Path เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+  setupSetDefaultBtn('setVideoWaitSecondsDefaultBtn', 'cfg_video_wait_seconds', 'video_wait_seconds', 'ตั้งค่าเวลารอเป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+  setupSetDefaultBtn('setVideoInputSelectorDefaultBtn', 'cfg_video_input_selector', 'video_input_selector', 'ตั้งค่า CSS Selector ช่องป้อนพรอพต์เรียบร้อยแล้ว');
+  setupSetDefaultBtn('setVideoSettingsSelectorDefaultBtn', 'cfg_video_settings_selector', 'video_settings_selector', 'ตั้งค่า CSS Selector ปุ่มตั้งค่าเรียบร้อยแล้ว');
+  setupSetDefaultBtn('setVideoSubmitSelectorDefaultBtn', 'cfg_video_submit_selector', 'video_submit_selector', 'ตั้งค่า CSS Selector ปุ่มส่งพรอพต์เรียบร้อยแล้ว');
+  setupSetDefaultBtn('setVideoLakornPathDefaultBtn', 'cfg_video_lakorn_path', 'video_lakorn_path', 'ตั้งค่า ละคร Path (Video) เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+  setupSetDefaultBtn('setVideoLakornEpDefaultBtn', 'cfg_video_lakorn_ep', 'video_lakorn_ep', 'ตั้งค่า ตอนละคร (Video) เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+
+  const btnRunGoogleFlow = document.getElementById('btnRunGoogleFlow');
+  const btnStopVideoGeneration = document.getElementById('btnStopVideoGeneration');
+
+  if (btnRunGoogleFlow) {
+    btnRunGoogleFlow.addEventListener('click', async () => {
+      const googleFlowPathVal = document.getElementById('cfg_google_flow_path')?.value.trim() || '';
+      const inputSelectorVal = document.getElementById('cfg_video_input_selector')?.value.trim() || '';
+      const settingsSelectorVal = document.getElementById('cfg_video_settings_selector')?.value.trim() || '';
+      const submitSelectorVal = document.getElementById('cfg_video_submit_selector')?.value.trim() || '';
+      const waitSecondsVal = parseInt(document.getElementById('cfg_video_wait_seconds')?.value.trim() || '60', 10);
+
+      let activeRounds = [];
+      for (let r = 1; r <= 10; r++) {
+        const checkbox = document.querySelector(`.video-round-active-checkbox[data-round="${r}"]`);
+        if (checkbox && checkbox.checked) {
+          activeRounds.push(r);
+        }
+      }
+
+      if (activeRounds.length === 0) {
+        showToast('ไม่มี Round ไหนเปิดทำงานอยู่เลย กรุณาเลือกอย่างน้อย 1 Round', 'error');
+        return;
+      }
+
+      btnRunGoogleFlow.disabled = true;
+      btnRunGoogleFlow.textContent = 'กำลังทำงาน...';
+      if (btnStopVideoGeneration) btnStopVideoGeneration.style.display = 'block';
+      shouldStopVideoGeneration = false;
+
+      writeConsoleLine('=== เริ่มต้นการทำงาน Google Flow Automation ===', 'system', 'videoConsole');
+
+      const cooldownTracker = document.getElementById('videoCooldownTracker');
+      if (cooldownTracker) cooldownTracker.style.display = 'none';
+
+      try {
+        for (let idx = 0; idx < activeRounds.length; idx++) {
+          const r = activeRounds[idx];
+          if (shouldStopVideoGeneration) {
+            writeConsoleLine('การทำงานถูกบังคับให้หยุด (Force Stopped)', 'warning', 'videoConsole');
+            break;
+          }
+
+          commitCurrentVideoRoundFromDOM();
+          const prompts = videoPromptsByRound[r] || [];
+          const activePrompts = prompts.map(x => x.trim()).filter(Boolean);
+
+          if (activePrompts.length === 0) {
+            writeConsoleLine(`[Round ${r}] ไม่มีพรอพต์ทำงาน ข้าม...`, 'warning', 'videoConsole');
+            continue;
+          }
+
+          writeConsoleLine(`[Round ${r}] เริ่มส่งพรอพต์จำนวน ${activePrompts.length} ข้อความ...`, 'info', 'videoConsole');
+          
+          videoStatusesByRound[r] = activePrompts.map(() => 'Idle');
+          renderVideoPromptsForRound(r);
+
+          for (let pIdx = 0; pIdx < activePrompts.length; pIdx++) {
+            if (shouldStopVideoGeneration) break;
+
+            const p = activePrompts[pIdx];
+            writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] กำลังส่งพรอพต์: "${p}"`, 'info', 'videoConsole');
+            
+            videoStatusesByRound[r][pIdx] = 'Generating...';
+            renderVideoPromptsForRound(r);
+
+            const success = await executeStep('/api/step/video-gen', {
+              prompt: p,
+              round_idx: r,
+              google_flow_path: googleFlowPathVal,
+              video_input_selector: inputSelectorVal,
+              video_settings_selector: settingsSelectorVal,
+              video_submit_selector: submitSelectorVal,
+              video_wait_seconds: waitSecondsVal
+            }, null, 'videoConsole');
+
+            if (!success) {
+              videoStatusesByRound[r][pIdx] = 'Failed';
+              renderVideoPromptsForRound(r);
+              writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] ส่งไม่สำเร็จ บังคับหยุดการทำงาน`, 'error', 'videoConsole');
+              shouldStopVideoGeneration = true;
+              break;
+            }
+
+            videoStatusesByRound[r][pIdx] = 'Sent / Cooldown';
+            renderVideoPromptsForRound(r);
+
+            await runVideoCooldown(r, waitSecondsVal);
+          }
+
+          if (shouldStopVideoGeneration) break;
+        }
+
+        writeConsoleLine('=== เสร็จสิ้นการทำงานทั้งหมด ===', 'success', 'videoConsole');
+      } catch (e) {
+        writeConsoleLine(`เกิดข้อผิดพลาดในการทำงาน: ${e.message}`, 'error', 'videoConsole');
+      } finally {
+        btnRunGoogleFlow.disabled = false;
+        btnRunGoogleFlow.textContent = '▶️ RUN GOOGLE FLOW AUTOMATION';
+        if (btnStopVideoGeneration) btnStopVideoGeneration.style.display = 'none';
+        
+        await saveVideoPrompts(true);
+      }
+    });
+  }
+
+  if (btnStopVideoGeneration) {
+    btnStopVideoGeneration.addEventListener('click', () => {
+      shouldStopVideoGeneration = true;
+      btnStopVideoGeneration.textContent = 'กำลังหยุดการทำงาน...';
+      btnStopVideoGeneration.disabled = true;
+      stopVideoCooldown();
+    });
+  }
+}
+
 // Initial setup on load
 initModal();
 loadSettings();
@@ -2607,6 +3222,7 @@ renderVideoHelperBatchRows();
 initTabNavigation();
 initWorkflowActionListeners();
 initFileImports();
+initVideoGenListeners();
 setupLogStream();
 
 // Start periodic real-time status check every 3 seconds

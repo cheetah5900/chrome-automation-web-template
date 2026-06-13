@@ -66,6 +66,7 @@
 
       <div class="tabs-container">
         <button id="tabImageGenBtn" class="tab-btn active">🖼️ Image Generation</button>
+        <button id="tabVideoGenBtn" class="tab-btn">🎬 Video Generation</button>
         <button id="tabVideoHelperBtn" class="tab-btn">🎥 Video Helper</button>
       </div>
 
@@ -118,10 +119,6 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
               <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0;">🖼️ Reference Images (Up to 7)</h2>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <label for="importCharBatchFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 0; font-size: 0.8rem; font-weight: bold; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; transition: all 0.2s ease;">
-                  📥 Import Batch (.md, .txt)
-                </label>
-                <input type="file" id="importCharBatchFile" accept=".txt,.md" style="display: none;" />
                 <span id="refImagesCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0/7 Images</span>
               </div>
             </div>
@@ -288,10 +285,172 @@
               <div class="console-line system">Waiting for generation to start...</div>
             </div>
           </section>
+      </div>
+    </div>
+
+      <!-- VIEW 3: VIDEO GENERATION (GOOGLE FLOW) -->
+      <div id="videoGenView" class="tab-view hidden">
+        <!-- Action Row -->
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+          <button id="resetAllVideoRoundsBtn" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; border-radius: 20px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0; cursor: pointer; transition: all 0.2s ease;">
+            🔄 RESET ALL
+          </button>
+        </div>
+
+        <!-- Drama Auto Import Card -->
+        <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+            <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
+              🎬 ระบบนำเข้าข้อมูลละครอัตโนมัติ (Drama Video Auto Import)
+            </h2>
+          </div>
+          <p class="section-subtitle" style="margin-bottom: 16px; font-size: 0.8rem; color: #94a3b8;">
+            ระบบจะดึงพรอพต์ภาพเคลื่อนไหวจากโฟลเดอร์ "4 - Animation Prompt" ภายในตอนละครที่ระบุโดยอัตโนมัติ
+          </p>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+            <!-- ละคร Path -->
+            <div style="flex: 2; min-width: 280px; display: flex; flex-direction: column; gap: 6px;">
+              <label for="cfg_video_lakorn_path" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">ละคร Path (Video)</label>
+              <div style="display: flex; gap: 8px;">
+                <input id="cfg_video_lakorn_path" placeholder="เช่น /Users/litarcopperkaikem/Downloads/drama_data" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; flex: 1;" />
+                <button id="browseVideoLakornPathBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                <button id="setVideoLakornPathDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set default</button>
+              </div>
+            </div>
+            <!-- เลขตอนละคร -->
+            <div style="flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 6px;">
+              <label for="cfg_video_lakorn_ep" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">ตอนละคร (เลขเดี่ยว)</label>
+              <div style="display: flex; gap: 8px;">
+                <input id="cfg_video_lakorn_ep" placeholder="1" maxlength="1" pattern="[0-9]" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; text-align: center; flex: 1;" />
+                <button id="setVideoLakornEpDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set default</button>
+              </div>
+            </div>
+            <!-- ปุ่มนำเข้า -->
+            <div style="display: flex; align-items: flex-end;">
+              <button id="btnImportVideoLakornAuto" class="primary" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
+                📥 เพิ่มข้อมูลละคร Auto
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Main Layout Grid -->
+        <div class="layout-grid workflow-grid" style="margin-bottom: 20px;">
+          <!-- Left Column: Animation Prompts -->
+          <section class="card" style="padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
+              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0;">🎬 Animation Prompts (Rounds 1-10)</h2>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="importVideoPromptsBatchFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 0; font-size: 0.8rem; font-weight: bold; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; transition: all 0.2s ease;">
+                  📥 Import Batch Rounds (.md, .txt)
+                </label>
+                <input type="file" id="importVideoPromptsBatchFile" accept=".txt,.md" multiple style="display: none;" />
+                <span id="videoPromptsCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Prompts</span>
+              </div>
+            </div>
+            <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">เพิ่ม/ลด พรอพต์ภาพเคลื่อนไหวที่จะส่งไปเจเนอเรทในแต่ละ Round</p>
+
+            <!-- Round Selection Tabs -->
+            <div class="prompt-tabs" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+              <button class="video-prompt-tab-btn active" data-round="1" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: #fff; cursor: pointer; font-weight: bold;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="1" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 1
+              </button>
+              <button class="video-prompt-tab-btn" data-round="2" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="2" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 2
+              </button>
+              <button class="video-prompt-tab-btn" data-round="3" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="3" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 3
+              </button>
+              <button class="video-prompt-tab-btn" data-round="4" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="4" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 4
+              </button>
+              <button class="video-prompt-tab-btn" data-round="5" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="5" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 5
+              </button>
+              <button class="video-prompt-tab-btn" data-round="6" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="6" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 6
+              </button>
+              <button class="video-prompt-tab-btn" data-round="7" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="7" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 7
+              </button>
+              <button class="video-prompt-tab-btn" data-round="8" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="8" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 8
+              </button>
+              <button class="video-prompt-tab-btn" data-round="9" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="9" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 9
+              </button>
+              <button class="video-prompt-tab-btn" data-round="10" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="video-round-active-checkbox" data-round="10" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 10
+              </button>
+            </div>
+
+            <!-- List of Video Prompts for current active round -->
+            <div id="videoPromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
+            <div class="row" style="align-items: center; flex-wrap: wrap; gap: 10px;">
+              <button id="addVideoPromptBtn" class="secondary">+ Add Prompt</button>
+              <button id="saveVideoPromptsBtn">Save Prompts</button>
+              <button id="deleteAllVideoPromptsBtn" class="secondary" style="background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">🗑️ Delete All</button>
+              <label for="importVideoPromptsFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 11px 16px; margin: 0; font-size: 0.9rem; font-weight: 500; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; transition: all 0.2s ease;">📥 Import (.txt, .md)</label>
+              <input type="file" id="importVideoPromptsFile" accept=".txt,.md" multiple style="display: none;" />
+            </div>
+            <p id="videoPromptMsg" class="msg"></p>
+          </section>
+        </div>
+
+        <!-- Row 2: Controls & Console -->
+        <div class="layout-grid workflow-grid">
+          <!-- Video Generation Cockpit -->
+          <section class="card steps-card" style="padding: 20px;">
+            <h2 class="section-title">🤖 Google Flow Automation Cockpit</h2>
+            <p class="section-subtitle">รันการส่งพรอพต์เพื่อสร้างวิดีโอบน Google Flow อัตโนมัติ</p>
+
+            <div style="margin: 14px 0; display: flex; flex-direction: column; gap: 12px;">
+              <!-- Google Flow URL -->
+              <div>
+                <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Google Flow Project Path/URL:</label>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <input type="text" id="cfg_google_flow_path" placeholder="https://vids.google.com/..." style="padding: 10px 14px; flex-grow: 1; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0;" />
+                  <button id="setGoogleFlowPathDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
+              </div>
+
+              <!-- Wait time input -->
+              <div style="max-width: 350px; width: 100%;">
+                <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Wait Time หลังส่ง Prompt (วินาที):</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="number" id="cfg_video_wait_seconds" placeholder="60" style="padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; width: 100%;" />
+                  <button id="setVideoWaitSecondsDefaultBtn" class="secondary" style="padding: 10px 12px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Run Control Buttons -->
+            <div style="display: flex; gap: 12px; width: 100%; margin-top: 14px;">
+              <button id="btnRunGoogleFlow" class="primary" style="flex: 1; padding: 14px; font-size: 1.05rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
+                ▶️ RUN GOOGLE FLOW AUTOMATION
+              </button>
+            </div>
+
+            <button class="step-action-btn" id="btnStopVideoGeneration" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">Force Stop Generation</button>
+
+            <!-- Cooldown Tracker Banner (Video) -->
+            <div id="videoCooldownTracker" style="display: none; margin-top: 12px; padding: 12px; border-radius: 10px; background: rgba(237, 137, 54, 0.1); border: 1px solid rgba(237, 137, 54, 0.25); text-align: center; color: #ed8936; font-size: 0.9rem;">
+              ⏳ <b>Cooldown:</b> Round <span id="videoCooldownRound">-</span> | Remaining: <span id="videoCooldownTime">-</span> before next round
+            </div>
+          </section>
+
+          <!-- Console Card -->
+          <section class="card console-card">
+            <div class="console-header">
+              <h3>📟 Video Generation Logs Console</h3>
+              <button id="clearVideoConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
+            </div>
+            <div id="videoConsole" class="console-box">
+              <div class="console-line system">Waiting for video generation to start...</div>
+            </div>
+          </section>
         </div>
       </div>
-
-
 
       <!-- VIEW 4: VIDEO HELPER -->
       <div id="videoHelperView" class="tab-view hidden">

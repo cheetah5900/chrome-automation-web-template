@@ -91,6 +91,21 @@ class ImportLakornPayload(BaseModel):
     ref_images_dir: str = ""
 
 
+class ImportLakornVideoPayload(BaseModel):
+    lakorn_path: str
+    ep_num: int
+
+
+class VideoGenStepPayload(BaseModel):
+    prompt: str
+    round_idx: int
+    google_flow_path: str = ""
+    video_input_selector: str = ""
+    video_settings_selector: str = ""
+    video_submit_selector: str = ""
+    video_wait_seconds: int = 60
+
+
 
 class PromptDispatchPayload(BaseModel):
     prompt: str = ""
@@ -921,6 +936,15 @@ def _default_config() -> dict[str, Any]:
             "reference_image_3": "",
             "video_prefix_cover": "",
             "video_prefix_combine": "",
+            "lakorn_path": "",
+            "lakorn_ep": "",
+            "google_flow_path": "",
+            "video_wait_seconds": 60,
+            "video_input_selector": "",
+            "video_settings_selector": "",
+            "video_submit_selector": "",
+            "video_lakorn_path": "",
+            "video_lakorn_ep": "",
         }
     else:
         h = os.path.expanduser("~")
@@ -957,6 +981,15 @@ def _default_config() -> dict[str, Any]:
             "reference_image_3": "",
             "video_prefix_cover": "",
             "video_prefix_combine": "",
+            "lakorn_path": "",
+            "lakorn_ep": "",
+            "google_flow_path": "",
+            "video_wait_seconds": 60,
+            "video_input_selector": "",
+            "video_settings_selector": "",
+            "video_submit_selector": "",
+            "video_lakorn_path": "",
+            "video_lakorn_ep": "",
         }
 
     # Dynamically ensure all 10 rounds are initialized in config
@@ -967,6 +1000,17 @@ def _default_config() -> dict[str, Any]:
             res[p_key] = []
         if s_key not in res:
             res[s_key] = []
+
+        vp_key = "video_prompts" if r == 1 else f"video_prompts_{r}"
+        vs_key = "video_prompt_statuses" if r == 1 else f"video_prompt_statuses_{r}"
+        if vp_key not in res:
+            res[vp_key] = []
+        if vs_key not in res:
+            res[vs_key] = []
+
+        vactive_key = f"video_round_active_{r}"
+        if vactive_key not in res:
+            res[vactive_key] = True
             
         for i in range(1, 8):
             ref_key = f"reference_image_round_{r}_{i}"
@@ -983,6 +1027,7 @@ def _default_config() -> dict[str, Any]:
 
 
 def log(msg: str) -> None:
+    print(msg, flush=True)
     log_bus.publish(msg)
 
 
@@ -2891,6 +2936,402 @@ def import_lakorn_auto(payload: ImportLakornPayload):
         "ref_images_dir": ref_images_dir,
         "message": f"นำเข้าข้อมูลและจับคู่ตัวละครสำหรับตอนที่ {ep_num} เรียบร้อยแล้ว (จำนวน {len(prompt_files)} ฉาก)"
     }
+
+
+@app.post("/api/utils/import-lakorn-video-auto")
+def import_lakorn_video_auto(payload: ImportLakornVideoPayload):
+    import os
+    import re
+    from pathlib import Path
+
+    lakorn_path = payload.lakorn_path.strip()
+    ep_num = payload.ep_num
+
+    if not lakorn_path or not os.path.exists(lakorn_path) or not os.path.isdir(lakorn_path):
+        raise HTTPException(status_code=400, detail="ไม่พบ Drama Path ที่ระบุ")
+    
+    # 1. Find episode folder inside lakorn_path
+    ep_dir = None
+    for candidate in [str(ep_num), f"{ep_num:02d}", f"EP{ep_num}", f"EP{ep_num:02d}", f"ep{ep_num}", f"ep{ep_num:02d}"]:
+        path = Path(lakorn_path) / candidate
+        if path.exists() and path.is_dir():
+            ep_dir = path
+            break
+            
+    if not ep_dir:
+        dirs = [d for d in Path(lakorn_path).iterdir() if d.is_dir()]
+        for d in dirs:
+            if re.search(rf"\b0*{ep_num}\b", d.name) or f"ep{ep_num}" in d.name.lower() or f"ep0{ep_num}" in d.name.lower():
+                ep_dir = d
+                break
+                
+    if not ep_dir:
+        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยเลข {ep_num})")
+
+    # 2. Find animation prompt directory inside episode folder
+    prompt_dir = None
+    for candidate in ["4 - Animation Prompt", "4-Animation Prompt", "Animation Prompt", "animation prompt", "4 - Video Prompt", "Video Prompt", "video prompt"]:
+        path = ep_dir / candidate
+        if path.exists() and path.is_dir():
+            prompt_dir = path
+            break
+            
+    if not prompt_dir:
+        dirs = [d for d in ep_dir.iterdir() if d.is_dir()]
+        for d in dirs:
+            name_lower = d.name.lower()
+            if "prompt" in name_lower and ("animation" in name_lower or "video" in name_lower):
+                prompt_dir = d
+                break
+        if not prompt_dir:
+            for d in dirs:
+                if "prompt" in d.name.lower():
+                    prompt_dir = d
+                    break
+                    
+    if not prompt_dir:
+        raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์พรอพต์ภาพเคลื่อนไหว (4 - Animation Prompt)")
+
+    # Find specific EP subfolder under prompt_dir (e.g. EP01)
+    ep_str = f"EP{ep_num:02d}"
+    ep_prompt_dir = prompt_dir / ep_str
+    if not (ep_prompt_dir.exists() and ep_prompt_dir.is_dir()):
+        ep_prompt_dir = prompt_dir / f"EP{ep_num}"
+    if not (ep_prompt_dir.exists() and ep_prompt_dir.is_dir()):
+        dirs = [d for d in prompt_dir.iterdir() if d.is_dir()]
+        for d in dirs:
+            if f"{ep_num}" in d.name or f"ep" in d.name.lower():
+                ep_prompt_dir = d
+                break
+                
+    if not ep_prompt_dir or not ep_prompt_dir.exists():
+        ep_prompt_dir = prompt_dir
+
+    # List all prompt files
+    prompt_files = sorted([
+        f for f in ep_prompt_dir.iterdir() 
+        if f.is_file() and f.suffix.lower() in (".md", ".txt")
+    ], key=lambda x: x.name)
+
+    prompts_by_round = {str(r): [] for r in range(1, 11)}
+
+    for idx, p_file in enumerate(prompt_files):
+        round_num = idx + 1
+        if round_num > 10:
+            break
+        try:
+            content = p_file.read_text(encoding="utf-8")
+            prompts_by_round[str(round_num)] = [content.strip()]
+        except Exception as e:
+            log(f"Error reading video prompt file {p_file.name}: {e}")
+
+    return {
+        "ok": True,
+        "prompts_by_round": prompts_by_round,
+        "message": f"นำเข้าข้อมูลพรอพต์วิดีโอสำหรับตอนที่ {ep_num} เรียบร้อยแล้ว (จำนวน {len(prompt_files)} ฉาก)"
+    }
+
+
+@app.post("/api/step/video-gen")
+def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
+    _activate_chrome()
+    prompt = payload.prompt.strip()
+    round_idx = payload.round_idx
+    google_flow_path = payload.google_flow_path.strip()
+    video_input_selector = payload.video_input_selector.strip()
+    video_settings_selector = payload.video_settings_selector.strip()
+    video_submit_selector = payload.video_submit_selector.strip()
+    video_wait_seconds = payload.video_wait_seconds
+
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    import time
+
+    bot = None
+    try:
+        bot = browser_manager.get()
+        _ = bot.driver.window_handles
+    except Exception as e:
+        log(f"Warning: Browser session check failed ({e}). Recreating browser session...")
+        browser_manager.close()
+        bot = browser_manager.get()
+        
+    driver = bot.driver
+
+    # 1. Navigate to Google Flow path if not already there
+    if google_flow_path:
+        current_url = ""
+        try:
+            current_url = driver.current_url
+        except Exception:
+            pass
+            
+        if google_flow_path.lower() not in current_url.lower():
+            log(f"กำลังนำทางไปยัง Google Flow: {google_flow_path}")
+            driver.get(google_flow_path)
+            time.sleep(5.0)
+
+    # Bring Chrome window to front
+    _activate_chrome()
+
+    # 1.5. Run Google Flow Configuration Sequence (Steps 2-8)
+    def click_by_xpath(xpath: str, description: str, timeout: int = 15):
+        log(f"[กำลังค้นหาปุ่ม] {description} (XPath: {xpath})")
+        try:
+            elem = WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.XPATH, xpath))
+            )
+            # เลื่อนองค์ประกอบให้อยู่ในหน้าจอ
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
+            time.sleep(0.5)
+
+            clicked = False
+
+            # วิธีที่ 1: ActionChains (จำลองการเลื่อนเมาส์ไปกดจริง)
+            try:
+                from selenium.webdriver.common.action_chains import ActionChains
+                actions = ActionChains(driver)
+                actions.move_to_element(elem).click().perform()
+                log(f"[คลิกปุ่มสำเร็จ] (ActionChains): {description}")
+                clicked = True
+            except Exception as e1:
+                log(f"ActionChains click failed: {e1}")
+
+            # วิธีที่ 2: Standard click
+            if not clicked:
+                try:
+                    elem.click()
+                    log(f"[คลิกปุ่มสำเร็จ] (Standard Click): {description}")
+                    clicked = True
+                except Exception as e2:
+                    log(f"Standard click failed: {e2}")
+
+            # วิธีที่ 3: คลิกที่ตัว overlay ของปุ่ม
+            if not clicked:
+                try:
+                    overlay = elem.find_element(By.XPATH, ".//div[@data-type='button-overlay']")
+                    overlay.click()
+                    log(f"[คลิกปุ่มสำเร็จ] (Overlay Click): {description}")
+                    clicked = True
+                except Exception as e3:
+                    log(f"Overlay click failed: {e3}")
+
+            # วิธีที่ 4: JavaScript click (วิธีสุดท้ายที่เป็นการบังคับคลิก)
+            if not clicked:
+                try:
+                    driver.execute_script("arguments[0].click();", elem)
+                    log(f"[คลิกปุ่มสำเร็จ] (JS Click): {description}")
+                    clicked = True
+                except Exception as e4:
+                    log(f"JS click failed: {e4}")
+
+            if not clicked:
+                raise Exception("ไม่สามารถจำลองการคลิกด้วยวิธีใดๆ ได้")
+
+            time.sleep(1.0)
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"ไม่สามารถดำเนินการขั้นตอน: {description} (Error: {e})"
+            )
+
+    log("เริ่มขั้นตอนการตั้งค่า Google Flow Automation (Steps 1-8)")
+    
+    xpath_video_settings = "//button[contains(., 'วิดีโอ') and @aria-haspopup='menu']"
+    
+    # Step 2: Open settings panel if not already open
+    try:
+        settings_btn = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, xpath_video_settings))
+        )
+        aria_expanded = settings_btn.get_attribute("aria-expanded")
+        data_state = settings_btn.get_attribute("data-state")
+        if aria_expanded == "true" or data_state == "open":
+            log("เมนูตั้งค่าวิดีโอเปิดอยู่แล้ว ไม่จำเป็นต้องคลิกเปิดซ้ำ")
+        else:
+            click_by_xpath(xpath_video_settings, "ปุ่มเปิดเมนูตั้งค่าวิดีโอ (วิดีโอ)")
+    except Exception:
+        click_by_xpath(xpath_video_settings, "ปุ่มเปิดเมนูตั้งค่าวิดีโอ (วิดีโอ)")
+
+    # Step 3: Tab วิดีโอ
+    xpath_tab_video = "//button[@role='tab' and (contains(., 'วิดีโอ') or contains(@id, '-trigger-VIDEO'))]"
+    click_by_xpath(xpath_tab_video, "แท็บวิดีโอ")
+
+    # Step 4: Tab เฟรม
+    xpath_tab_frames = "//button[@role='tab' and (contains(., 'เฟรม') or contains(@id, '-trigger-VIDEO_FRAMES'))]"
+    click_by_xpath(xpath_tab_frames, "แท็บเฟรม")
+
+    # Step 5: Ratio 9:16
+    xpath_ratio_portrait = "//button[@role='tab' and (contains(., '9:16') or contains(@id, '-trigger-PORTRAIT'))]"
+    click_by_xpath(xpath_ratio_portrait, "ปุ่มเลือกอัตราส่วน 9:16")
+
+    # Step 6: Speed x2
+    xpath_speed_x2 = "//button[@role='tab' and (text()='x2' or contains(., 'x2') or contains(@id, '-trigger-2'))]"
+    click_by_xpath(xpath_speed_x2, "ปุ่มเลือกความเร็ว x2")
+
+    # Step 7 & 8: Select "Veo 3.1 - Lite" model
+    xpath_dropdown_model = "//button[@aria-haspopup='menu' and (contains(., 'Veo 3.1') or contains(., 'Veo') or contains(@class, 'eaVRLg'))]"
+    try:
+        model_btn = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, xpath_dropdown_model))
+        )
+        current_model_text = model_btn.text.strip()
+        log(f"โมเดลปัจจุบันที่เลือกอยู่คือ: '{current_model_text}'")
+        if "Veo 3.1 - Lite" in current_model_text:
+            log("โมเดลเป็น Veo 3.1 - Lite อยู่แล้ว ไม่ต้องกดเลือกซ้ำ")
+        else:
+            # Open dropdown
+            click_by_xpath(xpath_dropdown_model, f"ปุ่มเปิด Dropdown รุ่นโมเดล (ปัจจุบัน: {current_model_text})")
+            # Step 8: Select "Veo 3.1 - Lite" from menu
+            xpath_select_model = "//*[contains(text(), 'Veo 3.1 - Lite')] | //button[contains(., 'Veo 3.1 - Lite')] | //div[@role='menuitem']//*[contains(text(), 'Veo 3.1 - Lite')]"
+            click_by_xpath(xpath_select_model, "เลือก Veo 3.1 - Lite จากเมนู")
+    except Exception as e:
+        log(f"Warning: ไม่สามารถตรวจเช็คโมเดลปัจจุบันได้ ทำการกดสลับโมเดลเป็นปกติ (Error: {e})")
+        click_by_xpath(xpath_dropdown_model, "ปุ่มเปิด Dropdown รุ่นโมเดล")
+        xpath_select_model = "//*[contains(text(), 'Veo 3.1 - Lite')] | //button[contains(., 'Veo 3.1 - Lite')] | //div[@role='menuitem']//*[contains(text(), 'Veo 3.1 - Lite')]"
+        click_by_xpath(xpath_select_model, "เลือก Veo 3.1 - Lite จากเมนู")
+
+    log("เสร็จสิ้นการตั้งค่า Google Flow Automation (Steps 1-8)")
+
+    # 2. Close settings modal using Esc key
+    log("[กำลังส่งคำสั่ง] กด Esc เพื่อปิดเมนูตั้งค่าวิดีโอ")
+    try:
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+        time.sleep(1.0)
+    except Exception as e:
+        log(f"ไม่สามารถกด Esc เพื่อปิดเมนูได้: {e}")
+
+    # 3. Find and click prompt input field
+    if not video_input_selector:
+        video_input_selector = "#__next > div.sc-c7ee1759-1.jhwuTJ > div.sc-7175135e-1.dIpEew > div > div > div > div > div.sc-26b30722-3.kezgTH > div > p"
+
+    log(f"[กำลังค้นหาช่องพรอพต์] ค้นหาช่องป้อนพรอพต์ด้วย CSS Selector: {video_input_selector}")
+    try:
+        box = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, video_input_selector))
+        )
+    except Exception as e1:
+        log(f"ไม่พบช่องพรอพต์ด้วยตัวเลือกหลัก ({e1}) ลองใช้ตัวเลือกสำรอง (contenteditable)...")
+        try:
+            box = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'] p, div[contenteditable='true'], [role='textbox'] p, textarea"))
+            )
+        except Exception as e2:
+            raise HTTPException(status_code=400, detail=f"ไม่พบช่องป้อนพรอพต์ด้วยวิธีใดๆ (Error: {e2})")
+
+    # Click the input box to focus
+    try:
+        from selenium.webdriver.common.action_chains import ActionChains
+        actions = ActionChains(driver)
+        actions.move_to_element(box).click().perform()
+        log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย ActionChains")
+    except Exception:
+        try:
+            box.click()
+            log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย Standard Click")
+        except Exception:
+            driver.execute_script("arguments[0].click();", box)
+            log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
+    time.sleep(0.5)
+
+    # Clear previous contents if any
+    try:
+        driver.execute_script("arguments[0].textContent = '';", box)
+        driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
+        log("[ล้างข้อมูลสำเร็จ] ล้างข้อความเดิมในช่องพรอพต์เรียบร้อย")
+    except Exception as e:
+        log(f"เตือน: ล้างข้อความเดิมล้มเหลว ({e})")
+    
+    # 4. Type @ using ActionChains keyboard events
+    log("[ป้อนข้อมูล] พิมพ์ @ ด้วยคีย์บอร์ดเสมือน")
+    try:
+        from selenium.webdriver.common.action_chains import ActionChains
+        actions = ActionChains(driver)
+        actions.send_keys("@").perform()
+    except Exception as e:
+        log(f"พิมพ์ @ ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
+        box.send_keys("@")
+    time.sleep(1.0) # Wait 1.0s after typing @
+
+    # Type round number using ActionChains keyboard events
+    log(f"[ป้อนข้อมูล] พิมพ์หมายเลข Round ด้วยคีย์บอร์ดเสมือน: {round_idx}")
+    try:
+        actions = ActionChains(driver)
+        actions.send_keys(str(round_idx)).perform()
+    except Exception as e:
+        log(f"พิมพ์ตัวเลขด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
+        box.send_keys(str(round_idx))
+    time.sleep(1.0) # Wait 1.0s for autocomplete
+
+    # Press Enter using ActionChains keyboard events
+    log("[ป้อนข้อมูล] กด Enter ด้วยคีย์บอร์ดเสมือน")
+    try:
+        actions = ActionChains(driver)
+        actions.send_keys(Keys.ENTER).perform()
+    except Exception as e:
+        log(f"กด Enter ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
+        box.send_keys(Keys.ENTER)
+    time.sleep(0.5)
+
+    # 5. Paste the animation prompt
+    log(f"[ป้อนข้อมูล] วางพรอพต์ของฉาก: {prompt}")
+    import subprocess
+    try:
+        process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, text=True)
+        process.communicate(input=prompt)
+        
+        paste_script = """
+        tell application "Google Chrome" to activate
+        delay 0.3
+        tell application "System Events"
+            keystroke "v" using command down
+        end tell
+        """
+        subprocess.run(["osascript", "-e", paste_script], check=False)
+        log("[ป้อนข้อมูลสำเร็จ] วางพรอพต์สำเร็จผ่าน macOS clipboard")
+    except Exception as e:
+        log(f"วางผ่าน Clipboard ล้มเหลว, ใช้ send_keys สำรอง: {e}")
+        box.send_keys(prompt)
+    time.sleep(1.0)
+
+    # 5. Click settings button to check/verify settings if specified
+    if video_settings_selector:
+        log(f"คลิกปุ่มตั้งค่าด้วย CSS Selector: {video_settings_selector}")
+        try:
+            settings_btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, video_settings_selector))
+            )
+            try:
+                settings_btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", settings_btn)
+            time.sleep(1.5) # Wait for settings panel to verify/load
+        except Exception as e:
+            log(f"Warning: ไม่สามารถคลิกปุ่มตั้งค่าได้: {e}")
+
+    # 6. Submit/Send the prompt
+    if video_submit_selector:
+        log(f"คลิกปุ่มส่งพรอพต์ด้วย CSS Selector: {video_submit_selector}")
+        try:
+            submit_btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, video_submit_selector))
+            )
+            try:
+                submit_btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", submit_btn)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"ไม่พบปุ่มส่งพรอพต์: {e}")
+    else:
+        log("ยกเลิกการกดปุ่ม Enter บังคับส่งพรอพต์เพื่อรอให้ผู้ใช้ตรวจทานข้อความ")
+
+    log(f"วางพรอพต์เรียบร้อยแล้ว เริ่มเวลารอ {video_wait_seconds} วินาที...")
+    return {"ok": True, "message": "วางพรอพต์และเริ่มต้นการรอ"}
 
 
 @app.get("/")
