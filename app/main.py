@@ -3285,7 +3285,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         except Exception:
             driver.execute_script("arguments[0].click();", box)
             log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
-    time.sleep(0.5)
+    time.sleep(1.0)
 
     # Clear previous contents if any
     try:
@@ -3304,7 +3304,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     except Exception as e:
         log(f"พิมพ์ @ ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys("@")
-    time.sleep(1.0) # Wait 1.0s after typing @
+    time.sleep(2.0) # Wait 2.0s after typing @
 
     # Type round number using ActionChains keyboard events
     text_to_type = f"{round_idx}.png"
@@ -3315,7 +3315,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     except Exception as e:
         log(f"พิมพ์ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(text_to_type)
-    time.sleep(1.0) # Wait 1.0s for autocomplete
+    time.sleep(2.0) # Wait 2.0s for autocomplete
 
     # Press Enter using ActionChains keyboard events
     log("[ป้อนข้อมูล] กด Enter ด้วยคีย์บอร์ดเสมือน")
@@ -3326,8 +3326,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         log(f"กด Enter ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(Keys.ENTER)
     
-    # Wait 1.0 second after selecting autocomplete
-    time.sleep(1.0)
+    # Wait 2.0 seconds after selecting autocomplete
+    time.sleep(2.0)
 
     # Press Spacebar 1 time
     log("[ป้อนข้อมูล] กด Spacebar ด้วยคีย์บอร์ดเสมือน 1 ครั้ง")
@@ -3336,7 +3336,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         actions.send_keys(Keys.SPACE).perform()
     except Exception as e:
         log(f"กด Spacebar ล้มเหลว: {e}")
-    time.sleep(0.5)
+    time.sleep(1.0)
 
     # 5. Paste the animation prompt
     log(f"[ป้อนข้อมูล] วางพรอพต์ของฉาก: {prompt}")
@@ -3347,7 +3347,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         
         paste_script = """
         tell application "Google Chrome" to activate
-        delay 0.3
+        delay 0.6
         tell application "System Events"
             keystroke "v" using command down
         end tell
@@ -3357,7 +3357,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     except Exception as e:
         log(f"วางผ่าน Clipboard ล้มเหลว, ใช้ send_keys สำรอง: {e}")
         box.send_keys(prompt)
-    time.sleep(1.0)
+    time.sleep(2.0)
 
     # Press Enter to submit the prompt
     log("[ป้อนข้อมูล] กด Enter เพื่อส่ง prompt")
@@ -3367,7 +3367,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     except Exception as e:
         log(f"ส่ง Enter ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(Keys.ENTER)
-    time.sleep(1.0)
+    time.sleep(2.0)
 
     # 5. Click settings button to check/verify settings if specified
     if video_settings_selector:
