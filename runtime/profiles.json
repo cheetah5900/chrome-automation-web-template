@@ -6,7 +6,6 @@
       "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Generate Image Dino",
       "debug_port": 9222,
       "startup_urls": [
-        "https://gemini.google.com/app",
         "https://chatgpt.com/"
       ]
     }

@@ -40,7 +40,10 @@
 
         <div style="display: flex; flex-direction: column; gap: 10px; flex: 1.2; min-width: 320px; justify-content: center;">
           <div style="display: flex; gap: 10px; width: 100%;">
-            <button id="launchProfile" style="flex: 2; padding: 12px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #7f5cff, #3aa0ff);">🚀 Launch Profile & Open Dashboard</button>
+            <button id="launchProfile" class="has-tooltip" style="flex: 2; padding: 12px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #7f5cff, #3aa0ff);">
+              🚀 Launch Profile & Open Dashboard
+              <div class="custom-tooltip" id="tooltip_launchProfile"></div>
+            </button>
             <button id="setProfile" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem;">Set Default</button>
           </div>
           <div style="display: flex; gap: 8px; width: 100%; flex-wrap: wrap;">
@@ -109,8 +112,9 @@
             </div>
             <!-- ปุ่มนำเข้า -->
             <div style="display: flex; align-items: flex-end;">
-              <button id="btnImportLakornAuto" class="primary" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
+              <button id="btnImportLakornAuto" class="primary has-tooltip" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
                 📥 เพิ่มข้อมูลละคร Auto
+                <div class="custom-tooltip" id="tooltip_btnImportLakornAuto"></div>
               </button>
             </div>
           </div>
@@ -266,12 +270,21 @@
             </div>
 
             <div style="display: flex; gap: 12px; margin-top: 12px;">
-              <button class="step-action-btn gemini-btn" id="btn_step3_gemini" style="width: 50%; padding: 14px; font-size: 1rem;">Gemini</button>
-              <button class="step-action-btn secondary" id="btn_step3_chatgpt" style="width: 50%; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366);">ChatGPT</button>
+              <button class="step-action-btn gemini-btn has-tooltip" id="btn_step3_gemini" style="width: 50%; padding: 14px; font-size: 1rem;">
+                Gemini
+                <div class="custom-tooltip" id="tooltip_btn_step3_gemini"></div>
+              </button>
+              <button class="step-action-btn secondary has-tooltip" id="btn_step3_chatgpt" style="width: 50%; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366);">
+                ChatGPT
+                <div class="custom-tooltip" id="tooltip_btn_step3_chatgpt"></div>
+              </button>
             </div>
 
             <!-- Force Stop Button -->
-            <button class="step-action-btn" id="btn_stop_generation" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">Force Stop Generation</button>
+            <button class="step-action-btn has-tooltip" id="btn_stop_generation" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">
+              Force Stop Generation
+              <div class="custom-tooltip" id="tooltip_btn_stop_generation"></div>
+            </button>
 
             <!-- Cooldown Tracker Banner -->
             <div id="cooldownTracker" style="display: none; margin-top: 12px; padding: 12px; border-radius: 10px; background: rgba(237, 137, 54, 0.1); border: 1px solid rgba(237, 137, 54, 0.25); text-align: center; color: #ed8936; font-size: 0.9rem;">
@@ -335,8 +348,9 @@
             </div>
             <!-- ปุ่มนำเข้า -->
             <div style="display: flex; align-items: flex-end;">
-              <button id="btnImportVideoLakornAuto" class="primary" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
+              <button id="btnImportVideoLakornAuto" class="primary has-tooltip" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
                 📥 เพิ่มข้อมูลละคร Auto
+                <div class="custom-tooltip" id="tooltip_btnImportVideoLakornAuto"></div>
               </button>
             </div>
           </div>
@@ -434,12 +448,16 @@
 
             <!-- Run Control Buttons -->
             <div style="display: flex; gap: 12px; width: 100%; margin-top: 14px;">
-              <button id="btnRunGoogleFlow" class="primary" style="flex: 1; padding: 14px; font-size: 1.05rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
+              <button id="btnRunGoogleFlow" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 1.05rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
                 ▶️ RUN GOOGLE FLOW AUTOMATION
+                <div class="custom-tooltip" id="tooltip_btnRunGoogleFlow"></div>
               </button>
             </div>
 
-            <button class="step-action-btn" id="btnStopVideoGeneration" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">Force Stop Generation</button>
+            <button class="step-action-btn has-tooltip" id="btnStopVideoGeneration" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">
+              Force Stop Generation
+              <div class="custom-tooltip" id="tooltip_btnStopVideoGeneration"></div>
+            </button>
 
             <!-- Cooldown Tracker Banner (Video) -->
             <div id="videoCooldownTracker" style="display: none; margin-top: 12px; padding: 12px; border-radius: 10px; background: rgba(237, 137, 54, 0.1); border: 1px solid rgba(237, 137, 54, 0.25); text-align: center; color: #ed8936; font-size: 0.9rem;">
@@ -552,7 +570,10 @@
                 <div id="videoCombineSetRows" style="display: flex; flex-direction: column; gap: 10px;"></div>
               </div>
                
-              <button id="runVideoHelperBtn" class="primary-btn" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">Run</button>
+              <button id="runVideoHelperBtn" class="primary-btn has-tooltip" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">
+                Run
+                <div class="custom-tooltip" id="tooltip_runVideoHelperBtn"></div>
+              </button>
             </div>
           </section>
 

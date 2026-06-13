@@ -66,6 +66,144 @@ async function jsonFetch(url, options = {}) {
 
 let profileCache = [];
 
+function updateTooltips() {
+  const firstTimeWaiting = document.getElementById('firstTimeWaitingInput')?.value || '60';
+  const checkInterval = document.getElementById('checkIntervalInput')?.value || '60';
+  const maxChecks = document.getElementById('maxChecksInput')?.value || '3';
+  const waitSeconds = document.getElementById('cfg_video_wait_seconds')?.value || '60';
+  
+  const select = document.getElementById('profileSelect');
+  const selected = (profileCache || []).find(x => x.name === select?.value);
+  const port = selected ? Number(selected.debug_port || 9222) : 9222;
+  const profileName = selected ? selected.name : '';
+  const startupUrls = selected ? (selected.startup_urls || []) : [];
+  const startupUrlsText = startupUrls.length > 0 ? startupUrls.join(', ') : 'ไม่มี';
+
+  const tooltipImportLakornAuto = document.getElementById('tooltip_btnImportLakornAuto');
+  if (tooltipImportLakornAuto) {
+    tooltipImportLakornAuto.textContent = `📥 ขั้นตอนการนำเข้าข้อมูลละครอัตโนมัติ (ภาพ/บท):
+1. ดึงข้อมูลละครจากระบบตามชื่อเรื่องและ EP ที่ระบุ
+2. จัดระบบจัดเก็บรูปภาพ Reference ลงเครื่องตามโครงสร้างที่ถูกต้อง
+3. แปลงไฟล์บทละครแยกตาม Round (1-10) บันทึกเข้าไฟล์ Config`;
+  }
+
+  const tooltipImportVideoLakornAuto = document.getElementById('tooltip_btnImportVideoLakornAuto');
+  if (tooltipImportVideoLakornAuto) {
+    tooltipImportVideoLakornAuto.textContent = `📥 ขั้นตอนการนำเข้าข้อมูลละครอัตโนมัติ (วิดีโอ):
+1. ดึงข้อมูลละครและคิววิดีโอตามชื่อเรื่อง ตอน และ EP
+2. จัดโครงสร้างบทพรอพต์วิดีโอของแต่ละรอบ (1-10) ลงสู่ไฟล์ Config`;
+  }
+
+  const tooltipGemini = document.getElementById('tooltip_btn_step3_gemini');
+  if (tooltipGemini) {
+    tooltipGemini.textContent = `▶️ ขั้นตอนการรันผ่าน Google Gemini:
+1. ดึงเบราว์เซอร์ -> สลับไปยังแท็บ gemini.google.com (ถ้าไม่พบ จะเปิดแท็บใหม่และหน่วง 3.0 วินาที)
+2. โฟกัสช่องกรอกคำสั่ง
+3. อัปโหลด Reference Image (สูงสุด 7 รูป) ทีละรูป: คลิกอัปโหลด -> รอ 1.2 วินาที -> คลิกตัวเลือกภาพ -> ใช้ AppleScript ป้อนเส้นทางรูปภาพใน File Dialog -> รอ 2.5 วินาทีต่อรูป
+4. ดีเลย์ 0.5 วินาที -> คัดลอกพรอพต์และสั่งวาง (Cmd+V) -> ดีเลย์ 0.3 วินาที
+5. คลิกปุ่ม Send (สูงสุด 3 ครั้ง) -> ดีเลย์ 1.0 วินาทีต่อครั้ง
+6. ตรวจจับการเริ่มประมวลผล (ภายใน 5 วินาที)
+7. รอจนเจเนอเรตเสร็จ: ดีเลย์เริ่มแรก ${firstTimeWaiting} วินาที จากนั้นตรวจสอบปุ่ม Stop ทุกๆ ${checkInterval} วินาที (ตรวจสูงสุด ${maxChecks} ครั้ง)`;
+  }
+
+  const tooltipChatGPT = document.getElementById('tooltip_btn_step3_chatgpt');
+  if (tooltipChatGPT) {
+    const chatgptModeSelect = document.getElementById('chatgptChatModeSelect');
+    const chatgptModeVal = chatgptModeSelect ? chatgptModeSelect.value : 'new';
+    const chatgptUrlInput = document.getElementById('chatgptUrlInput');
+    const chatgptUrlVal = chatgptUrlInput ? chatgptUrlInput.value.trim() : '';
+
+    let modeDescription = '';
+    if (chatgptModeVal === 'new') {
+      modeDescription = `1. เปิดหน้าเว็บโปรเจกต์ ChatGPT ตาม URL ที่กำหนด: "${chatgptUrlVal || 'ไม่ได้กำหนด'}" เพื่อเตรียมสร้างแชทใหม่
+2. รอจนกว่ากล่องข้อความและหน้าเว็บจะโหลดเสร็จสมบูรณ์
+3. ปิดแท็บ ChatGPT เก่าอื่นๆ ที่เปิดค้างไว้เพื่อความเป็นระเบียบ`;
+    } else {
+      modeDescription = `1. สลับไปยังแท็บ ChatGPT ที่กำลังเปิดค้างไว้ล่าสุด (ถ้าไม่พบ จะเปิดแท็บใหม่ chatgpt.com และดีเลย์หน้าเว็บโหลด 3.0 วินาที)`;
+    }
+
+    tooltipChatGPT.textContent = `▶️ ขั้นตอนการรันผ่าน ChatGPT:
+${modeDescription}
+2. นำเบราว์เซอร์ไปที่ฉากหน้า (Physical Switch) และสลับแท็บไปยัง chatgpt.com
+3. ตรวจสอบสถานะการทำงาน:
+   - หากรันต่อเนื่อง สุ่มดีเลย์เลียนแบบพฤติกรรมมนุษย์ (1-10 วินาที)
+   - หากมีงานเจเนอเรตเดิมค้างอยู่: หน่วงเวลารอ ${firstTimeWaiting} วินาที จากนั้นตรวจสอบสถานะปุ่ม Stop ทุกๆ ${checkInterval} วินาที (สูงสุด ${maxChecks} ครั้ง)
+4. อัปโหลดรูปภาพตัวละคร (สูงสุด 7 รูป) ทีละรูป:
+   - คลิกปุ่มบวก (+) หรือกดคีย์ลัด Cmd+U -> รอ 1.5 วินาที
+   - ใช้ AppleScript พิมพ์ระบุเส้นทางไฟล์รูปภาพใน File Dialog -> รอ 2.5 วินาทีต่อภาพ
+5. ดีเลย์ 0.5 วินาที -> วางข้อความพรอพต์แบบทีละอักขระเพื่อความปลอดภัย
+6. คลิกปุ่ม Send หรือกด Enter สำรองเพื่อส่งข้อมูล -> หน่วงเวลารอเริ่มกระบวนการ 3.0 วินาที`;
+  }
+
+  const tooltipStopGen = document.getElementById('tooltip_btn_stop_generation');
+  if (tooltipStopGen) {
+    tooltipStopGen.textContent = `🛑 ขั้นตอนการบังคับหยุดการเจเนอเรตภาพ:
+1. ตั้งค่าการหยุดลูปคิวเจเนอเรตฝั่งหน้าบ้าน
+2. ซ่อนแถบนับถอยหลัง Cooldown บนหน้าจอ
+3. เรียก API บังคับปิดกระบวนการ (Kill) ของ Chrome บน Port ${port} ทันทีเพื่อยุติการออโตเมชันทั้งหมด`;
+  }
+
+  const tooltipRunGoogleFlow = document.getElementById('tooltip_btnRunGoogleFlow');
+  if (tooltipRunGoogleFlow) {
+    tooltipRunGoogleFlow.textContent = `▶️ ขั้นตอนการรันวิดีโอผ่าน Google Flow:
+1. นำทางบราว์เซอร์ Chrome ไปยังลิงก์โครงการที่กำหนด -> หน่วงเวลาหน้าเว็บโหลด 5.0 วินาที
+2. ตั้งค่าโมเดลและวิดีโอ (คลิกเปิดเมนู -> เลือกขนาด 9:16 -> เลือกความเร็ว x2 -> เลือกโมเดล Veo 3.1 -> กด Esc เพื่อปิดเมนู)
+3. พิมพ์ @ -> ดีเลย์ 1.0 วินาที
+4. พิมพ์หมายเลข Round บวก .png (เช่น @1.png) -> ดีเลย์ 1.0 วินาที
+5. กด Enter เพื่อยืนยัน -> ดีเลย์ 0.5 วินาที
+6. วางพรอพต์วิดีโอลงในกล่องข้อความ -> ดีเลย์ 1.0 วินาที
+7. กด Enter เพื่อส่งพรอพต์ทันที
+8. คลิกเปิดเมนูตั้งค่าวิดีโอ (ตาม XPath ที่ระบุ)
+9. เริ่มคูลดาวน์ระบบ ${waitSeconds} วินาที เพื่อรันฉาก/รอบต่อไป`;
+  }
+
+  const tooltipStopVideo = document.getElementById('tooltip_btnStopVideoGeneration');
+  if (tooltipStopVideo) {
+    tooltipStopVideo.textContent = `🛑 ขั้นตอนการบังคับหยุดการเจเนอเรตวิดีโอ:
+1. ยกเลิกลูปคิวจัดส่งพรอพต์วิดีโอหน้าบ้าน
+2. หยุดเวลานับถอยหลัง Cooldown บนแถบแจ้งเตือน
+3. เรียก API บังคับปิดกระบวนการ (Kill) ของ Chrome บน Port ${port} ทันทีเพื่อให้สคริปต์ออโตเมชันหยุดทำงานทันที`;
+  }
+
+  const tooltipLaunchProfile = document.getElementById('tooltip_launchProfile');
+  if (tooltipLaunchProfile) {
+    tooltipLaunchProfile.textContent = `🚀 ขั้นตอนการเปิดเบราว์เซอร์ Chrome:
+1. เรียกใช้ API หลังบ้าน /api/profiles/launch
+2. ระบบจะสั่งเปิดเบราว์เซอร์ Google Chrome แบบ Remote Debugging
+3. รันบนโปรไฟล์ "${profileName || 'ไม่ได้ระบุ'}" ที่ Port: ${port}
+4. หน้าต่างเบราว์เซอร์จะเปิดโดยมีหน้าเว็บเริ่มต้นดังนี้: ${startupUrlsText}`;
+  }
+
+  const tooltipRunVideoHelperBtn = document.getElementById('tooltip_runVideoHelperBtn');
+  if (tooltipRunVideoHelperBtn) {
+    const videoMode = document.querySelector('input[name="videoHelperMode"]:checked');
+    const modeVal = videoMode ? videoMode.value : 'cover';
+    const outputPathVal = document.getElementById('videoOutputPathText')?.value.trim() || 'ไม่ได้กำหนด';
+    const prefixVal = document.getElementById('videoPrefixText')?.value.trim() || 'ไม่มี';
+    const suffixVal = document.getElementById('videoSuffixText')?.value.trim() || 'ไม่มี';
+    
+    if (modeVal === 'cover') {
+      const foldersVal = document.getElementById('videoCoverFoldersText')?.value.trim() || 'ไม่ได้กำหนด';
+      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการรัน Video Helper (Cover Mode):
+1. ตรวจสอบที่อยู่โฟลเดอร์: ${outputPathVal}
+2. ดึงชื่อโฟลเดอร์ย่อยที่จะประมวลผล: ${foldersVal}
+3. วนลูปทีละโฟลเดอร์: ค้นหาไฟล์วิดีโอ (.mp4/.mov) และดึงภาพจากโฟลเดอร์ย่อย 'cover/'
+4. เรียกใช้ API /api/video/make-cover ของระบบหลังบ้านเพื่อนำไฟล์มารวมกัน
+5. หลังบ้านจะแทรกภาพพื้นหลังดำยาว 2.0 วินาที คั่นระหว่างจุดสิ้นสุดวิดีโอกับภาพปก
+6. บันทึกผลลัพธ์เป็นไฟล์วิดีโอใหม่โดยมี Prefix: "${prefixVal}" และ Suffix: "${suffixVal}"`;
+    } else {
+      const combineSets = collectVideoCombineBatchSets();
+      const combineSetsSummary = combineSets.map((folders, idx) => `เซ็ตที่ ${idx + 1}: [${folders.join(', ')}]`).join('\n') || 'ไม่มี';
+      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการรัน Video Helper (Combine Mode):
+1. ตรวจสอบที่อยู่โฟลเดอร์: ${outputPathVal}
+2. ดึงรายการวิดีโอที่จะนำมารวมกันในแต่ละเซ็ต:
+${combineSetsSummary}
+3. วนลูปเรียกใช้ API /api/video/make-cover ของระบบหลังบ้านทีละเซ็ต
+4. หลังบ้านจะต่อไฟล์วิดีโอทั้งหมดตามลำดับตัวเลขภายในโฟลเดอร์แบบไร้รอยต่อ
+5. บันทึกผลลัพธ์ลงโฟลเดอร์โดยใช้ Prefix: "${prefixVal}" และ Suffix: "${suffixVal}"`;
+    }
+  }
+}
 
 async function loadSettings() {
   const data = await jsonFetch('/api/settings');
@@ -73,6 +211,7 @@ async function loadSettings() {
   document.getElementById('startupUrl1').value = urls[0] || '';
   document.getElementById('startupUrl2').value = urls[1] || '';
   document.getElementById('startupUrl3').value = urls[2] || '';
+  updateTooltips();
 }
 
 async function saveSettings() {
@@ -125,6 +264,7 @@ async function loadProfiles() {
   const selected = profileCache.find(x => x.name === select.value) || profileCache[0];
   fillProfileForm(selected);
   updatePortStatus();
+  updateTooltips();
 }
 
 async function createProfile() {
@@ -427,6 +567,31 @@ document.getElementById('profileSelect').addEventListener('change', () => {
   const selected = profileCache.find(x => x.name === document.getElementById('profileSelect').value);
   fillProfileForm(selected);
   updatePortStatus();
+  updateTooltips();
+});
+
+// Setup real-time listeners to update tooltips on config changes
+const inputsToListen = [
+  'firstTimeWaitingInput',
+  'checkIntervalInput',
+  'maxChecksInput',
+  'cfg_video_wait_seconds',
+  'chatgptUrlInput',
+  'chatgptChatModeSelect',
+  'videoCoverFoldersText',
+  'videoOutputPathText',
+  'videoPrefixText',
+  'videoSuffixText',
+  'startupUrl1',
+  'startupUrl2',
+  'startupUrl3'
+];
+inputsToListen.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('input', updateTooltips);
+    el.addEventListener('change', updateTooltips);
+  }
 });
 
 // --- Workflow Tab and API integrations ---
@@ -495,6 +660,7 @@ async function loadConfig() {
     if (lakornTonInput) lakornTonInput.value = config.lakorn_ton || '';
     const lakornEpInput = document.getElementById('cfg_lakorn_ep');
     if (lakornEpInput) lakornEpInput.value = config.lakorn_ep || '';
+    updateTooltips();
   } catch (e) {
     writeConsoleLine(`Failed to load config: ${e.message}`, 'error', 'imageConsole');
   }
@@ -932,7 +1098,7 @@ async function loadImagePrompts() {
     });
     
     renderImagePromptsForRound(1);
-
+    updateTooltips();
   } catch (e) {
     writeConsoleLine(`Failed to load prompts: ${e.message}`, 'error', 'imageConsole');
   }
@@ -1238,6 +1404,12 @@ function createVideoCombineSetRow(value = '') {
     refreshVideoCombineSetLabels();
   });
 
+  const inputEl = row.querySelector('.video-combine-set-input');
+  if (inputEl) {
+    inputEl.addEventListener('input', updateTooltips);
+    inputEl.addEventListener('change', updateTooltips);
+  }
+
   return row;
 }
 
@@ -1252,6 +1424,7 @@ function refreshVideoCombineSetLabels() {
       status.id = `videoCombineSetStatus_combine_${index + 1}`;
     }
   });
+  updateTooltips();
 }
 
 function collectVideoCombineBatchSets() {
@@ -1847,6 +2020,7 @@ function initWorkflowActionListeners() {
       if (runBtn) {
         runBtn.textContent = 'Run';
       }
+      updateTooltips();
     });
   });
 
