@@ -3327,6 +3327,27 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         box.send_keys(Keys.ENTER)
     time.sleep(0.5)
 
+    # Press Arrow Right to move cursor out of the autocomplete pill/tag
+    log("[ป้อนข้อมูล] กดลูกศรขวาเพื่อออกจาก Tag")
+    try:
+        actions = ActionChains(driver)
+        actions.send_keys(Keys.ARROW_RIGHT).perform()
+    except Exception as e:
+        log(f"กดลูกศรขวาล้มเหลว: {e}")
+    time.sleep(0.2)
+
+    # Click the input box to restore active cursor focus after the pill
+    log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์อีกครั้งเพื่อเตรียมวางพรอพต์")
+    try:
+        actions = ActionChains(driver)
+        actions.move_to_element(box).click().perform()
+    except Exception:
+        try:
+            box.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", box)
+    time.sleep(0.3)
+
     # 5. Paste the animation prompt
     log(f"[ป้อนข้อมูล] วางพรอพต์ของฉาก: {prompt}")
     import subprocess
