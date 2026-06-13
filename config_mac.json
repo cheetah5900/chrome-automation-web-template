@@ -16,176 +16,106 @@
     "secondary_color": "Gray",
     "focus_browser_tabs": true,
     "canva_design_url_part": "",
-    "image_prompts": [
-        "# Scene 01 \u2014 Two Children Trapped in the Pit\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khun Thongdaeng, @img4 = Khram.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khun Thongdaeng), @img4 (Khram). Khram must appear in warm burnt-orange glass/outfit, clearly not blue or cyan. Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Open the story BEFORE any golden stair appears. A deep square flooded pit inside a tall brick underground chamber fills the frame. Nin and Khram are both trapped together at the bottom, shivering in rising dark water and looking up for help. Above the pit edge, the two fathers stand looking down from opposite sides: Khun Phloeng grips old magical books with desperate protective fear, while Khun Thongdaeng watches coldly with wealthy authority. Do not show a golden stair, golden bridge, or anyone already climbing yet; this first image must clearly establish that both children are stuck below and both fathers are watching from above. Emphasize the vertical height difference, the dangerous water level, the pit walls, the power imbalance, intense melodramatic facial expressions, clear actor blocking, coherent continuity, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses": [
-        {
-            "text": "# Scene 01 \u2014 Two Children Trapped in the Pit\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khun Thongdaeng, @img4 = Khram.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khun Thongdaeng), @img4 (Khram). Khram must appear in warm burnt-orange glass/outfit, clearly not blue or cyan. Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Open the story BEFORE any golden stair appears. A deep square flooded pit inside a tall brick underground chamber fills the frame. Nin and Khram are both trapped together at the bottom, shivering in rising dark water and looking up for help. Above the pit edge, the two fathers stand looking down from opposite sides: Khun Phloeng grips old magical books with desperate protective fear, while Khun Thongdaeng watches coldly with wealthy authority. Do not show a golden stair, golden bridge, or anyone already climbing yet; this first image must clearly establish that both children are stuck below and both fathers are watching from above. Emphasize the vertical height difference, the dangerous water level, the pit walls, the power imbalance, intense melodramatic facial expressions, clear actor blocking, coherent continuity, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
-    "image_prompts_2": [
-        "# Scene 02 \u2014 Judgment From the Rich\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Thongdaeng, @img2 = Nin, @img3 = Khram, @img4 = Khun Phloeng.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Thongdaeng), @img2 (Nin), @img3 (Khram), @img4 (Khun Phloeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Khun Thongdaeng stands above the flooded pit and points down like a judge, while Khun Phloeng struggles to reach his son. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses_2": [
-        {
-            "text": "# Scene 02 \u2014 Judgment From the Rich\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Thongdaeng, @img2 = Nin, @img3 = Khram, @img4 = Khun Phloeng.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Thongdaeng), @img2 (Nin), @img3 (Khram), @img4 (Khun Phloeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Khun Thongdaeng stands above the flooded pit and points down like a judge, while Khun Phloeng struggles to reach his son. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
-    "image_prompts_3": [
-        "# Scene 03 \u2014 The Golden Stair Appears\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Thongdaeng, @img2 = Khram, @img3 = Nin.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Thongdaeng), @img2 (Khram), @img3 (Nin). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: A glowing golden stair materializes only in front of Khram, reflecting on the dark floodwater as Nin watches from the side. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses_3": [
-        {
-            "text": "# Scene 03 \u2014 The Golden Stair Appears\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Thongdaeng, @img2 = Khram, @img3 = Nin.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Thongdaeng), @img2 (Khram), @img3 (Nin). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: A glowing golden stair materializes only in front of Khram, reflecting on the dark floodwater as Nin watches from the side. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
+    "image_prompts": [],
+    "image_prompt_statuses": [],
+    "image_prompts_2": [],
+    "image_prompt_statuses_2": [],
+    "image_prompts_3": [],
+    "image_prompt_statuses_3": [],
     "chatgpt_url": "https://chatgpt.com/g/g-p-6a27e5e0b6e081919083f0522292eb21-chaatrii-sriismr/project",
     "video_input_path": "a_silent_motor_glider_flying_low_through_a_canadian_alpine_valley.mov",
     "image_input_path": "5-1.png",
     "video_output_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/Yuki - \u0e08\u0e34\u0e49\u0e07\u0e08\u0e2d\u0e01",
-    "reference_image": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Phloeng.png",
-    "reference_image_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
-    "reference_image_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
+    "reference_image": "",
+    "reference_image_2": "",
+    "reference_image_3": "",
     "video_prefix_cover": "youtube-",
     "video_prefix_combine": "combined-",
-    "reference_image_round_1_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Phloeng.png",
-    "reference_image_round_1_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
-    "reference_image_round_1_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
-    "reference_image_round_1_4": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khram.png",
+    "reference_image_round_1_1": "",
+    "reference_image_round_1_2": "",
+    "reference_image_round_1_3": "",
+    "reference_image_round_1_4": "",
     "reference_image_round_1_5": "",
     "reference_image_round_1_6": "",
     "reference_image_round_1_7": "",
-    "reference_image_round_2_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
-    "reference_image_round_2_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
-    "reference_image_round_2_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khram.png",
-    "reference_image_round_2_4": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Phloeng.png",
+    "reference_image_round_2_1": "",
+    "reference_image_round_2_2": "",
+    "reference_image_round_2_3": "",
+    "reference_image_round_2_4": "",
     "reference_image_round_2_5": "",
     "reference_image_round_2_6": "",
     "reference_image_round_2_7": "",
-    "reference_image_round_3_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
-    "reference_image_round_3_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khram.png",
-    "reference_image_round_3_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
+    "reference_image_round_3_1": "",
+    "reference_image_round_3_2": "",
+    "reference_image_round_3_3": "",
     "reference_image_round_3_4": "",
     "reference_image_round_3_5": "",
     "reference_image_round_3_6": "",
     "reference_image_round_3_7": "",
-    "image_prompts_4": [
-        "# Scene 04 \u2014 The Chosen Child\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khram, @img2 = Khun Thongdaeng, @img3 = Nin.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khram), @img2 (Khun Thongdaeng), @img3 (Nin). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Khram climbs the golden stair with trembling hesitation while Khun Thongdaeng smiles proudly above him and Nin remains trapped below. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses_4": [
-        {
-            "text": "# Scene 04 \u2014 The Chosen Child\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khram, @img2 = Khun Thongdaeng, @img3 = Nin.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khram), @img2 (Khun Thongdaeng), @img3 (Nin). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Khram climbs the golden stair with trembling hesitation while Khun Thongdaeng smiles proudly above him and Nin remains trapped below. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
-    "reference_image_round_4_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khram.png",
-    "reference_image_round_4_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
-    "reference_image_round_4_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
+    "image_prompts_4": [],
+    "image_prompt_statuses_4": [],
+    "reference_image_round_4_1": "",
+    "reference_image_round_4_2": "",
+    "reference_image_round_4_3": "",
     "reference_image_round_4_4": "",
     "reference_image_round_4_5": "",
     "reference_image_round_4_6": "",
     "reference_image_round_4_7": "",
-    "image_prompts_5": [
-        "# Scene 05 \u2014 The Child Left Behind\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Nin, @img2 = Khun Phloeng, @img3 = Khun Thongdaeng.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Nin), @img2 (Khun Phloeng), @img3 (Khun Thongdaeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Nin stands alone in the cold water as the golden stair fades away from him, while Khun Phloeng reaches toward him with desperate focus. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses_5": [
-        {
-            "text": "# Scene 05 \u2014 The Child Left Behind\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Nin, @img2 = Khun Phloeng, @img3 = Khun Thongdaeng.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Nin), @img2 (Khun Phloeng), @img3 (Khun Thongdaeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Nin stands alone in the cold water as the golden stair fades away from him, while Khun Phloeng reaches toward him with desperate focus. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
-    "reference_image_round_5_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
-    "reference_image_round_5_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Phloeng.png",
-    "reference_image_round_5_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
+    "image_prompts_5": [],
+    "image_prompt_statuses_5": [],
+    "reference_image_round_5_1": "",
+    "reference_image_round_5_2": "",
+    "reference_image_round_5_3": "",
     "reference_image_round_5_4": "",
     "reference_image_round_5_5": "",
     "reference_image_round_5_6": "",
     "reference_image_round_5_7": "",
-    "image_prompts_6": [
-        "# Scene 06 \u2014 The Father\u2019s Book\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khun Thongdaeng.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khun Thongdaeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Khun Phloeng opens an old worn book. Warm amber light spills from the pages, pushing back the cold reflections of the flood. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses_6": [
-        {
-            "text": "# Scene 06 \u2014 The Father\u2019s Book\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khun Thongdaeng.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khun Thongdaeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Khun Phloeng opens an old worn book. Warm amber light spills from the pages, pushing back the cold reflections of the flood. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
-    "reference_image_round_6_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Phloeng.png",
-    "reference_image_round_6_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
-    "reference_image_round_6_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
+    "image_prompts_6": [],
+    "image_prompt_statuses_6": [],
+    "reference_image_round_6_1": "",
+    "reference_image_round_6_2": "",
+    "reference_image_round_6_3": "",
     "reference_image_round_6_4": "",
     "reference_image_round_6_5": "",
     "reference_image_round_6_6": "",
     "reference_image_round_6_7": "",
-    "image_prompts_7": [
-        "# Scene 07 \u2014 The Paper Path\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khram.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khram). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Glowing pages unfold from the old book and become a fragile path over the water. Nin steps onto the paper path while Khram watches in shock. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses_7": [
-        {
-            "text": "# Scene 07 \u2014 The Paper Path\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khram.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khram). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Glowing pages unfold from the old book and become a fragile path over the water. Nin steps onto the paper path while Khram watches in shock. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
-    "reference_image_round_7_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Phloeng.png",
-    "reference_image_round_7_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
-    "reference_image_round_7_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khram.png",
+    "image_prompts_7": [],
+    "image_prompt_statuses_7": [],
+    "reference_image_round_7_1": "",
+    "reference_image_round_7_2": "",
+    "reference_image_round_7_3": "",
     "reference_image_round_7_4": "",
     "reference_image_round_7_5": "",
     "reference_image_round_7_6": "",
     "reference_image_round_7_7": "",
-    "image_prompts_8": [
-        "# Scene 08 \u2014 The Father\u2019s Hand\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khun Thongdaeng.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khun Thongdaeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Khun Phloeng pulls Nin up from the last sheet of glowing paper, holding him tightly as water churns below. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses_8": [
-        {
-            "text": "# Scene 08 \u2014 The Father\u2019s Hand\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khun Thongdaeng.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khun Thongdaeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: Khun Phloeng pulls Nin up from the last sheet of glowing paper, holding him tightly as water churns below. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
-    "reference_image_round_8_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Phloeng.png",
-    "reference_image_round_8_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
-    "reference_image_round_8_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
+    "image_prompts_8": [],
+    "image_prompt_statuses_8": [],
+    "reference_image_round_8_1": "",
+    "reference_image_round_8_2": "",
+    "reference_image_round_8_3": "",
     "reference_image_round_8_4": "",
     "reference_image_round_8_5": "",
     "reference_image_round_8_6": "",
     "reference_image_round_8_7": "",
-    "image_prompts_9": [
-        "# Scene 09 \u2014 Saved, But Not Safe\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khram, @img4 = Khun Thongdaeng.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khram), @img4 (Khun Thongdaeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: The group stands on a narrow dry ledge above the flood. Relief lasts only a moment as a new golden light opens behind them. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses_9": [
-        {
-            "text": "# Scene 09 \u2014 Saved, But Not Safe\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khram, @img4 = Khun Thongdaeng.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khram), @img4 (Khun Thongdaeng). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: The group stands on a narrow dry ledge above the flood. Relief lasts only a moment as a new golden light opens behind them. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
-    "reference_image_round_9_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Phloeng.png",
-    "reference_image_round_9_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
-    "reference_image_round_9_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khram.png",
-    "reference_image_round_9_4": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
+    "image_prompts_9": [],
+    "image_prompt_statuses_9": [],
+    "reference_image_round_9_1": "",
+    "reference_image_round_9_2": "",
+    "reference_image_round_9_3": "",
+    "reference_image_round_9_4": "",
     "reference_image_round_9_5": "",
     "reference_image_round_9_6": "",
     "reference_image_round_9_7": "",
-    "image_prompts_10": [
-        "# Scene 10 \u2014 The Desert Trial\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khun Thongdaeng, @img4 = Khram.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khun Thongdaeng), @img4 (Khram). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: The chamber dissolves into a blazing desert road with a square black pit in the ground, announcing the next dangerous trial. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo."
-    ],
-    "image_prompt_statuses_10": [
-        {
-            "text": "# Scene 10 \u2014 The Desert Trial\n\nEpisode: EP01 \u2014 The Golden Stair That Saves Only One\n\n## GPTImages2 Prompt\n\nAttached image order for this scene: @img1 = Khun Phloeng, @img2 = Nin, @img3 = Khun Thongdaeng, @img4 = Khram.\n\nKhram color continuity: Khram must be warm burnt-orange / amber-orange glass and outfit, clearly not blue or cyan.\n\nCreate a vertical 9:16 AI short-drama image using @img1 (Khun Phloeng), @img2 (Nin), @img3 (Khun Thongdaeng), @img4 (Khram). Visual style: realistic Thai drama characters with cinematic semi-photoreal faces and grounded emotional acting; high-end anime painted backgrounds: hand-painted 2D anime environment art with clean linework, soft painterly gradients, luminous cinematic light, atmospheric depth, detailed Thai-period locations and props, gentle haze, rich but natural colors, polished feature-film anime background finish; not a generic flat cartoon and not a 3D environment; vertical 9:16 phone-video composition; dramatic depth of field; premium AI short-drama production still; no text overlay, no subtitles, no watermark, no logo. Scene action: The chamber dissolves into a blazing desert road with a square black pit in the ground, announcing the next dangerous trial. Emphasize intense melodramatic facial expressions, clear actor blocking, emotional Thai-drama tension translated into a cinematic English prompt, detailed props, coherent continuity from the previous scene, and a clean composition that reads instantly on a phone screen. Keep all characters consistent with their attached reference images. No text overlay, no subtitles, no watermark, no logo.",
-            "status": "Done"
-        }
-    ],
-    "reference_image_round_10_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Phloeng.png",
-    "reference_image_round_10_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Nin.png",
-    "reference_image_round_10_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khun Thongdaeng.png",
-    "reference_image_round_10_4": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khram.png",
+    "image_prompts_10": [],
+    "image_prompt_statuses_10": [],
+    "reference_image_round_10_1": "",
+    "reference_image_round_10_2": "",
+    "reference_image_round_10_3": "",
+    "reference_image_round_10_4": "",
     "reference_image_round_10_5": "",
     "reference_image_round_10_6": "",
     "reference_image_round_10_7": "",
-    "reference_image_4": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet/Khram.png",
+    "reference_image_4": "",
     "reference_image_5": "",
     "reference_image_6": "",
     "reference_image_7": "",
@@ -195,17 +125,17 @@
     "image_url_2": "",
     "image_url_3": "",
     "video_prefix": "combine-",
-    "reference_images_dir_round_1": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir_round_2": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir_round_3": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir_round_4": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir_round_5": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir_round_6": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir_round_7": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir_round_8": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir_round_9": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir_round_10": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
-    "reference_images_dir": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/AetherLore23 - done/1/2 - Character Sheet",
+    "reference_images_dir_round_1": "",
+    "reference_images_dir_round_2": "",
+    "reference_images_dir_round_3": "",
+    "reference_images_dir_round_4": "",
+    "reference_images_dir_round_5": "",
+    "reference_images_dir_round_6": "",
+    "reference_images_dir_round_7": "",
+    "reference_images_dir_round_8": "",
+    "reference_images_dir_round_9": "",
+    "reference_images_dir_round_10": "",
+    "reference_images_dir": "",
     "round_active_1": true,
     "round_active_2": true,
     "round_active_3": true,

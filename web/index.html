@@ -71,6 +71,12 @@
 
       <!-- VIEW 2: IMAGE GENERATION -->
       <div id="imageGenView" class="tab-view">
+        <!-- Action Row -->
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+          <button id="resetAllRoundsBtn" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; border-radius: 20px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0; cursor: pointer; transition: all 0.2s ease;">
+            🔄 RESET ALL
+          </button>
+        </div>
         <!-- Drama Auto Import Card -->
         <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
           <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
@@ -160,9 +166,6 @@
                   📥 Import Batch Rounds (.md, .txt)
                 </label>
                 <input type="file" id="importGenerationPromptsBatchFile" accept=".txt,.md" multiple style="display: none;" />
-                <button id="resetAllRoundsBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; font-weight: bold; border-radius: 20px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0; cursor: pointer; transition: all 0.2s ease;">
-                  🔄 RESET
-                </button>
                 <span id="imagePromptCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Prompts</span>
               </div>
             </div>
