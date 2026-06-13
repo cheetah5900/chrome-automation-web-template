@@ -3325,28 +3325,18 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     except Exception as e:
         log(f"กด Enter ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(Keys.ENTER)
-    time.sleep(0.5)
+    
+    # Wait 1.0 second after selecting autocomplete
+    time.sleep(1.0)
 
-    # Press Arrow Right to move cursor out of the autocomplete pill/tag
-    log("[ป้อนข้อมูล] กดลูกศรขวาเพื่อออกจาก Tag")
+    # Press Spacebar 1 time
+    log("[ป้อนข้อมูล] กด Spacebar ด้วยคีย์บอร์ดเสมือน 1 ครั้ง")
     try:
         actions = ActionChains(driver)
-        actions.send_keys(Keys.ARROW_RIGHT).perform()
+        actions.send_keys(Keys.SPACE).perform()
     except Exception as e:
-        log(f"กดลูกศรขวาล้มเหลว: {e}")
-    time.sleep(0.2)
-
-    # Click the input box to restore active cursor focus after the pill
-    log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์อีกครั้งเพื่อเตรียมวางพรอพต์")
-    try:
-        actions = ActionChains(driver)
-        actions.move_to_element(box).click().perform()
-    except Exception:
-        try:
-            box.click()
-        except Exception:
-            driver.execute_script("arguments[0].click();", box)
-    time.sleep(0.3)
+        log(f"กด Spacebar ล้มเหลว: {e}")
+    time.sleep(0.5)
 
     # 5. Paste the animation prompt
     log(f"[ป้อนข้อมูล] วางพรอพต์ของฉาก: {prompt}")
