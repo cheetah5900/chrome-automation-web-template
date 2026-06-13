@@ -87,13 +87,13 @@ class ForceKillPayload(BaseModel):
 
 class ImportLakornPayload(BaseModel):
     lakorn_path: str
-    ep_num: int
+    ep_num: str
     ref_images_dir: str = ""
 
 
 class ImportLakornVideoPayload(BaseModel):
     lakorn_path: str
-    ep_num: int
+    ep_num: str
 
 
 class VideoGenStepPayload(BaseModel):
@@ -2693,6 +2693,102 @@ def list_images(dir_path: str) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def find_episode_dir(lakorn_path: str, ep_val: str):
+    import re
+    from pathlib import Path
+    
+    ep_val_clean = ep_val.strip().lower()
+    if not ep_val_clean:
+        return None
+        
+    path_obj = Path(lakorn_path)
+    if not path_obj.exists() or not path_obj.is_dir():
+        return None
+        
+    subdirs = [d for d in path_obj.iterdir() if d.is_dir()]
+    
+    # 1. Try exact match (case insensitive)
+    for d in subdirs:
+        if d.name.lower() == ep_val_clean:
+            return d
+            
+    # 2. Try exact match with prepended "EP" if it's a number
+    if ep_val_clean.isdigit():
+        val_int = int(ep_val_clean)
+        candidates = [
+            f"ep{val_int}", 
+            f"ep{val_int:02d}", 
+            f"ep{val_int:03d}",
+            f"{val_int:02d}", 
+            f"{val_int:03d}",
+            str(val_int)
+        ]
+        for d in subdirs:
+            if d.name.lower() in candidates:
+                return d
+
+    # 3. Try finding by matching numbers exactly
+    match = re.search(r"\d+", ep_val_clean)
+    if match:
+        target_num = int(match.group())
+        for d in subdirs:
+            num_matches = re.findall(r"\d+", d.name)
+            for nm in num_matches:
+                if int(nm) == target_num:
+                    return d
+
+    # 4. Fallback to simple substring match
+    for d in subdirs:
+        if ep_val_clean in d.name.lower():
+            return d
+            
+    return None
+
+
+def find_sub_ep_dir(parent_dir: Path, ep_val: str):
+    import re
+    ep_val_clean = ep_val.strip().lower()
+    if not ep_val_clean:
+        return parent_dir
+        
+    subdirs = [d for d in parent_dir.iterdir() if d.is_dir()]
+    
+    # 1. Try exact match
+    for d in subdirs:
+        if d.name.lower() == ep_val_clean:
+            return d
+            
+    # 2. Try simple numeric candidates
+    match = re.search(r"\d+", ep_val_clean)
+    if match:
+        val_int = int(match.group())
+        candidates = [
+            f"ep{val_int:02d}",
+            f"ep{val_int}",
+            f"ep{val_int:03d}",
+            f"{val_int:02d}",
+            f"{val_int:03d}",
+            str(val_int)
+        ]
+        for d in subdirs:
+            if d.name.lower() in candidates:
+                return d
+                
+        # 3. Try finding directory containing target_num as distinct number
+        for d in subdirs:
+            num_matches = re.findall(r"\d+", d.name)
+            for nm in num_matches:
+                if int(nm) == val_int:
+                    return d
+                    
+    # 4. Fallback to substring
+    for d in subdirs:
+        if ep_val_clean in d.name.lower():
+            return d
+            
+    return parent_dir
+
+
 @app.post("/api/utils/import-lakorn-auto")
 def import_lakorn_auto(payload: ImportLakornPayload):
     import os
@@ -2707,25 +2803,9 @@ def import_lakorn_auto(payload: ImportLakornPayload):
         raise HTTPException(status_code=400, detail="ไม่พบ Drama Path ที่ระบุ")
     
     # 1. Find episode folder inside lakorn_path
-    ep_dir = None
-    # Check different potential naming formats for episode folder
-    for candidate in [str(ep_num), f"{ep_num:02d}", f"EP{ep_num}", f"EP{ep_num:02d}", f"ep{ep_num}", f"ep{ep_num:02d}"]:
-        path = Path(lakorn_path) / candidate
-        if path.exists() and path.is_dir():
-            ep_dir = path
-            break
-            
+    ep_dir = find_episode_dir(lakorn_path, ep_num)
     if not ep_dir:
-        # Check folders inside lakorn_path containing the episode number
-        dirs = [d for d in Path(lakorn_path).iterdir() if d.is_dir()]
-        for d in dirs:
-            # Match number exactly or with leading zeroes
-            if re.search(rf"\b0*{ep_num}\b", d.name) or f"ep{ep_num}" in d.name.lower() or f"ep0{ep_num}" in d.name.lower():
-                ep_dir = d
-                break
-                
-    if not ep_dir:
-        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยเลข {ep_num})")
+        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยคำค้นหา: {ep_num})")
 
     # 1.5. Find/resolve character sheet directory (2 - Character Sheet)
     resolved_ref_dir = None
@@ -2797,21 +2877,8 @@ def import_lakorn_auto(payload: ImportLakornPayload):
     if not prompt_dir:
         raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์พรอพต์ภาพ (4 - Image Prompt)")
 
-    # Find specific EP subfolder under prompt_dir (e.g. EP01)
-    ep_str = f"EP{ep_num:02d}"
-    ep_prompt_dir = prompt_dir / ep_str
-    if not (ep_prompt_dir.exists() and ep_prompt_dir.is_dir()):
-        ep_prompt_dir = prompt_dir / f"EP{ep_num}"
-    if not (ep_prompt_dir.exists() and ep_prompt_dir.is_dir()):
-        # Try finding folder containing the episode name or number
-        dirs = [d for d in prompt_dir.iterdir() if d.is_dir()]
-        for d in dirs:
-            if f"{ep_num}" in d.name or f"ep" in d.name.lower():
-                ep_prompt_dir = d
-                break
-                
-    if not ep_prompt_dir or not ep_prompt_dir.exists():
-        ep_prompt_dir = prompt_dir # fall back to base prompt dir if no EP subdir
+    # Find specific EP subfolder under prompt_dir
+    ep_prompt_dir = find_sub_ep_dir(prompt_dir, ep_num)
 
     # List all prompt files
     prompt_files = sorted([
@@ -2838,20 +2905,8 @@ def import_lakorn_auto(payload: ImportLakornPayload):
     if not char_dir:
         raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์พรอพต์ตัวละครรายฉาก (4 - Character Each Scene)")
 
-    # Find specific EP subfolder under char_dir (e.g. EP01)
-    ep_char_dir = char_dir / ep_str
-    if not (ep_char_dir.exists() and ep_char_dir.is_dir()):
-        ep_char_dir = char_dir / f"EP{ep_num}"
-    if not (ep_char_dir.exists() and ep_char_dir.is_dir()):
-        # Try finding folder containing the episode name or number
-        dirs = [d for d in char_dir.iterdir() if d.is_dir()]
-        for d in dirs:
-            if f"{ep_num}" in d.name or f"ep" in d.name.lower():
-                ep_char_dir = d
-                break
-                
-    if not ep_char_dir or not ep_char_dir.exists():
-        ep_char_dir = char_dir # fall back to base char dir if no EP subdir
+    # Find specific EP subfolder under char_dir
+    ep_char_dir = find_sub_ep_dir(char_dir, ep_num)
 
     # List all character files
     char_files = sorted([
@@ -2951,22 +3006,9 @@ def import_lakorn_video_auto(payload: ImportLakornVideoPayload):
         raise HTTPException(status_code=400, detail="ไม่พบ Drama Path ที่ระบุ")
     
     # 1. Find episode folder inside lakorn_path
-    ep_dir = None
-    for candidate in [str(ep_num), f"{ep_num:02d}", f"EP{ep_num}", f"EP{ep_num:02d}", f"ep{ep_num}", f"ep{ep_num:02d}"]:
-        path = Path(lakorn_path) / candidate
-        if path.exists() and path.is_dir():
-            ep_dir = path
-            break
-            
+    ep_dir = find_episode_dir(lakorn_path, ep_num)
     if not ep_dir:
-        dirs = [d for d in Path(lakorn_path).iterdir() if d.is_dir()]
-        for d in dirs:
-            if re.search(rf"\b0*{ep_num}\b", d.name) or f"ep{ep_num}" in d.name.lower() or f"ep0{ep_num}" in d.name.lower():
-                ep_dir = d
-                break
-                
-    if not ep_dir:
-        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยเลข {ep_num})")
+        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยคำค้นหา: {ep_num})")
 
     # 2. Find animation prompt directory inside episode folder
     prompt_dir = None
@@ -2992,20 +3034,8 @@ def import_lakorn_video_auto(payload: ImportLakornVideoPayload):
     if not prompt_dir:
         raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์พรอพต์ภาพเคลื่อนไหว (4 - Animation Prompt)")
 
-    # Find specific EP subfolder under prompt_dir (e.g. EP01)
-    ep_str = f"EP{ep_num:02d}"
-    ep_prompt_dir = prompt_dir / ep_str
-    if not (ep_prompt_dir.exists() and ep_prompt_dir.is_dir()):
-        ep_prompt_dir = prompt_dir / f"EP{ep_num}"
-    if not (ep_prompt_dir.exists() and ep_prompt_dir.is_dir()):
-        dirs = [d for d in prompt_dir.iterdir() if d.is_dir()]
-        for d in dirs:
-            if f"{ep_num}" in d.name or f"ep" in d.name.lower():
-                ep_prompt_dir = d
-                break
-                
-    if not ep_prompt_dir or not ep_prompt_dir.exists():
-        ep_prompt_dir = prompt_dir
+    # Find specific EP subfolder under prompt_dir
+    ep_prompt_dir = find_sub_ep_dir(prompt_dir, ep_num)
 
     # List all prompt files
     prompt_files = sorted([

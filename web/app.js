@@ -2026,10 +2026,7 @@ function initWorkflowActionListeners() {
   if (lakornEpInput) {
     lakornEpInput.addEventListener('input', (e) => {
       let val = e.target.value;
-      val = val.replace(/[^0-9]/g, '');
-      if (val.length > 1) {
-        val = val.charAt(0);
-      }
+      val = val.replace(/[^a-zA-Z0-9\s._-]/g, '');
       e.target.value = val;
       jsonFetch('/api/config/set-default', {
         method: 'POST',
@@ -2049,7 +2046,7 @@ function initWorkflowActionListeners() {
         return;
       }
       if (!epVal) {
-        showToast('กรุณาระบุเลขตอนละครก่อน (ตัวเลขตัวเดียว)', 'error');
+        showToast('กรุณาระบุตอนละครก่อน (เช่น 1, 10, EP01)', 'error');
         if (lakornEpInput) lakornEpInput.focus();
         return;
       }
@@ -2063,7 +2060,7 @@ function initWorkflowActionListeners() {
           method: 'POST',
           body: JSON.stringify({
             lakorn_path: path,
-            ep_num: parseInt(epVal, 10)
+            ep_num: epVal
           })
         });
 
@@ -3025,21 +3022,32 @@ function initVideoGenListeners() {
     });
   }
 
+  const videoLakornEpInput = document.getElementById('cfg_video_lakorn_ep');
+  if (videoLakornEpInput) {
+    videoLakornEpInput.addEventListener('input', (e) => {
+      let val = e.target.value;
+      val = val.replace(/[^a-zA-Z0-9\s._-]/g, '');
+      e.target.value = val;
+      jsonFetch('/api/config/set-default', {
+        method: 'POST',
+        body: JSON.stringify({ key: 'video_lakorn_ep', value: val })
+      }).catch(err => console.error('Failed to save video_lakorn_ep:', err));
+    });
+  }
+
   const btnImportVideoLakornAuto = document.getElementById('btnImportVideoLakornAuto');
   if (btnImportVideoLakornAuto) {
     btnImportVideoLakornAuto.addEventListener('click', async () => {
       const path = cfgVideoLakornPathInput?.value.trim();
-      const epVal = document.getElementById('cfg_video_lakorn_ep')?.value.trim();
+      const epVal = videoLakornEpInput?.value.trim();
       if (!path) {
         showToast('กรุณาระบุ ละคร Path (Video)', 'error');
         if (cfgVideoLakornPathInput) cfgVideoLakornPathInput.focus();
         return;
       }
-      const epNum = parseInt(epVal, 10);
-      if (isNaN(epNum)) {
+      if (!epVal) {
         showToast('กรุณาระบุ ตอนละคร (Video)', 'error');
-        const epEl = document.getElementById('cfg_video_lakorn_ep');
-        if (epEl) epEl.focus();
+        if (videoLakornEpInput) videoLakornEpInput.focus();
         return;
       }
 
@@ -3049,7 +3057,7 @@ function initVideoGenListeners() {
       try {
         const res = await jsonFetch('/api/utils/import-lakorn-video-auto', {
           method: 'POST',
-          body: JSON.stringify({ lakorn_path: path, ep_num: epNum })
+          body: JSON.stringify({ lakorn_path: path, ep_num: epVal })
         });
         if (res.ok && res.prompts_by_round) {
           for (let r = 1; r <= 10; r++) {
