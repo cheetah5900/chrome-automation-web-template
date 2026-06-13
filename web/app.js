@@ -479,6 +479,8 @@ async function loadConfig() {
 
     const lakornPathInput = document.getElementById('cfg_lakorn_path');
     if (lakornPathInput) lakornPathInput.value = config.lakorn_path || '';
+    const lakornTonInput = document.getElementById('cfg_lakorn_ton');
+    if (lakornTonInput) lakornTonInput.value = config.lakorn_ton || '';
     const lakornEpInput = document.getElementById('cfg_lakorn_ep');
     if (lakornEpInput) lakornEpInput.value = config.lakorn_ep || '';
   } catch (e) {
@@ -902,6 +904,8 @@ async function loadImagePrompts() {
     // Load lakorn config values
     const lakornPathInput = document.getElementById('cfg_lakorn_path');
     if (lakornPathInput) lakornPathInput.value = config.lakorn_path || '';
+    const lakornTonInput = document.getElementById('cfg_lakorn_ton');
+    if (lakornTonInput) lakornTonInput.value = config.lakorn_ton || '';
     const lakornEpInput = document.getElementById('cfg_lakorn_ep');
     if (lakornEpInput) lakornEpInput.value = config.lakorn_ep || '';
 
@@ -1990,6 +1994,7 @@ function initWorkflowActionListeners() {
   const browseLakornPathBtn = document.getElementById('browseLakornPathBtn');
   const cfgLakornPathInput = document.getElementById('cfg_lakorn_path');
   const setLakornPathDefaultBtn = document.getElementById('setLakornPathDefaultBtn');
+  const lakornTonInput = document.getElementById('cfg_lakorn_ton');
   const lakornEpInput = document.getElementById('cfg_lakorn_ep');
   const btnImportLakornAuto = document.getElementById('btnImportLakornAuto');
 
@@ -2023,6 +2028,18 @@ function initWorkflowActionListeners() {
     });
   }
 
+  if (lakornTonInput) {
+    lakornTonInput.addEventListener('input', (e) => {
+      let val = e.target.value;
+      val = val.replace(/[^a-zA-Z0-9\s._-]/g, '');
+      e.target.value = val;
+      jsonFetch('/api/config/set-default', {
+        method: 'POST',
+        body: JSON.stringify({ key: 'lakorn_ton', value: val })
+      }).catch(err => console.error('Failed to save lakorn_ton:', err));
+    });
+  }
+
   if (lakornEpInput) {
     lakornEpInput.addEventListener('input', (e) => {
       let val = e.target.value;
@@ -2038,6 +2055,7 @@ function initWorkflowActionListeners() {
   if (btnImportLakornAuto) {
     btnImportLakornAuto.addEventListener('click', async () => {
       const path = cfgLakornPathInput?.value.trim();
+      const tonVal = lakornTonInput?.value.trim();
       const epVal = lakornEpInput?.value.trim();
       
       if (!path) {
@@ -2045,8 +2063,13 @@ function initWorkflowActionListeners() {
         if (cfgLakornPathInput) cfgLakornPathInput.focus();
         return;
       }
+      if (!tonVal) {
+        showToast('กรุณาระบุตอนของละครก่อน (เช่น 1)', 'error');
+        if (lakornTonInput) lakornTonInput.focus();
+        return;
+      }
       if (!epVal) {
-        showToast('กรุณาระบุตอนละครก่อน (เช่น 1, 10, EP01)', 'error');
+        showToast('กรุณาระบุ EP ของละครก่อน (เช่น 2)', 'error');
         if (lakornEpInput) lakornEpInput.focus();
         return;
       }
@@ -2055,11 +2078,12 @@ function initWorkflowActionListeners() {
       btnImportLakornAuto.textContent = 'กำลังนำเข้า...';
 
       try {
-        writeConsoleLine(`Drama Import: Starting auto import for Episode ${epVal} from path: ${path}...`, 'info', 'imageConsole');
+        writeConsoleLine(`Drama Import: Starting auto import for Episode folder ${tonVal}, EP ${epVal} from path: ${path}...`, 'info', 'imageConsole');
         const res = await jsonFetch('/api/utils/import-lakorn-auto', {
           method: 'POST',
           body: JSON.stringify({
             lakorn_path: path,
+            ton_num: tonVal,
             ep_num: epVal
           })
         });
@@ -2708,6 +2732,9 @@ async function loadVideoPrompts() {
     const lakornPath = document.getElementById('cfg_video_lakorn_path');
     if (lakornPath) lakornPath.value = config.video_lakorn_path || '';
 
+    const lakornTon = document.getElementById('cfg_video_lakorn_ton');
+    if (lakornTon) lakornTon.value = config.video_lakorn_ton || '';
+
     const lakornEp = document.getElementById('cfg_video_lakorn_ep');
     if (lakornEp) lakornEp.value = config.video_lakorn_ep || '';
 
@@ -3022,7 +3049,20 @@ function initVideoGenListeners() {
     });
   }
 
+  const videoLakornTonInput = document.getElementById('cfg_video_lakorn_ton');
   const videoLakornEpInput = document.getElementById('cfg_video_lakorn_ep');
+  if (videoLakornTonInput) {
+    videoLakornTonInput.addEventListener('input', (e) => {
+      let val = e.target.value;
+      val = val.replace(/[^a-zA-Z0-9\s._-]/g, '');
+      e.target.value = val;
+      jsonFetch('/api/config/set-default', {
+        method: 'POST',
+        body: JSON.stringify({ key: 'video_lakorn_ton', value: val })
+      }).catch(err => console.error('Failed to save video_lakorn_ton:', err));
+    });
+  }
+
   if (videoLakornEpInput) {
     videoLakornEpInput.addEventListener('input', (e) => {
       let val = e.target.value;
@@ -3039,14 +3079,20 @@ function initVideoGenListeners() {
   if (btnImportVideoLakornAuto) {
     btnImportVideoLakornAuto.addEventListener('click', async () => {
       const path = cfgVideoLakornPathInput?.value.trim();
+      const tonVal = videoLakornTonInput?.value.trim();
       const epVal = videoLakornEpInput?.value.trim();
       if (!path) {
         showToast('กรุณาระบุ ละคร Path (Video)', 'error');
         if (cfgVideoLakornPathInput) cfgVideoLakornPathInput.focus();
         return;
       }
+      if (!tonVal) {
+        showToast('กรุณาระบุตอนของละครก่อน (เช่น 1)', 'error');
+        if (videoLakornTonInput) videoLakornTonInput.focus();
+        return;
+      }
       if (!epVal) {
-        showToast('กรุณาระบุ ตอนละคร (Video)', 'error');
+        showToast('กรุณาระบุ EP ของละครก่อน (เช่น 2)', 'error');
         if (videoLakornEpInput) videoLakornEpInput.focus();
         return;
       }
@@ -3057,7 +3103,7 @@ function initVideoGenListeners() {
       try {
         const res = await jsonFetch('/api/utils/import-lakorn-video-auto', {
           method: 'POST',
-          body: JSON.stringify({ lakorn_path: path, ep_num: epVal })
+          body: JSON.stringify({ lakorn_path: path, ton_num: tonVal, ep_num: epVal })
         });
         if (res.ok && res.prompts_by_round) {
           for (let r = 1; r <= 10; r++) {

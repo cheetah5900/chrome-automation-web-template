@@ -87,12 +87,14 @@ class ForceKillPayload(BaseModel):
 
 class ImportLakornPayload(BaseModel):
     lakorn_path: str
+    ton_num: str
     ep_num: str
     ref_images_dir: str = ""
 
 
 class ImportLakornVideoPayload(BaseModel):
     lakorn_path: str
+    ton_num: str
     ep_num: str
 
 
@@ -938,6 +940,7 @@ def _default_config() -> dict[str, Any]:
             "video_prefix_combine": "",
             "lakorn_path": "",
             "lakorn_ep": "",
+            "lakorn_ton": "",
             "google_flow_path": "",
             "video_wait_seconds": 60,
             "video_input_selector": "",
@@ -945,6 +948,7 @@ def _default_config() -> dict[str, Any]:
             "video_submit_selector": "",
             "video_lakorn_path": "",
             "video_lakorn_ep": "",
+            "video_lakorn_ton": "",
         }
     else:
         h = os.path.expanduser("~")
@@ -983,6 +987,7 @@ def _default_config() -> dict[str, Any]:
             "video_prefix_combine": "",
             "lakorn_path": "",
             "lakorn_ep": "",
+            "lakorn_ton": "",
             "google_flow_path": "",
             "video_wait_seconds": 60,
             "video_input_selector": "",
@@ -990,6 +995,7 @@ def _default_config() -> dict[str, Any]:
             "video_submit_selector": "",
             "video_lakorn_path": "",
             "video_lakorn_ep": "",
+            "video_lakorn_ton": "",
         }
 
     # Dynamically ensure all 10 rounds are initialized in config
@@ -2796,6 +2802,7 @@ def import_lakorn_auto(payload: ImportLakornPayload):
     from pathlib import Path
 
     lakorn_path = payload.lakorn_path.strip()
+    ton_num = payload.ton_num
     ep_num = payload.ep_num
     ref_images_dir = payload.ref_images_dir.strip()
 
@@ -2803,9 +2810,9 @@ def import_lakorn_auto(payload: ImportLakornPayload):
         raise HTTPException(status_code=400, detail="ไม่พบ Drama Path ที่ระบุ")
     
     # 1. Find episode folder inside lakorn_path
-    ep_dir = find_episode_dir(lakorn_path, ep_num)
+    ep_dir = find_episode_dir(lakorn_path, ton_num)
     if not ep_dir:
-        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยคำค้นหา: {ep_num})")
+        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยตอน: {ton_num})")
 
     # 1.5. Find/resolve character sheet directory (2 - Character Sheet)
     resolved_ref_dir = None
@@ -3000,15 +3007,16 @@ def import_lakorn_video_auto(payload: ImportLakornVideoPayload):
     from pathlib import Path
 
     lakorn_path = payload.lakorn_path.strip()
+    ton_num = payload.ton_num
     ep_num = payload.ep_num
 
     if not lakorn_path or not os.path.exists(lakorn_path) or not os.path.isdir(lakorn_path):
         raise HTTPException(status_code=400, detail="ไม่พบ Drama Path ที่ระบุ")
     
     # 1. Find episode folder inside lakorn_path
-    ep_dir = find_episode_dir(lakorn_path, ep_num)
+    ep_dir = find_episode_dir(lakorn_path, ton_num)
     if not ep_dir:
-        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยคำค้นหา: {ep_num})")
+        raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยตอน: {ton_num})")
 
     # 2. Find animation prompt directory inside episode folder
     prompt_dir = None
