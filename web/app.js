@@ -377,11 +377,13 @@ async function updatePortStatus() {
   const select = document.getElementById('profileSelect');
   const launchBtn = document.getElementById('launchProfile');
   const lockedDash = document.getElementById('lockedDashboardContent');
+  const closeBtn = document.getElementById('closeBrowser');
 
   if (!select || !select.value) {
     badge.textContent = 'No Profile';
     badge.className = 'status-badge offline';
     if (lockedDash) lockedDash.classList.add('locked');
+    if (closeBtn) closeBtn.style.display = 'none';
     return;
   }
 
@@ -409,6 +411,7 @@ async function updatePortStatus() {
       launchBtn.textContent = 'Profile Running';
       launchBtn.style.background = 'rgba(72, 187, 120, 0.4)';
     }
+    if (closeBtn) closeBtn.style.display = 'inline-block';
   } else {
     badge.textContent = `Offline (Port ${port})`;
     badge.className = 'status-badge offline';
@@ -422,6 +425,7 @@ async function updatePortStatus() {
       launchBtn.textContent = '🚀 Launch Profile & Open Dashboard';
       launchBtn.style.background = '';
     }
+    if (closeBtn) closeBtn.style.display = 'none';
   }
 }
 
@@ -563,6 +567,34 @@ document.getElementById('createProfile').addEventListener('click', createProfile
 document.getElementById('updateProfile').addEventListener('click', updateProfile);
 document.getElementById('setProfile').addEventListener('click', setDefaultProfile);
 document.getElementById('launchProfile').addEventListener('click', launchProfile);
+document.getElementById('closeBrowser').addEventListener('click', async () => {
+  const select = document.getElementById('profileSelect');
+  const selected = (profileCache || []).find(x => x.name === select?.value);
+  const port = selected ? Number(selected.debug_port || 9222) : 9222;
+  const msg = document.getElementById('profileMsg'); 
+  if (msg) {
+    msg.classList.remove('error');
+    msg.textContent = 'Closing browser...';
+  }
+  try {
+    const res = await jsonFetch('/api/profiles/force-kill', {
+      method: 'POST',
+      body: JSON.stringify({ port })
+    });
+    if (res && res.ok) {
+      if (msg) msg.textContent = `ปิด Browser ที่ port ${port} สำเร็จ`;
+      updatePortStatus();
+    } else {
+      if (msg) msg.textContent = `ไม่พบ Browser ที่เปิดอยู่บน port ${port}`;
+      updatePortStatus();
+    }
+  } catch (err) {
+    if (msg) {
+      msg.textContent = `เกิดข้อผิดพลาด: ${err.message}`;
+      msg.classList.add('error');
+    }
+  }
+});
 document.getElementById('deleteProfileBtn').addEventListener('click', deleteProfile);
 document.getElementById('profileSelect').addEventListener('change', () => {
   const selected = profileCache.find(x => x.name === document.getElementById('profileSelect').value);
@@ -3428,6 +3460,10 @@ function initVideoGenListeners() {
             videoStatusesByRound[r][pIdx] = 'Generating...';
             renderVideoPromptsForRound(r);
 
+            // Generate random cooldown between 10 and 30 seconds
+            const randomCooldown = Math.floor(Math.random() * (30 - 10 + 1)) + 10;
+            writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] สุ่มเวลารอคอยรอบถัดไป: ${randomCooldown} วินาที`, 'info', 'videoConsole');
+
             const success = await executeStep('/api/step/video-gen', {
               prompt: p,
               round_idx: r,
@@ -3435,7 +3471,7 @@ function initVideoGenListeners() {
               video_input_selector: inputSelectorVal,
               video_settings_selector: settingsSelectorVal,
               video_submit_selector: submitSelectorVal,
-              video_wait_seconds: waitSecondsVal,
+              video_wait_seconds: randomCooldown,
               is_first_run: isFirstPrompt
             }, null, 'videoConsole');
 
@@ -3452,7 +3488,7 @@ function initVideoGenListeners() {
             videoStatusesByRound[r][pIdx] = 'Sent / Cooldown';
             renderVideoPromptsForRound(r);
 
-            await runVideoCooldown(r, waitSecondsVal);
+            await runVideoCooldown(r, randomCooldown);
           }
 
           if (shouldStopVideoGeneration) break;

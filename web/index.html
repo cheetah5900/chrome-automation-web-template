@@ -44,6 +44,7 @@
               🚀 Launch Profile & Open Dashboard
               <div class="custom-tooltip" id="tooltip_launchProfile"></div>
             </button>
+            <button id="closeBrowser" class="secondary" style="display: none; flex: 1.2; padding: 12px; font-size: 0.9rem; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">❌ Close Browser</button>
             <button id="setProfile" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem;">Set Default</button>
           </div>
           <div style="display: flex; gap: 8px; width: 100%; flex-wrap: wrap;">
@@ -438,10 +439,9 @@
 
               <!-- Wait time input -->
               <div style="max-width: 350px; width: 100%;">
-                <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Wait Time หลังส่ง Prompt (วินาที):</label>
+                <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Wait Time หลังส่ง Prompt (สุ่มอัตโนมัติ):</label>
                 <div style="display: flex; gap: 8px;">
-                  <input type="number" id="cfg_video_wait_seconds" placeholder="60" style="padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; width: 100%;" />
-                  <button id="setVideoWaitSecondsDefaultBtn" class="secondary" style="padding: 10px 12px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                  <input type="text" id="cfg_video_wait_seconds" value="สุ่ม 10-30 วินาที" disabled style="padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-bottom: 0; width: 100%; cursor: not-allowed;" />
                 </div>
               </div>
             </div>
