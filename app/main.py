@@ -183,6 +183,14 @@ def _activate_chrome():
             pass
 
 
+def is_driver_alive(driver) -> bool:
+    try:
+        _ = driver.window_handles
+        return True
+    except Exception:
+        return False
+
+
 def _physical_switch_to_tab(url_part):
     import subprocess
     script = f"""
@@ -1232,6 +1240,8 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                 def click_element_with_retry(selectors, name):
                     combined_selector = ", ".join(selectors)
                     for attempt in range(3):
+                        if not is_driver_alive(driver):
+                            raise RuntimeError("Browser connection lost.")
                         log(f"Attempt {attempt + 1}/3 to locate and click {name}...")
                         try:
                             el = WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.CSS_SELECTOR, combined_selector)))
@@ -1243,6 +1253,8 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                                 log(f"Successfully clicked {name}!")
                                 return True
                         except Exception:
+                            if not is_driver_alive(driver):
+                                raise RuntimeError("Browser connection lost.")
                             pass
                         if attempt < 2:
                             log(f"Failed to click {name}. Waiting 1.5 seconds before next attempt...")
@@ -1251,6 +1263,8 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     return False
 
                 def upload_macos_file_dialog(file_path):
+                    if not is_driver_alive(driver):
+                        raise RuntimeError("Browser connection lost.")
                     import subprocess
                     escaped_path = file_path.replace('"', '\\"')
                     script = f"""
@@ -1270,11 +1284,15 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                         subprocess.run(["osascript", "-e", script], check=False)
                         return True
                     except Exception as e:
+                        if not is_driver_alive(driver):
+                            raise RuntimeError("Browser connection lost.")
                         log(f"AppleScript dialog input failed: {e}")
                         return False
 
                 # Upload all reference images sequentially
                 for run_idx, reference_image in enumerate(ref_images):
+                    if not is_driver_alive(driver):
+                        raise RuntimeError("Browser connection lost.")
                     if not reference_image:
                         continue
                     log(f"Uploading Gemini reference image {run_idx + 1}/{len(ref_images)}: {reference_image}")
@@ -1595,6 +1613,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             if not submit_only:
                 def click_chatgpt_attach_button() -> bool:
                     for attempt in range(3):
+                        if not is_driver_alive(driver):
+                            raise RuntimeError("Browser connection lost.")
                         log(f"Attempt {attempt + 1}/3 to open ChatGPT add-files menu...")
                         try:
                             plus_btn = WebDriverWait(driver, 3).until(
@@ -1619,6 +1639,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                             log("Clicked ChatGPT 'Add photos & files' menu item.")
                             return True
                         except Exception:
+                            if not is_driver_alive(driver):
+                                raise RuntimeError("Browser connection lost.")
                             pass
 
                         fallback_selectors = [
@@ -1630,6 +1652,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         ]
                         for selector in fallback_selectors:
                             try:
+                                if not is_driver_alive(driver):
+                                    raise RuntimeError("Browser connection lost.")
                                 el = WebDriverWait(driver, 2).until(
                                     EC.presence_of_element_located((By.CSS_SELECTOR, selector))
                                 )
@@ -1648,6 +1672,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     return False
 
                 def upload_macos_file_dialog(file_path):
+                    if not is_driver_alive(driver):
+                        raise RuntimeError("Browser connection lost.")
                     import subprocess
                     escaped_path = file_path.replace('"', '\\"')
                     script = f"""
@@ -1667,11 +1693,15 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         subprocess.run(["osascript", "-e", script], check=False)
                         return True
                     except Exception as e:
+                        if not is_driver_alive(driver):
+                            raise RuntimeError("Browser connection lost.")
                         log(f"AppleScript dialog input failed: {e}")
                         return False
 
                 # Upload all reference images sequentially
                 for run_idx, reference_image in enumerate(ref_images):
+                    if not is_driver_alive(driver):
+                        raise RuntimeError("Browser connection lost.")
                     if not reference_image:
                         continue
                     log(f"Uploading ChatGPT reference image {run_idx + 1}/{len(ref_images)}: {reference_image}")
@@ -1689,6 +1719,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         log(f"UI attach trigger failed: {click_err}")
                     
                     if not attach_triggered:
+                        if not is_driver_alive(driver):
+                            raise RuntimeError("Browser connection lost.")
                         # press Cmd + U directly to open file modal
                         log("Fallback: Sending Cmd + U keystroke via System Events directly to trigger file modal...")
                         _activate_chrome()
@@ -3129,6 +3161,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
     # 1.5. Run Google Flow Configuration Sequence (Steps 2-8)
     def click_by_xpath(xpath: str, description: str, timeout: int = 15):
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         log(f"[กำลังค้นหาปุ่ม] {description} (XPath: {xpath})")
         try:
             elem = WebDriverWait(driver, timeout).until(
@@ -3141,6 +3175,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             clicked = False
 
             # วิธีที่ 1: ActionChains (จำลองการเลื่อนเมาส์ไปกดจริง)
+            if not is_driver_alive(driver):
+                raise RuntimeError("Browser connection lost.")
             try:
                 from selenium.webdriver.common.action_chains import ActionChains
                 actions = ActionChains(driver)
@@ -3152,6 +3188,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
             # วิธีที่ 2: Standard click
             if not clicked:
+                if not is_driver_alive(driver):
+                    raise RuntimeError("Browser connection lost.")
                 try:
                     elem.click()
                     log(f"[คลิกปุ่มสำเร็จ] (Standard Click): {description}")
@@ -3161,6 +3199,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
             # วิธีที่ 3: คลิกที่ตัว overlay ของปุ่ม
             if not clicked:
+                if not is_driver_alive(driver):
+                    raise RuntimeError("Browser connection lost.")
                 try:
                     overlay = elem.find_element(By.XPATH, ".//div[@data-type='button-overlay']")
                     overlay.click()
@@ -3171,6 +3211,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
             # วิธีที่ 4: JavaScript click (วิธีสุดท้ายที่เป็นการบังคับคลิก)
             if not clicked:
+                if not is_driver_alive(driver):
+                    raise RuntimeError("Browser connection lost.")
                 try:
                     driver.execute_script("arguments[0].click();", elem)
                     log(f"[คลิกปุ่มสำเร็จ] (JS Click): {description}")
@@ -3183,6 +3225,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
             time.sleep(1.0)
         except Exception as e:
+            if not is_driver_alive(driver):
+                raise RuntimeError("Browser connection lost.")
             raise HTTPException(
                 status_code=400,
                 detail=f"ไม่สามารถดำเนินการขั้นตอน: {description} (Error: {e})"
@@ -3296,33 +3340,45 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         log(f"เตือน: ล้างข้อความเดิมล้มเหลว ({e})")
     
     # 4. Type @ using ActionChains keyboard events
+    if not is_driver_alive(driver):
+        raise RuntimeError("Browser connection lost.")
     log("[ป้อนข้อมูล] พิมพ์ @ ด้วยคีย์บอร์ดเสมือน")
     try:
         from selenium.webdriver.common.action_chains import ActionChains
         actions = ActionChains(driver)
         actions.send_keys("@").perform()
     except Exception as e:
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ @ ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys("@")
     time.sleep(2.0) # Wait 2.0s after typing @
 
     # Type round number using ActionChains keyboard events
+    if not is_driver_alive(driver):
+        raise RuntimeError("Browser connection lost.")
     text_to_type = f"{round_idx}.png"
     log(f"[ป้อนข้อมูล] พิมพ์หมายเลข Round + .png ด้วยคีย์บอร์ดเสมือน: {text_to_type}")
     try:
         actions = ActionChains(driver)
         actions.send_keys(text_to_type).perform()
     except Exception as e:
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(text_to_type)
     time.sleep(2.0) # Wait 2.0s for autocomplete
 
     # Press Enter using ActionChains keyboard events
+    if not is_driver_alive(driver):
+        raise RuntimeError("Browser connection lost.")
     log("[ป้อนข้อมูล] กด Enter ด้วยคีย์บอร์ดเสมือน")
     try:
         actions = ActionChains(driver)
         actions.send_keys(Keys.ENTER).perform()
     except Exception as e:
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         log(f"กด Enter ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(Keys.ENTER)
     
@@ -3330,15 +3386,21 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     time.sleep(2.0)
 
     # Press Spacebar 1 time
+    if not is_driver_alive(driver):
+        raise RuntimeError("Browser connection lost.")
     log("[ป้อนข้อมูล] กด Spacebar ด้วยคีย์บอร์ดเสมือน 1 ครั้ง")
     try:
         actions = ActionChains(driver)
         actions.send_keys(Keys.SPACE).perform()
     except Exception as e:
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         log(f"กด Spacebar ล้มเหลว: {e}")
     time.sleep(1.0)
 
     # 5. Paste the animation prompt
+    if not is_driver_alive(driver):
+        raise RuntimeError("Browser connection lost.")
     log(f"[ป้อนข้อมูล] วางพรอพต์ของฉาก: {prompt}")
     import subprocess
     try:
@@ -3355,22 +3417,30 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         subprocess.run(["osascript", "-e", paste_script], check=False)
         log("[ป้อนข้อมูลสำเร็จ] วางพรอพต์สำเร็จผ่าน macOS clipboard")
     except Exception as e:
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         log(f"วางผ่าน Clipboard ล้มเหลว, ใช้ send_keys สำรอง: {e}")
         box.send_keys(prompt)
     time.sleep(2.0)
 
     # Press Enter to submit the prompt
+    if not is_driver_alive(driver):
+        raise RuntimeError("Browser connection lost.")
     log("[ป้อนข้อมูล] กด Enter เพื่อส่ง prompt")
     try:
         actions = ActionChains(driver)
         actions.send_keys(Keys.ENTER).perform()
     except Exception as e:
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         log(f"ส่ง Enter ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(Keys.ENTER)
     time.sleep(2.0)
 
     # 5. Click settings button to check/verify settings if specified
     if video_settings_selector:
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         log(f"คลิกปุ่มตั้งค่าด้วย CSS Selector: {video_settings_selector}")
         try:
             settings_btn = WebDriverWait(driver, 5).until(
@@ -3382,10 +3452,14 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 driver.execute_script("arguments[0].click();", settings_btn)
             time.sleep(1.5) # Wait for settings panel to verify/load
         except Exception as e:
+            if not is_driver_alive(driver):
+                raise RuntimeError("Browser connection lost.")
             log(f"Warning: ไม่สามารถคลิกปุ่มตั้งค่าได้: {e}")
 
     # 6. Submit/Send the prompt
     if video_submit_selector:
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         log(f"คลิกปุ่มส่งพรอพต์ด้วย CSS Selector: {video_submit_selector}")
         try:
             submit_btn = WebDriverWait(driver, 5).until(
@@ -3396,6 +3470,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             except Exception:
                 driver.execute_script("arguments[0].click();", submit_btn)
         except Exception as e:
+            if not is_driver_alive(driver):
+                raise RuntimeError("Browser connection lost.")
             raise HTTPException(status_code=400, detail=f"ไม่พบปุ่มส่งพรอพต์: {e}")
     else:
         log("ยกเลิกการกดปุ่ม Enter บังคับส่งพรอพต์เพื่อรอให้ผู้ใช้ตรวจทานข้อความ")
