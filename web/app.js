@@ -2261,6 +2261,29 @@ function initWorkflowActionListeners() {
         return;
       }
 
+      // Reset all image generation data structures and UI first
+      promptsByRound = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
+      statusesByRound = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
+      refImagesByRound = { 
+        1: ["", "", "", "", "", "", ""], 2: ["", "", "", "", "", "", ""], 3: ["", "", "", "", "", "", ""], 4: ["", "", "", "", "", "", ""], 5: ["", "", "", "", "", "", ""],
+        6: ["", "", "", "", "", "", ""], 7: ["", "", "", "", "", "", ""], 8: ["", "", "", "", "", "", ""], 9: ["", "", "", "", "", "", ""], 10: ["", "", "", "", "", "", ""] 
+      };
+      refImagesDirByRound = {
+        1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 10: ""
+      };
+      
+      const list = document.getElementById('imagePromptList');
+      if (list) list.innerHTML = '';
+      
+      const dirInput = document.getElementById('cfg_ref_images_dir');
+      if (dirInput) dirInput.value = '';
+
+      renderImagePromptsForRound(currentPromptRound);
+      renderSelectedRefImagesList();
+      renderDropdownOptions();
+      
+      await saveImagePrompts(true);
+
       btnImportLakornAuto.disabled = true;
       btnImportLakornAuto.textContent = 'กำลังนำเข้า...';
 
