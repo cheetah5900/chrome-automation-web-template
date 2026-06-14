@@ -1488,7 +1488,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             import time
             import random
             if last_submit_time > 0.0:
-                random_delay = random.randint(1, 10)
+                random_delay = random.randint(1, 5)
                 log(f"จำลองการทำงานมนุษย์: สุ่มรอ {random_delay} วินาที ก่อนเริ่มอัปโหลดรูปและวาง Prompt ถัดไป...")
                 time.sleep(random_delay)
             
