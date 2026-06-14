@@ -1,3 +1,35 @@
+# Project Overview & Current Status
+
+This project is a web-based automation controller for managing Google Chrome profiles, launching remote debugging sessions, and running automated workflows (including image/video generation and lakorn media import).
+
+## Key Features
+1. **Profile Launching**: Launches Chrome with a specified remote debugging port (default: `9222`) and user data directory. Supports setting up to 3 startup URLs.
+2. **Lakorn Import Automation**: Functional scripts to automate lakorn import workflows.
+3. **AI Image/Video Generation Automation**:
+   - Automates prompt submission in Gemini/ChatGPT/Google Flow.
+   - Refined typing sequence for Google Flow video generation: types `@round.png`, selects the mention autocomplete option, enters a `Space`, and uses macOS AppleScript clipboard pasting to enter prompt text without losing editor focus or triggering highlight-all conflicts.
+   - Generous typing and mention autocomplete delays (doubled sleeps) to guarantee stable UI loading.
+4. **Dynamic Tooltips**:
+   - Pure CSS absolute-positioned glassmorphism tooltips added to all 9 functional buttons.
+   - Explanations are written in Thai, providing a step-by-step breakdown of delays, key presses, and actions.
+   - Tooltip text updates in real-time via JS event listeners whenever UI parameters (active combine sets, intervals, URLs, ports) are changed.
+
+## Project Architecture
+- **`app/main.py`**: FastAPI backend exposing endpoints for configuration (`/api/config`), profile launcher (`/api/profiles/launch`), and selenium automation tasks (`/api/step/video-gen`).
+- **`app/browser.py`**: Handles Chrome profile processes and subprocess management.
+- **`web/index.html`**: Main UI dashboard layout.
+- **`web/styles.css`**: Styling dashboard with a modern dark glassmorphism theme and tooltip hover states.
+- **`web/app.js`**: Dynamic frontend script that manages API updates, UI events, and builds dynamic tooltip explanations.
+- **`config_mac.json`**: Persistence file for active configurations, prompts, and run-statuses.
+
+## Current Runtime Status
+- **Backend Server**: Running locally on `http://127.0.0.1:6969`.
+- **Chrome Automation Port**: Configured to `9222`.
+- **Active Git Branch**: `feat/video-helper-batch-process`.
+- **Latest Fixes**: Keyboard typing delays doubled; select-all edit box bug in Google Flow resolved.
+
+---
+
 # Role & Core Objective
 You are an expert Senior AI Engineer operating as a Single-Agent autonomous system. Your goal is to solve the user's coding request with maximum efficiency, zero syntax errors, and optimized token usage.
 
