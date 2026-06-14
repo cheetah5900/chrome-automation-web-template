@@ -104,6 +104,7 @@ class VideoGenStepPayload(BaseModel):
     video_settings_selector: str = ""
     video_submit_selector: str = ""
     video_wait_seconds: int = 60
+    is_first_run: bool = True
 
 
 
@@ -3232,71 +3233,74 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 detail=f"ไม่สามารถดำเนินการขั้นตอน: {description} (Error: {e})"
             )
 
-    log("เริ่มขั้นตอนการตั้งค่า Google Flow Automation (Steps 1-8)")
-    
-    xpath_video_settings = "//button[contains(., 'วิดีโอ') and @aria-haspopup='menu']"
-    
-    # Step 2: Open settings panel if not already open
-    try:
-        settings_btn = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, xpath_video_settings))
-        )
-        aria_expanded = settings_btn.get_attribute("aria-expanded")
-        data_state = settings_btn.get_attribute("data-state")
-        if aria_expanded == "true" or data_state == "open":
-            log("เมนูตั้งค่าวิดีโอเปิดอยู่แล้ว ไม่จำเป็นต้องคลิกเปิดซ้ำ")
-        else:
+    if payload.is_first_run:
+        log("เริ่มขั้นตอนการตั้งค่า Google Flow Automation (Steps 1-8)")
+        
+        xpath_video_settings = "//button[contains(., 'วิดีโอ') and @aria-haspopup='menu']"
+        
+        # Step 2: Open settings panel if not already open
+        try:
+            settings_btn = WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.XPATH, xpath_video_settings))
+            )
+            aria_expanded = settings_btn.get_attribute("aria-expanded")
+            data_state = settings_btn.get_attribute("data-state")
+            if aria_expanded == "true" or data_state == "open":
+                log("เมนูตั้งค่าวิดีโอเปิดอยู่แล้ว ไม่จำเป็นต้องคลิกเปิดซ้ำ")
+            else:
+                click_by_xpath(xpath_video_settings, "ปุ่มเปิดเมนูตั้งค่าวิดีโอ (วิดีโอ)")
+        except Exception:
             click_by_xpath(xpath_video_settings, "ปุ่มเปิดเมนูตั้งค่าวิดีโอ (วิดีโอ)")
-    except Exception:
-        click_by_xpath(xpath_video_settings, "ปุ่มเปิดเมนูตั้งค่าวิดีโอ (วิดีโอ)")
 
-    # Step 3: Tab วิดีโอ
-    xpath_tab_video = "//button[@role='tab' and (contains(., 'วิดีโอ') or contains(@id, '-trigger-VIDEO'))]"
-    click_by_xpath(xpath_tab_video, "แท็บวิดีโอ")
+        # Step 3: Tab วิดีโอ
+        xpath_tab_video = "//button[@role='tab' and (contains(., 'วิดีโอ') or contains(@id, '-trigger-VIDEO'))]"
+        click_by_xpath(xpath_tab_video, "แท็บวิดีโอ")
 
-    # Step 4: Tab เฟรม
-    xpath_tab_frames = "//button[@role='tab' and (contains(., 'เฟรม') or contains(@id, '-trigger-VIDEO_FRAMES'))]"
-    click_by_xpath(xpath_tab_frames, "แท็บเฟรม")
+        # Step 4: Tab เฟรม
+        xpath_tab_frames = "//button[@role='tab' and (contains(., 'เฟรม') or contains(@id, '-trigger-VIDEO_FRAMES'))]"
+        click_by_xpath(xpath_tab_frames, "แท็บเฟรม")
 
-    # Step 5: Ratio 9:16
-    xpath_ratio_portrait = "//button[@role='tab' and (contains(., '9:16') or contains(@id, '-trigger-PORTRAIT'))]"
-    click_by_xpath(xpath_ratio_portrait, "ปุ่มเลือกอัตราส่วน 9:16")
+        # Step 5: Ratio 9:16
+        xpath_ratio_portrait = "//button[@role='tab' and (contains(., '9:16') or contains(@id, '-trigger-PORTRAIT'))]"
+        click_by_xpath(xpath_ratio_portrait, "ปุ่มเลือกอัตราส่วน 9:16")
 
-    # Step 6: Speed x2
-    xpath_speed_x2 = "//button[@role='tab' and (text()='x2' or contains(., 'x2') or contains(@id, '-trigger-2'))]"
-    click_by_xpath(xpath_speed_x2, "ปุ่มเลือกความเร็ว x2")
+        # Step 6: Speed x2
+        xpath_speed_x2 = "//button[@role='tab' and (text()='x2' or contains(., 'x2') or contains(@id, '-trigger-2'))]"
+        click_by_xpath(xpath_speed_x2, "ปุ่มเลือกความเร็ว x2")
 
-    # Step 7 & 8: Select "Veo 3.1 - Lite" model
-    xpath_dropdown_model = "//button[@aria-haspopup='menu' and (contains(., 'Veo 3.1') or contains(., 'Veo') or contains(@class, 'eaVRLg'))]"
-    try:
-        model_btn = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, xpath_dropdown_model))
-        )
-        current_model_text = model_btn.text.strip()
-        log(f"โมเดลปัจจุบันที่เลือกอยู่คือ: '{current_model_text}'")
-        if "Veo 3.1 - Lite" in current_model_text:
-            log("โมเดลเป็น Veo 3.1 - Lite อยู่แล้ว ไม่ต้องกดเลือกซ้ำ")
-        else:
-            # Open dropdown
-            click_by_xpath(xpath_dropdown_model, f"ปุ่มเปิด Dropdown รุ่นโมเดล (ปัจจุบัน: {current_model_text})")
-            # Step 8: Select "Veo 3.1 - Lite" from menu
+        # Step 7 & 8: Select "Veo 3.1 - Lite" model
+        xpath_dropdown_model = "//button[@aria-haspopup='menu' and (contains(., 'Veo 3.1') or contains(., 'Veo') or contains(@class, 'eaVRLg'))]"
+        try:
+            model_btn = WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.XPATH, xpath_dropdown_model))
+            )
+            current_model_text = model_btn.text.strip()
+            log(f"โมเดลปัจจุบันที่เลือกอยู่คือ: '{current_model_text}'")
+            if "Veo 3.1 - Lite" in current_model_text:
+                log("โมเดลเป็น Veo 3.1 - Lite อยู่แล้ว ไม่ต้องกดเลือกซ้ำ")
+            else:
+                # Open dropdown
+                click_by_xpath(xpath_dropdown_model, f"ปุ่มเปิด Dropdown รุ่นโมเดล (ปัจจุบัน: {current_model_text})")
+                # Step 8: Select "Veo 3.1 - Lite" from menu
+                xpath_select_model = "//*[contains(text(), 'Veo 3.1 - Lite')] | //button[contains(., 'Veo 3.1 - Lite')] | //div[@role='menuitem']//*[contains(text(), 'Veo 3.1 - Lite')]"
+                click_by_xpath(xpath_select_model, "เลือก Veo 3.1 - Lite จากเมนู")
+        except Exception as e:
+            log(f"Warning: ไม่สามารถตรวจเช็คโมเดลปัจจุบันได้ ทำการกดสลับโมเดลเป็นปกติ (Error: {e})")
+            click_by_xpath(xpath_dropdown_model, "ปุ่มเปิด Dropdown รุ่นโมเดล")
             xpath_select_model = "//*[contains(text(), 'Veo 3.1 - Lite')] | //button[contains(., 'Veo 3.1 - Lite')] | //div[@role='menuitem']//*[contains(text(), 'Veo 3.1 - Lite')]"
             click_by_xpath(xpath_select_model, "เลือก Veo 3.1 - Lite จากเมนู")
-    except Exception as e:
-        log(f"Warning: ไม่สามารถตรวจเช็คโมเดลปัจจุบันได้ ทำการกดสลับโมเดลเป็นปกติ (Error: {e})")
-        click_by_xpath(xpath_dropdown_model, "ปุ่มเปิด Dropdown รุ่นโมเดล")
-        xpath_select_model = "//*[contains(text(), 'Veo 3.1 - Lite')] | //button[contains(., 'Veo 3.1 - Lite')] | //div[@role='menuitem']//*[contains(text(), 'Veo 3.1 - Lite')]"
-        click_by_xpath(xpath_select_model, "เลือก Veo 3.1 - Lite จากเมนู")
 
-    log("เสร็จสิ้นการตั้งค่า Google Flow Automation (Steps 1-8)")
+        log("เสร็จสิ้นการตั้งค่า Google Flow Automation (Steps 1-8)")
 
-    # 2. Close settings modal using Esc key
-    log("[กำลังส่งคำสั่ง] กด Esc เพื่อปิดเมนูตั้งค่าวิดีโอ")
-    try:
-        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
-        time.sleep(1.0)
-    except Exception as e:
-        log(f"ไม่สามารถกด Esc เพื่อปิดเมนูได้: {e}")
+        # 2. Close settings modal using Esc key
+        log("[กำลังส่งคำสั่ง] กด Esc เพื่อปิดเมนูตั้งค่าวิดีโอ")
+        try:
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+            time.sleep(1.0)
+        except Exception as e:
+            log(f"ไม่สามารถกด Esc เพื่อปิดเมนูได้: {e}")
+    else:
+        log("ข้ามขั้นตอนการตั้งค่า Google Flow Automation (ไม่ใช่รอบแรกที่รันระบบ)")
 
     # 3. Find and click prompt input field
     if not video_input_selector:

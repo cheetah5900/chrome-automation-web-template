@@ -3396,6 +3396,7 @@ function initVideoGenListeners() {
       const cooldownTracker = document.getElementById('videoCooldownTracker');
       if (cooldownTracker) cooldownTracker.style.display = 'none';
 
+      let isFirstPrompt = true;
       try {
         for (let idx = 0; idx < activeRounds.length; idx++) {
           const r = activeRounds[idx];
@@ -3434,8 +3435,11 @@ function initVideoGenListeners() {
               video_input_selector: inputSelectorVal,
               video_settings_selector: settingsSelectorVal,
               video_submit_selector: submitSelectorVal,
-              video_wait_seconds: waitSecondsVal
+              video_wait_seconds: waitSecondsVal,
+              is_first_run: isFirstPrompt
             }, null, 'videoConsole');
+
+            isFirstPrompt = false;
 
             if (!success) {
               videoStatusesByRound[r][pIdx] = 'Failed';
