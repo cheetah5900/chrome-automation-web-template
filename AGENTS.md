@@ -26,7 +26,11 @@ This project is a web-based automation controller for managing Google Chrome pro
 - **Backend Server**: Running locally on `http://127.0.0.1:6969`.
 - **Chrome Automation Port**: Configured to `9222`.
 - **Active Git Branch**: `feat/video-helper-batch-process`.
-- **Latest Fixes**: Keyboard typing delays doubled; select-all edit box bug in Google Flow resolved.
+- **Latest Fixes & Features**:
+  - **Force Stop Safety**: Implemented `is_driver_alive` session validation inside all selenium click/upload functions. If Chrome is force-killed, the backend immediately raises an exception and aborts execution, completely preventing AppleScript keystrokes from leaking into other active desktop windows.
+  - **Google Flow Optimization**: Modified the video generation workflow to skip settings configuration (ratio, speed, model selection) after the first round has successfully completed, significantly speeding up subsequent rounds.
+  - **Close Browser Button**: Added a dedicated button to the Profile Manager UI to close Chrome profiles cleanly.
+  - **Delay Optimizations**: Doubled keyboard typing delays for stable autocompletion, and randomized the human simulation delay interval.
 
 ---
 
@@ -70,4 +74,8 @@ Before outputting any final code, you MUST think step-by-step internally and str
 - DO NOT add complex window existence checks (like `exists windows of process "Google Chrome"`) inside the AppleScript dialog workflow. These queries require Accessibility (Assistive device) permissions in macOS, which standard Terminal/Python processes do not have, causing the script to bypass the keystrokes or crash. Use a simple, reliable `delay 1.0` before sending keystrokes instead.
 - Use clipboard pasting (`keystroke "v" using {command down}`) for putting the filepath into the path sheet, as it is 10x faster and layout-independent compared to character-by-character typing.
 - Always perform the file upload sequence *before* typing/submitting the prompt, and wait at least 3 seconds after pasting the prompt before clicking send.
+
+## Force Stop Handling & Session Validation
+- Webdriver commands and AppleScript dialog automation must always verify driver session validity (`is_driver_alive`) before starting or retrying, to prevent sending system key-events to the wrong application if Chrome is closed.
+- If the browser session is closed, raise a runtime error immediately to break backend automation loops, letting the frontend know it should stop processing further rounds.
 
