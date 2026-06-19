@@ -1017,8 +1017,8 @@ def _default_config() -> dict[str, Any]:
             "video_lakorn_ton": "",
         }
 
-    # Dynamically ensure all 10 rounds are initialized in config
-    for r in range(1, 11):
+    # Dynamically ensure all 20 rounds of image prompts and 10 rounds of video prompts are initialized in config
+    for r in range(1, 21):
         p_key = "image_prompts" if r == 1 else f"image_prompts_{r}"
         s_key = "image_prompt_statuses" if r == 1 else f"image_prompt_statuses_{r}"
         if p_key not in res:
@@ -1026,6 +1026,16 @@ def _default_config() -> dict[str, Any]:
         if s_key not in res:
             res[s_key] = []
 
+        active_key = f"round_active_{r}"
+        if active_key not in res:
+            res[active_key] = True
+
+        for i in range(1, 8):
+            ref_key = f"reference_image_round_{r}_{i}"
+            if ref_key not in res:
+                res[ref_key] = ""
+
+    for r in range(1, 11):
         vp_key = "video_prompts" if r == 1 else f"video_prompts_{r}"
         vs_key = "video_prompt_statuses" if r == 1 else f"video_prompt_statuses_{r}"
         if vp_key not in res:
@@ -1036,11 +1046,6 @@ def _default_config() -> dict[str, Any]:
         vactive_key = f"video_round_active_{r}"
         if vactive_key not in res:
             res[vactive_key] = True
-            
-        for i in range(1, 8):
-            ref_key = f"reference_image_round_{r}_{i}"
-            if ref_key not in res:
-                res[ref_key] = ""
                 
     # Also add default reference image 4 to 7 globally for defaults
     for i in range(4, 8):
@@ -1782,7 +1787,11 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 try:
                     driver.execute_script("document.execCommand('insertText', false, arguments[0]);", custom_prompt)
                     time.sleep(0.5)
-                    entered_text = driver.execute_script("return arguments[0].innerText || arguments[0].textContent;", box)
+                    # Verify text inside the entire #prompt-textarea div instead of just the (potentially detached) box element
+                    entered_text = driver.execute_script("""
+                        var target = document.getElementById('prompt-textarea') || arguments[0];
+                        return target.innerText || target.textContent || '';
+                    """, box)
                     if entered_text and entered_text.strip() != "":
                         log("Prompt input populated successfully via browser insertText command.")
                         input_success = True
@@ -1791,6 +1800,18 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
 
                 # Secondary Fallback: Copy prompt to macOS clipboard and paste it via System Events
                 if not input_success:
+                    log("Fallback: Browser insertText failed or could not be verified. Re-focusing and pasting via macOS clipboard...")
+                    try:
+                        # Re-focus and re-click the input box right before activating Chrome and pasting
+                        try:
+                            box.click()
+                        except Exception:
+                            driver.execute_script("arguments[0].click();", box)
+                        driver.execute_script("arguments[0].focus();", box)
+                        time.sleep(0.3)
+                    except Exception as focus_err:
+                        log(f"Fallback focus failed: {focus_err}")
+
                     import subprocess
                     try:
                         process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, text=True)
@@ -1805,7 +1826,12 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         """
                         subprocess.run(["osascript", "-e", paste_script], check=False)
                         time.sleep(1.0)
-                        entered_text = driver.execute_script("return arguments[0].innerText || arguments[0].textContent;", box)
+                        
+                        # Re-verify inside the entire contenteditable div
+                        entered_text = driver.execute_script("""
+                            var target = document.getElementById('prompt-textarea') || arguments[0];
+                            return target.innerText || target.textContent || '';
+                        """, box)
                         if entered_text and entered_text.strip() != "":
                             log("Pasted prompt successfully using macOS clipboard.")
                             input_success = True
@@ -2976,14 +3002,14 @@ def import_lakorn_auto(payload: ImportLakornPayload):
                     "path": full_path
                 })
 
-    # Prepare rounds (up to 10 rounds maximum, matching UI limit)
-    prompts_by_round = {str(r): [] for r in range(1, 11)}
-    ref_images_by_round = {str(r): ["", "", "", "", "", "", ""] for r in range(1, 11)}
+    # Prepare rounds (up to 20 rounds maximum, matching UI limit)
+    prompts_by_round = {str(r): [] for r in range(1, 21)}
+    ref_images_by_round = {str(r): ["", "", "", "", "", "", ""] for r in range(1, 21)}
 
     # Process prompt files and insert into corresponding rounds
     for idx, p_file in enumerate(prompt_files):
         round_num = idx + 1
-        if round_num > 10:
+        if round_num > 20:
             break
         try:
             content = p_file.read_text(encoding="utf-8")
@@ -2994,7 +3020,7 @@ def import_lakorn_auto(payload: ImportLakornPayload):
     # Process character files and match reference images
     for idx, c_file in enumerate(char_files):
         round_num = idx + 1
-        if round_num > 10:
+        if round_num > 20:
             break
         try:
             content = c_file.read_text(encoding="utf-8")
@@ -3482,6 +3508,65 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
     log(f"วางพรอพต์เรียบร้อยแล้ว เริ่มเวลารอ {video_wait_seconds} วินาที...")
     return {"ok": True, "message": "วางพรอพต์และเริ่มต้นการรอ"}
+
+
+class SeedancePayload(BaseModel):
+    prompt: str
+
+
+@app.post("/api/step/seedance")
+async def step_seedance(payload: SeedancePayload):
+    try:
+        bot = browser_manager.get()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ไม่สามารถเชื่อมต่อ Browser ได้: {e}")
+
+    try:
+        # Check if tab exists and switch to it
+        switched = bot.switch_to_tab_containing("dreamina.capcut.com")
+        if not switched:
+            bot.driver.execute_script("window.open('https://dreamina.capcut.com/ai-tool/generate', '_blank');")
+            await asyncio.sleep(1) # wait for tab handles to update
+            bot.switch_to_tab_containing("dreamina.capcut.com")
+    except Exception as e:
+        if not is_driver_alive(bot.driver):
+            browser_manager.close()
+            raise HTTPException(status_code=400, detail="Browser connection was lost.")
+        raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาดขณะสลับแท็บ: {e}")
+
+    safe_prompt = payload.prompt.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+    js_inject = f"""
+    (function() {{
+        const el = document.querySelector('.tiptap.ProseMirror');
+        if (el) {{
+            el.innerHTML = '<p>{safe_prompt}</p>';
+            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            return true;
+        }}
+        return false;
+    }})();
+    """
+
+    try:
+        success = False
+        for _ in range(10):
+            res = bot.driver.execute_script(js_inject)
+            if res:
+                success = True
+                break
+            await asyncio.sleep(0.5)
+
+        if not success:
+            raise HTTPException(status_code=400, detail="ไม่พบกล่องป้อนพรอพต์ในหน้าเว็บ CapCut Dreamina (กรุณาเปิดหน้าเว็บทิ้งไว้)")
+
+        _activate_chrome()
+        return {"ok": True, "message": "Injected prompt successfully."}
+
+    except Exception as e:
+        if not is_driver_alive(bot.driver):
+            browser_manager.close()
+            raise HTTPException(status_code=400, detail="Browser connection was lost.")
+        raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาดขณะส่งพรอพต์: {e}")
 
 
 @app.get("/")

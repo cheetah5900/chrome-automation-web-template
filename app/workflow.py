@@ -1456,11 +1456,24 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     # The earliest must be 1 because we download from the top-most (first to last download).
     
     # 4. Rename each file from 1 to n ordering from first to last download
-    # 5. Move to a new folder call 'Images'
-    dest_dir = os.path.join(downloads_dir, "Images")
+    # 5. Move to a new folder named 'images' (or 'images (n)' if it already exists)
+    base_dest_dir = os.path.join(downloads_dir, "images")
+    if not os.path.exists(base_dest_dir):
+        dest_dir = base_dest_dir
+    else:
+        counter = 1
+        while True:
+            candidate = f"images ({counter})"
+            candidate_path = os.path.join(downloads_dir, candidate)
+            if not os.path.exists(candidate_path):
+                dest_dir = candidate_path
+                break
+            counter += 1
+
     os.makedirs(dest_dir, exist_ok=True)
+    folder_basename = os.path.basename(dest_dir) # e.g. "images" or "images (1)"
     
-    log(f"Step 4 ChatGPT: Renaming and moving {len(downloaded_images)} files...")
+    log(f"Step 4 ChatGPT: Renaming and moving {len(downloaded_images)} files to {folder_basename}...")
     success_count = 0
     for idx, f in enumerate(downloaded_images):
         src_path = os.path.join(downloads_dir, f)
@@ -1480,27 +1493,10 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
         except Exception as e:
             log(f"Step 4 ChatGPT: Failed to rename/move {f}: {e}")
             
-    log(f"Step 4 ChatGPT: Completed! Moved {success_count} files to 'Downloads/Images' folder.")
+    log(f"Step 4 ChatGPT: Completed! Moved {success_count} files to 'Downloads/{folder_basename}' folder.")
 
-    # Cut the folder to 'Local Path>Foldername'
-    local_path, folder_name = get_config_for_downloads()
-    if local_path and folder_name:
-        dest_parent = os.path.join(local_path, folder_name)
-        os.makedirs(dest_parent, exist_ok=True)
-        dest_folder = os.path.join(dest_parent, "Images")
-        if os.path.exists(dest_folder):
-            log(f"Step 4 ChatGPT: Target folder {dest_folder} already exists, trashing it first...")
-            try:
-                trash(dest_folder, log)
-            except Exception as e:
-                log(f"Step 4 ChatGPT: Failed to trash existing folder {dest_folder}: {e}")
-        try:
-            shutil.move(dest_dir, dest_folder)
-            log(f"Step 4 ChatGPT: Cut 'Downloads/Images' folder to '{dest_folder}'.")
-        except Exception as e:
-            log(f"Step 4 ChatGPT: Failed to cut 'Downloads/Images' folder to '{dest_folder}': {e}")
-    else:
-        log("Step 4 ChatGPT: Local path or folder name not configured. Left 'Images' folder in Downloads.")
+    # Keep the folder in Downloads as requested (do not cut/move it to local path)
+    log(f"Step 4 ChatGPT: Completed! Folder '{folder_basename}' is preserved in Downloads folder.")
 
 
 def step4_chatgpt_download_images_bot(bot: Any, log: Callable[[str], None]) -> None:

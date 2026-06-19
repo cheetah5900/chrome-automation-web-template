@@ -135,6 +135,21 @@ ${modeDescription}
 6. คลิกปุ่ม Send หรือกด Enter สำรองเพื่อส่งข้อมูล -> หน่วงเวลารอเริ่มกระบวนการ 3.0 วินาที`;
   }
 
+  const tooltipChatGPTDownload = document.getElementById('tooltip_btn_chatgpt_download');
+  if (tooltipChatGPTDownload) {
+    tooltipChatGPTDownload.textContent = `📥 ขั้นตอนการดาวน์โหลดและจัดเก็บภาพจาก ChatGPT:
+1. สลับไปยังแท็บ ChatGPT แชทที่เปิดอยู่
+2. เลื่อนหน้าจอขึ้นบนสุดเพื่อโหลดภาพทั้งหมดในแชท
+3. คลิกเปิดดูภาพแรกสุด (เก่าที่สุด) เพื่อเข้าหน้าขยาย (Lightbox) -> หน่วงเวลา 3.0 วินาที
+4. รันลูปดาวน์โหลดทีละภาพ:
+   - คลิกปุ่ม Save เพื่อดาวน์โหลดไฟล์ภาพ (.png) -> ดีเลย์ 2.5 วินาที
+   - กดแป้นพิมพ์ลูกศรลง (Arrow Down) เพื่อสลับไปภาพถัดไป -> ดีเลย์ 2.5 วินาที
+5. กดปุ่ม Esc เพื่อปิดหน้าขยายรูปภาพ
+6. ตรวจสอบการดาวน์โหลดไฟล์จนเสร็จสมบูรณ์ (สูงสุด 30 วินาที)
+7. จัดเรียงไฟล์ภาพตามเวลาการแก้ไขและเปลี่ยนชื่อเรียงลำดับเป็นตัวเลข 1 ถึง n
+8. สร้างและย้ายไฟล์ไปยังโฟลเดอร์ชื่อ "images" (หรือใส่ (n) ต่อท้ายหากโฟลเดอร์มีอยู่เดิม) ในโฟลเดอร์ Downloads`;
+  }
+
   const tooltipStopGen = document.getElementById('tooltip_btn_stop_generation');
   if (tooltipStopGen) {
     tooltipStopGen.textContent = `🛑 ขั้นตอนการบังคับหยุดการเจเนอเรตภาพ:
@@ -408,7 +423,9 @@ async function updatePortStatus() {
 
     if (launchBtn) {
       launchBtn.disabled = true;
-      launchBtn.textContent = 'Profile Running';
+      const btnText = launchBtn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'Profile Running';
+      else launchBtn.textContent = 'Profile Running';
       launchBtn.style.background = 'rgba(72, 187, 120, 0.4)';
     }
     if (closeBtn) closeBtn.style.display = 'inline-block';
@@ -422,7 +439,9 @@ async function updatePortStatus() {
 
     if (launchBtn) {
       launchBtn.disabled = false;
-      launchBtn.textContent = '🚀 Launch Profile & Open Dashboard';
+      const btnText = launchBtn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = '🚀 Launch Profile & Open Dashboard';
+      else launchBtn.textContent = '🚀 Launch Profile & Open Dashboard';
       launchBtn.style.background = '';
     }
     if (closeBtn) closeBtn.style.display = 'none';
@@ -635,17 +654,20 @@ function initTabNavigation() {
   const btnVideoGen = document.getElementById('tabVideoGenBtn');
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
+  const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
   
   const viewImageGen = document.getElementById('imageGenView');
   const viewVideoGen = document.getElementById('videoGenView');
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
+  const viewSeedanceGen = document.getElementById('seedanceGenView');
 
   const tabs = [
     { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
-    { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig }
+    { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
+    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: loadSeedancePrompts }
   ];
 
   tabs.forEach(tab => {
@@ -771,14 +793,23 @@ function imagePromptRowTemplate(text = '') {
   return row;
 }
 
-let promptsByRound = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
-let statusesByRound = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
+let promptsByRound = { 
+  1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [],
+  11: [], 12: [], 13: [], 14: [], 15: [], 16: [], 17: [], 18: [], 19: [], 20: []
+};
+let statusesByRound = { 
+  1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [],
+  11: [], 12: [], 13: [], 14: [], 15: [], 16: [], 17: [], 18: [], 19: [], 20: []
+};
 let refImagesByRound = { 
   1: ["", "", "", "", "", "", ""], 2: ["", "", "", "", "", "", ""], 3: ["", "", "", "", "", "", ""], 4: ["", "", "", "", "", "", ""], 5: ["", "", "", "", "", "", ""],
-  6: ["", "", "", "", "", "", ""], 7: ["", "", "", "", "", "", ""], 8: ["", "", "", "", "", "", ""], 9: ["", "", "", "", "", "", ""], 10: ["", "", "", "", "", "", ""] 
+  6: ["", "", "", "", "", "", ""], 7: ["", "", "", "", "", "", ""], 8: ["", "", "", "", "", "", ""], 9: ["", "", "", "", "", "", ""], 10: ["", "", "", "", "", "", ""],
+  11: ["", "", "", "", "", "", ""], 12: ["", "", "", "", "", "", ""], 13: ["", "", "", "", "", "", ""], 14: ["", "", "", "", "", "", ""], 15: ["", "", "", "", "", "", ""],
+  16: ["", "", "", "", "", "", ""], 17: ["", "", "", "", "", "", ""], 18: ["", "", "", "", "", "", ""], 19: ["", "", "", "", "", "", ""], 20: ["", "", "", "", "", "", ""] 
 };
 let refImagesDirByRound = {
-  1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 10: ""
+  1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 10: "",
+  11: "", 12: "", 13: "", 14: "", 15: "", 16: "", 17: "", 18: "", 19: "", 20: ""
 };
 let chatgptUrl = '';
 let currentPromptRound = 1;
@@ -1056,7 +1087,7 @@ async function loadImagePrompts() {
     const config = await jsonFetch('/api/config');
     const defaultData = await jsonFetch('/api/config/reference-image/default');
 
-    for (let r = 1; r <= 10; r++) {
+    for (let r = 1; r <= 20; r++) {
       const p_key = r === 1 ? 'image_prompts' : `image_prompts_${r}`;
       const s_key = r === 1 ? 'image_prompt_statuses' : `image_prompt_statuses_${r}`;
       
@@ -1598,7 +1629,9 @@ async function runVideoHelper(btnElement) {
 
   btnElement.disabled = true;
   btnElement.classList.add('loading');
-  btnElement.textContent = 'Generating Batch...';
+  const btnText = btnElement.querySelector('.btn-text');
+  if (btnText) btnText.textContent = 'Generating Batch...';
+  else btnElement.textContent = 'Generating Batch...';
   
   if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Starting batch cover video rendering process...</div>';
   writeConsoleLine(`Video Helper: Packaging requests for ${activeSets.length} active sets...`, 'system', 'videoConsole');
@@ -1679,7 +1712,9 @@ async function runVideoHelper(btnElement) {
 
   btnElement.disabled = false;
   btnElement.classList.remove('loading');
-  btnElement.textContent = 'Run';
+  const endBtnText = btnElement.querySelector('.btn-text');
+  if (endBtnText) endBtnText.textContent = 'Run';
+  else btnElement.textContent = 'Run';
 }
 
 async function setVideoOutputDefault() {
@@ -1735,8 +1770,8 @@ async function saveImagePrompts(silent = false) {
       chatgpt_url: chatgptUrl,
     };
     
-    // Populate all 10 rounds of prompts and statuses
-    for (let r = 1; r <= 10; r++) {
+    // Populate all 20 rounds of prompts and statuses
+    for (let r = 1; r <= 20; r++) {
       const p_key = r === 1 ? 'image_prompts' : `image_prompts_${r}`;
       const s_key = r === 1 ? 'image_prompt_statuses' : `image_prompt_statuses_${r}`;
       payload[p_key] = promptsByRound[r] || [];
@@ -1975,7 +2010,9 @@ function initWorkflowActionListeners() {
       stopFrontendCooldown();
       writeConsoleLine('Force Stop: Requesting immediate cancellation...', 'warning', 'imageConsole');
       stopGenerationBtn.disabled = true;
-      stopGenerationBtn.textContent = 'Stopping...';
+      const btnText = stopGenerationBtn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'Stopping...';
+      else stopGenerationBtn.textContent = 'Stopping...';
 
       const select = document.getElementById('profileSelect');
       const selected = (profileCache || []).find(x => x.name === select?.value);
@@ -1999,7 +2036,7 @@ function initWorkflowActionListeners() {
   }
   const runVideoBtn = document.getElementById('runVideoHelperBtn');
   if (runVideoBtn) {
-    runVideoBtn.addEventListener('click', (e) => runVideoHelper(e.target));
+    runVideoBtn.addEventListener('click', (e) => runVideoHelper(e.currentTarget));
   }
 
   document.querySelectorAll('input[name="videoHelperMode"]').forEach(radio => {
@@ -2163,7 +2200,7 @@ function initWorkflowActionListeners() {
           return;
         }
         const currentRefs = refImagesByRound[currentPromptRound] || ["", "", "", "", "", "", ""];
-        for (let r = 1; r <= 10; r++) {
+        for (let r = 1; r <= 20; r++) {
           refImagesDirByRound[r] = path;
           refImagesByRound[r] = [...currentRefs];
         }
@@ -2294,14 +2331,23 @@ function initWorkflowActionListeners() {
       }
 
       // Reset all image generation data structures and UI first
-      promptsByRound = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
-      statusesByRound = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
+      promptsByRound = { 
+        1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [],
+        11: [], 12: [], 13: [], 14: [], 15: [], 16: [], 17: [], 18: [], 19: [], 20: []
+      };
+      statusesByRound = { 
+        1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [],
+        11: [], 12: [], 13: [], 14: [], 15: [], 16: [], 17: [], 18: [], 19: [], 20: []
+      };
       refImagesByRound = { 
         1: ["", "", "", "", "", "", ""], 2: ["", "", "", "", "", "", ""], 3: ["", "", "", "", "", "", ""], 4: ["", "", "", "", "", "", ""], 5: ["", "", "", "", "", "", ""],
-        6: ["", "", "", "", "", "", ""], 7: ["", "", "", "", "", "", ""], 8: ["", "", "", "", "", "", ""], 9: ["", "", "", "", "", "", ""], 10: ["", "", "", "", "", "", ""] 
+        6: ["", "", "", "", "", "", ""], 7: ["", "", "", "", "", "", ""], 8: ["", "", "", "", "", "", ""], 9: ["", "", "", "", "", "", ""], 10: ["", "", "", "", "", "", ""],
+        11: ["", "", "", "", "", "", ""], 12: ["", "", "", "", "", "", ""], 13: ["", "", "", "", "", "", ""], 14: ["", "", "", "", "", "", ""], 15: ["", "", "", "", "", "", ""],
+        16: ["", "", "", "", "", "", ""], 17: ["", "", "", "", "", "", ""], 18: ["", "", "", "", "", "", ""], 19: ["", "", "", "", "", "", ""], 20: ["", "", "", "", "", "", ""] 
       };
       refImagesDirByRound = {
-        1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 10: ""
+        1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 10: "",
+        11: "", 12: "", 13: "", 14: "", 15: "", 16: "", 17: "", 18: "", 19: "", 20: ""
       };
       
       const list = document.getElementById('imagePromptList');
@@ -2317,7 +2363,9 @@ function initWorkflowActionListeners() {
       await saveImagePrompts(true);
 
       btnImportLakornAuto.disabled = true;
-      btnImportLakornAuto.textContent = 'กำลังนำเข้า...';
+      const btnText = btnImportLakornAuto.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'กำลังนำเข้า...';
+      else btnImportLakornAuto.textContent = 'กำลังนำเข้า...';
 
       try {
         writeConsoleLine(`Drama Import: Starting auto import for Episode folder ${tonVal}, EP ${epVal} from path: ${path}...`, 'info', 'imageConsole');
@@ -2336,7 +2384,7 @@ function initWorkflowActionListeners() {
 
           if (res.ref_images_dir) {
             // Update refImagesDirByRound for all rounds
-            for (let r = 1; r <= 10; r++) {
+            for (let r = 1; r <= 20; r++) {
               refImagesDirByRound[r] = res.ref_images_dir;
             }
             // Update the UI field
@@ -2364,7 +2412,9 @@ function initWorkflowActionListeners() {
         showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
       } finally {
         btnImportLakornAuto.disabled = false;
-        btnImportLakornAuto.textContent = '📥 เพิ่มข้อมูลละคร Auto';
+        const btnText = btnImportLakornAuto.querySelector('.btn-text');
+        if (btnText) btnText.textContent = '📥 เพิ่มข้อมูลละคร Auto';
+        else btnImportLakornAuto.textContent = '📥 เพิ่มข้อมูลละคร Auto';
       }
     });
   }
@@ -2401,14 +2451,16 @@ function initWorkflowActionListeners() {
     if (stopGenerationBtn) {
       stopGenerationBtn.style.display = 'block';
       stopGenerationBtn.disabled = false;
-      stopGenerationBtn.textContent = 'Force Stop Generation';
+      const btnText = stopGenerationBtn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'Force Stop Generation';
+      else stopGenerationBtn.textContent = 'Force Stop Generation';
     }
 
     writeConsoleLine(`Bulk Generation: Starting multi-round generation on ${target === 'gemini' ? 'Gemini' : 'ChatGPT'}...`, 'system', 'imageConsole');
 
     let hasProcessedAnyRound = false;
 
-    for (let r = 1; r <= 10; r++) {
+    for (let r = 1; r <= 20; r++) {
       if (shouldStopGeneration) {
         break;
       }
@@ -2570,6 +2622,35 @@ function initWorkflowActionListeners() {
   // Step 2 ChatGPT (Bulk loop)
   document.getElementById('btn_step3_chatgpt').addEventListener('click', async (e) => {
     await runMultiRoundGeneration('chatgpt', e.target);
+  });
+
+  // ChatGPT Download Button
+  document.getElementById('btn_chatgpt_download').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const btnText = btn.querySelector('.btn-text');
+    btn.disabled = true;
+    const oldText = btnText ? btnText.textContent : '📥 ดาวน์โหลด (Download ChatGPT Images)';
+    if (btnText) btnText.textContent = 'กำลังทำงาน...';
+    try {
+      writeConsoleLine('ChatGPT Download: Starting image download and rename workflow...', 'system', 'imageConsole');
+      const res = await jsonFetch('/api/step/4-chatgpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (res && res.ok) {
+        showToast('ดาวน์โหลดและจัดเก็บรูปภาพ ChatGPT เรียบร้อยแล้ว!', 'success');
+        writeConsoleLine('ChatGPT Download: Completed successfully!', 'success', 'imageConsole');
+      } else {
+        throw new Error(res.message || 'ดาวน์โหลดล้มเหลว');
+      }
+    } catch (err) {
+      showToast(`ดาวน์โหลดล้มเหลว: ${err.message}`, 'error');
+      writeConsoleLine(`ChatGPT Download Error: ${err.message}`, 'error', 'imageConsole');
+    } finally {
+      btn.disabled = false;
+      if (btnText) btnText.textContent = oldText;
+    }
   });
 
 }
@@ -2901,7 +2982,7 @@ function initFileImports() {
       const confirmReset = confirm("คุณต้องการล้างข้อมูลพรอพต์และรูปภาพอ้างอิงทั้งหมดในทุก Round ใช่หรือไม่?");
       if (!confirmReset) return;
 
-      for (let r = 1; r <= 10; r++) {
+      for (let r = 1; r <= 20; r++) {
         promptsByRound[r] = [];
         statusesByRound[r] = [];
         refImagesByRound[r] = ["", "", "", "", "", "", ""];
@@ -3340,7 +3421,9 @@ function initVideoGenListeners() {
       }
 
       btnImportVideoLakornAuto.disabled = true;
-      btnImportVideoLakornAuto.textContent = 'กำลังนำเข้า...';
+      const btnText = btnImportVideoLakornAuto.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'กำลังนำเข้า...';
+      else btnImportVideoLakornAuto.textContent = 'กำลังนำเข้า...';
 
       try {
         const res = await jsonFetch('/api/utils/import-lakorn-video-auto', {
@@ -3360,7 +3443,9 @@ function initVideoGenListeners() {
         showToast(`นำเข้าพรอพต์วิดีโอไม่สำเร็จ: ${e.message}`, 'error');
       } finally {
         btnImportVideoLakornAuto.disabled = false;
-        btnImportVideoLakornAuto.textContent = '📥 เพิ่มข้อมูลละคร Auto';
+        const btnText = btnImportVideoLakornAuto.querySelector('.btn-text');
+        if (btnText) btnText.textContent = '📥 เพิ่มข้อมูลละคร Auto';
+        else btnImportVideoLakornAuto.textContent = '📥 เพิ่มข้อมูลละคร Auto';
       }
     });
   }
@@ -3419,8 +3504,17 @@ function initVideoGenListeners() {
       }
 
       btnRunGoogleFlow.disabled = true;
-      btnRunGoogleFlow.textContent = 'กำลังทำงาน...';
-      if (btnStopVideoGeneration) btnStopVideoGeneration.style.display = 'block';
+      const btnText = btnRunGoogleFlow.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'กำลังทำงาน...';
+      else btnRunGoogleFlow.textContent = 'กำลังทำงาน...';
+
+      if (btnStopVideoGeneration) {
+        btnStopVideoGeneration.style.display = 'block';
+        btnStopVideoGeneration.disabled = false;
+        const stopBtnText = btnStopVideoGeneration.querySelector('.btn-text');
+        if (stopBtnText) stopBtnText.textContent = 'Force Stop Generation';
+        else btnStopVideoGeneration.textContent = 'Force Stop Generation';
+      }
       shouldStopVideoGeneration = false;
 
       writeConsoleLine('=== เริ่มต้นการทำงาน Google Flow Automation ===', 'system', 'videoConsole');
@@ -3499,7 +3593,9 @@ function initVideoGenListeners() {
         writeConsoleLine(`เกิดข้อผิดพลาดในการทำงาน: ${e.message}`, 'error', 'videoConsole');
       } finally {
         btnRunGoogleFlow.disabled = false;
-        btnRunGoogleFlow.textContent = '▶️ RUN GOOGLE FLOW AUTOMATION';
+        const btnText = btnRunGoogleFlow.querySelector('.btn-text');
+        if (btnText) btnText.textContent = '▶️ RUN GOOGLE FLOW AUTOMATION';
+        else btnRunGoogleFlow.textContent = '▶️ RUN GOOGLE FLOW AUTOMATION';
         if (btnStopVideoGeneration) btnStopVideoGeneration.style.display = 'none';
         
         await saveVideoPrompts(true);
@@ -3510,7 +3606,9 @@ function initVideoGenListeners() {
   if (btnStopVideoGeneration) {
     btnStopVideoGeneration.addEventListener('click', async () => {
       shouldStopVideoGeneration = true;
-      btnStopVideoGeneration.textContent = 'กำลังหยุดการทำงาน...';
+      const btnText = btnStopVideoGeneration.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'กำลังหยุดการทำงาน...';
+      else btnStopVideoGeneration.textContent = 'กำลังหยุดการทำงาน...';
       btnStopVideoGeneration.disabled = true;
       stopVideoCooldown();
 
@@ -3538,16 +3636,255 @@ function initVideoGenListeners() {
   }
 }
 
+function seedancePromptRowTemplate(text = '') {
+  const row = document.createElement('div');
+  row.className = 'prompt-row';
+  row.style.display = 'flex';
+  row.style.flexDirection = 'column';
+  row.style.gap = '8px';
+  row.style.background = 'rgba(15, 21, 48, 0.4)';
+  row.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+  row.style.borderRadius = '12px';
+  row.style.padding = '12px';
+  
+  row.innerHTML = `
+    <textarea class="seedance-prompt-input" rows="4" style="margin-bottom:0; width: 100%;" placeholder="เช่น A realistic Thai drama character dancing...">${text.replace(/</g, '&lt;')}</textarea>
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 4px;">
+      <span class="row-status" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; font-weight: bold; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); min-width: 95px; text-align: center; white-space: nowrap; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.25s ease;">Not start</span>
+      <div style="display: flex; gap: 8px;">
+        <button class="secondary delete-btn" style="padding: 6px 12px; font-size: 0.85rem; margin-bottom: 0;" type="button">Delete</button>
+        <button class="send-btn" style="padding: 6px 12px; font-size: 0.85rem; margin-bottom: 0; background: linear-gradient(135deg, #7f5cff, #3aa0ff); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;" type="button">🚀 Send to CapCut</button>
+      </div>
+    </div>
+  `;
+
+  const deleteBtn = row.querySelector('.delete-btn');
+  const sendBtn = row.querySelector('.send-btn');
+  const textarea = row.querySelector('.seedance-prompt-input');
+  const statusSpan = row.querySelector('.row-status');
+
+  deleteBtn.addEventListener('click', () => {
+    row.remove();
+    updateSeedancePromptCountBadge();
+  });
+
+  textarea.addEventListener('input', () => {
+    updateSeedancePromptCountBadge();
+  });
+
+  sendBtn.addEventListener('click', async () => {
+    const promptValue = textarea.value.trim();
+    if (!promptValue) {
+      writeConsoleLine('Error: Prompt is empty.', 'error', 'seedanceConsole');
+      return;
+    }
+
+    sendBtn.disabled = true;
+    sendBtn.style.opacity = '0.7';
+    statusSpan.textContent = 'Sending...';
+    statusSpan.style.color = 'orange';
+    statusSpan.style.borderColor = 'rgba(255, 165, 0, 0.3)';
+    statusSpan.style.background = 'rgba(255, 165, 0, 0.08)';
+
+    writeConsoleLine(`Injecting prompt to CapCut: "${promptValue.substring(0, 40)}..."`, 'info', 'seedanceConsole');
+
+    try {
+      const res = await fetch('/api/step/seedance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: promptValue })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        statusSpan.textContent = 'Success';
+        statusSpan.style.color = '#27AE60';
+        statusSpan.style.borderColor = 'rgba(39, 174, 96, 0.3)';
+        statusSpan.style.background = 'rgba(39, 174, 96, 0.08)';
+        writeConsoleLine('Success: Prompt injected into CapCut Dreamina successfully!', 'success', 'seedanceConsole');
+      } else {
+        const errMsg = data.detail || data.message || 'Unknown error occurred.';
+        statusSpan.textContent = 'Failed';
+        statusSpan.style.color = '#C0392B';
+        statusSpan.style.borderColor = 'rgba(192, 57, 43, 0.3)';
+        statusSpan.style.background = 'rgba(192, 57, 43, 0.08)';
+        writeConsoleLine(`Failed: ${errMsg}`, 'error', 'seedanceConsole');
+      }
+    } catch (err) {
+      statusSpan.textContent = 'Error';
+      statusSpan.style.color = '#C0392B';
+      statusSpan.style.borderColor = 'rgba(192, 57, 43, 0.3)';
+      statusSpan.style.background = 'rgba(192, 57, 43, 0.08)';
+      writeConsoleLine(`Error: ${err.message}`, 'error', 'seedanceConsole');
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.style.opacity = '1';
+    }
+  });
+
+  return row;
+}
+
+function updateSeedancePromptCountBadge() {
+  const count = document.querySelectorAll('#seedancePromptList .prompt-row').length;
+  const badge = document.getElementById('seedancePromptCountBadge');
+  if (badge) {
+    badge.textContent = `${count} Prompt${count !== 1 ? 's' : ''}`;
+  }
+}
+
+function loadSeedancePrompts() {
+  const list = document.getElementById('seedancePromptList');
+  if (!list) return;
+  list.innerHTML = '';
+  
+  try {
+    const raw = localStorage.getItem('seedance_prompts');
+    const prompts = raw ? JSON.parse(raw) : [];
+    
+    if (prompts.length === 0) {
+      list.appendChild(seedancePromptRowTemplate(''));
+    } else {
+      prompts.forEach(p => {
+        list.appendChild(seedancePromptRowTemplate(p));
+      });
+    }
+  } catch (e) {
+    console.error('Error loading seedance prompts:', e);
+    list.appendChild(seedancePromptRowTemplate(''));
+  }
+  updateSeedancePromptCountBadge();
+}
+
+function saveSeedancePrompts(showMsg = true) {
+  const rows = document.querySelectorAll('#seedancePromptList .prompt-row');
+  const prompts = Array.from(rows).map(row => {
+    const textarea = row.querySelector('.seedance-prompt-input');
+    return textarea ? textarea.value : '';
+  });
+
+  try {
+    localStorage.setItem('seedance_prompts', JSON.stringify(prompts));
+    if (showMsg) {
+      const msg = document.getElementById('seedancePromptMsg');
+      if (msg) {
+        msg.textContent = 'Saved prompts successfully!';
+        msg.style.color = '#27AE60';
+        setTimeout(() => { msg.textContent = ''; }, 3000);
+      }
+      showToast('Saved Seedance prompts successfully!', 'success');
+    }
+  } catch (e) {
+    console.error('Error saving seedance prompts:', e);
+    showToast(`Failed to save: ${e.message}`, 'error');
+  }
+}
+
+function initSeedanceGenListeners() {
+  const clearBtn = document.getElementById('clearSeedanceConsoleBtn');
+  const addBtn = document.getElementById('addSeedancePromptBtn');
+  const saveBtn = document.getElementById('saveSeedancePromptsBtn');
+  const deleteBtn = document.getElementById('deleteAllSeedancePromptsBtn');
+  const importInput = document.getElementById('importSeedancePromptsFile');
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      const consoleBox = document.getElementById('seedanceConsole');
+      if (consoleBox) {
+        consoleBox.innerHTML = '<div class="console-line system">Waiting for process to start...</div>';
+      }
+    });
+  }
+
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      const list = document.getElementById('seedancePromptList');
+      if (list) {
+        list.appendChild(seedancePromptRowTemplate(''));
+        updateSeedancePromptCountBadge();
+      }
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      saveSeedancePrompts(true);
+    });
+  }
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', () => {
+      if (!confirm('Are you sure you want to delete all Seedance prompts?')) return;
+      const list = document.getElementById('seedancePromptList');
+      if (list) {
+        list.innerHTML = '';
+        list.appendChild(seedancePromptRowTemplate(''));
+        updateSeedancePromptCountBadge();
+        saveSeedancePrompts(false);
+      }
+    });
+  }
+
+  if (importInput) {
+    importInput.addEventListener('change', async (e) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      
+      const file = files[0];
+      const reader = new FileReader();
+      
+      reader.onload = async (evt) => {
+        const text = evt.target.result;
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+        
+        if (lines.length === 0) {
+          showToast('No valid prompts found in file.', 'error');
+          return;
+        }
+
+        const list = document.getElementById('seedancePromptList');
+        if (list) {
+          // Clear current rows if there's only a single empty row
+          const rows = list.querySelectorAll('.prompt-row');
+          if (rows.length === 1) {
+            const firstTextarea = rows[0].querySelector('.seedance-prompt-input');
+            if (firstTextarea && firstTextarea.value.trim() === '') {
+              list.innerHTML = '';
+            }
+          }
+
+          lines.forEach(line => {
+            list.appendChild(seedancePromptRowTemplate(line));
+          });
+
+          saveSeedancePrompts(false);
+          updateSeedancePromptCountBadge();
+          showToast(`Imported ${lines.length} prompts successfully!`, 'success');
+        }
+      };
+
+      reader.onerror = (err) => {
+        showToast('Error reading file.', 'error');
+      };
+
+      reader.readAsText(file);
+      importInput.value = '';
+    });
+  }
+}
+
 // Initial setup on load
 initModal();
 loadSettings();
 loadProfiles();
 loadImagePrompts();
+loadSeedancePrompts();
 renderVideoHelperBatchRows();
 initTabNavigation();
 initWorkflowActionListeners();
 initFileImports();
 initVideoGenListeners();
+initSeedanceGenListeners();
 setupLogStream();
 
 // Start periodic real-time status check every 3 seconds

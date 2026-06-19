@@ -41,7 +41,7 @@
         <div style="display: flex; flex-direction: column; gap: 10px; flex: 1.2; min-width: 320px; justify-content: center;">
           <div style="display: flex; gap: 10px; width: 100%;">
             <button id="launchProfile" class="has-tooltip" style="flex: 2; padding: 12px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #7f5cff, #3aa0ff);">
-              🚀 Launch Profile & Open Dashboard
+              <span class="btn-text">🚀 Launch Profile & Open Dashboard</span>
               <div class="custom-tooltip" id="tooltip_launchProfile"></div>
             </button>
             <button id="closeBrowser" class="secondary" style="display: none; flex: 1.2; padding: 12px; font-size: 0.9rem; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">❌ Close Browser</button>
@@ -72,6 +72,7 @@
         <button id="tabImageGenBtn" class="tab-btn active">🖼️ Image Generation</button>
         <button id="tabVideoGenBtn" class="tab-btn">🎬 Video Generation</button>
         <button id="tabVideoHelperBtn" class="tab-btn">🎥 Video Helper</button>
+        <button id="tabSeedanceGenBtn" class="tab-btn">💃 Seedance Gen</button>
       </div>
 
       <!-- VIEW 2: IMAGE GENERATION -->
@@ -114,7 +115,7 @@
             <!-- ปุ่มนำเข้า -->
             <div style="display: flex; align-items: flex-end;">
               <button id="btnImportLakornAuto" class="primary has-tooltip" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
-                📥 เพิ่มข้อมูลละคร Auto
+                <span class="btn-text">📥 เพิ่มข้อมูลละคร Auto</span>
                 <div class="custom-tooltip" id="tooltip_btnImportLakornAuto"></div>
               </button>
             </div>
@@ -209,6 +210,36 @@
               <button class="prompt-tab-btn" data-round="10" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
                 <input type="checkbox" class="round-active-checkbox" data-round="10" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 10
               </button>
+              <button class="prompt-tab-btn" data-round="11" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="11" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 11
+              </button>
+              <button class="prompt-tab-btn" data-round="12" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="12" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 12
+              </button>
+              <button class="prompt-tab-btn" data-round="13" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="13" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 13
+              </button>
+              <button class="prompt-tab-btn" data-round="14" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="14" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 14
+              </button>
+              <button class="prompt-tab-btn" data-round="15" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="15" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 15
+              </button>
+              <button class="prompt-tab-btn" data-round="16" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="16" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 16
+              </button>
+              <button class="prompt-tab-btn" data-round="17" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="17" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 17
+              </button>
+              <button class="prompt-tab-btn" data-round="18" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="18" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 18
+              </button>
+              <button class="prompt-tab-btn" data-round="19" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="19" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 19
+              </button>
+              <button class="prompt-tab-btn" data-round="20" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer;">
+                <input type="checkbox" class="round-active-checkbox" data-round="20" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation();" /> Round 20
+              </button>
             </div>
             
             <div id="imagePromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
@@ -281,9 +312,15 @@
               </button>
             </div>
 
+            <!-- ChatGPT Download Images Button -->
+            <button class="step-action-btn secondary has-tooltip" id="btn_chatgpt_download" style="width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #3182ce, #2b6cb0); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">
+              <span class="btn-text">📥 ดาวน์โหลด (Download ChatGPT Images)</span>
+              <div class="custom-tooltip" id="tooltip_btn_chatgpt_download"></div>
+            </button>
+
             <!-- Force Stop Button -->
             <button class="step-action-btn has-tooltip" id="btn_stop_generation" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">
-              Force Stop Generation
+              <span class="btn-text">Force Stop Generation</span>
               <div class="custom-tooltip" id="tooltip_btn_stop_generation"></div>
             </button>
 
@@ -350,7 +387,7 @@
             <!-- ปุ่มนำเข้า -->
             <div style="display: flex; align-items: flex-end;">
               <button id="btnImportVideoLakornAuto" class="primary has-tooltip" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
-                📥 เพิ่มข้อมูลละคร Auto
+                <span class="btn-text">📥 เพิ่มข้อมูลละคร Auto</span>
                 <div class="custom-tooltip" id="tooltip_btnImportVideoLakornAuto"></div>
               </button>
             </div>
@@ -449,13 +486,13 @@
             <!-- Run Control Buttons -->
             <div style="display: flex; gap: 12px; width: 100%; margin-top: 14px;">
               <button id="btnRunGoogleFlow" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 1.05rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
-                ▶️ RUN GOOGLE FLOW AUTOMATION
+                <span class="btn-text">▶️ RUN GOOGLE FLOW AUTOMATION</span>
                 <div class="custom-tooltip" id="tooltip_btnRunGoogleFlow"></div>
               </button>
             </div>
 
             <button class="step-action-btn has-tooltip" id="btnStopVideoGeneration" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">
-              Force Stop Generation
+              <span class="btn-text">Force Stop Generation</span>
               <div class="custom-tooltip" id="tooltip_btnStopVideoGeneration"></div>
             </button>
 
@@ -571,7 +608,7 @@
               </div>
                
               <button id="runVideoHelperBtn" class="primary-btn has-tooltip" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">
-                Run
+                <span class="btn-text">Run</span>
                 <div class="custom-tooltip" id="tooltip_runVideoHelperBtn"></div>
               </button>
             </div>
@@ -585,6 +622,51 @@
                 <button id="clearVideoConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
               </div>
               <div id="videoConsole" class="console-box">
+                <div class="console-line system">Waiting for process to start...</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 5: SEEDANCE GEN -->
+      <div id="seedanceGenView" class="tab-view hidden">
+        <div class="layout-grid workflow-grid" style="grid-template-columns: 7fr 3fr;">
+          <!-- Configuration Column -->
+          <section class="card">
+            <h2 class="section-title">💃 Seedance Gen</h2>
+            <p class="section-subtitle">Automate prompt input for CapCut Dreamina (Seedance)</p>
+            
+            <div class="settings-form" style="margin-top: 15px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px; flex-wrap: wrap;">
+                <label style="font-weight: bold; color: #8da6ff; font-size: 1.1rem;">📝 Seedance Prompts</label>
+                <span id="seedancePromptCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(127, 92, 255, 0.15); border: 1px solid rgba(127, 92, 255, 0.25); color: #c4b5fd; border-radius: 20px; font-weight: bold;">0 Prompts</span>
+              </div>
+              <p class="section-subtitle" style="margin-bottom: 16px;">เพิ่ม/ลด พรอพต์ที่ต้องการส่งไปเจเนอเรทภาพเคลื่อนไหวบน CapCut Dreamina</p>
+              
+              <!-- Prompt List Container -->
+              <div id="seedancePromptList" class="prompt-list" style="margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px; max-height: 500px; overflow-y: auto; padding-right: 4px;"></div>
+              
+              <!-- Action Row -->
+              <div class="row" style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <button id="addSeedancePromptBtn" class="secondary" style="padding: 10px 16px; border-radius: 12px;">+ Add Prompt</button>
+                <button id="saveSeedancePromptsBtn" style="padding: 10px 16px; border-radius: 12px; font-weight: bold; background: linear-gradient(135deg, #7f5cff, #3aa0ff); color: white; border: none; cursor: pointer;">Save Prompts</button>
+                <button id="deleteAllSeedancePromptsBtn" class="secondary" style="padding: 10px 16px; border-radius: 12px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">🗑️ Delete All</button>
+                <label for="importSeedancePromptsFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 11px 16px; margin: 0; font-size: 0.9rem; font-weight: 500; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; transition: all 0.2s ease;">📥 Import (.txt, .md)</label>
+                <input type="file" id="importSeedancePromptsFile" accept=".txt,.md" style="display: none;" />
+              </div>
+              <p id="seedancePromptMsg" class="msg" style="margin-top: 10px; font-size: 0.85rem; text-align: center; min-height: auto;"></p>
+            </div>
+          </section>
+
+          <!-- Console Column -->
+          <div class="actions-column">
+            <section class="card console-card">
+              <div class="console-header">
+                <h3>📟 Seedance Console</h3>
+                <button id="clearSeedanceConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
+              </div>
+              <div id="seedanceConsole" class="console-box">
                 <div class="console-line system">Waiting for process to start...</div>
               </div>
             </section>
