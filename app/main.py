@@ -1017,8 +1017,8 @@ def _default_config() -> dict[str, Any]:
             "video_lakorn_ton": "",
         }
 
-    # Dynamically ensure all 20 rounds of image prompts and 10 rounds of video prompts are initialized in config
-    for r in range(1, 21):
+    # Dynamically ensure all 30 rounds of image prompts and 10 rounds of video prompts are initialized in config
+    for r in range(1, 31):
         p_key = "image_prompts" if r == 1 else f"image_prompts_{r}"
         s_key = "image_prompt_statuses" if r == 1 else f"image_prompt_statuses_{r}"
         if p_key not in res:
@@ -3002,15 +3002,17 @@ def import_lakorn_auto(payload: ImportLakornPayload):
                     "path": full_path
                 })
 
-    # Prepare rounds (up to 20 rounds maximum, matching UI limit)
-    prompts_by_round = {str(r): [] for r in range(1, 21)}
-    ref_images_by_round = {str(r): ["", "", "", "", "", "", ""] for r in range(1, 21)}
+    # Calculate max rounds dynamically based on files found
+    max_rounds = max(len(prompt_files), len(char_files))
+    if max_rounds == 0:
+        max_rounds = 1
+
+    prompts_by_round = {str(r): [] for r in range(1, max_rounds + 1)}
+    ref_images_by_round = {str(r): ["", "", "", "", "", "", ""] for r in range(1, max_rounds + 1)}
 
     # Process prompt files and insert into corresponding rounds
     for idx, p_file in enumerate(prompt_files):
         round_num = idx + 1
-        if round_num > 20:
-            break
         try:
             content = p_file.read_text(encoding="utf-8")
             prompts_by_round[str(round_num)] = [content.strip()]
@@ -3020,8 +3022,6 @@ def import_lakorn_auto(payload: ImportLakornPayload):
     # Process character files and match reference images
     for idx, c_file in enumerate(char_files):
         round_num = idx + 1
-        if round_num > 20:
-            break
         try:
             content = c_file.read_text(encoding="utf-8")
             lines = content.splitlines()

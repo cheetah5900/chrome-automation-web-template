@@ -793,24 +793,23 @@ function imagePromptRowTemplate(text = '') {
   return row;
 }
 
-let promptsByRound = { 
-  1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [],
-  11: [], 12: [], 13: [], 14: [], 15: [], 16: [], 17: [], 18: [], 19: [], 20: []
-};
-let statusesByRound = { 
-  1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [],
-  11: [], 12: [], 13: [], 14: [], 15: [], 16: [], 17: [], 18: [], 19: [], 20: []
-};
-let refImagesByRound = { 
-  1: ["", "", "", "", "", "", ""], 2: ["", "", "", "", "", "", ""], 3: ["", "", "", "", "", "", ""], 4: ["", "", "", "", "", "", ""], 5: ["", "", "", "", "", "", ""],
-  6: ["", "", "", "", "", "", ""], 7: ["", "", "", "", "", "", ""], 8: ["", "", "", "", "", "", ""], 9: ["", "", "", "", "", "", ""], 10: ["", "", "", "", "", "", ""],
-  11: ["", "", "", "", "", "", ""], 12: ["", "", "", "", "", "", ""], 13: ["", "", "", "", "", "", ""], 14: ["", "", "", "", "", "", ""], 15: ["", "", "", "", "", "", ""],
-  16: ["", "", "", "", "", "", ""], 17: ["", "", "", "", "", "", ""], 18: ["", "", "", "", "", "", ""], 19: ["", "", "", "", "", "", ""], 20: ["", "", "", "", "", "", ""] 
-};
-let refImagesDirByRound = {
-  1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 10: "",
-  11: "", 12: "", 13: "", 14: "", 15: "", 16: "", 17: "", 18: "", 19: "", 20: ""
-};
+let promptsByRound = { 1: [] };
+let statusesByRound = { 1: [] };
+let refImagesByRound = { 1: ["", "", "", "", "", "", ""] };
+let refImagesDirByRound = { 1: "" };
+
+function getImageGenMaxRound() {
+  const keys = Object.keys(promptsByRound).map(Number).filter(n => !isNaN(n));
+  return keys.length > 0 ? Math.max(...keys) : 1;
+}
+
+function initImageGenRound(r) {
+  if (!promptsByRound[r]) promptsByRound[r] = [];
+  if (!statusesByRound[r]) statusesByRound[r] = [];
+  if (!refImagesByRound[r]) refImagesByRound[r] = ["", "", "", "", "", "", ""];
+  if (refImagesDirByRound[r] === undefined) refImagesDirByRound[r] = "";
+}
+
 let chatgptUrl = '';
 let currentPromptRound = 1;
 let shouldStopGeneration = false;
@@ -1087,18 +1086,30 @@ async function loadImagePrompts() {
     const config = await jsonFetch('/api/config');
     const defaultData = await jsonFetch('/api/config/reference-image/default');
 
-    for (let r = 1; r <= 20; r++) {
+    let maxRoundConfig = 1;
+    for (const key in config) {
+      if (key.startsWith('image_prompts_')) {
+        const match = key.match(/^image_prompts_(\d+)$/);
+        if (match) {
+          const r = parseInt(match[1]);
+          if (!isNaN(r) && r > maxRoundConfig) maxRoundConfig = r;
+        }
+      }
+    }
+    promptsByRound = {};
+    statusesByRound = {};
+    refImagesByRound = {};
+    refImagesDirByRound = {};
+    
+    for (let r = 1; r <= maxRoundConfig; r++) {
+      initImageGenRound(r);
       const p_key = r === 1 ? 'image_prompts' : `image_prompts_${r}`;
       const s_key = r === 1 ? 'image_prompt_statuses' : `image_prompt_statuses_${r}`;
       
       promptsByRound[r] = (config[p_key] || []).map(x => x.trim()).filter(Boolean);
       statusesByRound[r] = config[s_key] || [];
 
-      // Set active checkbox value
-      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
-      if (roundCheckbox) {
-        roundCheckbox.checked = config[`round_active_${r}`] !== false; // Default is true if undefined
-      }
+      // Active checkbox is now controlled by localStorage, so we don't overwrite it here from config.
 
       // Load 7 reference images per round
       const refImgs = [];
@@ -1770,8 +1781,18 @@ async function saveImagePrompts(silent = false) {
       chatgpt_url: chatgptUrl,
     };
     
+    // Clear old image generation keys from payload to avoid retaining deleted rounds
+    for (const k in payload) {
+      if (k === 'image_prompts' || k.startsWith('image_prompts_') || 
+          k === 'image_prompt_statuses' || k.startsWith('image_prompt_statuses_') || 
+          k.startsWith('reference_image_round_') || k.startsWith('reference_images_dir_round_') || 
+          k.startsWith('round_active_')) {
+        delete payload[k];
+      }
+    }
+    
     // Populate all 20 rounds of prompts and statuses
-    for (let r = 1; r <= 20; r++) {
+    for (let r = 1; r <= getImageGenMaxRound(); r++) {
       const p_key = r === 1 ? 'image_prompts' : `image_prompts_${r}`;
       const s_key = r === 1 ? 'image_prompt_statuses' : `image_prompt_statuses_${r}`;
       payload[p_key] = promptsByRound[r] || [];
@@ -1979,6 +2000,40 @@ function initWorkflowActionListeners() {
     const consoleBox = document.getElementById('imageConsole');
     if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
   });
+
+  const addRoundBtn = document.getElementById('addRoundBtn');
+  if (addRoundBtn) {
+    addRoundBtn.addEventListener('click', () => {
+      const nextRound = getImageGenMaxRound() + 1;
+      initImageGenRound(nextRound);
+      renderImageGenTabs();
+      // Auto-switch to new round
+      const newTab = document.querySelector(`.prompt-tab-btn[data-round="${nextRound}"]`);
+      if (newTab) newTab.click();
+      saveImagePrompts(true);
+    });
+  }
+
+  const resetAllRoundsBtn = document.getElementById('resetAllRoundsBtn');
+  if (resetAllRoundsBtn) {
+    resetAllRoundsBtn.addEventListener('click', async () => {
+      if (!confirm('ยืนยันลบ Round ทั้งหมดและรีเซ็ตค่า? (การเปลี่ยนแปลงนี้จะเคลียร์ข้อมูลพรอพต์ทั้งหมด)')) return;
+      promptsByRound = { 1: [] };
+      statusesByRound = { 1: [] };
+      refImagesByRound = { 1: ["", "", "", "", "", "", ""] };
+      refImagesDirByRound = { 1: "" };
+      currentPromptRound = 1;
+      
+      // Clear localStorage active state
+      localStorage.removeItem('imageGenActiveRoundsState');
+      
+      renderImageGenTabs();
+      renderImagePromptsForRound(1);
+      renderSelectedRefImagesList();
+      await saveImagePrompts(true);
+      showToast('รีเซ็ตทุก Round สำเร็จ', 'success');
+    });
+  }
 
   document.getElementById('addImagePromptBtn').addEventListener('click', () => {
     document.getElementById('imagePromptList').appendChild(imagePromptRowTemplate(''));
@@ -2200,7 +2255,7 @@ function initWorkflowActionListeners() {
           return;
         }
         const currentRefs = refImagesByRound[currentPromptRound] || ["", "", "", "", "", "", ""];
-        for (let r = 1; r <= 20; r++) {
+        for (let r = 1; r <= getImageGenMaxRound(); r++) {
           refImagesDirByRound[r] = path;
           refImagesByRound[r] = [...currentRefs];
         }
@@ -2341,24 +2396,10 @@ function initWorkflowActionListeners() {
       }
 
       // Reset all image generation data structures and UI first
-      promptsByRound = { 
-        1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [],
-        11: [], 12: [], 13: [], 14: [], 15: [], 16: [], 17: [], 18: [], 19: [], 20: []
-      };
-      statusesByRound = { 
-        1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [],
-        11: [], 12: [], 13: [], 14: [], 15: [], 16: [], 17: [], 18: [], 19: [], 20: []
-      };
-      refImagesByRound = { 
-        1: ["", "", "", "", "", "", ""], 2: ["", "", "", "", "", "", ""], 3: ["", "", "", "", "", "", ""], 4: ["", "", "", "", "", "", ""], 5: ["", "", "", "", "", "", ""],
-        6: ["", "", "", "", "", "", ""], 7: ["", "", "", "", "", "", ""], 8: ["", "", "", "", "", "", ""], 9: ["", "", "", "", "", "", ""], 10: ["", "", "", "", "", "", ""],
-        11: ["", "", "", "", "", "", ""], 12: ["", "", "", "", "", "", ""], 13: ["", "", "", "", "", "", ""], 14: ["", "", "", "", "", "", ""], 15: ["", "", "", "", "", "", ""],
-        16: ["", "", "", "", "", "", ""], 17: ["", "", "", "", "", "", ""], 18: ["", "", "", "", "", "", ""], 19: ["", "", "", "", "", "", ""], 20: ["", "", "", "", "", "", ""] 
-      };
-      refImagesDirByRound = {
-        1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 10: "",
-        11: "", 12: "", 13: "", 14: "", 15: "", 16: "", 17: "", 18: "", 19: "", 20: ""
-      };
+      promptsByRound = {};
+      statusesByRound = {};
+      refImagesByRound = {};
+      refImagesDirByRound = {};
       
       const list = document.getElementById('imagePromptList');
       if (list) list.innerHTML = '';
@@ -2392,9 +2433,14 @@ function initWorkflowActionListeners() {
           promptsByRound = res.prompts_by_round;
           refImagesByRound = res.ref_images_by_round;
 
+          const maxRounds = getImageGenMaxRound();
+          for (let r = 1; r <= maxRounds; r++) {
+            initImageGenRound(r);
+          }
+
           if (res.ref_images_dir) {
             // Update refImagesDirByRound for all rounds
-            for (let r = 1; r <= 20; r++) {
+            for (let r = 1; r <= maxRounds; r++) {
               refImagesDirByRound[r] = res.ref_images_dir;
             }
             // Update the UI field
@@ -2406,6 +2452,7 @@ function initWorkflowActionListeners() {
             await scanDirectoryForImages(res.ref_images_dir);
           }
 
+          renderImageGenTabs();
           renderImagePromptsForRound(currentPromptRound);
           renderSelectedRefImagesList();
           renderDropdownOptions();
@@ -2430,26 +2477,113 @@ function initWorkflowActionListeners() {
   }
 
 
-  // Prompt Tabs Click Listeners
-  document.querySelectorAll('.prompt-tab-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      commitCurrentRoundFromDOM();
-      document.querySelectorAll('.prompt-tab-btn').forEach(b => {
-        b.classList.remove('active');
-        b.style.background = 'transparent';
-        b.style.color = 'rgba(255,255,255,0.6)';
-        b.style.border = '1px solid rgba(255,255,255,0.1)';
-        b.style.fontWeight = 'normal';
+  function renderImageGenTabs() {
+    const container = document.getElementById('promptTabsContainer');
+    const checkboxContainer = document.getElementById('activeRoundsCheckboxes');
+    if (!container || !checkboxContainer) return;
+    container.innerHTML = '';
+    checkboxContainer.innerHTML = '';
+    
+    let savedActiveState = {};
+    try {
+      const stored = localStorage.getItem('imageGenActiveRoundsState');
+      if (stored) savedActiveState = JSON.parse(stored);
+    } catch(e) {}
+
+    const saveActiveState = () => {
+      const state = {};
+      document.querySelectorAll('.round-active-checkbox').forEach(cb => {
+        state[cb.dataset.round] = cb.checked;
       });
-      btn.classList.add('active');
-      btn.style.background = 'rgba(255,255,255,0.05)';
-      btn.style.color = '#fff';
-      btn.style.border = '1px solid rgba(255,255,255,0.15)';
-      btn.style.fontWeight = 'bold';
-      currentPromptRound = parseInt(btn.dataset.round, 10);
-      renderImagePromptsForRound(currentPromptRound);
-    });
-  });
+      localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(state));
+    };
+
+    for (let r = 1; r <= getImageGenMaxRound(); r++) {
+      const isChecked = savedActiveState.hasOwnProperty(r) ? savedActiveState[r] : true;
+      
+      // Checkbox for dropdown
+      const cbLabel = document.createElement('label');
+      cbLabel.style.cssText = 'display: flex; align-items: center; width: 100%; font-size: 0.85rem; cursor: pointer; color: #fff; padding: 6px 4px; border-radius: 4px; transition: background 0.2s; box-sizing: border-box;';
+      cbLabel.onmouseover = () => cbLabel.style.background = 'rgba(255,255,255,0.05)';
+      cbLabel.onmouseout = () => cbLabel.style.background = 'transparent';
+      cbLabel.innerHTML = `<div style="flex: 0 0 10%; display: flex; justify-content: flex-start; align-items: center;"><input type="checkbox" class="round-active-checkbox" data-round="${r}" ${isChecked ? 'checked' : ''} style="margin: 0; cursor: pointer;" /></div><div style="flex: 0 0 90%; user-select: none;">Round ${r}</div>`;
+      
+      const cbInput = cbLabel.querySelector('input');
+      cbInput.addEventListener('change', saveActiveState);
+      
+      checkboxContainer.appendChild(cbLabel);
+
+      // Tab Button
+      const btn = document.createElement('button');
+      btn.className = 'prompt-tab-btn' + (r === 1 ? ' active' : '');
+      btn.dataset.round = r;
+      btn.style.cssText = `display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; font-size: 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; white-space: nowrap; height: 35px; flex-shrink: 0;`;
+      if (r === 1) {
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.color = '#fff';
+        btn.style.borderColor = 'rgba(255,255,255,0.15)';
+        btn.style.fontWeight = 'bold';
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.color = 'rgba(255,255,255,0.6)';
+      }
+      btn.innerHTML = `R${r}`;
+      
+      btn.addEventListener('click', () => {
+        commitCurrentRoundFromDOM();
+        currentPromptRound = r;
+        document.querySelectorAll('.prompt-tab-btn').forEach(b => {
+          const isCurrent = parseInt(b.dataset.round) === currentPromptRound;
+          b.classList.toggle('active', isCurrent);
+          b.style.background = isCurrent ? 'rgba(255,255,255,0.05)' : 'transparent';
+          b.style.color = isCurrent ? '#fff' : 'rgba(255,255,255,0.6)';
+          b.style.borderColor = isCurrent ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.1)';
+          b.style.fontWeight = isCurrent ? 'bold' : 'normal';
+        });
+        renderImagePromptsForRound(currentPromptRound);
+      });
+      
+      container.appendChild(btn);
+    }
+
+    // Dropdown Toggle Logic
+    const activeBtn = document.getElementById('activeRoundsBtn');
+    const menu = document.getElementById('activeRoundsMenu');
+    if (activeBtn && menu) {
+      activeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+      });
+      document.addEventListener('click', (e) => {
+        if (!activeBtn.contains(e.target) && !menu.contains(e.target)) {
+          menu.style.display = 'none';
+        }
+      });
+      menu.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    const selectAllBtn = document.getElementById('selectAllRoundsBtn');
+    const deselectAllBtn = document.getElementById('deselectAllRoundsBtn');
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener('click', () => {
+        document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = true);
+        saveActiveState();
+      });
+    }
+    if (deselectAllBtn) {
+      deselectAllBtn.addEventListener('click', () => {
+        document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = false);
+        saveActiveState();
+      });
+    }
+
+    if (!localStorage.getItem('imageGenActiveRoundsState')) {
+      saveActiveState();
+    }
+  }
+
+  // Initialize tabs
+  renderImageGenTabs();
 
   const runMultiRoundGeneration = async (target, btn) => {
     btn.classList.add('loading');
@@ -2470,7 +2604,7 @@ function initWorkflowActionListeners() {
 
     let hasProcessedAnyRound = false;
 
-    for (let r = 1; r <= 20; r++) {
+    for (let r = 1; r <= getImageGenMaxRound(); r++) {
       if (shouldStopGeneration) {
         break;
       }
@@ -2992,7 +3126,7 @@ function initFileImports() {
       const confirmReset = confirm("คุณต้องการล้างข้อมูลพรอพต์และรูปภาพอ้างอิงทั้งหมดในทุก Round ใช่หรือไม่?");
       if (!confirmReset) return;
 
-      for (let r = 1; r <= 20; r++) {
+      for (let r = 1; r <= getImageGenMaxRound(); r++) {
         promptsByRound[r] = [];
         statusesByRound[r] = [];
         refImagesByRound[r] = ["", "", "", "", "", "", ""];
