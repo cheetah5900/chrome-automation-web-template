@@ -3170,163 +3170,27 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         
     driver = bot.driver
 
-    # 1. Navigate to Google Flow path if not already there
-    if google_flow_path:
-        current_url = ""
+    # 1. Switch to Google Flow tab if it exists (no redirect/get)
+    switched = False
+    for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+        if bot.switch_to_tab_containing(url_part):
+            switched = True
+            break
+
+    if not switched and google_flow_path:
         try:
-            current_url = driver.current_url
+            from urllib.parse import urlparse
+            parsed = urlparse(google_flow_path)
+            if parsed.netloc and bot.switch_to_tab_containing(parsed.netloc):
+                switched = True
         except Exception:
             pass
-            
-        if google_flow_path.lower() not in current_url.lower():
-            log(f"กำลังนำทางไปยัง Google Flow: {google_flow_path}")
-            driver.get(google_flow_path)
-            time.sleep(5.0)
+
+    if not switched:
+        raise HTTPException(status_code=400, detail="ไม่พบแท็บ Google Flow ที่เปิดอยู่ กรุณาเปิดแท็บ Google Flow ค้างไว้ก่อนทำการรัน")
 
     # Bring Chrome window to front
     _activate_chrome()
-
-    # 1.5. Run Google Flow Configuration Sequence (Steps 2-8)
-    def click_by_xpath(xpath: str, description: str, timeout: int = 15):
-        if not is_driver_alive(driver):
-            raise RuntimeError("Browser connection lost.")
-        log(f"[กำลังค้นหาปุ่ม] {description} (XPath: {xpath})")
-        try:
-            elem = WebDriverWait(driver, timeout).until(
-                EC.presence_of_element_located((By.XPATH, xpath))
-            )
-            # เลื่อนองค์ประกอบให้อยู่ในหน้าจอ
-            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
-            time.sleep(0.5)
-
-            clicked = False
-
-            # วิธีที่ 1: ActionChains (จำลองการเลื่อนเมาส์ไปกดจริง)
-            if not is_driver_alive(driver):
-                raise RuntimeError("Browser connection lost.")
-            try:
-                from selenium.webdriver.common.action_chains import ActionChains
-                actions = ActionChains(driver)
-                actions.move_to_element(elem).click().perform()
-                log(f"[คลิกปุ่มสำเร็จ] (ActionChains): {description}")
-                clicked = True
-            except Exception as e1:
-                log(f"ActionChains click failed: {e1}")
-
-            # วิธีที่ 2: Standard click
-            if not clicked:
-                if not is_driver_alive(driver):
-                    raise RuntimeError("Browser connection lost.")
-                try:
-                    elem.click()
-                    log(f"[คลิกปุ่มสำเร็จ] (Standard Click): {description}")
-                    clicked = True
-                except Exception as e2:
-                    log(f"Standard click failed: {e2}")
-
-            # วิธีที่ 3: คลิกที่ตัว overlay ของปุ่ม
-            if not clicked:
-                if not is_driver_alive(driver):
-                    raise RuntimeError("Browser connection lost.")
-                try:
-                    overlay = elem.find_element(By.XPATH, ".//div[@data-type='button-overlay']")
-                    overlay.click()
-                    log(f"[คลิกปุ่มสำเร็จ] (Overlay Click): {description}")
-                    clicked = True
-                except Exception as e3:
-                    log(f"Overlay click failed: {e3}")
-
-            # วิธีที่ 4: JavaScript click (วิธีสุดท้ายที่เป็นการบังคับคลิก)
-            if not clicked:
-                if not is_driver_alive(driver):
-                    raise RuntimeError("Browser connection lost.")
-                try:
-                    driver.execute_script("arguments[0].click();", elem)
-                    log(f"[คลิกปุ่มสำเร็จ] (JS Click): {description}")
-                    clicked = True
-                except Exception as e4:
-                    log(f"JS click failed: {e4}")
-
-            if not clicked:
-                raise Exception("ไม่สามารถจำลองการคลิกด้วยวิธีใดๆ ได้")
-
-            time.sleep(1.0)
-        except Exception as e:
-            if not is_driver_alive(driver):
-                raise RuntimeError("Browser connection lost.")
-            raise HTTPException(
-                status_code=400,
-                detail=f"ไม่สามารถดำเนินการขั้นตอน: {description} (Error: {e})"
-            )
-
-    if payload.is_first_run:
-        log("เริ่มขั้นตอนการตั้งค่า Google Flow Automation (Steps 1-8)")
-        
-        xpath_video_settings = "//button[contains(., 'วิดีโอ') and @aria-haspopup='menu']"
-        
-        # Step 2: Open settings panel if not already open
-        try:
-            settings_btn = WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, xpath_video_settings))
-            )
-            aria_expanded = settings_btn.get_attribute("aria-expanded")
-            data_state = settings_btn.get_attribute("data-state")
-            if aria_expanded == "true" or data_state == "open":
-                log("เมนูตั้งค่าวิดีโอเปิดอยู่แล้ว ไม่จำเป็นต้องคลิกเปิดซ้ำ")
-            else:
-                click_by_xpath(xpath_video_settings, "ปุ่มเปิดเมนูตั้งค่าวิดีโอ (วิดีโอ)")
-        except Exception:
-            click_by_xpath(xpath_video_settings, "ปุ่มเปิดเมนูตั้งค่าวิดีโอ (วิดีโอ)")
-
-        # Step 3: Tab วิดีโอ
-        xpath_tab_video = "//button[@role='tab' and (contains(., 'วิดีโอ') or contains(@id, '-trigger-VIDEO'))]"
-        click_by_xpath(xpath_tab_video, "แท็บวิดีโอ")
-
-        # Step 4: Tab เฟรม
-        xpath_tab_frames = "//button[@role='tab' and (contains(., 'เฟรม') or contains(@id, '-trigger-VIDEO_FRAMES'))]"
-        click_by_xpath(xpath_tab_frames, "แท็บเฟรม")
-
-        # Step 5: Ratio 9:16
-        xpath_ratio_portrait = "//button[@role='tab' and (contains(., '9:16') or contains(@id, '-trigger-PORTRAIT'))]"
-        click_by_xpath(xpath_ratio_portrait, "ปุ่มเลือกอัตราส่วน 9:16")
-
-        # Step 6: Speed x2
-        xpath_speed_x2 = "//button[@role='tab' and (text()='x2' or contains(., 'x2') or contains(@id, '-trigger-2'))]"
-        click_by_xpath(xpath_speed_x2, "ปุ่มเลือกความเร็ว x2")
-
-        # Step 7 & 8: Select "Veo 3.1 - Lite" model
-        xpath_dropdown_model = "//button[@aria-haspopup='menu' and (contains(., 'Veo 3.1') or contains(., 'Veo') or contains(@class, 'eaVRLg'))]"
-        try:
-            model_btn = WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, xpath_dropdown_model))
-            )
-            current_model_text = model_btn.text.strip()
-            log(f"โมเดลปัจจุบันที่เลือกอยู่คือ: '{current_model_text}'")
-            if "Veo 3.1 - Lite" in current_model_text:
-                log("โมเดลเป็น Veo 3.1 - Lite อยู่แล้ว ไม่ต้องกดเลือกซ้ำ")
-            else:
-                # Open dropdown
-                click_by_xpath(xpath_dropdown_model, f"ปุ่มเปิด Dropdown รุ่นโมเดล (ปัจจุบัน: {current_model_text})")
-                # Step 8: Select "Veo 3.1 - Lite" from menu
-                xpath_select_model = "//*[contains(text(), 'Veo 3.1 - Lite')] | //button[contains(., 'Veo 3.1 - Lite')] | //div[@role='menuitem']//*[contains(text(), 'Veo 3.1 - Lite')]"
-                click_by_xpath(xpath_select_model, "เลือก Veo 3.1 - Lite จากเมนู")
-        except Exception as e:
-            log(f"Warning: ไม่สามารถตรวจเช็คโมเดลปัจจุบันได้ ทำการกดสลับโมเดลเป็นปกติ (Error: {e})")
-            click_by_xpath(xpath_dropdown_model, "ปุ่มเปิด Dropdown รุ่นโมเดล")
-            xpath_select_model = "//*[contains(text(), 'Veo 3.1 - Lite')] | //button[contains(., 'Veo 3.1 - Lite')] | //div[@role='menuitem']//*[contains(text(), 'Veo 3.1 - Lite')]"
-            click_by_xpath(xpath_select_model, "เลือก Veo 3.1 - Lite จากเมนู")
-
-        log("เสร็จสิ้นการตั้งค่า Google Flow Automation (Steps 1-8)")
-
-        # 2. Close settings modal using Esc key
-        log("[กำลังส่งคำสั่ง] กด Esc เพื่อปิดเมนูตั้งค่าวิดีโอ")
-        try:
-            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
-            time.sleep(1.0)
-        except Exception as e:
-            log(f"ไม่สามารถกด Esc เพื่อปิดเมนูได้: {e}")
-    else:
-        log("ข้ามขั้นตอนการตั้งค่า Google Flow Automation (ไม่ใช่รอบแรกที่รันระบบ)")
 
     # 3. Find and click prompt input field
     if not video_input_selector:
@@ -3344,7 +3208,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'] p, div[contenteditable='true'], [role='textbox'] p, textarea"))
             )
         except Exception as e2:
-            raise HTTPException(status_code=400, detail=f"ไม่พบช่องป้อนพรอพต์ด้วยวิธีใดๆ (Error: {e2})")
+            raise HTTPException(status_code=400, detail="ไม่พบช่องป้อนพรอพต์บนหน้าเว็บ Google Flow")
 
     # Click the input box to focus
     try:
@@ -3361,14 +3225,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
     time.sleep(1.0)
 
-    # Clear previous contents if any
-    try:
-        driver.execute_script("arguments[0].textContent = '';", box)
-        driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
-        log("[ล้างข้อมูลสำเร็จ] ล้างข้อความเดิมในช่องพรอพต์เรียบร้อย")
-    except Exception as e:
-        log(f"เตือน: ล้างข้อความเดิมล้มเหลว ({e})")
-    
+
     # 4. Type @ using ActionChains keyboard events
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")

@@ -2254,12 +2254,22 @@ function initWorkflowActionListeners() {
   const lakornEpInput = document.getElementById('cfg_lakorn_ep');
   const btnImportLakornAuto = document.getElementById('btnImportLakornAuto');
 
+  if (cfgLakornPathInput) {
+    cfgLakornPathInput.addEventListener('input', (e) => {
+      jsonFetch('/api/config/set-default', {
+        method: 'POST',
+        body: JSON.stringify({ key: 'lakorn_path', value: e.target.value.trim() })
+      }).catch(err => console.error('Failed to save lakorn_path:', err));
+    });
+  }
+
   if (browseLakornPathBtn && cfgLakornPathInput) {
     browseLakornPathBtn.addEventListener('click', async () => {
       try {
         const res = await jsonFetch('/api/utils/browse-directory');
         if (res.ok && res.path) {
           cfgLakornPathInput.value = res.path;
+          cfgLakornPathInput.dispatchEvent(new Event('input'));
         }
       } catch (e) {
         showToast(`Failed to browse directory: ${e.message}`, 'error');
@@ -3359,12 +3369,23 @@ function initVideoGenListeners() {
 
   const browseVideoLakornPathBtn = document.getElementById('browseVideoLakornPathBtn');
   const cfgVideoLakornPathInput = document.getElementById('cfg_video_lakorn_path');
+
+  if (cfgVideoLakornPathInput) {
+    cfgVideoLakornPathInput.addEventListener('input', (e) => {
+      jsonFetch('/api/config/set-default', {
+        method: 'POST',
+        body: JSON.stringify({ key: 'video_lakorn_path', value: e.target.value.trim() })
+      }).catch(err => console.error('Failed to save video_lakorn_path:', err));
+    });
+  }
+
   if (browseVideoLakornPathBtn && cfgVideoLakornPathInput) {
     browseVideoLakornPathBtn.addEventListener('click', async () => {
       try {
         const res = await jsonFetch('/api/utils/browse-directory');
         if (res.ok && res.path) {
           cfgVideoLakornPathInput.value = res.path;
+          cfgVideoLakornPathInput.dispatchEvent(new Event('input'));
         }
       } catch (e) {
         showToast(`Failed to browse directory: ${e.message}`, 'error');
