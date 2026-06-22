@@ -1741,7 +1741,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         tell application "Google Chrome" to activate
                         delay 1.0
                         tell application "System Events"
-                            keystroke "u" using command down
+                            key code 32 using command down
                         end tell
                         """
                         try:
@@ -3142,8 +3142,19 @@ def import_lakorn_video_auto(payload: ImportLakornVideoPayload):
     }
 
 
+_upload_images_stop_flag = False
+
+@app.post("/api/step/stop-upload-google-flow")
+def stop_upload_google_flow() -> dict[str, Any]:
+    global _upload_images_stop_flag
+    _upload_images_stop_flag = True
+    return {"ok": True, "message": "Stop flag set"}
+
 @app.post("/api/step/upload-google-flow-images")
 def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[str, Any]:
+    global _upload_images_stop_flag
+    _upload_images_stop_flag = False
+    
     import os
     import subprocess
     import time
@@ -3162,7 +3173,10 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
         if os.path.isfile(full_path) and Path(f).suffix.lower() in valid_exts:
             images.append(full_path)
             
-    images.sort()
+    import re
+    def natural_sort_key(s):
+        return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
+    images.sort(key=natural_sort_key)
     
     if not images:
         return {"ok": False, "message": "ไม่พบไฟล์รูปภาพในโฟลเดอร์ที่เลือก"}
@@ -3199,14 +3213,18 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
     log(f"Found {len(images)} images to upload to Google Flow.")
     
     for idx, img_path in enumerate(images):
+        if _upload_images_stop_flag:
+            log("Upload forcefully stopped by user.")
+            return {"ok": False, "message": f"ยกเลิกการอัพโหลดแล้ว (สำเร็จ {idx}/{len(images)} รูป)"}
+            
         log(f"Uploading image {idx+1}/{len(images)}: {os.path.basename(img_path)}")
         _activate_chrome()
         time.sleep(1.0)
         
-        # Press Cmd + U to open file picker
+        # Press Cmd + U to open file picker (Use key code 32 for 'U' to bypass keyboard layout issues)
         cmd_u_script = """
         tell application "System Events"
-            keystroke "u" using command down
+            key code 32 using command down
         end tell
         """
         subprocess.run(["osascript", "-e", cmd_u_script], check=False)

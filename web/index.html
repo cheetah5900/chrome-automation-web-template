@@ -432,16 +432,29 @@
               </div>
             </div>
 
-            <!-- Run Control Buttons -->
+              <!-- Run Control Buttons -->
             <div style="display: flex; gap: 12px; width: 100%; margin-top: 14px;">
               <button id="btnRunGoogleFlow" class="primary has-tooltip" style="flex: 2; padding: 14px; font-size: 1.05rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
                 <span class="btn-text">▶️ RUN GOOGLE FLOW AUTOMATION</span>
                 <div class="custom-tooltip" id="tooltip_btnRunGoogleFlow"></div>
               </button>
-              
-              <button id="btnBrowseGoogleFlowImages" class="secondary has-tooltip" style="flex: 1; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);">
-                <span style="font-size: 1.1rem;">📸</span> <span class="btn-text">UPLOAD IMAGES (FOLDER)</span>
-              </button>
+            </div>
+            
+            <!-- Image Upload Section -->
+            <div style="margin-top: 16px; padding: 14px; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+              <h3 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 12px; color: #fff;">📸 Image Upload to Google Flow</h3>
+              <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                <input type="text" id="cfg_upload_folder_path" placeholder="เลือกโฟลเดอร์รูปภาพ..." readonly style="flex-grow: 1; padding: 10px 14px; border-radius: 10px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.09); color: #aaa; font-size: 0.85rem;" />
+                <button id="btnBrowseGoogleFlowImages" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; border-radius: 10px; white-space: nowrap;">📁 Browse Folder</button>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <button id="btnStartGoogleFlowUpload" class="primary" disabled style="flex: 1; padding: 12px; font-size: 0.95rem; font-weight: bold; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; color: white; border-radius: 10px; cursor: pointer; transition: all 0.2s; opacity: 0.5;">
+                  <span class="btn-text">📤 START UPLOAD</span>
+                </button>
+                <button id="btnStopGoogleFlowUpload" class="secondary" style="display: none; flex: 1; padding: 12px; font-size: 0.95rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: none; color: white; border-radius: 10px; cursor: pointer; transition: all 0.2s;">
+                  <span class="btn-text">🛑 FORCE STOP</span>
+                </button>
+              </div>
             </div>
 
             <button class="step-action-btn has-tooltip" id="btnStopVideoGeneration" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">

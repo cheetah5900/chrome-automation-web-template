@@ -3308,7 +3308,7 @@ async function loadVideoPrompts() {
     renderVideoActiveRoundsDropdown();
     renderVideoPromptsForRound(1);
   } catch (e) {
-    writeConsoleLine(`Failed to load video prompts: ${e.message}`, 'error', 'videoConsole');
+        writeConsoleLine(`Failed to load video prompts: ${e.message}`, 'error', 'videoConsole');
   }
 }
 
@@ -3556,40 +3556,88 @@ function initVideoGenListeners() {
   }
 
   const btnBrowseGoogleFlowImages = document.getElementById('btnBrowseGoogleFlowImages');
+  const btnStartGoogleFlowUpload = document.getElementById('btnStartGoogleFlowUpload');
+  const btnStopGoogleFlowUpload = document.getElementById('btnStopGoogleFlowUpload');
+  const inputUploadFolderPath = document.getElementById('cfg_upload_folder_path');
+  
   if (btnBrowseGoogleFlowImages) {
     btnBrowseGoogleFlowImages.addEventListener('click', async () => {
       try {
         btnBrowseGoogleFlowImages.disabled = true;
-        const btnText = btnBrowseGoogleFlowImages.querySelector('.btn-text');
-        if (btnText) btnText.textContent = 'Browsing...';
-
         const res = await jsonFetch('/api/utils/browse-directory');
         if (res && res.ok && res.path) {
-          if (btnText) btnText.textContent = 'Uploading...';
-          const uploadRes = await jsonFetch('/api/step/upload-google-flow-images', {
-            method: 'POST',
-            body: JSON.stringify({ folder_path: res.path })
-          });
-          
-          if (uploadRes.ok) {
-            showToast(uploadRes.message, 'success');
-            writeConsoleLine(`Upload Success: ${uploadRes.message}`, 'success', 'videoConsole');
-          } else {
-            showToast(uploadRes.message || 'การอัพโหลดล้มเหลว', 'error');
-            writeConsoleLine(`Upload Error: ${uploadRes.message}`, 'error', 'videoConsole');
+          if (inputUploadFolderPath) inputUploadFolderPath.value = res.path;
+          if (btnStartGoogleFlowUpload) {
+            btnStartGoogleFlowUpload.disabled = false;
+            btnStartGoogleFlowUpload.style.opacity = '1';
           }
-        } else if (res && !res.ok && res.path === "") {
-          // User cancelled
+        }
+      } catch (err) {
+        showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
+      } finally {
+        btnBrowseGoogleFlowImages.disabled = false;
+      }
+    });
+  }
+
+  if (btnStartGoogleFlowUpload) {
+    btnStartGoogleFlowUpload.addEventListener('click', async () => {
+      const folderPath = inputUploadFolderPath ? inputUploadFolderPath.value : '';
+      if (!folderPath) {
+        showToast('กรุณาเลือกโฟลเดอร์รูปภาพก่อน', 'warning');
+        return;
+      }
+
+      try {
+        btnStartGoogleFlowUpload.style.display = 'none';
+        if (btnStopGoogleFlowUpload) {
+          btnStopGoogleFlowUpload.style.display = 'block';
+          btnStopGoogleFlowUpload.disabled = false;
+        }
+
+        writeConsoleLine(`Upload: Starting image upload from ${folderPath}...`, 'info', 'videoConsole');
+        const uploadRes = await jsonFetch('/api/step/upload-google-flow-images', {
+          method: 'POST',
+          body: JSON.stringify({ folder_path: folderPath })
+        });
+        
+        if (uploadRes.ok) {
+          showToast(uploadRes.message, 'success');
+          writeConsoleLine(`Upload Success: ${uploadRes.message}`, 'success', 'videoConsole');
         } else {
-          showToast('ไม่สามารถเปิดหน้าต่างเลือกโฟลเดอร์ได้', 'error');
+          showToast(uploadRes.message || 'การอัพโหลดถูกยกเลิกหรือล้มเหลว', 'error');
+          writeConsoleLine(`Upload Interrupted: ${uploadRes.message}`, 'warning', 'videoConsole');
         }
       } catch (err) {
         showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
         writeConsoleLine(`Upload Error: ${err.message}`, 'error', 'videoConsole');
       } finally {
-        btnBrowseGoogleFlowImages.disabled = false;
-        const btnText = btnBrowseGoogleFlowImages.querySelector('.btn-text');
-        if (btnText) btnText.textContent = 'Browse Folder & Upload';
+        if (btnStopGoogleFlowUpload) {
+          btnStopGoogleFlowUpload.style.display = 'none';
+          btnStopGoogleFlowUpload.disabled = false;
+          const stopBtnText = btnStopGoogleFlowUpload.querySelector('.btn-text');
+          if (stopBtnText) stopBtnText.textContent = '🛑 FORCE STOP';
+        }
+        btnStartGoogleFlowUpload.style.display = 'block';
+      }
+    });
+  }
+
+  if (btnStopGoogleFlowUpload) {
+    btnStopGoogleFlowUpload.addEventListener('click', async () => {
+      try {
+        btnStopGoogleFlowUpload.disabled = true;
+        const btnText = btnStopGoogleFlowUpload.querySelector('.btn-text');
+        if (btnText) btnText.textContent = 'กำลังหยุด...';
+        
+        writeConsoleLine('Force Stop: Stopping image upload...', 'warning', 'videoConsole');
+        await jsonFetch('/api/step/stop-upload-google-flow', { method: 'POST' });
+      } catch (err) {
+        showToast(`Force Stop Error: ${err.message}`, 'error');
+        writeConsoleLine(`Force Stop Error: ${err.message}`, 'error', 'videoConsole');
+        btnStopGoogleFlowUpload.disabled = false;
+        const btnText = btnStopGoogleFlowUpload.querySelector('.btn-text');
+        if (btnText) btnText.textContent = '🛑 FORCE STOP';
       }
     });
   }
