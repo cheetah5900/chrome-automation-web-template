@@ -5,3 +5,4 @@ __pycache__/
 runtime/*.local.json
 /runtime
 web/node_modules/
+/.venv_system
