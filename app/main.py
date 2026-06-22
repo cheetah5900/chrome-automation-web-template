@@ -3171,17 +3171,14 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
         escaped_path = file_path.replace('"', '\\"')
         script = f"""
         set the clipboard to "{escaped_path}"
+        delay 0.5
         tell application "System Events"
-            -- Press Cmd + U to open file picker in Google Flow
-            keystroke "u" using {{command down}}
-            delay 1.5
-            
             -- Press Cmd + Shift + G to open path dialog
             key code 5 using {{command down, shift down}}
             delay 0.75
             
             -- Press Cmd + V to paste
-            keystroke "v" using {{command down}}
+            key code 9 using {{command down}}
             delay 1.0
             
             -- Enter to confirm path
@@ -3204,10 +3201,23 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
     for idx, img_path in enumerate(images):
         log(f"Uploading image {idx+1}/{len(images)}: {os.path.basename(img_path)}")
         _activate_chrome()
-        time.sleep(0.5)
+        time.sleep(1.0)
+        
+        # Press Cmd + U to open file picker
+        cmd_u_script = """
+        tell application "System Events"
+            keystroke "u" using command down
+        end tell
+        """
+        subprocess.run(["osascript", "-e", cmd_u_script], check=False)
+        
+        log("Waiting 1.5 seconds for file modal to fully open...")
+        time.sleep(1.5)
+        
         upload_macos_file_dialog(img_path)
-        # Delay before processing next image to let Google Flow handle the upload UI
-        time.sleep(3.0) 
+        
+        log("Waiting 2.5 seconds for file upload to settle...")
+        time.sleep(2.5) 
 
     return {"ok": True, "message": f"อัพโหลด {len(images)} รูปไปยัง Google Flow เรียบร้อยแล้ว"}
 
