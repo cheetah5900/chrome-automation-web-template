@@ -3555,6 +3555,47 @@ function initVideoGenListeners() {
     });
   }
 
+  setupSetDefaultBtn('setVideoLakornTonDefaultBtn', 'cfg_video_lakorn_ton', 'video_lakorn_ton', 'ตั้งค่า ตอนละคร (Video) เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+
+  const btnBrowseGoogleFlowImages = document.getElementById('btnBrowseGoogleFlowImages');
+  if (btnBrowseGoogleFlowImages) {
+    btnBrowseGoogleFlowImages.addEventListener('click', async () => {
+      try {
+        btnBrowseGoogleFlowImages.disabled = true;
+        const btnText = btnBrowseGoogleFlowImages.querySelector('.btn-text');
+        if (btnText) btnText.textContent = 'Browsing...';
+
+        const res = await jsonFetch('/api/utils/browse-directory');
+        if (res && res.ok && res.path) {
+          if (btnText) btnText.textContent = 'Uploading...';
+          const uploadRes = await jsonFetch('/api/step/upload-google-flow-images', {
+            method: 'POST',
+            body: JSON.stringify({ folder_path: res.path })
+          });
+          
+          if (uploadRes.ok) {
+            showToast(uploadRes.message, 'success');
+            writeConsoleLine(`Upload Success: ${uploadRes.message}`, 'success', 'videoConsole');
+          } else {
+            showToast(uploadRes.message || 'การอัพโหลดล้มเหลว', 'error');
+            writeConsoleLine(`Upload Error: ${uploadRes.message}`, 'error', 'videoConsole');
+          }
+        } else if (res && !res.ok && res.path === "") {
+          // User cancelled
+        } else {
+          showToast('ไม่สามารถเปิดหน้าต่างเลือกโฟลเดอร์ได้', 'error');
+        }
+      } catch (err) {
+        showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
+        writeConsoleLine(`Upload Error: ${err.message}`, 'error', 'videoConsole');
+      } finally {
+        btnBrowseGoogleFlowImages.disabled = false;
+        const btnText = btnBrowseGoogleFlowImages.querySelector('.btn-text');
+        if (btnText) btnText.textContent = 'Browse Folder & Upload';
+      }
+    });
+  }
+
   const resetAllVideoRoundsBtn = document.getElementById('resetAllVideoRoundsBtn');
   if (resetAllVideoRoundsBtn) {
     resetAllVideoRoundsBtn.addEventListener('click', async () => {

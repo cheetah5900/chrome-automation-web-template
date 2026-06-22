@@ -95,6 +95,10 @@ class ImportLakornVideoPayload(BaseModel):
     ton_num: str
     ep_num: str
 
+class UploadImagesGoogleFlowPayload(BaseModel):
+    folder_path: str
+
+
 
 class VideoGenStepPayload(BaseModel):
     prompt: str
@@ -3136,6 +3140,76 @@ def import_lakorn_video_auto(payload: ImportLakornVideoPayload):
         "prompts_by_round": prompts_by_round,
         "message": f"นำเข้าข้อมูลพรอพต์วิดีโอสำหรับตอนที่ {ep_num} เรียบร้อยแล้ว (จำนวน {len(prompt_files)} ฉาก)"
     }
+
+
+@app.post("/api/step/upload-google-flow-images")
+def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[str, Any]:
+    import os
+    import subprocess
+    import time
+    from pathlib import Path
+    
+    _activate_chrome()
+    
+    folder_path = payload.folder_path.strip()
+    if not os.path.isdir(folder_path):
+        raise HTTPException(status_code=400, detail="Invalid folder path")
+        
+    valid_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+    images = []
+    for f in os.listdir(folder_path):
+        full_path = os.path.join(folder_path, f)
+        if os.path.isfile(full_path) and Path(f).suffix.lower() in valid_exts:
+            images.append(full_path)
+            
+    images.sort()
+    
+    if not images:
+        return {"ok": False, "message": "ไม่พบไฟล์รูปภาพในโฟลเดอร์ที่เลือก"}
+        
+    def upload_macos_file_dialog(file_path: str):
+        escaped_path = file_path.replace('"', '\\"')
+        script = f"""
+        set the clipboard to "{escaped_path}"
+        tell application "System Events"
+            -- Press Cmd + U to open file picker in Google Flow
+            keystroke "u" using {{command down}}
+            delay 1.5
+            
+            -- Press Cmd + Shift + G to open path dialog
+            key code 5 using {{command down, shift down}}
+            delay 0.75
+            
+            -- Press Cmd + V to paste
+            keystroke "v" using {{command down}}
+            delay 1.0
+            
+            -- Enter to confirm path
+            keystroke return
+            delay 1.5
+            
+            -- Enter to confirm file selection
+            keystroke return
+        end tell
+        """
+        try:
+            subprocess.run(["osascript", "-e", script], check=False)
+            return True
+        except Exception as e:
+            log(f"AppleScript dialog input failed: {e}")
+            return False
+
+    log(f"Found {len(images)} images to upload to Google Flow.")
+    
+    for idx, img_path in enumerate(images):
+        log(f"Uploading image {idx+1}/{len(images)}: {os.path.basename(img_path)}")
+        _activate_chrome()
+        time.sleep(0.5)
+        upload_macos_file_dialog(img_path)
+        # Delay before processing next image to let Google Flow handle the upload UI
+        time.sleep(3.0) 
+
+    return {"ok": True, "message": f"อัพโหลด {len(images)} รูปไปยัง Google Flow เรียบร้อยแล้ว"}
 
 
 @app.post("/api/step/video-gen")
