@@ -3161,6 +3161,94 @@ function initFileImports() {
 let videoPromptsByRound = {};
 let videoStatusesByRound = {};
 let currentVideoPromptRound = 1;
+function getVideoGenMaxRound() {
+  const keys = Object.keys(videoPromptsByRound).map(Number).filter(n => !isNaN(n));
+  return keys.length > 0 ? Math.max(...keys) : 1;
+}
+
+function initVideoGenRound(r) {
+  if (!videoPromptsByRound[r]) videoPromptsByRound[r] = [];
+  if (!videoStatusesByRound[r]) videoStatusesByRound[r] = [];
+}
+
+function renderVideoGenTabs() {
+  const container = document.getElementById('videoPromptTabsContainer');
+  if (!container) return;
+  
+  const maxRounds = getVideoGenMaxRound();
+  let html = '';
+  
+  let activeState = {};
+  try {
+    const saved = localStorage.getItem('videoGenActiveRoundsState');
+    if (saved) activeState = JSON.parse(saved);
+  } catch (e) {}
+
+  for (let r = 1; r <= maxRounds; r++) {
+    const isCurrent = r === currentVideoPromptRound;
+    const activeClass = isCurrent ? 'active' : '';
+    const bg = isCurrent ? 'rgba(255,255,255,0.05)' : 'transparent';
+    const color = isCurrent ? '#fff' : 'rgba(255,255,255,0.6)';
+    const border = isCurrent ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(255,255,255,0.1)';
+    const fw = isCurrent ? 'bold' : 'normal';
+
+    html += `
+      <button class="video-prompt-tab-btn ${activeClass}" data-round="${r}" style="display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; font-size: 0.8rem; border-radius: 8px; border: ${border}; background: ${bg}; color: ${color}; cursor: pointer; white-space: nowrap; height: 35px; font-weight: ${fw}; flex-shrink: 0;">
+        R${r}
+      </button>
+    `;
+  }
+  container.innerHTML = html;
+
+  container.querySelectorAll('.video-prompt-tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      if (e.target.tagName.toLowerCase() === 'input') return;
+      currentVideoPromptRound = parseInt(btn.dataset.round);
+      renderVideoGenTabs();
+      renderVideoPromptsForRound(currentVideoPromptRound);
+    });
+  });
+
+
+}
+
+function renderVideoActiveRoundsDropdown() {
+  const container = document.getElementById('videoActiveRoundsCheckboxes');
+  if (!container) return;
+  const maxRounds = getVideoGenMaxRound();
+  let html = '';
+  
+  let activeState = {};
+  try {
+    const saved = localStorage.getItem('videoGenActiveRoundsState');
+    if (saved) activeState = JSON.parse(saved);
+  } catch (e) {}
+
+  for (let r = 1; r <= maxRounds; r++) {
+    const isActive = activeState[r] !== false;
+    html += `
+      <label style="display: flex; align-items: center; width: 100%; font-size: 0.85rem; cursor: pointer; color: #fff; padding: 6px 4px; border-radius: 4px; transition: background 0.2s; box-sizing: border-box;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+        <div style="flex: 0 0 10%; display: flex; justify-content: flex-start; align-items: center;">
+          <input type="checkbox" class="video-dropdown-round-cb" data-round="${r}" ${isActive ? 'checked' : ''} style="margin: 0; cursor: pointer;" />
+        </div>
+        <div style="flex: 0 0 90%; user-select: none;">Round ${r}</div>
+      </label>
+    `;
+  }
+  container.innerHTML = html;
+
+  container.querySelectorAll('.video-dropdown-round-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const r = parseInt(cb.dataset.round);
+      activeState[r] = cb.checked;
+      localStorage.setItem('videoGenActiveRoundsState', JSON.stringify(activeState));
+      
+
+      saveVideoPrompts(true);
+    });
+  });
+}
+
 let shouldStopVideoGeneration = false;
 let videoCooldownInterval = null;
 
@@ -3168,18 +3256,28 @@ async function loadVideoPrompts() {
   try {
     const config = await jsonFetch('/api/config');
 
-    for (let r = 1; r <= 10; r++) {
-      const p_key = r === 1 ? 'video_prompts' : `video_prompts_${r}`;
-      const s_key = r === 1 ? 'video_prompt_statuses' : `video_prompt_statuses_${r}`;
-      
-      videoPromptsByRound[r] = (config[p_key] || []).map(x => x.trim()).filter(Boolean);
-      videoStatusesByRound[r] = config[s_key] || [];
-
-      const roundCheckbox = document.querySelector(`.video-round-active-checkbox[data-round="${r}"]`);
-      if (roundCheckbox) {
-        roundCheckbox.checked = config[`video_round_active_${r}`] !== false;
+    let maxRoundConfig = 1;
+    for (const key in config) {
+      if (key.startsWith('video_prompts_')) {
+        const match = key.match(/^video_prompts_(\d+)$/);
+        if (match) {
+          const r = parseInt(match[1]);
+          if (!isNaN(r) && r > maxRoundConfig) maxRoundConfig = r;
+        }
       }
     }
+    videoPromptsByRound = {};
+    videoStatusesByRound = {};
+    
+    for (let r = 1; r <= maxRoundConfig; r++) {
+      initVideoGenRound(r);
+      const p_key = r === 1 ? 'video_prompts' : `video_prompts_${r}`;
+      const s_key = r === 1 ? 'video_prompt_statuses' : `video_prompt_statuses_${r}`;
+      videoPromptsByRound[r] = (config[p_key] || []).map(x => x.trim()).filter(Boolean);
+      videoStatusesByRound[r] = config[s_key] || [];
+    }
+    
+    // We don't restore checked state from config anymore; we use localStorage like ImageGen
     
     const flowPath = document.getElementById('cfg_google_flow_path');
     if (flowPath) flowPath.value = config.google_flow_path || '';
@@ -3206,15 +3304,8 @@ async function loadVideoPrompts() {
     if (lakornEp) lakornEp.value = config.video_lakorn_ep || '';
 
     currentVideoPromptRound = 1;
-    document.querySelectorAll('.video-prompt-tab-btn').forEach(b => {
-      const isRound1 = b.dataset.round === '1';
-      b.classList.toggle('active', isRound1);
-      b.style.background = isRound1 ? 'rgba(255,255,255,0.05)' : 'transparent';
-      b.style.color = isRound1 ? '#fff' : 'rgba(255,255,255,0.6)';
-      b.style.border = isRound1 ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(255,255,255,0.1)';
-      b.style.fontWeight = isRound1 ? 'bold' : 'normal';
-    });
-    
+    renderVideoGenTabs();
+    renderVideoActiveRoundsDropdown();
     renderVideoPromptsForRound(1);
   } catch (e) {
     writeConsoleLine(`Failed to load video prompts: ${e.message}`, 'error', 'videoConsole');
@@ -3297,14 +3388,26 @@ async function saveVideoPrompts(silent = false) {
       ...currentConfig, 
     };
     
-    for (let r = 1; r <= 10; r++) {
+    for (const k in payload) {
+      if (k === 'video_prompts' || k.startsWith('video_prompts_') || 
+          k === 'video_prompt_statuses' || k.startsWith('video_prompt_statuses_') || 
+          k.startsWith('video_round_active_')) {
+        delete payload[k];
+      }
+    }
+
+    let activeState = {};
+    try {
+      const saved = localStorage.getItem('videoGenActiveRoundsState');
+      if (saved) activeState = JSON.parse(saved);
+    } catch (e) {}
+
+    for (let r = 1; r <= getVideoGenMaxRound(); r++) {
       const p_key = r === 1 ? 'video_prompts' : `video_prompts_${r}`;
       const s_key = r === 1 ? 'video_prompt_statuses' : `video_prompt_statuses_${r}`;
       payload[p_key] = videoPromptsByRound[r] || [];
       payload[s_key] = videoStatusesByRound[r] || [];
-
-      const roundCheckbox = document.querySelector(`.video-round-active-checkbox[data-round="${r}"]`);
-      payload[`video_round_active_${r}`] = roundCheckbox ? roundCheckbox.checked : true;
+      payload[`video_round_active_${r}`] = activeState[r] !== false;
     }
     
     await jsonFetch('/api/config', {
@@ -3439,11 +3542,77 @@ function initVideoGenListeners() {
     });
   });
 
-  document.querySelectorAll('.video-round-active-checkbox').forEach(cb => {
-    cb.addEventListener('change', () => {
+  const addVideoRoundBtn = document.getElementById('addVideoRoundBtn');
+  if (addVideoRoundBtn) {
+    addVideoRoundBtn.addEventListener('click', () => {
+      const nextRound = getVideoGenMaxRound() + 1;
+      initVideoGenRound(nextRound);
+      renderVideoGenTabs();
+      renderVideoActiveRoundsDropdown();
+      const newTab = document.querySelector(`.video-prompt-tab-btn[data-round="${nextRound}"]`);
+      if (newTab) newTab.click();
       saveVideoPrompts(true);
     });
-  });
+  }
+
+  const resetAllVideoRoundsBtn = document.getElementById('resetAllVideoRoundsBtn');
+  if (resetAllVideoRoundsBtn) {
+    resetAllVideoRoundsBtn.addEventListener('click', async () => {
+      if (!confirm('ยืนยันลบ Round วิดีโอทั้งหมดและรีเซ็ตค่า?')) return;
+      videoPromptsByRound = { 1: [] };
+      videoStatusesByRound = { 1: [] };
+      currentVideoPromptRound = 1;
+      localStorage.removeItem('videoGenActiveRoundsState');
+      renderVideoGenTabs();
+      renderVideoActiveRoundsDropdown();
+      renderVideoPromptsForRound(1);
+      await saveVideoPrompts(true);
+      showToast('รีเซ็ตทุก Round ของวิดีโอสำเร็จ', 'success');
+    });
+  }
+
+  const videoActiveRoundsBtn = document.getElementById('videoActiveRoundsBtn');
+  const videoActiveRoundsMenu = document.getElementById('videoActiveRoundsMenu');
+  if (videoActiveRoundsBtn && videoActiveRoundsMenu) {
+    videoActiveRoundsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      renderVideoActiveRoundsDropdown();
+      videoActiveRoundsMenu.style.display = videoActiveRoundsMenu.style.display === 'none' ? 'block' : 'none';
+    });
+    document.addEventListener('click', (e) => {
+      if (!videoActiveRoundsMenu.contains(e.target) && e.target !== videoActiveRoundsBtn) {
+        videoActiveRoundsMenu.style.display = 'none';
+      }
+    });
+    videoActiveRoundsMenu.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  const selectAllVideoRoundsBtn = document.getElementById('selectAllVideoRoundsBtn');
+  const deselectAllVideoRoundsBtn = document.getElementById('deselectAllVideoRoundsBtn');
+  
+  if (selectAllVideoRoundsBtn) {
+    selectAllVideoRoundsBtn.addEventListener('click', () => {
+      let activeState = {};
+      const maxRounds = getVideoGenMaxRound();
+      for (let r = 1; r <= maxRounds; r++) activeState[r] = true;
+      localStorage.setItem('videoGenActiveRoundsState', JSON.stringify(activeState));
+      renderVideoActiveRoundsDropdown();
+      renderVideoGenTabs();
+      saveVideoPrompts(true);
+    });
+  }
+  
+  if (deselectAllVideoRoundsBtn) {
+    deselectAllVideoRoundsBtn.addEventListener('click', () => {
+      let activeState = {};
+      const maxRounds = getVideoGenMaxRound();
+      for (let r = 1; r <= maxRounds; r++) activeState[r] = false;
+      localStorage.setItem('videoGenActiveRoundsState', JSON.stringify(activeState));
+      renderVideoActiveRoundsDropdown();
+      renderVideoGenTabs();
+      saveVideoPrompts(true);
+    });
+  }
 
   const saveBtn = document.getElementById('saveVideoPromptsBtn');
   if (saveBtn) {
@@ -3480,7 +3649,7 @@ function initVideoGenListeners() {
       const confirmReset = confirm("คุณต้องการล้างข้อมูลพรอพต์ทั้งหมดในทุก Round ใช่หรือไม่?");
       if (!confirmReset) return;
 
-      for (let r = 1; r <= 10; r++) {
+      for (let r = 1; r <= getVideoGenMaxRound(); r++) {
         videoPromptsByRound[r] = [];
         videoStatusesByRound[r] = [];
       }
@@ -3586,10 +3755,16 @@ function initVideoGenListeners() {
           body: JSON.stringify({ lakorn_path: path, ton_num: tonVal, ep_num: epVal })
         });
         if (res.ok && res.prompts_by_round) {
-          for (let r = 1; r <= 10; r++) {
-            videoPromptsByRound[r] = res.prompts_by_round[r] || [];
-            videoStatusesByRound[r] = [];
+          videoPromptsByRound = res.prompts_by_round;
+          videoStatusesByRound = {};
+          
+          const maxRounds = getVideoGenMaxRound();
+          for (let r = 1; r <= maxRounds; r++) {
+            initVideoGenRound(r);
           }
+          
+          renderVideoGenTabs();
+          renderVideoActiveRoundsDropdown();
           renderVideoPromptsForRound(currentVideoPromptRound);
           await saveVideoPrompts(true);
           showToast(res.message || 'นำเข้าพรอพต์วิดีโอสำเร็จ', 'success');
@@ -3643,11 +3818,11 @@ function initVideoGenListeners() {
       const inputSelectorVal = document.getElementById('cfg_video_input_selector')?.value.trim() || '';
       const settingsSelectorVal = document.getElementById('cfg_video_settings_selector')?.value.trim() || '';
       const submitSelectorVal = document.getElementById('cfg_video_submit_selector')?.value.trim() || '';
-      const waitSecondsVal = parseInt(document.getElementById('cfg_video_wait_seconds')?.value.trim() || '60', 10);
+      const waitSecondsVal = document.getElementById('cfg_video_wait_seconds')?.value.trim() || '10-30';
 
       let activeRounds = [];
-      for (let r = 1; r <= 10; r++) {
-        const checkbox = document.querySelector(`.video-round-active-checkbox[data-round="${r}"]`);
+      for (let r = 1; r <= getVideoGenMaxRound(); r++) {
+        const checkbox = document.querySelector(`.video-dropdown-round-cb[data-round="${r}"]`);
         if (checkbox && checkbox.checked) {
           activeRounds.push(r);
         }
@@ -3709,9 +3884,17 @@ function initVideoGenListeners() {
             videoStatusesByRound[r][pIdx] = 'Generating...';
             renderVideoPromptsForRound(r);
 
-            // Generate random cooldown between 10 and 30 seconds
-            const randomCooldown = Math.floor(Math.random() * (30 - 10 + 1)) + 10;
-            writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] สุ่มเวลารอคอยรอบถัดไป: ${randomCooldown} วินาที`, 'info', 'videoConsole');
+            // Generate random cooldown based on user input (e.g. "10-30" or "60")
+            let randomCooldown = 30;
+            if (waitSecondsVal.includes('-')) {
+              const parts = waitSecondsVal.split('-');
+              const minW = parseInt(parts[0], 10) || 10;
+              const maxW = parseInt(parts[1], 10) || 30;
+              randomCooldown = Math.floor(Math.random() * (maxW - minW + 1)) + minW;
+            } else {
+              randomCooldown = parseInt(waitSecondsVal, 10) || 30;
+            }
+            writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] รอคอยรอบถัดไป: ${randomCooldown} วินาที`, 'info', 'videoConsole');
 
             const success = await executeStep('/api/step/video-gen', {
               prompt: p,

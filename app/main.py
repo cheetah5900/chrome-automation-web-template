@@ -3120,12 +3120,11 @@ def import_lakorn_video_auto(payload: ImportLakornVideoPayload):
         if f.is_file() and f.suffix.lower() in (".md", ".txt")
     ], key=lambda x: x.name)
 
-    prompts_by_round = {str(r): [] for r in range(1, 11)}
+    max_rounds = max(len(prompt_files), 1)
+    prompts_by_round = {str(r): [] for r in range(1, max_rounds + 1)}
 
     for idx, p_file in enumerate(prompt_files):
         round_num = idx + 1
-        if round_num > 10:
-            break
         try:
             content = p_file.read_text(encoding="utf-8")
             prompts_by_round[str(round_num)] = [content.strip()]
