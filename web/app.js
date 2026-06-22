@@ -3555,8 +3555,6 @@ function initVideoGenListeners() {
     });
   }
 
-  setupSetDefaultBtn('setVideoLakornTonDefaultBtn', 'cfg_video_lakorn_ton', 'video_lakorn_ton', 'ตั้งค่า ตอนละคร (Video) เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
-
   const btnBrowseGoogleFlowImages = document.getElementById('btnBrowseGoogleFlowImages');
   if (btnBrowseGoogleFlowImages) {
     btnBrowseGoogleFlowImages.addEventListener('click', async () => {

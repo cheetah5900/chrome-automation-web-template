@@ -422,31 +422,25 @@
                 </div>
               </div>
 
-              <!-- Control Row -->
-              <div style="display: flex; gap: 20px; align-items: flex-end; width: 100%;">
-                <!-- Wait time input -->
-                <div style="flex: 1; max-width: 350px;">
-                  <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Wait Time หลังส่ง Prompt (สุ่มช่วงวินาที เช่น 10-30):</label>
-                  <div style="display: flex; gap: 8px;">
-                    <input type="text" id="cfg_video_wait_seconds" placeholder="10-30" style="padding: 10px 14px; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; width: 100%; box-sizing: border-box;" />
-                    <button id="setVideoWaitSecondsDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; height: 38px;">Set Default</button>
-                  </div>
-                </div>
-
-                <!-- Auto Upload Images -->
-                <div style="flex: 1; max-width: 350px;">
-                  <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">อัพโหลดรูปไปยัง Google Flow:</label>
-                  <button id="btnBrowseGoogleFlowImages" class="secondary" style="width: 100%; padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; border-radius: 10px; height: 38px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                    <span style="font-size: 1.1rem;">📁</span> <span class="btn-text">Browse Folder & Upload</span>
-                  </button>
+              <!-- Wait time input -->
+              <div style="max-width: 350px; width: 100%;">
+                <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Wait Time หลังส่ง Prompt (สุ่มช่วงวินาที เช่น 10-30):</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="cfg_video_wait_seconds" placeholder="10-30" style="padding: 10px 14px; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; width: 100%; box-sizing: border-box;" />
+                  <button id="setVideoWaitSecondsDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; height: 38px;">Set Default</button>
                 </div>
               </div>
+            </div>
 
             <!-- Run Control Buttons -->
             <div style="display: flex; gap: 12px; width: 100%; margin-top: 14px;">
-              <button id="btnRunGoogleFlow" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 1.05rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
+              <button id="btnRunGoogleFlow" class="primary has-tooltip" style="flex: 2; padding: 14px; font-size: 1.05rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
                 <span class="btn-text">▶️ RUN GOOGLE FLOW AUTOMATION</span>
                 <div class="custom-tooltip" id="tooltip_btnRunGoogleFlow"></div>
+              </button>
+              
+              <button id="btnBrowseGoogleFlowImages" class="secondary has-tooltip" style="flex: 1; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);">
+                <span style="font-size: 1.1rem;">📸</span> <span class="btn-text">UPLOAD IMAGES (FOLDER)</span>
               </button>
             </div>
 
