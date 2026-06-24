@@ -2380,6 +2380,9 @@ def make_video_cover(
 
         for folder_name in combine_folders:
             subfolder = os.path.join(base_dir, folder_name)
+            if sub_mode == "view_channel":
+                subfolder = os.path.join(subfolder, "video")
+                
             if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
                 raise HTTPException(status_code=400, detail=f"Set {folder_name}: Subfolder '{subfolder}' does not exist")
 
@@ -2389,14 +2392,24 @@ def make_video_cover(
                 if any(f_lower.endswith(ext) for ext in combine_media_exts) and os.path.isfile(os.path.join(subfolder, f)):
                     media_files.append(f)
                     
+            import re
+            def atoi(text): return int(text) if text.isdigit() else text
+            def natural_keys(text): return [atoi(c) for c in re.split(r'(\d+)', text)]
+            media_files.sort(key=natural_keys)
+                    
             if len(media_files) == 0:
                 raise HTTPException(status_code=400, detail=f"Set {folder_name}: No video file found in subfolder '{subfolder}'")
-            elif len(media_files) > 1:
-                raise HTTPException(status_code=400, detail=f"Set {folder_name}: Multiple video files found in subfolder '{subfolder}'. Only 1 video is allowed (Found: {len(media_files)})")
-                
-            resolved_media_name = media_files[0]
-            resolved_media_path = os.path.join(subfolder, resolved_media_name)
-            combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
+            
+            if sub_mode == "view_channel":
+                for resolved_media_name in media_files:
+                    resolved_media_path = os.path.join(subfolder, resolved_media_name)
+                    combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
+            else:
+                if len(media_files) > 1:
+                    raise HTTPException(status_code=400, detail=f"Set {folder_name}: Multiple video files found in subfolder '{subfolder}'. Only 1 video is allowed (Found: {len(media_files)})")
+                resolved_media_name = media_files[0]
+                resolved_media_path = os.path.join(subfolder, resolved_media_name)
+                combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
 
         src_video_path = combine_sources[0][1]
         video_filename = combine_sources[0][2]

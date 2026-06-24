@@ -1553,7 +1553,11 @@ function toggleVideoCombineBatchUI(isCombine) {
   const viewChannelGroup = document.getElementById('viewChannelGroup');
   
   if (coverGroup) {
-    coverGroup.classList.toggle('hidden', isCombine);
+    if (!isCombine || (isCombine && document.getElementById('combineSubModeSelect')?.value === 'view_channel')) {
+      coverGroup.classList.remove('hidden');
+    } else {
+      coverGroup.classList.add('hidden');
+    }
   }
   
   if (subModeGroup) {
@@ -1659,40 +1663,48 @@ async function runVideoHelper(btnElement) {
         foldersJson: ''
       });
     }
-  } else {
-    const subModeSelect = document.getElementById('combineSubModeSelect');
-    const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
-
-    if (subModeVal === 'view_channel') {
-      const dur1 = document.getElementById('viewDur1')?.value || '';
-      const dur2 = document.getElementById('viewDur2')?.value || '';
-      const dur3 = document.getElementById('viewDur3')?.value || '';
-      const dur4 = document.getElementById('viewDur4')?.value || '';
-      const dur5 = document.getElementById('viewDur5')?.value || '';
-      
-      const durations = [dur1, dur2, dur3, dur4, dur5].filter(d => d.trim() !== '');
-      if (durations.length === 0) {
-        alert('Please enter at least one duration for View Channel mode.');
-        return;
-      }
-      
-      const folders = Array.from({length: durations.length}, (_, i) => String(i + 1));
-      
-      activeSets.push({
-        index: 'view_channel_set',
-        label: 'View Channel Mix',
-        videoFile: null,
-        imageFile: null,
-        videoPathVal: '',
-        imagePathVal: '',
-        no: folders[0],
-        amount: String(folders.length),
-        foldersJson: JSON.stringify(folders),
-        subMode: 'view_channel',
-        durationsJson: JSON.stringify(durations),
-        audioPath: document.getElementById('viewChannelAudioPath')?.value || ''
-      });
     } else {
+      const subModeSelect = document.getElementById('combineSubModeSelect');
+      const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
+
+      if (subModeVal === 'view_channel') {
+        const foldersInput = document.getElementById('videoCoverFoldersText');
+        const foldersVal = foldersInput ? foldersInput.value.trim() : '';
+        if (!foldersVal) {
+          alert('Please enter sub folders (e.g. 1,2,3-10 or 1-3) to process.');
+          return;
+        }
+        const folderList = parseFolderRanges(foldersVal);
+        
+        const dur1 = document.getElementById('viewDur1')?.value || '';
+        const dur2 = document.getElementById('viewDur2')?.value || '';
+        const dur3 = document.getElementById('viewDur3')?.value || '';
+        const dur4 = document.getElementById('viewDur4')?.value || '';
+        const dur5 = document.getElementById('viewDur5')?.value || '';
+        
+        const durations = [dur1, dur2, dur3, dur4, dur5].filter(d => d.trim() !== '');
+        if (durations.length === 0) {
+          alert('Please enter at least one duration for View Channel mode.');
+          return;
+        }
+        
+        for (const folder of folderList) {
+          activeSets.push({
+            index: `view_channel_${folder}`,
+            label: `Folder ${folder}`,
+            videoFile: null,
+            imageFile: null,
+            videoPathVal: '',
+            imagePathVal: '',
+            no: folder,
+            amount: '1',
+            foldersJson: JSON.stringify([folder]),
+            subMode: 'view_channel',
+            durationsJson: JSON.stringify(durations),
+            audioPath: document.getElementById('viewChannelAudioPath')?.value || ''
+          });
+        }
+      } else {
       const combineSets = collectVideoCombineBatchSets();
       combineSets.forEach((folders, idx) => {
         activeSets.push({
