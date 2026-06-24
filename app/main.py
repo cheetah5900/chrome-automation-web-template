@@ -1788,6 +1788,9 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 driver.execute_script("arguments[0].focus();", box)
                 time.sleep(0.5)
 
+                if not is_driver_alive(driver):
+                    raise RuntimeError("Browser connection lost (Force Stopped).")
+                
                 # Primary: Use document.execCommand('insertText') to insert prompt without triggering Enter key submits
                 input_success = False
                 try:
@@ -1807,6 +1810,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 # Secondary Fallback: Copy prompt to macOS clipboard and paste it via System Events
                 if not input_success:
                     log("Fallback: Browser insertText failed or could not be verified. Re-focusing and pasting via macOS clipboard...")
+                    if not is_driver_alive(driver):
+                        raise RuntimeError("Browser connection lost (Force Stopped).")
                     try:
                         # Re-focus and re-click the input box right before activating Chrome and pasting
                         try:
@@ -1823,6 +1828,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, text=True)
                         process.communicate(input=custom_prompt)
                         
+                        if not is_driver_alive(driver):
+                            raise RuntimeError("Browser connection lost (Force Stopped).")
                         paste_script = """
                         tell application "Google Chrome" to activate
                         delay 0.3
@@ -3400,6 +3407,9 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     try:
         process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, text=True)
         process.communicate(input=prompt)
+        
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
         
         paste_script = """
         tell application "Google Chrome" to activate
