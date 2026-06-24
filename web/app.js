@@ -3984,19 +3984,26 @@ function initVideoGenListeners() {
   }
 
   const resetAllVideoRoundsBtn = document.getElementById('resetAllVideoRoundsBtn');
+  const resetAllVideoRoundsBtn2 = document.getElementById('resetAllVideoRoundsBtn2');
+  
+  const handleVideoResetAll = async () => {
+    if (!confirm('ยืนยันลบ Round วิดีโอทั้งหมดและรีเซ็ตค่า?')) return;
+    videoPromptsByRound = { 1: [] };
+    videoStatusesByRound = { 1: [] };
+    currentVideoPromptRound = 1;
+    localStorage.removeItem('videoGenActiveRoundsState');
+    renderVideoGenTabs();
+    renderVideoActiveRoundsDropdown();
+    renderVideoPromptsForRound(1);
+    await saveVideoPrompts(true);
+    showToast('รีเซ็ตทุก Round ของวิดีโอสำเร็จ', 'success');
+  };
+
   if (resetAllVideoRoundsBtn) {
-    resetAllVideoRoundsBtn.addEventListener('click', async () => {
-      if (!confirm('ยืนยันลบ Round วิดีโอทั้งหมดและรีเซ็ตค่า?')) return;
-      videoPromptsByRound = { 1: [] };
-      videoStatusesByRound = { 1: [] };
-      currentVideoPromptRound = 1;
-      localStorage.removeItem('videoGenActiveRoundsState');
-      renderVideoGenTabs();
-      renderVideoActiveRoundsDropdown();
-      renderVideoPromptsForRound(1);
-      await saveVideoPrompts(true);
-      showToast('รีเซ็ตทุก Round ของวิดีโอสำเร็จ', 'success');
-    });
+    resetAllVideoRoundsBtn.addEventListener('click', handleVideoResetAll);
+  }
+  if (resetAllVideoRoundsBtn2) {
+    resetAllVideoRoundsBtn2.addEventListener('click', handleVideoResetAll);
   }
 
   const videoActiveRoundsBtn = document.getElementById('videoActiveRoundsBtn');
