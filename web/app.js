@@ -196,28 +196,40 @@ ${modeDescription}
     const modeVal = videoMode ? videoMode.value : 'cover';
     const outputPathVal = document.getElementById('videoOutputPathText')?.value.trim() || 'ไม่ได้กำหนด';
     const prefixVal = document.getElementById('videoPrefixText')?.value.trim() || 'ไม่มี';
-    const suffixVal = document.getElementById('videoSuffixText')?.value.trim() || 'ไม่มี';
     
     if (modeVal === 'cover') {
       const foldersVal = document.getElementById('videoCoverFoldersText')?.value.trim() || 'ไม่ได้กำหนด';
-      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการรัน Video Helper (Cover Mode):
-1. ตรวจสอบที่อยู่โฟลเดอร์: ${outputPathVal}
-2. ดึงชื่อโฟลเดอร์ย่อยที่จะประมวลผล: ${foldersVal}
-3. วนลูปทีละโฟลเดอร์: ค้นหาไฟล์วิดีโอ (.mp4/.mov) และดึงภาพจากโฟลเดอร์ย่อย 'cover/'
-4. เรียกใช้ API /api/video/make-cover ของระบบหลังบ้านเพื่อนำไฟล์มารวมกัน
-5. หลังบ้านจะแทรกภาพพื้นหลังดำยาว 2.0 วินาที คั่นระหว่างจุดสิ้นสุดวิดีโอกับภาพปก
-6. บันทึกผลลัพธ์เป็นไฟล์วิดีโอใหม่โดยมี Prefix: "${prefixVal}" และ Suffix: "${suffixVal}"`;
+      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Cover Mode:
+1. ระบบตรวจสอบ Path หลักที่ตั้งค่าไว้ (${outputPathVal})
+2. ดึงรายชื่อโฟลเดอร์ย่อยที่จะเข้าไปทำงาน (${foldersVal})
+3. เริ่มวนลูปเข้าโฟลเดอร์ทีละอัน: ค้นหาไฟล์วิดีโอ (.mp4/.mov) 1 ไฟล์ และรูปภาพปกที่อยู่ในโฟลเดอร์ย่อย 'cover/'
+4. ส่งคำสั่งให้ระบบหลังบ้าน (API) ประมวลผลวิดีโอ
+5. ระบบจะแทรกภาพหน้าจอดำ (Black Screen) เป็นเวลา 2.0 วินาที เพื่อคั่นระหว่างจุดจบของวิดีโอกับภาพปก
+6. บันทึกผลลัพธ์เป็นไฟล์วิดีโอใหม่โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
     } else {
       const combineSets = collectVideoCombineBatchSets();
       const combineSetsSummary = combineSets.map((folders, idx) => `เซ็ตที่ ${idx + 1}: [${folders.join(', ')}]`).join('\n') || 'ไม่มี';
-      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการรัน Video Helper (Combine Mode):
-1. ตรวจสอบที่อยู่โฟลเดอร์: ${outputPathVal}
-2. ดึงรายการวิดีโอที่จะนำมารวมกันในแต่ละเซ็ต:
+      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Combine Across Folder Mode:
+1. ระบบตรวจสอบ Path หลักที่ตั้งค่าไว้ (${outputPathVal})
+2. อ่านข้อมูลกลุ่มโฟลเดอร์ที่จะนำมารวมกัน (เซ็ต):
 ${combineSetsSummary}
-3. วนลูปเรียกใช้ API /api/video/make-cover ของระบบหลังบ้านทีละเซ็ต
-4. หลังบ้านจะต่อไฟล์วิดีโอทั้งหมดตามลำดับตัวเลขภายในโฟลเดอร์แบบไร้รอยต่อ
-5. บันทึกผลลัพธ์ลงโฟลเดอร์โดยใช้ Prefix: "${prefixVal}" และ Suffix: "${suffixVal}"`;
+3. เริ่มวนลูปทีละเซ็ต: นำไฟล์วิดีโอจากหมายเลขโฟลเดอร์ในแต่ละเซ็ตมาชนกัน
+4. ส่งคำสั่งให้ระบบหลังบ้าน (API) ทำการรวมไฟล์วิดีโอแบบไร้รอยต่อ (ไม่มีหน้าจอดำคั่นกลาง)
+5. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
     }
+  }
+
+  const tooltipCombineBatchSets = document.getElementById('tooltip_combineBatchSets');
+  if (tooltipCombineBatchSets) {
+    tooltipCombineBatchSets.innerHTML = `<strong>"Combine Batch Sets" คือเครื่องมือช่วยจัดกลุ่มโฟลเดอร์อัตโนมัติ</strong><br><br>
+แทนที่จะต้องพิมพ์เองทีละแถว ระบบจะคำนวณและสร้างช่วงข้อมูล (Range) ให้คุณเองจากตัวเลข 3 ค่านี้:<br>
+- <strong>Start number:</strong> โฟลเดอร์แรกที่จะเริ่มเอามาต่อกัน<br>
+- <strong>Amount in a set:</strong> จำนวนโฟลเดอร์ต่อ 1 เซ็ต (เช่น 3)<br>
+- <strong>Loop:</strong> จำนวนเซ็ตที่ต้องการสร้าง<br><br>
+<em>ตัวอย่าง: Start=4, Amount=3, Loop=2<br>
+กด "+ Add Set" จะได้ 2 แถวคือ:<br>
+- Set 1: 4-6 (เอาคลิป 4,5,6 มารวมกัน)<br>
+- Set 2: 7-9 (เอาคลิป 7,8,9 มารวมกัน)</em>`;
   }
 }
 
@@ -633,7 +645,6 @@ const inputsToListen = [
   'videoCoverFoldersText',
   'videoOutputPathText',
   'videoPrefixText',
-  'videoSuffixText',
   'startupUrl1',
   'startupUrl2',
   'startupUrl3'
@@ -1118,9 +1129,7 @@ async function loadImagePrompts() {
         const ref_key = `reference_image_round_${r}_${i}`;
         let val = config[ref_key];
         if (val === undefined || val === null) {
-          // Fallback to global/default images
-          const global_key = i === 1 ? 'reference_image' : `reference_image_${i}`;
-          val = config[global_key] || defaultData[global_key] || '';
+          val = '';
         }
         refImgs.push(val);
         if (val && !detectedDir) {
@@ -1132,7 +1141,7 @@ async function loadImagePrompts() {
       // Load folder path
       let folderVal = config[`reference_images_dir_round_${r}`];
       if (folderVal === undefined || folderVal === null) {
-        folderVal = defaultData.reference_images_dir || detectedDir || '';
+        folderVal = '';
       }
       refImagesDirByRound[r] = folderVal;
     }
@@ -1174,6 +1183,9 @@ async function loadImagePrompts() {
     
     renderImagePromptsForRound(1);
     updateTooltips();
+    if (typeof updateImageGenTabIndicators === 'function') {
+      updateImageGenTabIndicators();
+    }
   } catch (e) {
     writeConsoleLine(`Failed to load prompts: ${e.message}`, 'error', 'imageConsole');
   }
@@ -1576,8 +1588,6 @@ async function runVideoHelper(btnElement) {
   const modeVal = videoMode ? videoMode.value : 'cover';
   const videoPrefix = document.getElementById('videoPrefixText');
   const prefixVal = videoPrefix ? videoPrefix.value.trim() : '';
-  const videoSuffix = document.getElementById('videoSuffixText');
-  const suffixVal = videoSuffix ? videoSuffix.value.trim() : '';
   const videoOutputPath = document.getElementById('videoOutputPathText');
   const consoleBox = document.getElementById('videoConsole');
   const outputPathVal = videoOutputPath ? videoOutputPath.value.trim() : '';
@@ -1607,7 +1617,6 @@ async function runVideoHelper(btnElement) {
         imagePathVal: '',
         no: folder,
         amount: '2',
-        suffix: suffixVal,
         foldersJson: ''
       });
     }
@@ -1623,7 +1632,6 @@ async function runVideoHelper(btnElement) {
         imagePathVal: '',
         no: folders[0] || '',
         amount: String(folders.length || 1),
-        suffix: suffixVal,
         foldersJson: JSON.stringify(folders)
       });
     });
@@ -1675,8 +1683,7 @@ async function runVideoHelper(btnElement) {
       formData.append('output_path', outputPathVal);
       formData.append('prefix', prefixVal);
       formData.append('mode', modeVal);
-      formData.append('amount', amount);
-      formData.append('suffix', set.suffix || '');
+      formData.append('amount', set.amount || '');
       if (set.no) {
         formData.append('no', set.no);
       }
@@ -1850,6 +1857,9 @@ async function saveImagePrompts(silent = false) {
     } catch (defaultErr) {
       console.warn("Failed to automatically save default reference images:", defaultErr);
     }
+    if (typeof updateImageGenTabIndicators === 'function') {
+      updateImageGenTabIndicators();
+    }
     
     if (!isSilent) {
       msg.textContent = `Round ${currentPromptRound} and other tabs saved successfully!`;
@@ -1867,16 +1877,29 @@ async function saveImagePrompts(silent = false) {
 }
 
 async function deleteAllImagePrompts() {
-  if (!confirm(`Are you sure you want to delete all generation prompts in Round ${currentPromptRound}?`)) return;
+  if (!confirm(`Are you sure you want to delete all generation prompts and reference images across ALL ROUNDS?`)) return;
 
   const list = document.getElementById('imagePromptList');
   if (list) {
     list.innerHTML = '';
   }
   
-  commitCurrentRoundFromDOM();
+  const maxR = getImageGenMaxRound();
+  for (let r = 1; r <= maxR; r++) {
+    promptsByRound[r] = [];
+    statusesByRound[r] = [];
+    refImagesByRound[r] = ["", "", "", "", "", "", ""];
+    refImagesDirByRound[r] = "";
+  }
+  
+  const dirInput = document.getElementById('cfg_ref_images_dir');
+  if (dirInput) dirInput.value = '';
+  
+  renderSelectedRefImagesList();
+  renderDropdownOptions();
   updateImageGenButtonsState();
   await saveImagePrompts();
+  showToast('All rounds cleared successfully', 'success');
 }
 
 // Write line to terminal console
@@ -2546,20 +2569,18 @@ function initWorkflowActionListeners() {
       container.appendChild(btn);
     }
 
+    updateImageGenTabIndicators();
+
     // Dropdown Toggle Logic
-    const activeBtn = document.getElementById('activeRoundsBtn');
-    const menu = document.getElementById('activeRoundsMenu');
-    if (activeBtn && menu) {
-      activeBtn.addEventListener('click', (e) => {
+    const activeRoundsBtn = document.getElementById('activeRoundsBtn');
+    const activeRoundsMenu = document.getElementById('activeRoundsMenu');
+    if (activeRoundsBtn && activeRoundsMenu) {
+      activeRoundsBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        activeRoundsMenu.style.display = activeRoundsMenu.style.display === 'none' ? 'block' : 'none';
       });
-      document.addEventListener('click', (e) => {
-        if (!activeBtn.contains(e.target) && !menu.contains(e.target)) {
-          menu.style.display = 'none';
-        }
-      });
-      menu.addEventListener('click', (e) => e.stopPropagation());
+      document.addEventListener('click', () => activeRoundsMenu.style.display = 'none');
+      activeRoundsMenu.addEventListener('click', (e) => e.stopPropagation());
     }
 
     const selectAllBtn = document.getElementById('selectAllRoundsBtn');
@@ -2582,6 +2603,19 @@ function initWorkflowActionListeners() {
     }
   }
 
+  function updateImageGenTabIndicators() {
+    document.querySelectorAll('.prompt-tab-btn').forEach(btn => {
+      const r = parseInt(btn.dataset.round);
+      const hasData = promptsByRound[r] && promptsByRound[r].length > 0;
+      if (hasData) {
+        if (!btn.innerHTML.includes('🔴')) {
+          btn.innerHTML = `R${r} <span style="font-size: 0.6rem; color: #ff4a4a; margin-left: 4px;">🔴</span>`;
+        }
+      } else {
+        btn.innerHTML = `R${r}`;
+      }
+    });
+  }
   // Initialize tabs
   renderImageGenTabs();
 
@@ -4297,8 +4331,102 @@ function initSeedanceGenListeners() {
     });
   }
 }
+const staticTooltips = {
+  // Settings / Profile
+  "openSettings": "⚙️ ตั้งค่าระบบ (Settings):<br>- แก้ไขพอร์ต, หน่วงเวลา, หรือ URL เริ่มต้น",
+  "launchProfile": "🚀 เปิดเบราว์เซอร์ Chrome แบบโหมด Remote Debugging บนพอร์ตที่เลือก เพื่อให้บอทสามารถควบคุมได้",
+  "closeBrowser": "❌ ปิดเบราว์เซอร์ Chrome ที่กำลังทำงานอยู่บนพอร์ตนี้ เพื่อเริ่มใหม่หรือยุติการทำงาน",
+  "setProfile": "📌 ตั้งค่าโปรไฟล์ปัจจุบันเป็นโปรไฟล์เริ่มต้น (Default)",
+  "editProfileBtn": "✏️ แก้ไขโปรไฟล์ (Edit Profile):<br>- แก้ไขชื่อโปรไฟล์, พอร์ต (Port), และ Path",
+  "addProfileBtn": "➕ เพิ่มโปรไฟล์ (Add Profile):<br>- สร้างโปรไฟล์ Chrome ใหม่",
+  "deleteProfileBtn": "🗑️ ลบโปรไฟล์ (Delete Profile):<br>- ลบโปรไฟล์ปัจจุบันออกจากระบบ",
+
+  // Tabs
+  "tabImageGenBtn": "🖼️ แถบสร้างภาพ (Image Generation):<br>- รันเจเนอเรตภาพจาก Gemini หรือ ChatGPT",
+  "tabVideoGenBtn": "🎬 แถบสร้างวิดีโอ (Video Generation):<br>- รันเจเนอเรตวิดีโอบน Google Flow",
+  "tabVideoHelperBtn": "🎥 แถบช่วยเหลือวิดีโอ (Video Helper):<br>- ใส่ภาพปก (Cover Mode) หรือต่อคลิปวิดีโอ (Combine Mode)",
+  "tabSeedanceGenBtn": "💃 แถบ Seedance Gen:<br>- สร้างคลิปเต้น (สำหรับอนาคต)",
+
+  // Image Gen
+  "browseLakornPathBtn": "📁 เลือกโฟลเดอร์ละคร (Browse...):<br>- เลือกโฟลเดอร์รูปภาพหรือบทละคร",
+  "setLakornPathDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set default):<br>- จำ Path โฟลเดอร์ปัจจุบันไว้",
+  "activeRoundsBtn": "✅ เลือกรอบที่จะทำงาน (Active Rounds):<br>- ติ๊กเลือกว่าจะให้บอทรันใน Round ไหนบ้าง",
+  "selectAllRoundsBtn": "☑️ เลือกทุกรอบ (Select All)",
+  "deselectAllRoundsBtn": "🔲 ยกเลิกทุกรอบ (Deselect All)",
+  "addRoundBtn": "➕ เพิ่มรอบพรอพต์ (Add Round):<br>- สร้างหน้าต่างพรอพต์รอบใหม่",
+  "resetAllRoundsBtn": "🔄 ล้างข้อมูลทุกรอบ (Reset All):<br>- ลบพรอพต์ทั้งหมดในทุกรอบ",
+  "addImagePromptBtn": "➕ เพิ่มพรอพต์ (Add Prompt):<br>- เพิ่มพรอพต์ใหม่ในรอบปัจจุบัน",
+  "saveImagePromptsBtn": "💾 บันทึกพรอพต์ (Save Prompts):<br>- บันทึกพรอพต์และภาพลงไฟล์ Config",
+  "deleteAllImagePromptsBtn": "🗑️ ลบพรอพต์ทั้งหมด (Delete All):<br>- ลบพรอพต์ทั้งหมดในรอบนี้",
+  "browseRefImagesDirBtn": "📁 เลือกโฟลเดอร์ภาพอ้างอิง (Browse):<br>- เลือกโฟลเดอร์รูป Reference",
+  "setRefImagesDirForAllBtn": "📌 ใช้โฟลเดอร์นี้กับทุกพรอพต์ (Set for all):<br>- ก๊อปปี้ Path โฟลเดอร์ให้พรอพต์อื่นๆ ด้วย",
+  "setChatgptUrlDefaultBtn": "📌 ตั้ง URL เป็นค่าเริ่มต้น (Set Default)",
+  "setChatgptChatModeDefaultBtn": "📌 ตั้งโหมดเป็นค่าเริ่มต้น (Set Default)",
+  "setCheckSettingsDefaultBtn": "📌 ตั้งค่าหน่วงเวลา (Set Default)",
+  "clearImageConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)",
+
+  // Video Gen
+  "browseVideoLakornPathBtn": "📁 เลือกโฟลเดอร์บท (Browse...)",
+  "setVideoLakornPathDefaultBtn": "📌 ตั้งโฟลเดอร์เริ่มต้น (Set default)",
+  "setVideoLakornEpDefaultBtn": "📌 ตั้งค่า EP เริ่มต้น (Set default)",
+  "videoActiveRoundsBtn": "✅ เลือกรอบวิดีโอ (Active Rounds)",
+  "selectAllVideoRoundsBtn": "☑️ เลือกทุกรอบ (Select All)",
+  "deselectAllVideoRoundsBtn": "🔲 ยกเลิกทุกรอบ (Deselect All)",
+  "addVideoRoundBtn": "➕ เพิ่มรอบวิดีโอ (Add Round)",
+  "resetAllVideoRoundsBtn": "🔄 ล้างข้อมูลทุกรอบวิดีโอ (Reset All)",
+  "addVideoPromptBtn": "➕ เพิ่มพรอพต์วิดีโอ (Add Prompt)",
+  "saveVideoPromptsBtn": "💾 บันทึกพรอพต์วิดีโอ (Save Prompts)",
+  "deleteAllVideoPromptsBtn": "🗑️ ลบพรอพต์ทั้งหมด (Delete All)",
+  "setGoogleFlowPathDefaultBtn": "📌 ตั้งลิงก์เริ่มต้น (Set Default)",
+  "setVideoWaitSecondsDefaultBtn": "📌 ตั้งค่าดีเลย์ (Set Default)",
+  "btnBrowseGoogleFlowImages": "📁 เลือกโฟลเดอร์ภาพ (Browse Folder):<br>- สำหรับ Google Flow",
+  "btnStartGoogleFlowUpload": "⬆️ เริ่มอัปโหลดภาพ (Start Upload)",
+  "btnStopGoogleFlowUpload": "🛑 หยุดอัปโหลดภาพ (Stop Upload)",
+  "clearVideoConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)",
+
+  // Video Helper
+  "setVideoPrefixDefaultBtn": "📌 ตั้งคำนำหน้า (Set Default):<br>- Prefix ที่จะใส่หน้านามสกุลไฟล์",
+  "browseOutputBtn": "📁 เลือกโฟลเดอร์ผลลัพธ์ (Browse)",
+  "setVideoOutputDefaultBtn": "📌 ตั้ง Path ผลลัพธ์เริ่มต้น (Set Default)",
+  "addVideoCombineSetBtn": "➕ เพิ่มเซ็ตวิดีโอ (Add Set):<br>- สร้างช่วงการรวมโฟลเดอร์อัตโนมัติ",
+  
+  // Seedance
+  "addSeedancePromptBtn": "➕ เพิ่มพรอพต์ (Add Prompt)",
+  "saveSeedancePromptsBtn": "💾 บันทึกพรอพต์ (Save)",
+  "deleteAllSeedancePromptsBtn": "🗑️ ลบทั้งหมด (Delete All)",
+  "clearSeedanceConsoleBtn": "🧹 ล้าง Log (Clear)"
+};
+
+function initAllTooltips() {
+  let count = 0;
+  for (const [id, text] of Object.entries(staticTooltips)) {
+    const btn = document.getElementById(id);
+    if (!btn) {
+      console.warn('Tooltip target not found:', id);
+      continue;
+    }
+    
+    if (!btn.classList.contains('has-tooltip')) {
+      btn.classList.add('has-tooltip');
+    }
+    let tooltipDiv = btn.querySelector('.custom-tooltip');
+    if (!tooltipDiv) {
+      tooltipDiv = document.createElement('div');
+      tooltipDiv.className = 'custom-tooltip';
+      tooltipDiv.id = 'tooltip_' + id;
+      btn.appendChild(tooltipDiv);
+    }
+    
+    if (!tooltipDiv.innerHTML || tooltipDiv.innerHTML.trim() === '') {
+      tooltipDiv.innerHTML = text;
+      count++;
+    }
+  }
+  console.log('Attached', count, 'tooltips.');
+}
 
 // Initial setup on load
+initAllTooltips();
 initModal();
 loadSettings();
 loadProfiles();

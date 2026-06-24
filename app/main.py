@@ -2372,12 +2372,18 @@ def make_video_cover(
             if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
                 raise HTTPException(status_code=400, detail=f"Set {folder_name}: Subfolder '{subfolder}' does not exist")
 
-            resolved_media_name = resolve_named_media_file(subfolder, folder_name, combine_media_exts)
-            if not resolved_media_name:
-                if suffix_val:
-                    raise HTTPException(status_code=400, detail=f"Set {folder_name}: No media file matching '{folder_name}{suffix_val}' found in subfolder '{subfolder}'")
-                raise HTTPException(status_code=400, detail=f"Set {folder_name}: No media file named '{folder_name}' found in subfolder '{subfolder}'")
-
+            media_files = []
+            for f in os.listdir(subfolder):
+                f_lower = f.lower()
+                if any(f_lower.endswith(ext) for ext in combine_media_exts) and os.path.isfile(os.path.join(subfolder, f)):
+                    media_files.append(f)
+                    
+            if len(media_files) == 0:
+                raise HTTPException(status_code=400, detail=f"Set {folder_name}: No video file found in subfolder '{subfolder}'")
+            elif len(media_files) > 1:
+                raise HTTPException(status_code=400, detail=f"Set {folder_name}: Multiple video files found in subfolder '{subfolder}'. Only 1 video is allowed (Found: {len(media_files)})")
+                
+            resolved_media_name = media_files[0]
             resolved_media_path = os.path.join(subfolder, resolved_media_name)
             combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
 
@@ -2900,54 +2906,13 @@ def import_lakorn_auto(payload: ImportLakornPayload):
     if not ep_dir:
         raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยตอน: {ton_num})")
 
-    # 1.5. Find/resolve character sheet directory (2 - Character Sheet)
+    # 1.5. Resolve character sheet directory (Strictly Global Path)
     resolved_ref_dir = None
-    ref_candidates = [
-        "2 - Character Sheet", "2-Character Sheet", "Character Sheet", "character sheet", 
-        "2 - CharacterSheet", "2-CharacterSheet", "2_Character_Sheet", "2 - character sheet",
-        "2 - Character_Sheet", "2_Character Sheet"
-    ]
-    # Check inside ep_dir first
-    for candidate in ref_candidates:
-        path = ep_dir / candidate
-        if path.exists() and path.is_dir():
-            resolved_ref_dir = path
-            break
-            
-    # Fallback: scan subdirs of ep_dir for anything containing 'character sheet' case-insensitively
-    if not resolved_ref_dir:
-        try:
-            dirs = [d for d in ep_dir.iterdir() if d.is_dir()]
-            for d in dirs:
-                name_clean = d.name.lower().replace(" ", "").replace("-", "").replace("_", "")
-                if "charactersheet" in name_clean:
-                    resolved_ref_dir = d
-                    break
-        except Exception:
-            pass
-
-    # Fallback: Check inside lakorn_path directly
-    if not resolved_ref_dir:
-        for candidate in ref_candidates:
-            path = Path(lakorn_path) / candidate
-            if path.exists() and path.is_dir():
-                resolved_ref_dir = path
-                break
-
-    # Fallback: scan subdirs of lakorn_path for anything containing 'character sheet' case-insensitively
-    if not resolved_ref_dir:
-        try:
-            dirs = [d for d in Path(lakorn_path).iterdir() if d.is_dir()]
-            for d in dirs:
-                name_clean = d.name.lower().replace(" ", "").replace("-", "").replace("_", "")
-                if "charactersheet" in name_clean:
-                    resolved_ref_dir = d
-                    break
-        except Exception:
-            pass
-
-    if not resolved_ref_dir:
-        raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์รูปภาพตัวละคร (2 - Character Sheet) ในตอนหรือโฟลเดอร์ละคร")
+    global_char_sheet = Path("/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/ผักกาดการละคร - ละครไทย/Character Sheet")
+    if global_char_sheet.exists() and global_char_sheet.is_dir():
+        resolved_ref_dir = global_char_sheet
+    else:
+        raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์รูปภาพตัวละคร (Character Sheet) ใน Path หลักที่ตั้งค่าไว้")
 
     ref_images_dir = str(resolved_ref_dir)
 

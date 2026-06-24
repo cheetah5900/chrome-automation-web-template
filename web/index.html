@@ -545,12 +545,13 @@
 
               <div id="videoCombineBatchGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 10px; flex-wrap: wrap;">
-                  <label style="font-weight: bold; color: #8da6ff; margin: 0;">Combine Batch Sets</label>
+                  <label style="font-weight: bold; color: #8da6ff; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    Combine Batch Sets
+                    <span class="has-tooltip" style="cursor: help; background: rgba(141,166,255,0.2); width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; color: #8da6ff;">?
+                      <div class="custom-tooltip" id="tooltip_combineBatchSets" style="font-weight: normal;"></div>
+                    </span>
+                  </label>
                   <div style="display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;">
-                    <div style="display: flex; flex-direction: column; gap: 5px; min-width: 170px;">
-                      <label for="videoSuffixText" style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">Suffix</label>
-                      <input id="videoSuffixText" aria-label="Suffix" placeholder="e.g. _upscale or .mp4" style="margin-bottom: 0;" />
-                    </div>
                     <div style="display: flex; flex-direction: column; gap: 5px; min-width: 110px;">
                       <label for="videoCombineStartText" style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">Start number</label>
                       <input id="videoCombineStartText" type="number" min="1" placeholder="e.g. 4" style="margin-bottom: 0;" />
@@ -573,10 +574,15 @@
                 <div id="videoCombineSetRows" style="display: flex; flex-direction: column; gap: 10px;"></div>
               </div>
                
-              <button id="runVideoHelperBtn" class="primary-btn has-tooltip" style="width: 100%; margin-top: 20px; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">
-                <span class="btn-text">Run</span>
-                <div class="custom-tooltip" id="tooltip_runVideoHelperBtn"></div>
-              </button>
+              <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button id="runVideoHelperBtn" class="primary-btn" style="flex: 1; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); border: none; padding: 14px; font-size: 1rem;">
+                  <span class="btn-text">Run</span>
+                </button>
+                <span class="has-tooltip" style="cursor: help; background: rgba(141,166,255,0.15); width: 50px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #8da6ff; border: 1px solid rgba(141,166,255,0.3);">
+                  ?
+                  <div class="custom-tooltip" id="tooltip_runVideoHelperBtn" style="bottom: 120%; right: 0; left: auto; transform: none; min-width: 350px;"></div>
+                </span>
+              </div>
             </div>
           </section>
 
@@ -697,6 +703,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js"></script>
+  <script src="/web/app.js?v=6"></script>
 </body>
 </html>
