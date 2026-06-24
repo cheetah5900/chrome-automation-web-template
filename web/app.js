@@ -2426,7 +2426,6 @@ function initWorkflowActionListeners() {
         const res = await jsonFetch('/api/utils/browse-file?filter_type=audio');
         if (res && res.path) {
           viewChannelAudioPath.value = res.path;
-          saveConfigDebounced();
           updateTooltips();
         }
       } catch (e) {
