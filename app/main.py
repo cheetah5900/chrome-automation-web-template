@@ -2575,6 +2575,9 @@ def make_video_cover(
             list_txt = os.path.join(tmpdir, "list.txt")
 
             if is_combine_mode:
+                if sub_mode == "view_channel":
+                    combine_sources = combine_sources[:5]
+                
                 amount_val = len(combine_sources)
                 log(f"Combine Mode: Will merge {amount_val} matched files for '{combine_label}'")
 
@@ -2645,13 +2648,14 @@ def make_video_cover(
                         except ValueError:
                             pass
                             
-                    filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                    filter_complex_str = f"[1:a:0]{volume_filter}aformat=sample_rates=48000:channel_layouts=stereo[bgm];[0:a:0][bgm]amix=inputs=2:duration=shortest:dropout_transition=0:normalize=0[aout]"
                             
                     final_cmd = [
                         ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
                         "-filter_complex", filter_complex_str,
                         "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac",
                         "-b:a", "192k", "-ac", "2", "-ar", "48000",
+                        "-shortest",
                         "-disposition:a:0", "default", final_output_path
                     ]
                     res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
