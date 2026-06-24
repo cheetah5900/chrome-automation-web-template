@@ -2362,6 +2362,24 @@ function initWorkflowActionListeners() {
     });
   }
 
+  const browseAudioBtn = document.getElementById('browseAudioBtn');
+  const viewChannelAudioPath = document.getElementById('viewChannelAudioPath');
+
+  if (browseAudioBtn && viewChannelAudioPath) {
+    browseAudioBtn.addEventListener('click', async () => {
+      try {
+        const res = await jsonFetch('/api/utils/browse-file');
+        if (res && res.path) {
+          viewChannelAudioPath.value = res.path;
+          saveConfigDebounced();
+          updateTooltips();
+        }
+      } catch (e) {
+        showToast(`Failed to browse file: ${e.message}`, 'error');
+      }
+    });
+  }
+
   // Reference Images Folder & Dropdown bindings
   const browseRefImagesDirBtn = document.getElementById('browseRefImagesDirBtn');
   const cfgRefImagesDirInput = document.getElementById('cfg_ref_images_dir');
@@ -4499,6 +4517,7 @@ const staticTooltips = {
 
   // Video Helper
   "setVideoPrefixDefaultBtn": "📌 ตั้งคำนำหน้า (Set Default):<br>- Prefix ที่จะใส่หน้านามสกุลไฟล์",
+  "browseAudioBtn": "🎵 เลือกไฟล์เพลง (Browse):<br>- เลือกไฟล์เสียงจากในเครื่อง (รองรับ mp3, wav, aac ฯลฯ)",
   "browseOutputBtn": "📁 เลือกโฟลเดอร์ผลลัพธ์ (Browse)",
   "setVideoOutputDefaultBtn": "📌 ตั้ง Path ผลลัพธ์เริ่มต้น (Set Default)",
   "addVideoCombineSetBtn": "➕ เพิ่มเซ็ตวิดีโอ (Add Set):<br>- สร้างช่วงการรวมโฟลเดอร์อัตโนมัติ",
