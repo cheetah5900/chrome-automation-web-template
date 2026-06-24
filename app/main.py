@@ -2771,14 +2771,23 @@ def browse_directory() -> dict[str, Any]:
 
 
 @app.get("/api/utils/browse-file")
-def browse_file() -> dict[str, Any]:
+def browse_file(filter_type: str = "image") -> dict[str, Any]:
     import sys
     import subprocess
     import os
     
+    is_audio = filter_type == "audio"
+    
     if sys.platform == "darwin":
         try:
-            cmd = ['osascript', '-e', 'POSIX path of (choose file of type {"png", "jpg", "jpeg", "webp", "bmp"} with prompt "Select Reference Image")']
+            if is_audio:
+                exts = '{"mp3", "wav", "m4a", "aac", "flac", "ogg"}'
+                prompt_msg = "Select Audio File"
+            else:
+                exts = '{"png", "jpg", "jpeg", "webp", "bmp"}'
+                prompt_msg = "Select Reference Image"
+                
+            cmd = ['osascript', '-e', f'POSIX path of (choose file of type {exts} with prompt "{prompt_msg}")']
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if res.returncode == 0:
                 path = res.stdout.strip()
@@ -2794,10 +2803,18 @@ def browse_file() -> dict[str, Any]:
         root = tk.Tk()
         root.withdraw()
         root.attributes('-topmost', True)
+        
+        if is_audio:
+            filetypes = [("Audio files", "*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg"), ("All files", "*.*")]
+            prompt_msg = "Select Audio File"
+        else:
+            filetypes = [("Image files", "*.png;*.jpg;*.jpeg;*.webp;*.bmp"), ("All files", "*.*")]
+            prompt_msg = "Select Reference Image"
+            
         file_path = filedialog.askopenfilename(
             parent=root,
-            title="Select Reference Image",
-            filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.webp;*.bmp"), ("All files", "*.*")]
+            title=prompt_msg,
+            filetypes=filetypes
         )
         root.destroy()
         if file_path:

@@ -2368,7 +2368,7 @@ function initWorkflowActionListeners() {
   if (browseAudioBtn && viewChannelAudioPath) {
     browseAudioBtn.addEventListener('click', async () => {
       try {
-        const res = await jsonFetch('/api/utils/browse-file');
+        const res = await jsonFetch('/api/utils/browse-file?filter_type=audio');
         if (res && res.path) {
           viewChannelAudioPath.value = res.path;
           saveConfigDebounced();
