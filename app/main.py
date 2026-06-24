@@ -1456,6 +1456,8 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                 wait_time = first_time_waiting if check_idx == 1 else check_interval
                 log(f"Check {check_idx}/{max_checks}: Starting wait of {wait_time} seconds...")
                 for s in range(wait_time, 0, -1):
+                    if not is_driver_alive(driver):
+                        raise RuntimeError("Browser connection lost (Force Stopped).")
                     if s % 10 == 0 or s <= 5:
                         log(f"Check {check_idx}/{max_checks}: {s} seconds remaining before checking...")
                     time.sleep(1)
@@ -1892,6 +1894,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     if remaining_wait > 0:
                         log(f"เริ่มนับถอยหลัง First Time Waiting ทุกๆ 1 วินาที (เหลืออีก {int(remaining_wait)} วินาที จาก {first_time_waiting} วินาที)...")
                         for s in range(int(remaining_wait), 0, -1):
+                            if not is_driver_alive(driver):
+                                raise RuntimeError("Browser connection lost (Force Stopped).")
                             log(f"First Time Waiting: เหลืออีก {s} วินาที จะเริ่มตรวจสอบปุ่ม Send")
                             time.sleep(1)
                     
@@ -1911,6 +1915,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         for check_idx in range(1, max_checks + 1):
                             log(f"เริ่มตรวจรอบที่ {check_count} (Interval {check_interval} วินาที)...")
                             for s in range(check_interval, 0, -1):
+                                if not is_driver_alive(driver):
+                                    raise RuntimeError("Browser connection lost (Force Stopped).")
                                 log(f"Interval Check ครั้งที่ {check_count}: เหลืออีก {s} วินาที")
                                 time.sleep(1)
                             
