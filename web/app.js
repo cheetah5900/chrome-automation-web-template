@@ -2251,6 +2251,122 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
 }
 
 // Initialize steps listeners
+  function renderImageGenTabs() {
+    const container = document.getElementById('promptTabsContainer');
+    const checkboxContainer = document.getElementById('activeRoundsCheckboxes');
+    if (!container || !checkboxContainer) return;
+    container.innerHTML = '';
+    checkboxContainer.innerHTML = '';
+    
+    let savedActiveState = {};
+    try {
+      const stored = localStorage.getItem('imageGenActiveRoundsState');
+      if (stored) savedActiveState = JSON.parse(stored);
+    } catch(e) {}
+
+    const saveActiveState = () => {
+      const state = {};
+      document.querySelectorAll('.round-active-checkbox').forEach(cb => {
+        state[cb.dataset.round] = cb.checked;
+      });
+      localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(state));
+    };
+
+    for (let r = 1; r <= getImageGenMaxRound(); r++) {
+      const isChecked = savedActiveState.hasOwnProperty(r) ? savedActiveState[r] : true;
+      
+      // Checkbox for dropdown
+      const cbLabel = document.createElement('label');
+      cbLabel.style.cssText = 'display: flex; align-items: center; width: 100%; font-size: 0.85rem; cursor: pointer; color: #fff; padding: 6px 4px; border-radius: 4px; transition: background 0.2s; box-sizing: border-box;';
+      cbLabel.onmouseover = () => cbLabel.style.background = 'rgba(255,255,255,0.05)';
+      cbLabel.onmouseout = () => cbLabel.style.background = 'transparent';
+      cbLabel.innerHTML = `<div style="flex: 0 0 10%; display: flex; justify-content: flex-start; align-items: center;"><input type="checkbox" class="round-active-checkbox" data-round="${r}" ${isChecked ? 'checked' : ''} style="margin: 0; cursor: pointer;" /></div><div style="flex: 0 0 90%; user-select: none;">Round ${r}</div>`;
+      
+      const cbInput = cbLabel.querySelector('input');
+      cbInput.addEventListener('change', saveActiveState);
+      
+      checkboxContainer.appendChild(cbLabel);
+
+      // Tab Button
+      const btn = document.createElement('button');
+      btn.className = 'prompt-tab-btn' + (r === 1 ? ' active' : '');
+      btn.dataset.round = r;
+      btn.style.cssText = `display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; font-size: 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; white-space: nowrap; height: 35px; flex-shrink: 0;`;
+      if (r === 1) {
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.color = '#fff';
+        btn.style.borderColor = 'rgba(255,255,255,0.15)';
+        btn.style.fontWeight = 'bold';
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.color = 'rgba(255,255,255,0.6)';
+      }
+      btn.innerHTML = `R${r}`;
+      
+      btn.addEventListener('click', () => {
+        commitCurrentRoundFromDOM();
+        currentPromptRound = r;
+        document.querySelectorAll('.prompt-tab-btn').forEach(b => {
+          const isCurrent = parseInt(b.dataset.round) === currentPromptRound;
+          b.classList.toggle('active', isCurrent);
+          b.style.background = isCurrent ? 'rgba(255,255,255,0.05)' : 'transparent';
+          b.style.color = isCurrent ? '#fff' : 'rgba(255,255,255,0.6)';
+          b.style.borderColor = isCurrent ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.1)';
+          b.style.fontWeight = isCurrent ? 'bold' : 'normal';
+        });
+        renderImagePromptsForRound(currentPromptRound);
+      });
+      
+      container.appendChild(btn);
+    }
+
+    updateImageGenTabIndicators();
+
+    // Dropdown Toggle Logic
+    const activeRoundsBtn = document.getElementById('activeRoundsBtn');
+    const activeRoundsMenu = document.getElementById('activeRoundsMenu');
+    if (activeRoundsBtn && activeRoundsMenu) {
+      activeRoundsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        activeRoundsMenu.style.display = activeRoundsMenu.style.display === 'none' ? 'block' : 'none';
+      });
+      document.addEventListener('click', () => activeRoundsMenu.style.display = 'none');
+      activeRoundsMenu.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    const selectAllBtn = document.getElementById('selectAllRoundsBtn');
+    const deselectAllBtn = document.getElementById('deselectAllRoundsBtn');
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener('click', () => {
+        document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = true);
+        saveActiveState();
+      });
+    }
+    if (deselectAllBtn) {
+      deselectAllBtn.addEventListener('click', () => {
+        document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = false);
+        saveActiveState();
+      });
+    }
+
+    if (!localStorage.getItem('imageGenActiveRoundsState')) {
+      saveActiveState();
+    }
+  }
+
+  function updateImageGenTabIndicators() {
+    document.querySelectorAll('.prompt-tab-btn').forEach(btn => {
+      const r = parseInt(btn.dataset.round);
+      const hasData = promptsByRound[r] && promptsByRound[r].length > 0;
+      if (hasData) {
+        if (!btn.innerHTML.includes('🔴')) {
+          btn.innerHTML = `R${r} <span style="font-size: 0.6rem; color: #ff4a4a; margin-left: 4px;">🔴</span>`;
+        }
+      } else {
+        btn.innerHTML = `R${r}`;
+      }
+    });
+  }
 function initWorkflowActionListeners() {
   document.getElementById('clearImageConsoleBtn').addEventListener('click', () => {
     const consoleBox = document.getElementById('imageConsole');
@@ -2831,122 +2947,6 @@ function initWorkflowActionListeners() {
   }
 
 
-  function renderImageGenTabs() {
-    const container = document.getElementById('promptTabsContainer');
-    const checkboxContainer = document.getElementById('activeRoundsCheckboxes');
-    if (!container || !checkboxContainer) return;
-    container.innerHTML = '';
-    checkboxContainer.innerHTML = '';
-    
-    let savedActiveState = {};
-    try {
-      const stored = localStorage.getItem('imageGenActiveRoundsState');
-      if (stored) savedActiveState = JSON.parse(stored);
-    } catch(e) {}
-
-    const saveActiveState = () => {
-      const state = {};
-      document.querySelectorAll('.round-active-checkbox').forEach(cb => {
-        state[cb.dataset.round] = cb.checked;
-      });
-      localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(state));
-    };
-
-    for (let r = 1; r <= getImageGenMaxRound(); r++) {
-      const isChecked = savedActiveState.hasOwnProperty(r) ? savedActiveState[r] : true;
-      
-      // Checkbox for dropdown
-      const cbLabel = document.createElement('label');
-      cbLabel.style.cssText = 'display: flex; align-items: center; width: 100%; font-size: 0.85rem; cursor: pointer; color: #fff; padding: 6px 4px; border-radius: 4px; transition: background 0.2s; box-sizing: border-box;';
-      cbLabel.onmouseover = () => cbLabel.style.background = 'rgba(255,255,255,0.05)';
-      cbLabel.onmouseout = () => cbLabel.style.background = 'transparent';
-      cbLabel.innerHTML = `<div style="flex: 0 0 10%; display: flex; justify-content: flex-start; align-items: center;"><input type="checkbox" class="round-active-checkbox" data-round="${r}" ${isChecked ? 'checked' : ''} style="margin: 0; cursor: pointer;" /></div><div style="flex: 0 0 90%; user-select: none;">Round ${r}</div>`;
-      
-      const cbInput = cbLabel.querySelector('input');
-      cbInput.addEventListener('change', saveActiveState);
-      
-      checkboxContainer.appendChild(cbLabel);
-
-      // Tab Button
-      const btn = document.createElement('button');
-      btn.className = 'prompt-tab-btn' + (r === 1 ? ' active' : '');
-      btn.dataset.round = r;
-      btn.style.cssText = `display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; font-size: 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; white-space: nowrap; height: 35px; flex-shrink: 0;`;
-      if (r === 1) {
-        btn.style.background = 'rgba(255,255,255,0.05)';
-        btn.style.color = '#fff';
-        btn.style.borderColor = 'rgba(255,255,255,0.15)';
-        btn.style.fontWeight = 'bold';
-      } else {
-        btn.style.background = 'transparent';
-        btn.style.color = 'rgba(255,255,255,0.6)';
-      }
-      btn.innerHTML = `R${r}`;
-      
-      btn.addEventListener('click', () => {
-        commitCurrentRoundFromDOM();
-        currentPromptRound = r;
-        document.querySelectorAll('.prompt-tab-btn').forEach(b => {
-          const isCurrent = parseInt(b.dataset.round) === currentPromptRound;
-          b.classList.toggle('active', isCurrent);
-          b.style.background = isCurrent ? 'rgba(255,255,255,0.05)' : 'transparent';
-          b.style.color = isCurrent ? '#fff' : 'rgba(255,255,255,0.6)';
-          b.style.borderColor = isCurrent ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.1)';
-          b.style.fontWeight = isCurrent ? 'bold' : 'normal';
-        });
-        renderImagePromptsForRound(currentPromptRound);
-      });
-      
-      container.appendChild(btn);
-    }
-
-    updateImageGenTabIndicators();
-
-    // Dropdown Toggle Logic
-    const activeRoundsBtn = document.getElementById('activeRoundsBtn');
-    const activeRoundsMenu = document.getElementById('activeRoundsMenu');
-    if (activeRoundsBtn && activeRoundsMenu) {
-      activeRoundsBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        activeRoundsMenu.style.display = activeRoundsMenu.style.display === 'none' ? 'block' : 'none';
-      });
-      document.addEventListener('click', () => activeRoundsMenu.style.display = 'none');
-      activeRoundsMenu.addEventListener('click', (e) => e.stopPropagation());
-    }
-
-    const selectAllBtn = document.getElementById('selectAllRoundsBtn');
-    const deselectAllBtn = document.getElementById('deselectAllRoundsBtn');
-    if (selectAllBtn) {
-      selectAllBtn.addEventListener('click', () => {
-        document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = true);
-        saveActiveState();
-      });
-    }
-    if (deselectAllBtn) {
-      deselectAllBtn.addEventListener('click', () => {
-        document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = false);
-        saveActiveState();
-      });
-    }
-
-    if (!localStorage.getItem('imageGenActiveRoundsState')) {
-      saveActiveState();
-    }
-  }
-
-  function updateImageGenTabIndicators() {
-    document.querySelectorAll('.prompt-tab-btn').forEach(btn => {
-      const r = parseInt(btn.dataset.round);
-      const hasData = promptsByRound[r] && promptsByRound[r].length > 0;
-      if (hasData) {
-        if (!btn.innerHTML.includes('🔴')) {
-          btn.innerHTML = `R${r} <span style="font-size: 0.6rem; color: #ff4a4a; margin-left: 4px;">🔴</span>`;
-        }
-      } else {
-        btn.innerHTML = `R${r}`;
-      }
-    });
-  }
   // Initialize tabs
   renderImageGenTabs();
 
