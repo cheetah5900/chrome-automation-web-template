@@ -2733,13 +2733,14 @@ def make_video_cover(
                     f.write(f"file '{temp_black}'\n")
                     f.write(f"file '{temp_second}'\n")
                     
-            concat_cmd = [
-                ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                "-c", "copy", final_output_path
-            ]
-            res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            if res.returncode != 0:
-                raise RuntimeError(f"FFmpeg failed concatenating video: {res.stderr}")
+            if not is_combine_mode:
+                concat_cmd = [
+                    ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                    "-c", "copy", final_output_path
+                ]
+                res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if res.returncode != 0:
+                    raise RuntimeError(f"FFmpeg failed concatenating video: {res.stderr}")
                 
             if is_combine_mode:
                 try:
