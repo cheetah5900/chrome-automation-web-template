@@ -527,6 +527,14 @@
                 </div>
               </div>
 
+              <div id="combineSubModeGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
+                <label style="font-weight: bold; color: #8da6ff;">รูปแบบการรวมวิดีโอ (Combine Sub-Mode)</label>
+                <select id="combineSubModeSelect" style="width: 100%; padding: 10px; border-radius: 8px; margin-top: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
+                  <option value="normal">รวม 3 วิดีโอเข้าด้วยกัน</option>
+                  <option value="view_channel">สำหรับช่องวิวเท่านั้น</option>
+                </select>
+              </div>
+
               <!-- Sub folders -->
               <div id="videoHelperCoverFoldersGroup" class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
@@ -541,14 +549,6 @@
                   <span id="videoHelperCoverDesc">Video file location is in <code>[numberic_folder_name]/[any .mp4 or .mov file]</code> (just a video, if more, it'll error) and cover image inside folder <code>'cover/'</code>.</span>
                   <span id="videoHelperCombineDesc" class="hidden">Videos sequentially numbered from 1 (e.g. <code>1_upscale.mp4</code>, <code>2_upscale.mp4</code>, <code>3_upscale.mp4</code>) inside each subfolder.</span>
                 </div>
-              </div>
-
-              <div id="combineSubModeGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
-                <label style="font-weight: bold; color: #8da6ff;">รูปแบบการรวมวิดีโอ (Combine Sub-Mode)</label>
-                <select id="combineSubModeSelect" style="width: 100%; padding: 10px; border-radius: 8px; margin-top: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
-                  <option value="normal">รวม 3 วิดีโอเข้าด้วยกัน</option>
-                  <option value="view_channel">สำหรับช่องวิวเท่านั้น</option>
-                </select>
               </div>
 
               <div id="viewChannelGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
