@@ -738,6 +738,20 @@ async function loadConfig() {
     
     const vOut = document.getElementById('videoOutputPathText');
     if (vOut) vOut.value = config.video_output_path || '';
+    
+    const vChanAudio = document.getElementById('viewChannelAudioPath');
+    if (vChanAudio) vChanAudio.value = config.view_channel_audio_path || '';
+    
+    if (config.view_channel_durations && Array.isArray(config.view_channel_durations)) {
+      for (let i = 1; i <= 5; i++) {
+        const d = document.getElementById(`viewDur${i}`);
+        if (d && config.view_channel_durations[i-1] !== null && config.view_channel_durations[i-1] !== undefined) {
+          d.value = config.view_channel_durations[i-1];
+        } else if (d) {
+          d.value = '';
+        }
+      }
+    }
 
     const lakornPathInput = document.getElementById('cfg_lakorn_path');
     if (lakornPathInput) lakornPathInput.value = config.lakorn_path || '';
@@ -1867,6 +1881,41 @@ async function setVideoPrefixDefault() {
   }
 }
 
+async function setViewChannelAudioDefault() {
+  const input = document.getElementById('viewChannelAudioPath');
+  const val = input ? input.value.trim() : '';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'view_channel_audio_path', value: val })
+    });
+    writeConsoleLine(`View Channel Audio Path default saved: ${val || 'None'}`, 'success', 'videoConsole');
+    alert(`Default View Channel Audio Path set to: ${val || 'None'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default audio path: ${e.message}`, 'error', 'videoConsole');
+  }
+}
+
+async function setViewChannelDurationsDefault() {
+  const durations = [];
+  for (let i = 1; i <= 5; i++) {
+    const input = document.getElementById(`viewDur${i}`);
+    durations.push(input && input.value !== '' ? parseFloat(input.value) : null);
+  }
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'view_channel_durations', value: durations })
+    });
+    writeConsoleLine(`View Channel Durations default saved`, 'success', 'videoConsole');
+    alert(`Default View Channel Durations set successfully.`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default durations: ${e.message}`, 'error', 'videoConsole');
+  }
+}
+
 async function saveImagePrompts(silent = false) {
   const isSilent = silent === true;
   commitCurrentRoundFromDOM();
@@ -2306,6 +2355,12 @@ function initWorkflowActionListeners() {
 
   const setVideoPrefixBtn = document.getElementById('setVideoPrefixDefaultBtn');
   if (setVideoPrefixBtn) setVideoPrefixBtn.addEventListener('click', setVideoPrefixDefault);
+
+  const setViewChannelAudioDefaultBtn = document.getElementById('setViewChannelAudioDefaultBtn');
+  if (setViewChannelAudioDefaultBtn) setViewChannelAudioDefaultBtn.addEventListener('click', setViewChannelAudioDefault);
+
+  const setViewChannelDurationsDefaultBtn = document.getElementById('setViewChannelDurationsDefaultBtn');
+  if (setViewChannelDurationsDefaultBtn) setViewChannelDurationsDefaultBtn.addEventListener('click', setViewChannelDurationsDefault);
 
   const addVideoCombineSetBtn = document.getElementById('addVideoCombineSetBtn');
   const videoCombineSetRows = document.getElementById('videoCombineSetRows');
@@ -4518,6 +4573,8 @@ const staticTooltips = {
   // Video Helper
   "setVideoPrefixDefaultBtn": "📌 ตั้งคำนำหน้า (Set Default):<br>- Prefix ที่จะใส่หน้านามสกุลไฟล์",
   "browseAudioBtn": "🎵 เลือกไฟล์เพลง (Browse):<br>- เลือกไฟล์เสียงจากในเครื่อง (รองรับ mp3, wav, aac ฯลฯ)",
+  "setViewChannelAudioDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึกเพลงนี้เป็นค่าตั้งต้น",
+  "setViewChannelDurationsDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึกความยาววิดีโอทั้ง 5 ช่องเป็นค่าตั้งต้น",
   "browseOutputBtn": "📁 เลือกโฟลเดอร์ผลลัพธ์ (Browse)",
   "setVideoOutputDefaultBtn": "📌 ตั้ง Path ผลลัพธ์เริ่มต้น (Set Default)",
   "addVideoCombineSetBtn": "➕ เพิ่มเซ็ตวิดีโอ (Add Set):<br>- สร้างช่วงการรวมโฟลเดอร์อัตโนมัติ",
