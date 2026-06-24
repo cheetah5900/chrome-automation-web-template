@@ -2640,6 +2640,18 @@ def make_video_cover(
                     log(f"Received audio_boost: '{audio_boost}'")
                     
                     update_progress(90, "Mixing background music...")
+
+                    # Probe background audio duration
+                    ffprobe_bin = "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe"
+                    bgm_dur = None
+                    try:
+                        probe_cmd = [ffprobe_bin, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path]
+                        dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
+                        if dur_str:
+                            bgm_dur = float(dur_str)
+                    except Exception as e:
+                        log(f"Warning: Could not probe background music duration: {e}")
+
                     volume_filter = ""
                     if audio_boost and audio_boost.strip():
                         try:
@@ -2648,16 +2660,21 @@ def make_video_cover(
                         except ValueError:
                             pass
                             
-                    filter_complex_str = f"[1:a:0]{volume_filter}aformat=sample_rates=48000:channel_layouts=stereo[bgm];[0:a:0][bgm]amix=inputs=2:duration=shortest:dropout_transition=0:normalize=0[aout]"
+                    filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
                             
                     final_cmd = [
                         ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
                         "-filter_complex", filter_complex_str,
                         "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac",
-                        "-b:a", "192k", "-ac", "2", "-ar", "48000",
-                        "-shortest",
-                        "-disposition:a:0", "default", final_output_path
+                        "-b:a", "192k", "-ac", "2", "-ar", "48000"
                     ]
+
+                    if bgm_dur is not None:
+                        final_cmd.extend(["-t", str(bgm_dur)])
+                    
+                    final_cmd.extend([
+                        "-disposition:a:0", "default", final_output_path
+                    ])
                     res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     if res.returncode != 0:
                         raise RuntimeError(f"FFmpeg failed audio replacement: {res.stderr}")

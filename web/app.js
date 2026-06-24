@@ -1136,7 +1136,12 @@ async function loadImagePrompts() {
         const match = key.match(/^image_prompts_(\d+)$/);
         if (match) {
           const r = parseInt(match[1]);
-          if (!isNaN(r) && r > maxRoundConfig) maxRoundConfig = r;
+          if (!isNaN(r)) {
+            const arr = config[key];
+            if (Array.isArray(arr) && arr.length > 0 && r > maxRoundConfig) {
+              maxRoundConfig = r;
+            }
+          }
         }
       }
     }
@@ -1205,6 +1210,8 @@ async function loadImagePrompts() {
     if (lakornEpInput) lakornEpInput.value = config.lakorn_ep || '';
 
     currentPromptRound = 1;
+    renderImageGenTabs();
+    
     document.querySelectorAll('.prompt-tab-btn').forEach(b => {
       const isRound1 = b.dataset.round === '1';
       b.classList.toggle('active', isRound1);
@@ -2258,30 +2265,40 @@ function initWorkflowActionListeners() {
       renderImageGenTabs();
       // Auto-switch to new round
       const newTab = document.querySelector(`.prompt-tab-btn[data-round="${nextRound}"]`);
-      if (newTab) newTab.click();
+      if (newTab) {
+        newTab.click();
+        newTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
       saveImagePrompts(true);
     });
   }
 
   const resetAllRoundsBtn = document.getElementById('resetAllRoundsBtn');
+  const resetAllRoundsBtn2 = document.getElementById('resetAllRoundsBtn2');
+  
+  const handleResetAll = async () => {
+    if (!confirm('ยืนยันลบ Round ทั้งหมดและรีเซ็ตค่า? (การเปลี่ยนแปลงนี้จะเคลียร์ข้อมูลพรอพต์ทั้งหมด)')) return;
+    promptsByRound = { 1: [] };
+    statusesByRound = { 1: [] };
+    refImagesByRound = { 1: ["", "", "", "", "", "", ""] };
+    refImagesDirByRound = { 1: "" };
+    currentPromptRound = 1;
+    
+    // Clear localStorage active state
+    localStorage.removeItem('imageGenActiveRoundsState');
+    
+    renderImageGenTabs();
+    renderImagePromptsForRound(1);
+    renderSelectedRefImagesList();
+    await saveImagePrompts(true);
+    showToast('รีเซ็ตทุก Round สำเร็จ', 'success');
+  };
+
   if (resetAllRoundsBtn) {
-    resetAllRoundsBtn.addEventListener('click', async () => {
-      if (!confirm('ยืนยันลบ Round ทั้งหมดและรีเซ็ตค่า? (การเปลี่ยนแปลงนี้จะเคลียร์ข้อมูลพรอพต์ทั้งหมด)')) return;
-      promptsByRound = { 1: [] };
-      statusesByRound = { 1: [] };
-      refImagesByRound = { 1: ["", "", "", "", "", "", ""] };
-      refImagesDirByRound = { 1: "" };
-      currentPromptRound = 1;
-      
-      // Clear localStorage active state
-      localStorage.removeItem('imageGenActiveRoundsState');
-      
-      renderImageGenTabs();
-      renderImagePromptsForRound(1);
-      renderSelectedRefImagesList();
-      await saveImagePrompts(true);
-      showToast('รีเซ็ตทุก Round สำเร็จ', 'success');
-    });
+    resetAllRoundsBtn.addEventListener('click', handleResetAll);
+  }
+  if (resetAllRoundsBtn2) {
+    resetAllRoundsBtn2.addEventListener('click', handleResetAll);
   }
 
   document.getElementById('addImagePromptBtn').addEventListener('click', () => {
@@ -3468,36 +3485,7 @@ function initFileImports() {
     });
   }
 
-  const resetAllRoundsBtn = document.getElementById('resetAllRoundsBtn');
-  if (resetAllRoundsBtn) {
-    resetAllRoundsBtn.addEventListener('click', async () => {
-      const confirmReset = confirm("คุณต้องการล้างข้อมูลพรอพต์และรูปภาพอ้างอิงทั้งหมดในทุก Round ใช่หรือไม่?");
-      if (!confirmReset) return;
-
-      for (let r = 1; r <= getImageGenMaxRound(); r++) {
-        promptsByRound[r] = [];
-        statusesByRound[r] = [];
-        refImagesByRound[r] = ["", "", "", "", "", "", ""];
-        refImagesDirByRound[r] = "";
-      }
-
-      // Reset DOM elements of directory path input & dropdown
-      const dirInput = document.getElementById('cfg_ref_images_dir');
-      if (dirInput) dirInput.value = "";
-      
-      const dropdown = document.getElementById('cfg_ref_image_dropdown');
-      if (dropdown) dropdown.innerHTML = '<option value="">-- No folder scanned yet --</option>';
-
-      lastScannedImagesList = [];
-
-      // Re-render and Save
-      renderImagePromptsForRound(currentPromptRound);
-      renderDropdownOptions();
-      await saveImagePrompts(true);
-
-      showToast('ล้างข้อมูลทุก Round และรูปภาพแนบเรียบร้อยแล้ว', 'success');
-    });
-  }
+  // Duplicate resetAllRoundsBtn listener removed
 
   document.querySelectorAll('.round-active-checkbox').forEach(cb => {
     cb.addEventListener('change', () => {
@@ -3610,7 +3598,12 @@ async function loadVideoPrompts() {
         const match = key.match(/^video_prompts_(\d+)$/);
         if (match) {
           const r = parseInt(match[1]);
-          if (!isNaN(r) && r > maxRoundConfig) maxRoundConfig = r;
+          if (!isNaN(r)) {
+            const arr = config[key];
+            if (Array.isArray(arr) && arr.length > 0 && r > maxRoundConfig) {
+              maxRoundConfig = r;
+            }
+          }
         }
       }
     }
@@ -4078,22 +4071,7 @@ function initVideoGenListeners() {
     });
   }
 
-  const resetBtn = document.getElementById('resetAllVideoRoundsBtn');
-  if (resetBtn) {
-    resetBtn.addEventListener('click', async () => {
-      const confirmReset = confirm("คุณต้องการล้างข้อมูลพรอพต์ทั้งหมดในทุก Round ใช่หรือไม่?");
-      if (!confirmReset) return;
-
-      for (let r = 1; r <= getVideoGenMaxRound(); r++) {
-        videoPromptsByRound[r] = [];
-        videoStatusesByRound[r] = [];
-      }
-
-      renderVideoPromptsForRound(currentVideoPromptRound);
-      await saveVideoPrompts(true);
-      showToast('ล้างข้อมูลพรอพต์วิดีโอเรียบร้อยแล้ว', 'success');
-    });
-  }
+  // Duplicate resetAllVideoRoundsBtn listener removed
 
   const clearConsoleBtn = document.getElementById('clearVideoConsoleBtn');
   if (clearConsoleBtn) {
