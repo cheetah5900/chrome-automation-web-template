@@ -1715,7 +1715,8 @@ async function runVideoHelper(btnElement) {
             foldersJson: JSON.stringify([folder]),
             subMode: 'view_channel',
             durationsJson: JSON.stringify(durations),
-            audioPath: document.getElementById('viewChannelAudioPath')?.value || ''
+            audioPath: document.getElementById('viewChannelAudioPath')?.value || '',
+            audioBoost: document.getElementById('viewChannelAudioBoost')?.value || ''
           });
         }
       } else {
@@ -1761,6 +1762,15 @@ async function runVideoHelper(btnElement) {
 
   let successCount = 0;
   let failCount = 0;
+  let errorMessages = [];
+
+  const progressContainer = document.getElementById('videoHelperProgressContainer');
+  const progressBar = document.getElementById('videoHelperProgressBar');
+  const progressText = document.getElementById('videoHelperProgressText');
+  
+  if (progressContainer) progressContainer.classList.remove('hidden');
+  if (progressBar) progressBar.style.width = '0%';
+  if (progressText) progressText.textContent = `0% (0/${activeSets.length})`;
 
   for (const set of activeSets) {
     const { index, videoFile, imageFile, videoPathVal, imagePathVal, amount } = set;
@@ -1798,11 +1808,32 @@ async function runVideoHelper(btnElement) {
       if (set.audioPath) {
         formData.append('audio_path', set.audioPath);
       }
+      if (set.audioBoost) {
+        formData.append('audio_boost', set.audioBoost);
+      }
 
-      const response = await fetch('/api/video/make-cover', {
-        method: 'POST',
-        body: formData
-      });
+      const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).substring(7);
+      formData.append('job_id', jobId);
+
+      const progressInterval = setInterval(async () => {
+        try {
+          const pRes = await fetch(`/api/video/progress?job_id=${jobId}`);
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            updateVideoSetStatus(index, `Gen... ${pData.percent}% (${pData.status})`, '#8da6ff');
+          }
+        } catch (e) {}
+      }, 1000);
+
+      let response;
+      try {
+        response = await fetch('/api/video/make-cover', {
+          method: 'POST',
+          body: formData
+        });
+      } finally {
+        clearInterval(progressInterval);
+      }
       
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
@@ -1813,28 +1844,80 @@ async function runVideoHelper(btnElement) {
       
       if (res.ok) {
         if (res.skipped) {
-          writeConsoleLine(`[${setLabel}] Skipped: Output file already exists at: ${res.output_path}`, 'system', 'videoConsole');
-          updateVideoSetStatus(index, 'Done', '#10a37f');
+          const wantOverwrite = confirm(`ไฟล์ปลายทางมีอยู่แล้ว:\n${res.output_path}\n\nคุณต้องการเขียนทับ (Overwrite) ไฟล์เดิมหรือไม่?`);
+          if (wantOverwrite) {
+            writeConsoleLine(`[${setLabel}] User confirmed overwrite. Re-processing...`, 'system', 'videoConsole');
+            formData.append('overwrite', 'true');
+            const retryJobId = 'job_' + Date.now() + '_' + Math.random().toString(36).substring(7);
+            formData.set('job_id', retryJobId); // Update job ID for retry
+            
+            const retryInterval = setInterval(async () => {
+              try {
+                const pRes = await fetch(`/api/video/progress?job_id=${retryJobId}`);
+                if (pRes.ok) {
+                  const pData = await pRes.json();
+                  updateVideoSetStatus(index, `Gen... ${pData.percent}% (${pData.status})`, '#8da6ff');
+                }
+              } catch (e) {}
+            }, 1000);
+
+            let retryRes;
+            try {
+              retryRes = await fetch('/api/video/make-cover', { method: 'POST', body: formData });
+            } finally {
+              clearInterval(retryInterval);
+            }
+            if (!retryRes.ok) throw new Error(`Server error on retry: ${retryRes.status}`);
+            const retryData = await retryRes.json();
+            
+            if (retryData.ok) {
+              writeConsoleLine(`[${setLabel}] Success! Output video generated at: ${retryData.output_path}`, 'success', 'videoConsole');
+              updateVideoSetStatus(index, 'Done', '#10a37f');
+              successCount++;
+            } else {
+              const err = retryData.detail || 'Unknown error';
+              writeConsoleLine(`[${setLabel}] Failed on retry: ${err}`, 'error', 'videoConsole');
+              updateVideoSetStatus(index, 'Failed', '#ff4a4a', err);
+              errorMessages.push(`[${setLabel}] ${err}`);
+              failCount++;
+            }
+          } else {
+            writeConsoleLine(`[${setLabel}] Skipped by user.`, 'system', 'videoConsole');
+            updateVideoSetStatus(index, 'Done', '#10a37f');
+            successCount++;
+          }
         } else {
           writeConsoleLine(`[${setLabel}] Success! Output video generated at: ${res.output_path}`, 'success', 'videoConsole');
           updateVideoSetStatus(index, 'Done', '#10a37f');
+          successCount++;
         }
-        successCount++;
       } else {
         const err = res.detail || 'Unknown error';
         writeConsoleLine(`[${setLabel}] Failed: ${err}`, 'error', 'videoConsole');
         updateVideoSetStatus(index, 'Failed', '#ff4a4a', err);
+        errorMessages.push(`[${setLabel}] ${err}`);
         failCount++;
       }
     } catch (e) {
       writeConsoleLine(`[${setLabel}] Error: ${e.message}`, 'error', 'videoConsole');
       updateVideoSetStatus(index, 'Error', '#ff4a4a', e.message);
+      errorMessages.push(`[${setLabel}] Exception: ${e.message}`);
       failCount++;
     }
+    
+    const completed = successCount + failCount;
+    const percent = Math.round((completed / activeSets.length) * 100);
+    if (progressBar) progressBar.style.width = `${percent}%`;
+    if (progressText) progressText.textContent = `${percent}% (${completed}/${activeSets.length})`;
   }
 
   writeConsoleLine(`Batch Complete! Success: ${successCount}, Failed: ${failCount}`, 'system', 'videoConsole');
-  alert(`Batch Process Complete!\nSuccess: ${successCount}\nFailed: ${failCount}`);
+  
+  let alertMsg = `Batch Process Complete!<br>Success: ${successCount}<br>Failed: ${failCount}`;
+  if (errorMessages.length > 0) {
+    alertMsg += `<br><br>Errors:<br>` + errorMessages.join('<br>');
+  }
+  showToast(alertMsg, failCount > 0 ? 'error' : 'success');
 
   btnElement.disabled = false;
   btnElement.classList.remove('loading');
@@ -2326,11 +2409,23 @@ function initWorkflowActionListeners() {
   }
 
   const viewDurInputs = ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5', 'viewChannelAudioPath'];
+  const updateDurationsSum = () => {
+    let total = 0;
+    ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5'].forEach(id => {
+      const val = parseFloat(document.getElementById(id)?.value);
+      if (!isNaN(val) && val > 0) total += val;
+    });
+    const totalEl = document.getElementById('viewTotalDuration');
+    if (totalEl) {
+      totalEl.textContent = total.toFixed(2) + ' วินาที';
+    }
+  };
+
   viewDurInputs.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
-      el.addEventListener('input', updateTooltips);
-      el.addEventListener('change', updateTooltips);
+      el.addEventListener('input', () => { updateTooltips(); updateDurationsSum(); });
+      el.addEventListener('change', () => { updateTooltips(); updateDurationsSum(); });
     }
   });
 
@@ -2340,6 +2435,7 @@ function initWorkflowActionListeners() {
     if (activeRadio) {
       activeRadio.dispatchEvent(new Event('change'));
     }
+    updateDurationsSum();
   }, 100);
 
   const clearVideoConsole = document.getElementById('clearVideoConsoleBtn');
@@ -2430,6 +2526,39 @@ function initWorkflowActionListeners() {
         }
       } catch (e) {
         showToast(`Failed to browse file: ${e.message}`, 'error');
+      }
+    });
+  }
+
+  const verifyAudioBtn = document.getElementById('verifyAudioBtn');
+  const verifyAudioResult = document.getElementById('verifyAudioResult');
+  if (verifyAudioBtn && viewChannelAudioPath && verifyAudioResult) {
+    verifyAudioBtn.addEventListener('click', async () => {
+      const path = viewChannelAudioPath.value.trim();
+      if (!path) {
+        verifyAudioResult.style.display = 'block';
+        verifyAudioResult.innerHTML = '<span style="color: #ff6b6b;">กรุณาระบุที่อยู่ไฟล์เพลงก่อนตรวจสอบ</span>';
+        return;
+      }
+      verifyAudioBtn.disabled = true;
+      verifyAudioBtn.textContent = 'Verifying...';
+      try {
+        const res = await jsonFetch(`/api/video/verify-audio?path=${encodeURIComponent(path)}`);
+        verifyAudioResult.style.display = 'block';
+        if (res.valid) {
+          verifyAudioResult.innerHTML = `<span style="color: #4cd137;">✅ พบไฟล์เสียงที่ใช้งานได้</span><br/>
+            <strong>Codec:</strong> ${res.codec} <br/>
+            <strong>ความยาว:</strong> ${parseFloat(res.duration).toFixed(2)} วินาที <br/>
+            <strong>ระดับเสียงสูงสุด (Max Vol):</strong> ${res.max_volume}`;
+        } else {
+          verifyAudioResult.innerHTML = `<span style="color: #ff6b6b;">❌ ไฟล์เสียงมีปัญหา: ${res.error}</span>`;
+        }
+      } catch (e) {
+        verifyAudioResult.style.display = 'block';
+        verifyAudioResult.innerHTML = `<span style="color: #ff6b6b;">❌ ตรวจสอบไฟล์ล้มเหลว: ${e.message}</span>`;
+      } finally {
+        verifyAudioBtn.disabled = false;
+        verifyAudioBtn.textContent = 'Verify Audio';
       }
     });
   }

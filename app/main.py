@@ -2214,6 +2214,12 @@ def step15(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e))
 
 
+global_video_progress = {}
+
+@app.get("/api/video/progress")
+def get_video_progress(job_id: str):
+    return global_video_progress.get(job_id, {"percent": 0, "status": "Idle"})
+
 @app.post("/api/video/make-cover")
 def make_video_cover(
     video: UploadFile | None = File(None),
@@ -2230,13 +2236,23 @@ def make_video_cover(
     folder_range: str | None = Form(None),
     sub_mode: str | None = Form(None),
     audio_path: str | None = Form(None),
-    durations_json: str | None = Form(None)
+    durations_json: str | None = Form(None),
+    audio_boost: str | None = Form(None),
+    overwrite: str | None = Form(None),
+    job_id: str | None = Form(None)
 ) -> dict[str, Any]:
     import subprocess
     import tempfile
     import os
     import json
     import shutil
+    from datetime import datetime
+
+    def update_progress(percent: int, status: str):
+        if job_id:
+            global_video_progress[job_id] = {"percent": percent, "status": status}
+            
+    update_progress(0, "Initializing...")
     
     is_combine_mode = (mode == "combine")
     mode_label = "Combine Mode" if is_combine_mode else "Cover Mode"
@@ -2541,8 +2557,11 @@ def make_video_cover(
     log(f"Output Target Path: '{final_output_path}'")
     
     if os.path.exists(final_output_path):
-        log(f"Set {no or 'default'}: Destination file already exists: '{final_output_path}'. Skipping processing.")
-        return {"ok": True, "output_path": final_output_path, "skipped": True}
+        if str(overwrite).lower() == "true":
+            log(f"Set {no or 'default'}: Destination file already exists: '{final_output_path}'. Overwrite requested.")
+        else:
+            log(f"Set {no or 'default'}: Destination file already exists: '{final_output_path}'. Skipping processing.")
+            return {"ok": True, "output_path": final_output_path, "skipped": True}
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2561,6 +2580,7 @@ def make_video_cover(
 
                 aligned_paths = []
                 for idx, (folder_name, v_path, resolved_media_name) in enumerate(combine_sources, 1):
+                    update_progress(int((idx - 1) / amount_val * 70), f"Processing video {idx} of {amount_val}...")
                     has_video_v, has_audio_v = probe_media_streams(v_path)
                     out_aligned = os.path.join(tmpdir, f"aligned_{idx}.mp4")
                     log(f"Combine Mode [{idx}/{amount_val}]: Aligning '{folder_name}/{resolved_media_name}' to 9:16 vertical 4K 60fps...")
@@ -2568,6 +2588,7 @@ def make_video_cover(
                     if has_video_v and has_audio_v:
                         v_cmd = [
                             ffmpeg_bin, "-y", "-i", v_path,
+                            "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
                             "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
                         ]
                     elif has_video_v:
@@ -2596,11 +2617,13 @@ def make_video_cover(
                     aligned_paths.append(out_aligned)
                     
                 log(f"Combine Mode: Concatenating {amount_val} clips...")
+                update_progress(75, "Concatenating videos...")
                 with open(list_txt, "w", encoding="utf-8") as f:
                     for ap in aligned_paths:
                         f.write(f"file '{ap}'\n")
 
-                if sub_mode == "view_channel" and audio_path and os.path.isfile(audio_path.strip()):
+                clean_audio_path = audio_path.strip().strip('"').strip("'") if audio_path else ""
+                if sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path):
                     concat_out = os.path.join(tmpdir, "concat_temp.mp4")
                     concat_cmd = [
                         ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
@@ -2610,11 +2633,26 @@ def make_video_cover(
                     if res.returncode != 0:
                         raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
 
-                    log("View Channel Mode: Replacing audio track with provided audio...")
+                    log(f"View Channel Mode: Mixing original audio with background music... ({clean_audio_path})")
+                    log(f"Received audio_boost: '{audio_boost}'")
+                    
+                    update_progress(90, "Mixing background music...")
+                    volume_filter = ""
+                    if audio_boost and audio_boost.strip():
+                        try:
+                            boost_val = float(audio_boost.strip())
+                            volume_filter = f"volume={boost_val}dB,"
+                        except ValueError:
+                            pass
+                            
+                    filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                            
                     final_cmd = [
-                        ffmpeg_bin, "-y", "-i", concat_out, "-i", audio_path.strip(),
-                        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac",
-                        "-shortest", final_output_path
+                        ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
+                        "-filter_complex", filter_complex_str,
+                        "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac",
+                        "-b:a", "192k", "-ac", "2", "-ar", "48000",
+                        "-disposition:a:0", "default", final_output_path
                     ]
                     res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     if res.returncode != 0:
@@ -2730,7 +2768,11 @@ def make_video_cover(
                     log(f"Combine Mode Warning: Failed to write caption.md: {ce}")
 
             log(f"Video Helper Success: Saved final video to '{final_output_path}'")
-            return {"ok": True, "output_path": final_output_path}
+            update_progress(100, "Done")
+        return {
+            "ok": True,
+            "output_path": final_output_path
+        }
     except Exception as e:
         log(f"Video Helper Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2823,8 +2865,50 @@ def browse_file(filter_type: str = "image") -> dict[str, Any]:
         log(f"Browse File Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
+@app.get("/api/video/verify-audio")
+def verify_audio(path: str):
+    import os
+    import subprocess
+    import json
+    if not path or not path.strip():
+        return {"ok": False, "valid": False, "error": "ไม่ได้ระบุที่อยู่ไฟล์"}
+    
+    clean_path = path.strip().strip('"').strip("'")
+    clean_path = os.path.expanduser(clean_path)
+    
+    if not os.path.exists(clean_path):
+        return {"ok": False, "valid": False, "error": f"ไม่พบไฟล์ที่ระบุ (File not found): {clean_path}"}
+        
+    if not os.path.isfile(clean_path):
+        return {"ok": False, "valid": False, "error": "ที่อยู่ที่ระบุไม่ใช่ไฟล์"}
+        
+    # Get codec and duration
+    probe_cmd = [
+        "/opt/homebrew/bin/ffprobe", "-v", "error", "-select_streams", "a:0",
+        "-show_entries", "stream=codec_name,duration", "-of", "json", clean_path
+    ]
+    if not os.path.exists(probe_cmd[0]):
+        probe_cmd[0] = "ffprobe"
+        
+    codec_name = "unknown"
+    duration = "0"
+    try:
+        res = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        data = json.loads(res.stdout or "{}")
+        streams = data.get("streams", [])
+        if streams:
+            codec_name = streams[0].get("codec_name", "unknown")
+            duration = streams[0].get("duration", "0")
+    except Exception as e:
+        log(f"Audio verify probe error: {e}")
+        
+    return {
+        "ok": True, 
+        "valid": True,
+        "codec": codec_name,
+        "duration": duration,
+        "max_volume": "N/A (Skipped)"
+    }
 @app.get("/api/utils/view-image")
 def view_image(path: str) -> FileResponse:
     import os
@@ -3397,8 +3481,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # Type round number using ActionChains keyboard events
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
-    text_to_type = f"{round_idx}.png"
-    log(f"[ป้อนข้อมูล] พิมพ์หมายเลข Round + .png ด้วยคีย์บอร์ดเสมือน: {text_to_type}")
+    text_to_type = f"{round_idx:02d}"
+    log(f"[ป้อนข้อมูล] พิมพ์หมายเลขอ้างอิง (01, 02, ...) ด้วยคีย์บอร์ดเสมือน: {text_to_type}")
     try:
         actions = ActionChains(driver)
         actions.send_keys(text_to_type).perform()

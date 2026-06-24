@@ -494,14 +494,16 @@
               <div class="form-group" style="margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                 <label style="font-weight: bold; color: #8da6ff;">Processing Mode</label>
                 <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">Select the processing mode: Cover Mode (video + 2s black + cover image) or Combine Across Folder (merge multiple videos).</div>
-                <div style="display: flex; gap: 20px; margin-top: 5px;">
-                  <label style="display: flex; align-items: center; gap: 8px; color: #fff; font-size: 0.9rem; cursor: pointer;">
-                    <input type="radio" name="videoHelperMode" value="cover" checked style="margin: 0; accent-color: #8da6ff; width: auto;" />
-                    <span>Cover Mode (Video + Cover)</span>
+                <div style="display: flex; gap: 20px; margin-top: 15px;">
+                  <label class="mode-card">
+                    <input type="radio" name="videoHelperMode" value="cover" checked />
+                    <div class="mode-card-title">Cover Mode</div>
+                    <div class="mode-card-desc">Video + 2s Black + Cover Image</div>
                   </label>
-                  <label style="display: flex; align-items: center; gap: 8px; color: #fff; font-size: 0.9rem; cursor: pointer;">
-                    <input type="radio" name="videoHelperMode" value="combine" style="margin: 0; accent-color: #8da6ff; width: auto;" />
-                    <span>Combine Across Folder (Combine Videos)</span>
+                  <label class="mode-card">
+                    <input type="radio" name="videoHelperMode" value="combine" />
+                    <div class="mode-card-title">Combine Across Folder</div>
+                    <div class="mode-card-desc">Merge multiple videos per channel</div>
                   </label>
                 </div>
               </div>
@@ -556,7 +558,17 @@
                 <div style="display: flex; gap: 10px; width: 100%; margin-bottom: 15px; margin-top: 5px;">
                   <input id="viewChannelAudioPath" placeholder="e.g. /path/to/audio.mp3" style="margin-bottom: 0; flex-grow: 1;" />
                   <button id="browseAudioBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                  <button id="verifyAudioBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; border-color: #8da6ff; color: #8da6ff;">Verify Audio</button>
                   <button id="setViewChannelAudioDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
+                <div id="verifyAudioResult" style="font-size: 0.85rem; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: none; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);"></div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                  <div>
+                    <label style="font-weight: bold; color: #8da6ff; margin: 0;">Audio Volume Boost (dB)</label>
+                    <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 0 0; line-height: 1.4;">เร่งเสียงเพลง (เช่น 10, 20) ปล่อยว่างถ้าไม่ต้องการเร่ง</div>
+                  </div>
+                  <input id="viewChannelAudioBoost" type="number" step="0.1" placeholder="e.g. 20" style="width: 100px; margin-bottom: 0;" />
                 </div>
                 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -585,6 +597,10 @@
                     <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">วิดีโอที่ 5</label>
                     <input id="viewDur5" type="number" step="0.01" min="0" placeholder="" style="width: 100%; margin-bottom: 0;" />
                   </div>
+                </div>
+                <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 0.85rem; color: rgba(255,255,255,0.8);">เวลารวมทั้งหมด:</span>
+                  <span id="viewTotalDuration" style="font-weight: bold; color: #5eff5e; font-size: 1rem;">0.00 วินาที</span>
                 </div>
               </div>
               <div id="videoCombineBatchGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
@@ -626,6 +642,11 @@
                   ?
                   <div class="custom-tooltip" id="tooltip_runVideoHelperBtn" style="bottom: 120%; right: 0; left: auto; transform: none; min-width: 350px;"></div>
                 </span>
+              </div>
+
+              <div id="videoHelperProgressContainer" class="hidden" style="margin-top: 15px; background: rgba(0,0,0,0.3); border-radius: 8px; overflow: hidden; position: relative; height: 24px; border: 1px solid rgba(255,255,255,0.1);">
+                <div id="videoHelperProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #10a37f, #5eff5e); transition: width 0.3s ease;"></div>
+                <div id="videoHelperProgressText" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">0% (0/0)</div>
               </div>
             </div>
           </section>
