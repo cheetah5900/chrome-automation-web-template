@@ -207,15 +207,34 @@ ${modeDescription}
 5. ระบบจะแทรกภาพหน้าจอดำ (Black Screen) เป็นเวลา 2.0 วินาที เพื่อคั่นระหว่างจุดจบของวิดีโอกับภาพปก
 6. บันทึกผลลัพธ์เป็นไฟล์วิดีโอใหม่โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
     } else {
-      const combineSets = collectVideoCombineBatchSets();
-      const combineSetsSummary = combineSets.map((folders, idx) => `เซ็ตที่ ${idx + 1}: [${folders.join(', ')}]`).join('\n') || 'ไม่มี';
-      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Combine Across Folder Mode:
+      const subModeSelect = document.getElementById('combineSubModeSelect');
+      const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
+      
+      if (subModeVal === 'view_channel') {
+        const audioPathVal = document.getElementById('viewChannelAudioPath')?.value || 'ไม่ได้กำหนด';
+        const d1 = document.getElementById('viewDur1')?.value || '-';
+        const d2 = document.getElementById('viewDur2')?.value || '-';
+        const d3 = document.getElementById('viewDur3')?.value || '-';
+        const d4 = document.getElementById('viewDur4')?.value || '-';
+        const d5 = document.getElementById('viewDur5')?.value || '-';
+        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ View Channel Mode:
+1. ระบบตรวจสอบ Path หลักที่ตั้งค่าไว้ (${outputPathVal})
+2. อ่านข้อมูลวิดีโอจากโฟลเดอร์ย่อย 1 ถึง 5 (หรือตามจำนวนที่ระบุความยาววิดีโอ)
+3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${d1}, ${d2}, ${d3}, ${d4}, ${d5}] วินาที
+4. นำวิดีโอที่ตัดแล้วมาต่อกันแบบไร้รอยต่อ
+5. แทนที่เสียงเดิมในวิดีโอด้วยเพลงจากไฟล์: ${audioPathVal}
+6. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
+      } else {
+        const combineSets = collectVideoCombineBatchSets();
+        const combineSetsSummary = combineSets.map((folders, idx) => `เซ็ตที่ ${idx + 1}: [${folders.join(', ')}]`).join('\n') || 'ไม่มี';
+        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Combine Across Folder Mode:
 1. ระบบตรวจสอบ Path หลักที่ตั้งค่าไว้ (${outputPathVal})
 2. อ่านข้อมูลกลุ่มโฟลเดอร์ที่จะนำมารวมกัน (เซ็ต):
 ${combineSetsSummary}
 3. เริ่มวนลูปทีละเซ็ต: นำไฟล์วิดีโอจากหมายเลขโฟลเดอร์ในแต่ละเซ็ตมาชนกัน
 4. ส่งคำสั่งให้ระบบหลังบ้าน (API) ทำการรวมไฟล์วิดีโอแบบไร้รอยต่อ (ไม่มีหน้าจอดำคั่นกลาง)
 5. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
+      }
     }
   }
 
@@ -1530,18 +1549,38 @@ function collectVideoCombineBatchSets() {
 function toggleVideoCombineBatchUI(isCombine) {
   const batchGroup = document.getElementById('videoCombineBatchGroup');
   const coverGroup = document.getElementById('videoHelperCoverFoldersGroup');
-  if (!batchGroup) return;
-  batchGroup.classList.toggle('hidden', !isCombine);
+  const subModeGroup = document.getElementById('combineSubModeGroup');
+  const viewChannelGroup = document.getElementById('viewChannelGroup');
+  
   if (coverGroup) {
     coverGroup.classList.toggle('hidden', isCombine);
   }
+  
+  if (subModeGroup) {
+    subModeGroup.classList.toggle('hidden', !isCombine);
+  }
 
-  if (isCombine) {
+  if (!isCombine) {
+    if (batchGroup) batchGroup.classList.add('hidden');
+    if (viewChannelGroup) viewChannelGroup.classList.add('hidden');
+    return;
+  }
+
+  // If isCombine is true, check the subMode
+  const subMode = document.getElementById('combineSubModeSelect')?.value || 'normal';
+  
+  if (subMode === 'normal') {
+    if (batchGroup) batchGroup.classList.remove('hidden');
+    if (viewChannelGroup) viewChannelGroup.classList.add('hidden');
+    
     const rows = document.getElementById('videoCombineSetRows');
     if (rows && rows.children.length === 0) {
       rows.appendChild(createVideoCombineSetRow(''));
       refreshVideoCombineSetLabels();
     }
+  } else if (subMode === 'view_channel') {
+    if (batchGroup) batchGroup.classList.add('hidden');
+    if (viewChannelGroup) viewChannelGroup.classList.remove('hidden');
   }
 }
 
@@ -1621,20 +1660,54 @@ async function runVideoHelper(btnElement) {
       });
     }
   } else {
-    const combineSets = collectVideoCombineBatchSets();
-    combineSets.forEach((folders, idx) => {
+    const subModeSelect = document.getElementById('combineSubModeSelect');
+    const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
+
+    if (subModeVal === 'view_channel') {
+      const dur1 = document.getElementById('viewDur1')?.value || '';
+      const dur2 = document.getElementById('viewDur2')?.value || '';
+      const dur3 = document.getElementById('viewDur3')?.value || '';
+      const dur4 = document.getElementById('viewDur4')?.value || '';
+      const dur5 = document.getElementById('viewDur5')?.value || '';
+      
+      const durations = [dur1, dur2, dur3, dur4, dur5].filter(d => d.trim() !== '');
+      if (durations.length === 0) {
+        alert('Please enter at least one duration for View Channel mode.');
+        return;
+      }
+      
+      const folders = Array.from({length: durations.length}, (_, i) => String(i + 1));
+      
       activeSets.push({
-        index: `combine_${idx + 1}`,
-        label: `Set ${idx + 1}`,
+        index: 'view_channel_set',
+        label: 'View Channel Mix',
         videoFile: null,
         imageFile: null,
         videoPathVal: '',
         imagePathVal: '',
-        no: folders[0] || '',
-        amount: String(folders.length || 1),
-        foldersJson: JSON.stringify(folders)
+        no: folders[0],
+        amount: String(folders.length),
+        foldersJson: JSON.stringify(folders),
+        subMode: 'view_channel',
+        durationsJson: JSON.stringify(durations),
+        audioPath: document.getElementById('viewChannelAudioPath')?.value || ''
       });
-    });
+    } else {
+      const combineSets = collectVideoCombineBatchSets();
+      combineSets.forEach((folders, idx) => {
+        activeSets.push({
+          index: `combine_${idx + 1}`,
+          label: `Set ${idx + 1}`,
+          videoFile: null,
+          imageFile: null,
+          videoPathVal: '',
+          imagePathVal: '',
+          no: folders[0] || '',
+          amount: String(folders.length || 1),
+          foldersJson: JSON.stringify(folders)
+        });
+      });
+    }
   }
 
   if (activeSets.length === 0) {
@@ -1689,6 +1762,15 @@ async function runVideoHelper(btnElement) {
       }
       if (set.foldersJson) {
         formData.append('folders_json', set.foldersJson);
+      }
+      if (set.subMode) {
+        formData.append('sub_mode', set.subMode);
+      }
+      if (set.durationsJson) {
+        formData.append('durations_json', set.durationsJson);
+      }
+      if (set.audioPath) {
+        formData.append('audio_path', set.audioPath);
       }
 
       const response = await fetch('/api/video/make-cover', {
@@ -2170,6 +2252,25 @@ function initWorkflowActionListeners() {
       }
       updateTooltips();
     });
+  });
+
+  const combineSubModeSelect = document.getElementById('combineSubModeSelect');
+  if (combineSubModeSelect) {
+    combineSubModeSelect.addEventListener('change', () => {
+      const mode = document.querySelector('input[name="videoHelperMode"]:checked')?.value;
+      const isCombine = mode === 'combine';
+      toggleVideoCombineBatchUI(isCombine);
+      updateTooltips();
+    });
+  }
+
+  const viewDurInputs = ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5', 'viewChannelAudioPath'];
+  viewDurInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', updateTooltips);
+      el.addEventListener('change', updateTooltips);
+    }
   });
 
   // Trigger initial change event to sync with the checked option on load

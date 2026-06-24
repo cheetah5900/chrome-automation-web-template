@@ -2227,7 +2227,10 @@ def make_video_cover(
     amount: str | None = Form(None),
     suffix: str | None = Form(None),
     folders_json: str | None = Form(None),
-    folder_range: str | None = Form(None)
+    folder_range: str | None = Form(None),
+    sub_mode: str | None = Form(None),
+    audio_path: str | None = Form(None),
+    durations_json: str | None = Form(None)
 ) -> dict[str, Any]:
     import subprocess
     import tempfile
@@ -2366,6 +2369,14 @@ def make_video_cover(
             raise HTTPException(status_code=400, detail="At least one sub folder is required in Combine Mode")
 
         combine_label = build_folder_label(combine_folders)
+
+        durations = []
+        if sub_mode == "view_channel" and durations_json:
+            try:
+                dur_list = json.loads(durations_json)
+                durations = [float(d) for d in dur_list if str(d).strip()]
+            except Exception as e:
+                log(f"Combine Mode Warning: Failed to parse durations_json: {e}")
 
         for folder_name in combine_folders:
             subfolder = os.path.join(base_dir, folder_name)
@@ -2545,21 +2556,27 @@ def make_video_cover(
                         v_cmd = [
                             ffmpeg_bin, "-y", "-i", v_path,
                             "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", out_aligned
+                            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
                         ]
                     elif has_video_v:
                         v_cmd = [
                             ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
                             "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
-                            "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", out_aligned
+                            "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
                         ]
                     elif has_audio_v:
                         v_cmd = [
                             ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
-                            "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", out_aligned
+                            "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
                         ]
                     else:
                         raise RuntimeError(f"Matched file '{resolved_media_name}' has no usable audio or video stream")
+
+                    if sub_mode == "view_channel" and len(durations) >= idx:
+                        dur = durations[idx - 1]
+                        v_cmd.extend(["-t", str(dur)])
+                    
+                    v_cmd.append(out_aligned)
 
                     res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     if res.returncode != 0:
@@ -2570,6 +2587,34 @@ def make_video_cover(
                 with open(list_txt, "w", encoding="utf-8") as f:
                     for ap in aligned_paths:
                         f.write(f"file '{ap}'\n")
+
+                if sub_mode == "view_channel" and audio_path and os.path.isfile(audio_path.strip()):
+                    concat_out = os.path.join(tmpdir, "concat_temp.mp4")
+                    concat_cmd = [
+                        ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                        "-c", "copy", concat_out
+                    ]
+                    res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if res.returncode != 0:
+                        raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
+
+                    log("View Channel Mode: Replacing audio track with provided audio...")
+                    final_cmd = [
+                        ffmpeg_bin, "-y", "-i", concat_out, "-i", audio_path.strip(),
+                        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac",
+                        "-shortest", final_output_path
+                    ]
+                    res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if res.returncode != 0:
+                        raise RuntimeError(f"FFmpeg failed audio replacement: {res.stderr}")
+                else:
+                    concat_cmd = [
+                        ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                        "-c", "copy", final_output_path
+                    ]
+                    res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if res.returncode != 0:
+                        raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
                         
             else:
                 # Cover Mode: Video 1 + 2s Black + 3s Image
