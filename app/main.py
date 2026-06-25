@@ -2665,7 +2665,7 @@ def make_video_cover(
                     if video_audio_boost and video_audio_boost.strip():
                         try:
                             v_boost_val = float(video_audio_boost.strip())
-                            video_volume_filter = f"volume={v_boost_val}dB,"
+                            video_volume_filter = f"volume={v_boost_val}dB"
                         except ValueError:
                             pass
 
