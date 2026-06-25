@@ -2454,104 +2454,17 @@ def make_video_cover(
     prefix_str = prefix.strip() if prefix else ""
 
     if is_combine_mode:
-        # 1. Create a folder for the output video with a filename '[Prefix][folder range]'
-        folder_range_name = f"{prefix_str}{combine_label}"
-        out_dir = os.path.join(out_dir, folder_range_name)
-        
-        # 2. Extract and combine Caption.md files from all combined folders
-        combined_caption = ""
-        for folder_name in combine_folders:
-            caption_file = os.path.join(base_dir, folder_name, "Caption.md")
-            if os.path.exists(caption_file):
-                try:
-                    with open(caption_file, "r", encoding="utf-8") as f:
-                        text = f.read().strip()
-                        if text:
-                            combined_caption += text + "\n\n"
-                except Exception as e:
-                    log(f"Combine Mode Warning: Failed reading caption in {folder_name}: {e}")
-        
-        combined_caption = combined_caption.strip()
-        seo_name = ""
-        if combined_caption:
-            settings = {}
-            if SETTINGS_FILE.exists():
-                try:
-                    settings = json.loads(SETTINGS_FILE.read_text())
-                except:
-                    pass
+        if combine_folders:
+            out_dir = os.path.join(base_dir, combine_folders[0])
             
-            gemini_key = settings.get("gemini_api_key")
-            openai_key = settings.get("openai_api_key")
+        if prefix_str:
+            if prefix_str.endswith("-") or prefix_str.endswith("_"):
+                video_filename = f"{prefix_str}{combine_label}.mp4"
+            else:
+                video_filename = f"{prefix_str}.mp4"
+        else:
+            video_filename = f"{combine_label}_combined.mp4"
             
-            if gemini_key:
-                import httpx
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                prompt = (
-                    "Based on the following caption text (which is a combination of multiple captions), "
-                    "generate a single, clean, short SEO-friendly filename (3 to 6 words). "
-                    "Use only lowercase letters, numbers, and hyphens (no spaces, no special characters, no file extension). "
-                    "Do not include any other text or explanation. Content:\n\n" + combined_caption
-                )
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                try:
-                    res = httpx.post(url, json=payload, timeout=10)
-                    if res.status_code == 200:
-                        data = res.json()
-                        txt = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                        txt = txt.replace('"', '').replace("'", "").strip()
-                        import re
-                        txt = re.sub(r'[^a-z0-9\-]', '', txt.lower())
-                        if txt:
-                            seo_name = txt
-                except Exception as e:
-                    log(f"Gemini SEO name generation error: {e}")
-                    
-            if not seo_name and openai_key:
-                import httpx
-                url = "https://api.openai.com/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"}
-                prompt = (
-                    "Based on the following caption text (which is a combination of multiple captions), "
-                    "generate a single, clean, short SEO-friendly filename (3 to 6 words). "
-                    "Use only lowercase letters, numbers, and hyphens (no spaces, no special characters, no file extension). "
-                    "Do not include any other text or explanation. Content:\n\n" + combined_caption
-                )
-                payload = {
-                    "model": "gpt-4o-mini",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.3
-                }
-                try:
-                    res = httpx.post(url, json=payload, headers=headers, timeout=10)
-                    if res.status_code == 200:
-                        data = res.json()
-                        txt = data["choices"][0]["message"]["content"].strip()
-                        txt = txt.replace('"', '').replace("'", "").strip()
-                        import re
-                        txt = re.sub(r'[^a-z0-9\-]', '', txt.lower())
-                        if txt:
-                            seo_name = txt
-                except Exception as e:
-                    log(f"OpenAI SEO name generation error: {e}")
-                    
-            if not seo_name:
-                # Local fallback slug parser
-                lines = [line.strip() for line in combined_caption.split("\n") if line.strip()]
-                if lines:
-                    import re
-                    first_line = lines[0]
-                    first_line = re.sub(r'[#\*_`\[\]\(\)]', '', first_line)
-                    first_line = re.sub(r'[^a-zA-Z0-9\s\-]', '', first_line)
-                    slug = "-".join(first_line.lower().split())
-                    slug = re.sub(r'-+', '-', slug).strip('-')
-                    if slug:
-                        seo_name = slug
-                        
-        if not seo_name:
-            seo_name = f"{combine_label}_combined"
-            
-        video_filename = f"{seo_name}.mp4"
         final_output_path = os.path.join(out_dir, video_filename)
     else:
         if no and no.strip():
@@ -2814,31 +2727,7 @@ def make_video_cover(
                 if res.returncode != 0:
                     raise RuntimeError(f"FFmpeg failed concatenating video: {res.stderr}")
                 
-            if is_combine_mode:
-                try:
-                    caption_file_path = os.path.join(out_dir, "caption.md")
-                    normal_eng = seo_name.replace("-", " ").replace("_", " ").strip()
-                    normal_eng = " ".join(word.capitalize() for word in normal_eng.split())
-                    
-                    # Extract unique hashtags from the combined caption text
-                    import re
-                    hashtags = re.findall(r'#\w+', combined_caption)
-                    seen = set()
-                    unique_tags = []
-                    for tag in hashtags:
-                        if tag.lower() not in seen:
-                            seen.add(tag.lower())
-                            unique_tags.append(tag)
-                            
-                    caption_content = normal_eng
-                    if unique_tags:
-                        caption_content += "\n" + " ".join(unique_tags[:5])
-                        
-                    with open(caption_file_path, "w", encoding="utf-8") as cf:
-                        cf.write(caption_content)
-                    log(f"Combine Mode: Created caption file '{caption_file_path}' with hashtags")
-                except Exception as ce:
-                    log(f"Combine Mode Warning: Failed to write caption.md: {ce}")
+            # Caption.md generation has been removed as per user request
 
             log(f"Video Helper Success: Saved final video to '{final_output_path}'")
             update_progress(100, "Done")
