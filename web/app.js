@@ -748,6 +748,21 @@ async function loadConfig() {
     const vChanVideoAudioBoost = document.getElementById('viewChannelVideoAudioBoost');
     if (vChanVideoAudioBoost) vChanVideoAudioBoost.value = config.view_channel_video_audio_boost || '';
     
+    const vChanContrast = document.getElementById('viewChannelContrast');
+    if (vChanContrast) vChanContrast.value = config.view_channel_contrast || '1.10';
+    
+    const vChanSaturation = document.getElementById('viewChannelSaturation');
+    if (vChanSaturation) vChanSaturation.value = config.view_channel_saturation || '1.80';
+    
+    const vChanBrightness = document.getElementById('viewChannelBrightness');
+    if (vChanBrightness) vChanBrightness.value = config.view_channel_brightness || '0.01';
+    
+    const vChanGamma = document.getElementById('viewChannelGamma');
+    if (vChanGamma) vChanGamma.value = config.view_channel_gamma || '1.02';
+    
+    const vChanUnsharp = document.getElementById('viewChannelUnsharp');
+    if (vChanUnsharp) vChanUnsharp.value = config.view_channel_unsharp || '5:5:0.7:3:3:0.3';
+    
     if (config.view_channel_durations && Array.isArray(config.view_channel_durations)) {
       for (let i = 1; i <= 5; i++) {
         const d = document.getElementById(`viewDur${i}`);
@@ -1696,51 +1711,36 @@ async function runVideoHelper(btnElement) {
     } else {
       const subModeSelect = document.getElementById('combineSubModeSelect');
       const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
-
+      const combineSets = collectVideoCombineBatchSets();
+      
+      let durations = [];
+      let viewChannelData = null;
       if (subModeVal === 'view_channel') {
-        const foldersInput = document.getElementById('videoCoverFoldersText');
-        const foldersVal = foldersInput ? foldersInput.value.trim() : '';
-        if (!foldersVal) {
-          alert('Please enter sub folders (e.g. 1,2,3-10 or 1-3) to process.');
-          return;
-        }
-        const folderList = parseFolderRanges(foldersVal);
-        
         const dur1 = document.getElementById('viewDur1')?.value || '';
         const dur2 = document.getElementById('viewDur2')?.value || '';
         const dur3 = document.getElementById('viewDur3')?.value || '';
         const dur4 = document.getElementById('viewDur4')?.value || '';
         const dur5 = document.getElementById('viewDur5')?.value || '';
-        
-        const durations = [dur1, dur2, dur3, dur4, dur5].filter(d => d.trim() !== '');
+        durations = [dur1, dur2, dur3, dur4, dur5].filter(d => d.trim() !== '');
         if (durations.length === 0) {
           alert('Please enter at least one duration for View Channel mode.');
           return;
         }
-        
-        for (const folder of folderList) {
-          activeSets.push({
-            index: `view_channel_${folder}`,
-            label: `Folder ${folder}`,
-            videoFile: null,
-            imageFile: null,
-            videoPathVal: '',
-            imagePathVal: '',
-            no: folder,
-            amount: '1',
-            foldersJson: JSON.stringify([folder]),
-            subMode: 'view_channel',
-            durationsJson: JSON.stringify(durations),
-            audioPath: document.getElementById('viewChannelAudioPath')?.value || '',
-            audioBoost: document.getElementById('viewChannelAudioBoost')?.value || '',
-            videoAudioBoost: document.getElementById('viewChannelVideoAudioBoost')?.value || ''
-          });
-        }
-      } else {
-      const combineSets = collectVideoCombineBatchSets();
+        viewChannelData = {
+          audioPath: document.getElementById('viewChannelAudioPath')?.value || '',
+          audioBoost: document.getElementById('viewChannelAudioBoost')?.value || '',
+          videoAudioBoost: document.getElementById('viewChannelVideoAudioBoost')?.value || '',
+          contrast: document.getElementById('viewChannelContrast')?.value || '',
+          saturation: document.getElementById('viewChannelSaturation')?.value || '',
+          brightness: document.getElementById('viewChannelBrightness')?.value || '',
+          gamma: document.getElementById('viewChannelGamma')?.value || '',
+          unsharp: document.getElementById('viewChannelUnsharp')?.value || ''
+        };
+      }
+
       combineSets.forEach((folders, idx) => {
-        activeSets.push({
-          index: `combine_${idx + 1}`,
+        const setObj = {
+          index: subModeVal === 'view_channel' ? `view_channel_combine_${idx + 1}` : `combine_${idx + 1}`,
           label: `Set ${idx + 1}`,
           videoFile: null,
           imageFile: null,
@@ -1749,10 +1749,24 @@ async function runVideoHelper(btnElement) {
           no: folders[0] || '',
           amount: String(folders.length || 1),
           foldersJson: JSON.stringify(folders)
-        });
+        };
+        
+        if (subModeVal === 'view_channel' && viewChannelData) {
+          setObj.subMode = 'view_channel';
+          setObj.durationsJson = JSON.stringify(durations);
+          setObj.audioPath = viewChannelData.audioPath;
+          setObj.audioBoost = viewChannelData.audioBoost;
+          setObj.videoAudioBoost = viewChannelData.videoAudioBoost;
+          setObj.contrast = viewChannelData.contrast;
+          setObj.saturation = viewChannelData.saturation;
+          setObj.brightness = viewChannelData.brightness;
+          setObj.gamma = viewChannelData.gamma;
+          setObj.unsharp = viewChannelData.unsharp;
+        }
+        
+        activeSets.push(setObj);
       });
     }
-  }
 
   if (activeSets.length === 0) {
     if (modeVal === 'cover') {
@@ -1832,6 +1846,11 @@ async function runVideoHelper(btnElement) {
       if (set.videoAudioBoost) {
         formData.append('video_audio_boost', set.videoAudioBoost);
       }
+      if (set.contrast) formData.append('contrast', set.contrast);
+      if (set.saturation) formData.append('saturation', set.saturation);
+      if (set.brightness) formData.append('brightness', set.brightness);
+      if (set.gamma) formData.append('gamma', set.gamma);
+      if (set.unsharp) formData.append('unsharp', set.unsharp);
 
       const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).substring(7);
       formData.append('job_id', jobId);
@@ -2034,6 +2053,32 @@ async function setViewChannelVideoAudioBoostDefault() {
     alert(`Default Video Volume Boost set to: ${val || 'None'}`);
   } catch (e) {
     writeConsoleLine(`Failed to set default video audio boost: ${e.message}`, 'error', 'videoConsole');
+  }
+}
+
+async function setViewChannelColorDefault() {
+  const contrast = document.getElementById('viewChannelContrast')?.value.trim() || '';
+  const saturation = document.getElementById('viewChannelSaturation')?.value.trim() || '';
+  const brightness = document.getElementById('viewChannelBrightness')?.value.trim() || '';
+  const gamma = document.getElementById('viewChannelGamma')?.value.trim() || '';
+  const unsharp = document.getElementById('viewChannelUnsharp')?.value.trim() || '';
+  
+  try {
+    await jsonFetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        view_channel_contrast: contrast,
+        view_channel_saturation: saturation,
+        view_channel_brightness: brightness,
+        view_channel_gamma: gamma,
+        view_channel_unsharp: unsharp
+      })
+    });
+    writeConsoleLine(`View Channel Color defaults saved`, 'success', 'videoConsole');
+    alert(`Default Color Adjustments saved successfully.`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default color settings: ${e.message}`, 'error', 'videoConsole');
   }
 }
 
@@ -2435,6 +2480,7 @@ function initWorkflowActionListeners() {
     if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
   });
 
+
   const addRoundBtn = document.getElementById('addRoundBtn');
   if (addRoundBtn) {
     addRoundBtn.addEventListener('click', () => {
@@ -2656,6 +2702,9 @@ function initWorkflowActionListeners() {
 
   const setViewChannelDurationsDefaultBtn = document.getElementById('setViewChannelDurationsDefaultBtn');
   if (setViewChannelDurationsDefaultBtn) setViewChannelDurationsDefaultBtn.addEventListener('click', setViewChannelDurationsDefault);
+
+  const setViewChannelColorDefaultBtn = document.getElementById('setViewChannelColorDefaultBtn');
+  if (setViewChannelColorDefaultBtn) setViewChannelColorDefaultBtn.addEventListener('click', setViewChannelColorDefault);
 
   const setViewChannelAudioBoostDefaultBtn = document.getElementById('setViewChannelAudioBoostDefaultBtn');
   if (setViewChannelAudioBoostDefaultBtn) setViewChannelAudioBoostDefaultBtn.addEventListener('click', setViewChannelAudioBoostDefault);
