@@ -2239,6 +2239,11 @@ def make_video_cover(
     durations_json: str | None = Form(None),
     audio_boost: str | None = Form(None),
     video_audio_boost: str | None = Form(None),
+    contrast: str | None = Form(None),
+    saturation: str | None = Form(None),
+    brightness: str | None = Form(None),
+    gamma: str | None = Form(None),
+    unsharp: str | None = Form(None),
     overwrite: str | None = Form(None),
     job_id: str | None = Form(None)
 ) -> dict[str, Any]:
@@ -2627,6 +2632,22 @@ def make_video_cover(
                         f.write(f"file '{ap}'\n")
 
                 clean_audio_path = audio_path.strip().strip('"').strip("'") if audio_path else ""
+                
+                eq_parts = []
+                if contrast and contrast.strip(): eq_parts.append(f"contrast={contrast.strip()}")
+                if saturation and saturation.strip(): eq_parts.append(f"saturation={saturation.strip()}")
+                if brightness and brightness.strip(): eq_parts.append(f"brightness={brightness.strip()}")
+                if gamma and gamma.strip(): eq_parts.append(f"gamma={gamma.strip()}")
+                
+                video_filter_str = ""
+                if eq_parts:
+                    video_filter_str = "eq=" + ":".join(eq_parts)
+                if unsharp and unsharp.strip():
+                    if video_filter_str:
+                        video_filter_str += f",unsharp={unsharp.strip()}"
+                    else:
+                        video_filter_str = f"unsharp={unsharp.strip()}"
+
                 if sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path):
                     concat_out = os.path.join(tmpdir, "concat_temp.mp4")
                     concat_cmd = [
@@ -2673,12 +2694,23 @@ def make_video_cover(
                         filter_complex_str = f"[0:a:0]{video_volume_filter}[fg];[1:a:0]{volume_filter}apad[bgm];[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
                     else:
                         filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                    
+                    v_map = "0:v:0"
+                    v_codec = "copy"
+                    v_enc_args = []
+                    
+                    if video_filter_str:
+                        filter_complex_str += f";[0:v:0]{video_filter_str}[vout]"
+                        v_map = "[vout]"
+                        v_codec = "libx264"
+                        v_enc_args = ["-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
                             
                     final_cmd = [
                         ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
                         "-filter_complex", filter_complex_str,
-                        "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac",
-                        "-b:a", "192k", "-ac", "2", "-ar", "48000"
+                        "-map", v_map, "-map", "[aout]", "-c:v", v_codec
+                    ] + v_enc_args + [
+                        "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
                     ]
 
                     if bgm_dur is not None:
@@ -2691,10 +2723,17 @@ def make_video_cover(
                     if res.returncode != 0:
                         raise RuntimeError(f"FFmpeg failed audio replacement: {res.stderr}")
                 else:
-                    concat_cmd = [
-                        ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                        "-c", "copy", final_output_path
-                    ]
+                    if video_filter_str:
+                        concat_cmd = [
+                            ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                            "-vf", video_filter_str, "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
+                            "-c:a", "copy", final_output_path
+                        ]
+                    else:
+                        concat_cmd = [
+                            ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                            "-c", "copy", final_output_path
+                        ]
                     res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     if res.returncode != 0:
                         raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
