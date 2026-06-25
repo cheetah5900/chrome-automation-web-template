@@ -1780,6 +1780,7 @@ async function runVideoHelper(btnElement) {
   let successCount = 0;
   let failCount = 0;
   let errorMessages = [];
+  let globalOverwrite = null;
 
   const progressContainer = document.getElementById('videoHelperProgressContainer');
   const progressBar = document.getElementById('videoHelperProgressBar');
@@ -1864,7 +1865,11 @@ async function runVideoHelper(btnElement) {
       
       if (res.ok) {
         if (res.skipped) {
-          const wantOverwrite = confirm(`ไฟล์ปลายทางมีอยู่แล้ว:\n${res.output_path}\n\nคุณต้องการเขียนทับ (Overwrite) ไฟล์เดิมหรือไม่?`);
+          let wantOverwrite = false;
+          if (globalOverwrite === null) {
+            globalOverwrite = confirm(`ไฟล์ปลายทางมีอยู่แล้ว:\n${res.output_path}\n\nคุณต้องการเขียนทับ (Overwrite) ไฟล์เดิมทั้งหมดในรอบนี้หรือไม่?`);
+          }
+          wantOverwrite = globalOverwrite;
           if (wantOverwrite) {
             writeConsoleLine(`[${setLabel}] User confirmed overwrite. Re-processing...`, 'system', 'videoConsole');
             formData.append('overwrite', 'true');
@@ -2536,6 +2541,7 @@ function initWorkflowActionListeners() {
   document.querySelectorAll('input[name="videoHelperMode"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
       const mode = e.target.value;
+      localStorage.setItem('videoHelperMode', mode);
       const isCombine = mode === 'combine';
       
       // Save current input value to the previous mode
@@ -2588,9 +2594,23 @@ function initWorkflowActionListeners() {
     });
   });
 
+  // Restore modes from local storage
+  const savedHelperMode = localStorage.getItem('videoHelperMode');
+  if (savedHelperMode) {
+    const radioToSelect = document.querySelector(`input[name="videoHelperMode"][value="${savedHelperMode}"]`);
+    if (radioToSelect) {
+      radioToSelect.checked = true;
+    }
+  }
+
+  const savedCombineSubMode = localStorage.getItem('combineSubMode');
   const combineSubModeSelect = document.getElementById('combineSubModeSelect');
   if (combineSubModeSelect) {
-    combineSubModeSelect.addEventListener('change', () => {
+    if (savedCombineSubMode) {
+      combineSubModeSelect.value = savedCombineSubMode;
+    }
+    combineSubModeSelect.addEventListener('change', (e) => {
+      localStorage.setItem('combineSubMode', e.target.value);
       const mode = document.querySelector('input[name="videoHelperMode"]:checked')?.value;
       const isCombine = mode === 'combine';
       toggleVideoCombineBatchUI(isCombine);
