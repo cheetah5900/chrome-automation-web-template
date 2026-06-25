@@ -1711,11 +1711,21 @@ async function runVideoHelper(btnElement) {
     } else {
       const subModeSelect = document.getElementById('combineSubModeSelect');
       const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
-      const combineSets = collectVideoCombineBatchSets();
       
+      let combineSets = [];
       let durations = [];
       let viewChannelData = null;
+      
       if (subModeVal === 'view_channel') {
+        const foldersInput = document.getElementById('videoCoverFoldersText');
+        const foldersVal = foldersInput ? foldersInput.value.trim() : '';
+        if (!foldersVal) {
+          alert('Please enter sub folders (e.g. 1,2,3-10 or 1-3) to process.');
+          return;
+        }
+        const folderList = parseFolderRanges(foldersVal);
+        combineSets = folderList.map(f => [f]);
+        
         const dur1 = document.getElementById('viewDur1')?.value || '';
         const dur2 = document.getElementById('viewDur2')?.value || '';
         const dur3 = document.getElementById('viewDur3')?.value || '';
@@ -1736,6 +1746,8 @@ async function runVideoHelper(btnElement) {
           gamma: document.getElementById('viewChannelGamma')?.value || '',
           unsharp: document.getElementById('viewChannelUnsharp')?.value || ''
         };
+      } else {
+        combineSets = collectVideoCombineBatchSets();
       }
 
       combineSets.forEach((folders, idx) => {
@@ -2064,16 +2076,20 @@ async function setViewChannelColorDefault() {
   const unsharp = document.getElementById('viewChannelUnsharp')?.value.trim() || '';
   
   try {
+    const currentConfig = await jsonFetch('/api/config');
+    const newConfig = {
+      ...currentConfig,
+      view_channel_contrast: contrast,
+      view_channel_saturation: saturation,
+      view_channel_brightness: brightness,
+      view_channel_gamma: gamma,
+      view_channel_unsharp: unsharp
+    };
+    
     await jsonFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        view_channel_contrast: contrast,
-        view_channel_saturation: saturation,
-        view_channel_brightness: brightness,
-        view_channel_gamma: gamma,
-        view_channel_unsharp: unsharp
-      })
+      body: JSON.stringify(newConfig)
     });
     writeConsoleLine(`View Channel Color defaults saved`, 'success', 'videoConsole');
     alert(`Default Color Adjustments saved successfully.`);
