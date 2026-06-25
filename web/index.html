@@ -553,7 +553,10 @@
                     <label style="font-weight: bold; color: #8da6ff; margin: 0;">Audio Volume Boost (dB)</label>
                     <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 0 0; line-height: 1.4;">เร่งเสียงเพลง (เช่น 10, 20) ปล่อยว่างถ้าไม่ต้องการเร่ง</div>
                   </div>
-                  <input id="viewChannelAudioBoost" type="number" step="0.1" placeholder="e.g. 20" style="width: 100px; margin-bottom: 0;" />
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <input id="viewChannelAudioBoost" type="number" step="0.1" placeholder="e.g. 20" style="width: 100px; margin-bottom: 0;" />
+                    <button id="setViewChannelAudioBoostDefaultBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Set Default</button>
+                  </div>
                 </div>
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -561,7 +564,10 @@
                     <label style="font-weight: bold; color: #ff8da6; margin: 0;">Video Volume Boost (dB)</label>
                     <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 0 0; line-height: 1.4;">ลด/เพิ่มเสียงวิดีโอ (เช่น -10, 5) ปล่อยว่างถ้าไม่ต้องการปรับ</div>
                   </div>
-                  <input id="viewChannelVideoAudioBoost" type="number" step="0.1" placeholder="e.g. -10" style="width: 100px; margin-bottom: 0;" />
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <input id="viewChannelVideoAudioBoost" type="number" step="0.1" placeholder="e.g. -10" style="width: 100px; margin-bottom: 0;" />
+                    <button id="setViewChannelVideoAudioBoostDefaultBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Set Default</button>
+                  </div>
                 </div>
                 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
