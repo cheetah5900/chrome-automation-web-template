@@ -1723,7 +1723,8 @@ async function runVideoHelper(btnElement) {
             subMode: 'view_channel',
             durationsJson: JSON.stringify(durations),
             audioPath: document.getElementById('viewChannelAudioPath')?.value || '',
-            audioBoost: document.getElementById('viewChannelAudioBoost')?.value || ''
+            audioBoost: document.getElementById('viewChannelAudioBoost')?.value || '',
+            videoAudioBoost: document.getElementById('viewChannelVideoAudioBoost')?.value || ''
           });
         }
       } else {
@@ -1817,6 +1818,9 @@ async function runVideoHelper(btnElement) {
       }
       if (set.audioBoost) {
         formData.append('audio_boost', set.audioBoost);
+      }
+      if (set.videoAudioBoost) {
+        formData.append('video_audio_boost', set.videoAudioBoost);
       }
 
       const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).substring(7);

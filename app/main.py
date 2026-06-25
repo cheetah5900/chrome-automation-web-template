@@ -2238,6 +2238,7 @@ def make_video_cover(
     audio_path: str | None = Form(None),
     durations_json: str | None = Form(None),
     audio_boost: str | None = Form(None),
+    video_audio_boost: str | None = Form(None),
     overwrite: str | None = Form(None),
     job_id: str | None = Form(None)
 ) -> dict[str, Any]:
@@ -2660,7 +2661,18 @@ def make_video_cover(
                         except ValueError:
                             pass
                             
-                    filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                    video_volume_filter = ""
+                    if video_audio_boost and video_audio_boost.strip():
+                        try:
+                            v_boost_val = float(video_audio_boost.strip())
+                            video_volume_filter = f"volume={v_boost_val}dB,"
+                        except ValueError:
+                            pass
+
+                    if video_volume_filter:
+                        filter_complex_str = f"[0:a:0]{video_volume_filter}[fg];[1:a:0]{volume_filter}apad[bgm];[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                    else:
+                        filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
                             
                     final_cmd = [
                         ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
