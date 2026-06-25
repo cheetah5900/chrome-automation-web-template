@@ -760,6 +760,9 @@ async function loadConfig() {
     const lakornEpInput = document.getElementById('cfg_lakorn_ep');
     if (lakornEpInput) lakornEpInput.value = config.lakorn_ep || '';
     updateTooltips();
+    if (typeof updateDurationsSum === 'function') {
+      updateDurationsSum();
+    }
   } catch (e) {
     writeConsoleLine(`Failed to load config: ${e.message}`, 'error', 'imageConsole');
   }
@@ -2371,6 +2374,18 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
       }
     });
   }
+  function updateDurationsSum() {
+    let total = 0;
+    ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5'].forEach(id => {
+      const val = parseFloat(document.getElementById(id)?.value);
+      if (!isNaN(val) && val > 0) total += val;
+    });
+    const totalEl = document.getElementById('viewTotalDuration');
+    if (totalEl) {
+      totalEl.textContent = total.toFixed(2) + ' วินาที';
+    }
+  }
+
 function initWorkflowActionListeners() {
   document.getElementById('clearImageConsoleBtn').addEventListener('click', () => {
     const consoleBox = document.getElementById('imageConsole');
@@ -2546,17 +2561,6 @@ function initWorkflowActionListeners() {
   }
 
   const viewDurInputs = ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5', 'viewChannelAudioPath'];
-  const updateDurationsSum = () => {
-    let total = 0;
-    ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5'].forEach(id => {
-      const val = parseFloat(document.getElementById(id)?.value);
-      if (!isNaN(val) && val > 0) total += val;
-    });
-    const totalEl = document.getElementById('viewTotalDuration');
-    if (totalEl) {
-      totalEl.textContent = total.toFixed(2) + ' วินาที';
-    }
-  };
 
   viewDurInputs.forEach(id => {
     const el = document.getElementById(id);
