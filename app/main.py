@@ -1384,12 +1384,12 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     box
                 )
                 driver.execute_script("arguments[0].focus();", box)
-                time.sleep(0.5)
+                time.sleep(0.75)
 
                 input_success = False
                 try:
                     driver.execute_script("document.execCommand('insertText', false, arguments[0]);", custom_prompt)
-                    time.sleep(0.5)
+                    time.sleep(0.75)
                     entered_text = driver.execute_script("""
                         return arguments[0].innerText || arguments[0].textContent || '';
                     """, box)
@@ -1452,7 +1452,7 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                             break
                     except Exception:
                         pass
-                    time.sleep(1.0)
+                    time.sleep(1.5)
                 
                 if send_success:
                     break
@@ -1815,11 +1815,14 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     driver.execute_script("arguments[0].click();", box)
                     
                 driver.execute_script("arguments[0].focus();", box)
-                time.sleep(0.5)
+                time.sleep(0.75)
                 
-                # Focus the input area before pasting
-                driver.execute_script("arguments[0].focus();", box)
-                time.sleep(0.5)
+                # Clear the box to prevent double-pasting
+                driver.execute_script(
+                    "if(arguments[0].textContent !== undefined) { arguments[0].textContent = ''; } else { arguments[0].innerText = ''; } if(arguments[0].value !== undefined) { arguments[0].value = ''; }",
+                    box
+                )
+                time.sleep(0.75)
 
                 if not is_driver_alive(driver):
                     raise RuntimeError("Browser connection lost (Force Stopped).")
@@ -1828,7 +1831,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 input_success = False
                 try:
                     driver.execute_script("document.execCommand('insertText', false, arguments[0]);", custom_prompt)
-                    time.sleep(0.5)
+                    time.sleep(0.75)
                     # Verify text inside the entire #prompt-textarea div instead of just the (potentially detached) box element
                     entered_text = driver.execute_script("""
                         var target = document.getElementById('prompt-textarea') || arguments[0];
@@ -1955,7 +1958,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                             break
                         except Exception:
                             pass
-                    time.sleep(1.0)
+                    time.sleep(1.5)
 
                 # Check if it transitioned to active generation
                 started = False
@@ -1967,7 +1970,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                             break
                     except Exception:
                         pass
-                    time.sleep(1.0)
+                    time.sleep(1.5)
 
                 if started or submit_success:
                     log("ยืนยัน: ส่ง prompt เรียบร้อยแล้ว (ChatGPT กำลังทำการเจเนอเรตคำตอบ)!")
@@ -3411,7 +3414,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         except Exception:
             driver.execute_script("arguments[0].click();", box)
             log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
-    time.sleep(1.0)
+    time.sleep(1.5)
 
 
     # 4. Type @ using ActionChains keyboard events
@@ -3427,7 +3430,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ @ ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys("@")
-    time.sleep(2.0) # Wait 2.0s after typing @
+    time.sleep(3.0) # Wait 3.0s after typing @
 
     # Type round number using ActionChains keyboard events
     if not is_driver_alive(driver):
@@ -3442,7 +3445,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(text_to_type)
-    time.sleep(2.0) # Wait 2.0s for autocomplete
+    time.sleep(3.0) # Wait 3.0s for autocomplete
 
     # Press Enter using ActionChains keyboard events
     if not is_driver_alive(driver):
@@ -3457,8 +3460,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         log(f"กด Enter ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(Keys.ENTER)
     
-    # Wait 2.0 seconds after selecting autocomplete
-    time.sleep(2.0)
+    # Wait 3.0 seconds after selecting autocomplete
+    time.sleep(3.0)
 
     # Press Spacebar 1 time
     if not is_driver_alive(driver):
@@ -3471,7 +3474,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         if not is_driver_alive(driver):
             raise RuntimeError("Browser connection lost.")
         log(f"กด Spacebar ล้มเหลว: {e}")
-    time.sleep(1.0)
+    time.sleep(1.5)
 
     # 5. Paste the animation prompt
     if not is_driver_alive(driver):
@@ -3487,7 +3490,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         
         paste_script = """
         tell application "Google Chrome" to activate
-        delay 0.6
+        delay 0.9
         tell application "System Events"
             keystroke "v" using command down
         end tell
@@ -3499,7 +3502,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"วางผ่าน Clipboard ล้มเหลว, ใช้ send_keys สำรอง: {e}")
         box.send_keys(prompt)
-    time.sleep(2.0)
+    time.sleep(3.0)
 
     # Press Enter to submit the prompt
     if not is_driver_alive(driver):
@@ -3513,7 +3516,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"ส่ง Enter ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(Keys.ENTER)
-    time.sleep(2.0)
+    time.sleep(3.0)
 
     # 5. Click settings button to check/verify settings if specified
     if video_settings_selector:
