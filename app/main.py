@@ -1185,7 +1185,6 @@ def step2(payload: dict[str, Any]) -> dict[str, Any]:
 
 @app.post("/api/step/3")
 def step3(payload: dict[str, Any]) -> dict[str, Any]:
-    _activate_chrome()
     custom_prompt = payload.get("prompt")
     if custom_prompt:
         try:
@@ -1195,6 +1194,21 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
             
+            submit_only = payload.get("submit_only", False)
+            prepare_only = payload.get("prepare_only", False)
+            
+            ref_images = []
+            if not submit_only:
+                for k in ["reference_image", "reference_image_2", "reference_image_3", "reference_image_4", "reference_image_5", "reference_image_6", "reference_image_7"]:
+                    img = (payload.get(k) or "").strip()
+                    if img:
+                        ref_images.append(img)
+            has_images = len(ref_images) > 0
+            
+            # Switch to Chrome only if uploading images is required
+            if has_images:
+                _activate_chrome()
+
             bot = browser_manager.get()
             driver = bot.driver
             
@@ -1209,17 +1223,18 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     driver.get("https://gemini.google.com/app")
                     time.sleep(3.0)
                     
-            # Physically switch to the Gemini tab in macOS Chrome UI!
-            _physical_switch_to_tab("gemini.google.com")
-            _activate_chrome()
-            time.sleep(0.5)
+            if has_images:
+                # Physically switch to the Gemini tab in macOS Chrome UI!
+                _physical_switch_to_tab("gemini.google.com")
+                _activate_chrome()
+                time.sleep(0.5)
+            else:
+                # Background-safe Selenium tab switch
+                bot.switch_to_tab_containing("gemini.google.com")
             
             # Strictly verify we are on the Gemini page before sending input!
             if "gemini.google.com" not in driver.current_url:
                 raise RuntimeError("Failed to switch to Gemini tab. Please open it manually.")
-
-            prepare_only = payload.get("prepare_only", False)
-            submit_only = payload.get("submit_only", False)
 
             # Find the input box first to ensure tab is ready
             input_strats = [
@@ -1371,25 +1386,26 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                 driver.execute_script("arguments[0].focus();", box)
                 time.sleep(0.5)
 
-                # Copy prompt to macOS clipboard and paste it via System Events
-                import subprocess
+                input_success = False
                 try:
-                    process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, text=True)
-                    process.communicate(input=custom_prompt)
-                    
-                    paste_script = """
-                    tell application "Google Chrome" to activate
-                    delay 0.3
-                    tell application "System Events"
-                        keystroke "v" using command down
-                    end tell
-                    """
-                    subprocess.run(["osascript", "-e", paste_script], check=False)
-                    log("Pasted multiline prompt successfully using macOS clipboard.")
+                    driver.execute_script("document.execCommand('insertText', false, arguments[0]);", custom_prompt)
+                    time.sleep(0.5)
+                    entered_text = driver.execute_script("""
+                        return arguments[0].innerText || arguments[0].textContent || '';
+                    """, box)
+                    if entered_text and entered_text.strip() != "":
+                        log("Prompt input populated successfully via browser insertText command.")
+                        input_success = True
                 except Exception as e:
-                    log(f"Clipboard paste failed, falling back to send_keys: {e}")
-                    box.send_keys(custom_prompt)
-                    driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
+                    log(f"Browser insertText command failed: {e}")
+
+                if not input_success:
+                    log("Browser insertText failed or could not be verified. Typing prompt via native send_keys...")
+                    try:
+                        box.send_keys(custom_prompt)
+                        driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
+                    except Exception as fallback_err:
+                        log(f"Safe send_keys typing failed: {fallback_err}")
 
                 if prepare_only:
                     log("Prepare-only mode requested. Prompt pasted. Returning success without submitting.")
@@ -1493,12 +1509,21 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
 @app.post("/api/step/3-chatgpt")
 def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
     global last_submit_time
-    _activate_chrome()
     custom_prompt = payload.get("prompt")
     if custom_prompt:
         try:
             import time
             import random
+            
+            submit_only = payload.get("submit_only", False)
+            ref_images = []
+            if not submit_only:
+                for k in ["reference_image", "reference_image_2", "reference_image_3", "reference_image_4", "reference_image_5", "reference_image_6", "reference_image_7"]:
+                    img = (payload.get(k) or "").strip()
+                    if img:
+                        ref_images.append(img)
+            has_images = len(ref_images) > 0
+
             if last_submit_time > 0.0:
                 random_delay = random.randint(1, 5)
                 log(f"จำลองการทำงานมนุษย์: สุ่มรอ {random_delay} วินาที ก่อนเริ่มอัปโหลดรูปและวาง Prompt ถัดไป...")
@@ -1509,6 +1534,10 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
             
+            # Switch to Chrome window only if uploading images is required
+            if has_images:
+                _activate_chrome()
+
             bot = None
             try:
                 bot = browser_manager.get()
@@ -1584,10 +1613,14 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         driver.get("https://chatgpt.com/")
                         time.sleep(3.0)
             
-            # Physically switch to the ChatGPT tab in macOS Chrome UI!
-            _physical_switch_to_tab("chatgpt.com")
-            _activate_chrome()
-            time.sleep(0.5)
+            if has_images:
+                # Physically switch to the ChatGPT tab in macOS Chrome UI!
+                _physical_switch_to_tab("chatgpt.com")
+                _activate_chrome()
+                time.sleep(0.5)
+            else:
+                # Background-safe Selenium tab switch
+                bot.switch_to_tab_containing("chatgpt.com")
             
             # Strictly verify we are on the ChatGPT page before sending input!
             if "chatgpt.com" not in driver.current_url:
