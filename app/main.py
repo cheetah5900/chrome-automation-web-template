@@ -1799,7 +1799,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     # Verify text inside the entire #prompt-textarea div instead of just the (potentially detached) box element
                     entered_text = driver.execute_script("""
                         var target = document.getElementById('prompt-textarea') || arguments[0];
-                        return target.innerText || target.textContent || '';
+                        return target.value || target.innerText || target.textContent || '';
                     """, box)
                     if entered_text and entered_text.strip() != "":
                         log("Prompt input populated successfully via browser insertText command.")
@@ -1807,53 +1807,9 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 except Exception as e:
                     log(f"Browser insertText command failed: {e}")
 
-                # Secondary Fallback: Copy prompt to macOS clipboard and paste it via System Events
+                # Secondary Fallback: Native send_keys, but replacing newlines with SHIFT+ENTER to prevent auto-submission!
                 if not input_success:
-                    log("Fallback: Browser insertText failed or could not be verified. Re-focusing and pasting via macOS clipboard...")
-                    if not is_driver_alive(driver):
-                        raise RuntimeError("Browser connection lost (Force Stopped).")
-                    try:
-                        # Re-focus and re-click the input box right before activating Chrome and pasting
-                        try:
-                            box.click()
-                        except Exception:
-                            driver.execute_script("arguments[0].click();", box)
-                        driver.execute_script("arguments[0].focus();", box)
-                        time.sleep(0.3)
-                    except Exception as focus_err:
-                        log(f"Fallback focus failed: {focus_err}")
-
-                    import subprocess
-                    try:
-                        process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, text=True)
-                        process.communicate(input=custom_prompt)
-                        
-                        if not is_driver_alive(driver):
-                            raise RuntimeError("Browser connection lost (Force Stopped).")
-                        paste_script = """
-                        tell application "Google Chrome" to activate
-                        delay 0.3
-                        tell application "System Events"
-                            keystroke "v" using command down
-                        end tell
-                        """
-                        subprocess.run(["osascript", "-e", paste_script], check=False)
-                        time.sleep(1.0)
-                        
-                        # Re-verify inside the entire contenteditable div
-                        entered_text = driver.execute_script("""
-                            var target = document.getElementById('prompt-textarea') || arguments[0];
-                            return target.innerText || target.textContent || '';
-                        """, box)
-                        if entered_text and entered_text.strip() != "":
-                            log("Pasted prompt successfully using macOS clipboard.")
-                            input_success = True
-                    except Exception as e:
-                        log(f"Clipboard paste failed: {e}")
-
-                # Tertiary Fallback: Native send_keys, but replacing newlines with SHIFT+ENTER to prevent auto-submission!
-                if not input_success:
-                    log("All paste methods failed. Typing prompt via native send_keys with SHIFT+ENTER for newlines...")
+                    log("Browser insertText failed or could not be verified. Typing prompt via background-safe native send_keys with SHIFT+ENTER for newlines...")
                     try:
                         box.click()
                         # Type character by character or chunk by chunk to handle newlines safely
