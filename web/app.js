@@ -212,17 +212,18 @@ ${modeDescription}
       
       if (subModeVal === 'view_channel') {
         const audioPathVal = document.getElementById('viewChannelAudioPath')?.value || 'ไม่ได้กำหนด';
+        const viewFolderVal = document.getElementById('viewChannelFolderText')?.value || 'ไม่ได้กำหนด';
         const d1 = document.getElementById('viewDur1')?.value || '-';
         const d2 = document.getElementById('viewDur2')?.value || '-';
         const d3 = document.getElementById('viewDur3')?.value || '-';
         const d4 = document.getElementById('viewDur4')?.value || '-';
         const d5 = document.getElementById('viewDur5')?.value || '-';
         tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ View Channel Mode:
-1. ระบบตรวจสอบ Path หลักที่ตั้งค่าไว้ (${outputPathVal})
-2. อ่านข้อมูลวิดีโอจากโฟลเดอร์ย่อย 1 ถึง 5 (หรือตามจำนวนที่ระบุความยาววิดีโอ)
+1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
+2. อ่านข้อมูลวิดีโอ 1 ถึง 5 จากโฟลเดอร์นั้นโดยตรง
 3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${d1}, ${d2}, ${d3}, ${d4}, ${d5}] วินาที
 4. นำวิดีโอที่ตัดแล้วมาต่อกันแบบไร้รอยต่อ
-5. แทนที่เสียงเดิมในวิดีโอด้วยเพลงจากไฟล์: ${audioPathVal}
+5. ผสมเสียงเดิมเข้ากับเพลงจากไฟล์: ${audioPathVal}
 6. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
       } else {
         const combineSets = collectVideoCombineBatchSets();
@@ -664,6 +665,7 @@ const inputsToListen = [
   'videoCoverFoldersText',
   'videoOutputPathText',
   'videoPrefixText',
+  'viewChannelFolderText',
   'startupUrl1',
   'startupUrl2',
   'startupUrl3'
@@ -738,6 +740,9 @@ async function loadConfig() {
     
     const vOut = document.getElementById('videoOutputPathText');
     if (vOut) vOut.value = config.video_output_path || '';
+    
+    const vChanFolder = document.getElementById('viewChannelFolderText');
+    if (vChanFolder) vChanFolder.value = config.view_channel_folder || '';
     
     const vChanAudio = document.getElementById('viewChannelAudioPath');
     if (vChanAudio) vChanAudio.value = config.view_channel_audio_path || '';
@@ -1598,7 +1603,7 @@ function toggleVideoCombineBatchUI(isCombine) {
   const viewChannelGroup = document.getElementById('viewChannelGroup');
   
   if (coverGroup) {
-    if (!isCombine || (isCombine && document.getElementById('combineSubModeSelect')?.value === 'view_channel')) {
+    if (!isCombine) {
       coverGroup.classList.remove('hidden');
     } else {
       coverGroup.classList.add('hidden');
@@ -1717,14 +1722,13 @@ async function runVideoHelper(btnElement) {
       let viewChannelData = null;
       
       if (subModeVal === 'view_channel') {
-        const foldersInput = document.getElementById('videoCoverFoldersText');
-        const foldersVal = foldersInput ? foldersInput.value.trim() : '';
-        if (!foldersVal) {
-          alert('Please enter sub folders (e.g. 1,2,3-10 or 1-3) to process.');
+        const folderInput = document.getElementById('viewChannelFolderText');
+        const folderVal = folderInput ? folderInput.value.trim() : '';
+        if (!folderVal) {
+          alert('Please select a target folder for View Channel mode.');
           return;
         }
-        const folderList = parseFolderRanges(foldersVal);
-        combineSets = folderList.map(f => [f]);
+        combineSets = [[folderVal]];
         
         const dur1 = document.getElementById('viewDur1')?.value || '';
         const dur2 = document.getElementById('viewDur2')?.value || '';
@@ -1807,6 +1811,7 @@ async function runVideoHelper(btnElement) {
   let failCount = 0;
   let errorMessages = [];
   let globalOverwrite = null;
+  let lastTotalChunks = null;
 
   const progressContainer = document.getElementById('videoHelperProgressContainer');
   const progressBar = document.getElementById('videoHelperProgressBar');
@@ -1873,6 +1878,22 @@ async function runVideoHelper(btnElement) {
           if (pRes.ok) {
             const pData = await pRes.json();
             updateVideoSetStatus(index, `Gen... ${pData.percent}% (${pData.status})`, '#8da6ff');
+            
+            // Check for Chunk X/Y pattern to update bottom progress text
+            const chunkMatch = pData.status && pData.status.match(/\[Chunk\s+(\d+)\/(\d+)\]/);
+            if (chunkMatch) {
+              const currentChunk = parseInt(chunkMatch[1]);
+              const totalChunks = parseInt(chunkMatch[2]);
+              lastTotalChunks = totalChunks;
+              if (progressBar) progressBar.style.width = `${pData.percent}%`;
+              if (progressText) progressText.textContent = `${pData.percent}% (${currentChunk - 1}/${totalChunks})`;
+            } else {
+              if (pData.percent !== undefined) {
+                if (progressBar) progressBar.style.width = `${pData.percent}%`;
+                const completed = successCount + failCount;
+                if (progressText) progressText.textContent = `${pData.percent}% (${completed}/${activeSets.length})`;
+              }
+            }
           }
         } catch (e) {}
       }, 1000);
@@ -1913,6 +1934,22 @@ async function runVideoHelper(btnElement) {
                 if (pRes.ok) {
                   const pData = await pRes.json();
                   updateVideoSetStatus(index, `Gen... ${pData.percent}% (${pData.status})`, '#8da6ff');
+                  
+                  // Check for Chunk X/Y pattern to update bottom progress text
+                  const chunkMatch = pData.status && pData.status.match(/\[Chunk\s+(\d+)\/(\d+)\]/);
+                  if (chunkMatch) {
+                    const currentChunk = parseInt(chunkMatch[1]);
+                    const totalChunks = parseInt(chunkMatch[2]);
+                    lastTotalChunks = totalChunks;
+                    if (progressBar) progressBar.style.width = `${pData.percent}%`;
+                    if (progressText) progressText.textContent = `${pData.percent}% (${currentChunk - 1}/${totalChunks})`;
+                  } else {
+                    if (pData.percent !== undefined) {
+                      if (progressBar) progressBar.style.width = `${pData.percent}%`;
+                      const completed = successCount + failCount;
+                      if (progressText) progressText.textContent = `${pData.percent}% (${completed}/${activeSets.length})`;
+                    }
+                  }
                 }
               } catch (e) {}
             }, 1000);
@@ -1964,7 +2001,15 @@ async function runVideoHelper(btnElement) {
     const completed = successCount + failCount;
     const percent = Math.round((completed / activeSets.length) * 100);
     if (progressBar) progressBar.style.width = `${percent}%`;
-    if (progressText) progressText.textContent = `${percent}% (${completed}/${activeSets.length})`;
+    if (lastTotalChunks && activeSets.length === 1) {
+      if (successCount > 0 && failCount === 0) {
+        if (progressText) progressText.textContent = `100% (${lastTotalChunks}/${lastTotalChunks})`;
+      } else {
+        if (progressText) progressText.textContent = `${percent}% (${completed}/${activeSets.length})`;
+      }
+    } else {
+      if (progressText) progressText.textContent = `${percent}% (${completed}/${activeSets.length})`;
+    }
   }
 
   writeConsoleLine(`Batch Complete! Success: ${successCount}, Failed: ${failCount}`, 'system', 'videoConsole');
@@ -2017,6 +2062,22 @@ async function setVideoPrefixDefault() {
     alert(`Default video prefix for ${activeVideoMode} mode set to: ${val || 'None'}`);
   } catch (e) {
     writeConsoleLine(`Failed to set default video prefix: ${e.message}`, 'error', 'videoConsole');
+  }
+}
+
+async function setViewChannelFolderDefault() {
+  const input = document.getElementById('viewChannelFolderText');
+  const val = input ? input.value.trim() : '';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'view_channel_folder', value: val })
+    });
+    writeConsoleLine(`View Channel Target Folder default saved: ${val || 'None'}`, 'success', 'videoConsole');
+    alert(`Default View Channel Target Folder set to: ${val || 'None'}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default target folder: ${e.message}`, 'error', 'videoConsole');
   }
 }
 
@@ -2127,9 +2188,18 @@ async function saveImagePrompts(silent = false) {
   }
   try {
     const currentConfig = await jsonFetch('/api/config');
+    const firstWaitInput = document.getElementById('firstTimeWaitingInput');
+    const intervalInput = document.getElementById('checkIntervalInput');
+    const maxChecksInput = document.getElementById('maxChecksInput');
+    const chatgptChatModeSelect = document.getElementById('chatgptChatModeSelect');
+
     const payload = { 
       ...currentConfig, 
       chatgpt_url: chatgptUrl,
+      first_time_waiting: firstWaitInput ? parseInt(firstWaitInput.value, 10) || 60 : 60,
+      check_interval_seconds: intervalInput ? parseInt(intervalInput.value, 10) || 60 : 60,
+      max_checks: maxChecksInput ? parseInt(maxChecksInput.value, 10) || 3 : 3,
+      chatgpt_chat_mode: chatgptChatModeSelect ? chatgptChatModeSelect.value : 'new',
     };
     
     // Clear old image generation keys from payload to avoid retaining deleted rounds
@@ -2564,6 +2634,23 @@ function initWorkflowActionListeners() {
     setCheckSettingsBtn.addEventListener('click', setCheckSettingsDefault);
   }
 
+  const firstTimeWaitingInput = document.getElementById('firstTimeWaitingInput');
+  if (firstTimeWaitingInput) {
+    firstTimeWaitingInput.addEventListener('change', () => saveImagePrompts(true));
+  }
+  const checkIntervalInput = document.getElementById('checkIntervalInput');
+  if (checkIntervalInput) {
+    checkIntervalInput.addEventListener('change', () => saveImagePrompts(true));
+  }
+  const maxChecksInput = document.getElementById('maxChecksInput');
+  if (maxChecksInput) {
+    maxChecksInput.addEventListener('change', () => saveImagePrompts(true));
+  }
+  const chatgptChatModeSelect = document.getElementById('chatgptChatModeSelect');
+  if (chatgptChatModeSelect) {
+    chatgptChatModeSelect.addEventListener('change', () => saveImagePrompts(true));
+  }
+
   const stopGenerationBtn = document.getElementById('btn_stop_generation');
   if (stopGenerationBtn) {
     stopGenerationBtn.addEventListener('click', async () => {
@@ -2580,15 +2667,15 @@ function initWorkflowActionListeners() {
       const port = selected ? Number(selected.debug_port || 9222) : 9222;
 
       try {
-        writeConsoleLine(`Force Stop: Closing Chrome browser on port ${port}...`, 'warning', 'imageConsole');
+        writeConsoleLine(`Force Stop: Stopping active operations on port ${port}...`, 'warning', 'imageConsole');
         const res = await jsonFetch('/api/profiles/force-kill', {
           method: 'POST',
           body: JSON.stringify({ port: port })
         });
         if (res && res.ok) {
-          writeConsoleLine(`Force Stop: Successfully terminated Chrome browser on port ${port}.`, 'success', 'imageConsole');
+          writeConsoleLine(`Force Stop: Successfully stopped operations on port ${port}.`, 'success', 'imageConsole');
         } else {
-          writeConsoleLine(`Force Stop: Browser was already closed or not found on port ${port}.`, 'info', 'imageConsole');
+          writeConsoleLine(`Force Stop: Operation stop status: ${res ? res.message : 'Unknown'}`, 'info', 'imageConsole');
         }
       } catch (err) {
         writeConsoleLine(`Force Stop: Error calling force-kill endpoint: ${err.message}`, 'error', 'imageConsole');
@@ -2680,7 +2767,7 @@ function initWorkflowActionListeners() {
     });
   }
 
-  const viewDurInputs = ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5', 'viewChannelAudioPath'];
+  const viewDurInputs = ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5', 'viewChannelAudioPath', 'viewChannelFolderText'];
 
   viewDurInputs.forEach(id => {
     const el = document.getElementById(id);
@@ -2715,6 +2802,9 @@ function initWorkflowActionListeners() {
 
   const setViewChannelAudioDefaultBtn = document.getElementById('setViewChannelAudioDefaultBtn');
   if (setViewChannelAudioDefaultBtn) setViewChannelAudioDefaultBtn.addEventListener('click', setViewChannelAudioDefault);
+
+  const setViewChannelFolderDefaultBtn = document.getElementById('setViewChannelFolderDefaultBtn');
+  if (setViewChannelFolderDefaultBtn) setViewChannelFolderDefaultBtn.addEventListener('click', setViewChannelFolderDefault);
 
   const setViewChannelDurationsDefaultBtn = document.getElementById('setViewChannelDurationsDefaultBtn');
   if (setViewChannelDurationsDefaultBtn) setViewChannelDurationsDefaultBtn.addEventListener('click', setViewChannelDurationsDefault);
@@ -2776,6 +2866,22 @@ function initWorkflowActionListeners() {
         const res = await jsonFetch('/api/utils/browse-directory');
         if (res.ok && res.path) {
           videoOutputPathText.value = res.path;
+        }
+      } catch (e) {
+        showToast(`Failed to browse directory: ${e.message}`, 'error');
+      }
+    });
+  }
+
+  const browseViewChannelFolderBtn = document.getElementById('browseViewChannelFolderBtn');
+  const viewChannelFolderText = document.getElementById('viewChannelFolderText');
+  if (browseViewChannelFolderBtn && viewChannelFolderText) {
+    browseViewChannelFolderBtn.addEventListener('click', async () => {
+      try {
+        const res = await jsonFetch('/api/utils/browse-directory');
+        if (res.ok && res.path) {
+          viewChannelFolderText.value = res.path;
+          updateTooltips();
         }
       } catch (e) {
         showToast(`Failed to browse directory: ${e.message}`, 'error');
@@ -3760,6 +3866,9 @@ async function loadVideoPrompts() {
     const flowPath = document.getElementById('cfg_google_flow_path');
     if (flowPath) flowPath.value = config.google_flow_path || '';
 
+    const autoRetry = document.getElementById('cfg_auto_retry_mode');
+    if (autoRetry) autoRetry.checked = !!config.auto_retry_mode;
+
     const waitSecs = document.getElementById('cfg_video_wait_seconds');
     if (waitSecs) waitSecs.value = config.video_wait_seconds || 60;
 
@@ -3820,13 +3929,29 @@ function renderVideoPromptsForRound(roundNum) {
       <textarea class="video-prompt-input" placeholder="วาง Animation Prompt ตรงนี้..." style="flex: 1; padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); color: #fff; min-height: 80px; resize: vertical; margin-bottom: 0;">${p}</textarea>
       <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
         <span class="status-badge ${statusClass}" style="padding: 6px 12px; font-size: 0.78rem; font-weight: bold; border-radius: 8px; min-width: 90px; text-align: center;">${status}</span>
-        <button class="secondary delete-video-prompt-btn" data-idx="${idx}" style="padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; background: rgba(245, 101, 101, 0.08); border-color: rgba(245, 101, 101, 0.15); color: #f56565; margin: 0; height: auto;">Delete</button>
+        <div style="display: flex; gap: 6px;">
+          <button class="retry-video-prompt-btn" data-idx="${idx}" style="padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; background: rgba(72, 187, 120, 0.08); border-color: rgba(72, 187, 120, 0.15); color: #48bb78; margin: 0; height: auto;">Retry</button>
+          <button class="secondary delete-video-prompt-btn" data-idx="${idx}" style="padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; background: rgba(245, 101, 101, 0.08); border-color: rgba(245, 101, 101, 0.15); color: #f56565; margin: 0; height: auto;">Delete</button>
+        </div>
       </div>
     `;
     
     const ta = row.querySelector('.video-prompt-input');
     ta.addEventListener('input', (e) => {
       videoPromptsByRound[roundNum][idx] = e.target.value;
+    });
+
+    const retryBtn = row.querySelector('.retry-video-prompt-btn');
+    retryBtn.addEventListener('click', async () => {
+      retryBtn.disabled = true;
+      const origText = retryBtn.textContent;
+      retryBtn.textContent = 'Retrying...';
+      try {
+        await videoRetryClick(roundNum);
+      } finally {
+        retryBtn.disabled = false;
+        retryBtn.textContent = origText;
+      }
     });
 
     const delBtn = row.querySelector('.delete-video-prompt-btn');
@@ -3840,6 +3965,28 @@ function renderVideoPromptsForRound(roundNum) {
   });
 
   updateVideoPromptsBadge();
+}
+
+async function videoRetryClick(roundNum) {
+  writeConsoleLine(`[Round ${roundNum}] กำลังเริ่มกระบวนการกดปุ่มลองอีกครั้ง (Retry)...`, 'info', 'videoConsole');
+  try {
+    const res = await jsonFetch('/api/step/video-retry', {
+      method: 'POST',
+      body: JSON.stringify({
+        round_idx: roundNum
+      })
+    });
+    if (res && res.ok) {
+      writeConsoleLine(`[Round ${roundNum}] คลิกปุ่มลองอีกครั้งสำเร็จ!`, 'success', 'videoConsole');
+      showToast(`คลิกปุ่มลองอีกครั้งของรอบที่ ${roundNum} สำเร็จ`, 'success');
+    } else {
+      writeConsoleLine(`[Round ${roundNum}] การกดปุ่มลองอีกครั้งล้มเหลว: ${res ? res.detail : 'ไม่ทราบสาเหตุ'}`, 'error', 'videoConsole');
+      showToast(`กด Retry ล้มเหลว: ${res ? res.detail : 'ไม่ทราบสาเหตุ'}`, 'error');
+    }
+  } catch (err) {
+    writeConsoleLine(`[Round ${roundNum}] เกิดข้อผิดพลาดขณะส่งคำสั่ง Retry: ${err.message}`, 'error', 'videoConsole');
+    showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
+  }
 }
 
 function updateVideoPromptsBadge() {
@@ -3864,6 +4011,7 @@ async function saveVideoPrompts(silent = false) {
     const currentConfig = await jsonFetch('/api/config');
     const payload = { 
       ...currentConfig, 
+      auto_retry_mode: !!document.getElementById('cfg_auto_retry_mode')?.checked,
     };
     
     for (const k in payload) {
@@ -4366,11 +4514,19 @@ function initVideoGenListeners() {
   setupSetDefaultBtn('setVideoLakornPathDefaultBtn', 'cfg_video_lakorn_path', 'video_lakorn_path', 'ตั้งค่า ละคร Path (Video) เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
   setupSetDefaultBtn('setVideoLakornEpDefaultBtn', 'cfg_video_lakorn_ep', 'video_lakorn_ep', 'ตั้งค่า ตอนละคร (Video) เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
 
+  const autoRetryCheckbox = document.getElementById('cfg_auto_retry_mode');
+  if (autoRetryCheckbox) {
+    autoRetryCheckbox.addEventListener('change', () => {
+      saveVideoPrompts(true);
+    });
+  }
+
   const btnRunGoogleFlow = document.getElementById('btnRunGoogleFlow');
   const btnStopVideoGeneration = document.getElementById('btnStopVideoGeneration');
 
   if (btnRunGoogleFlow) {
     btnRunGoogleFlow.addEventListener('click', async () => {
+      commitCurrentVideoRoundFromDOM();
       const googleFlowPathVal = document.getElementById('cfg_google_flow_path')?.value.trim() || '';
       const inputSelectorVal = document.getElementById('cfg_video_input_selector')?.value.trim() || '';
       const settingsSelectorVal = document.getElementById('cfg_video_settings_selector')?.value.trim() || '';
@@ -4418,7 +4574,6 @@ function initVideoGenListeners() {
             break;
           }
 
-          commitCurrentVideoRoundFromDOM();
           const prompts = videoPromptsByRound[r] || [];
           const activePrompts = prompts.map(x => x.trim()).filter(Boolean);
 
@@ -4453,16 +4608,26 @@ function initVideoGenListeners() {
             }
             writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] รอคอยรอบถัดไป: ${randomCooldown} วินาที`, 'info', 'videoConsole');
 
-            const success = await executeStep('/api/step/video-gen', {
-              prompt: p,
-              round_idx: r,
-              google_flow_path: googleFlowPathVal,
-              video_input_selector: inputSelectorVal,
-              video_settings_selector: settingsSelectorVal,
-              video_submit_selector: submitSelectorVal,
-              video_wait_seconds: randomCooldown,
-              is_first_run: isFirstPrompt
-            }, null, 'videoConsole');
+            const isAutoRetry = !!document.getElementById('cfg_auto_retry_mode')?.checked;
+            let success = false;
+
+            if (isAutoRetry) {
+              writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] [Auto Retry Mode] กำลังส่งคำสั่งกด Retry...`, 'info', 'videoConsole');
+              success = await executeStep('/api/step/video-retry', {
+                round_idx: r
+              }, null, 'videoConsole');
+            } else {
+              success = await executeStep('/api/step/video-gen', {
+                prompt: p,
+                round_idx: r,
+                google_flow_path: googleFlowPathVal,
+                video_input_selector: inputSelectorVal,
+                video_settings_selector: settingsSelectorVal,
+                video_submit_selector: submitSelectorVal,
+                video_wait_seconds: randomCooldown,
+                is_first_run: isFirstPrompt
+              }, null, 'videoConsole');
+            }
 
             isFirstPrompt = false;
 
@@ -4474,7 +4639,7 @@ function initVideoGenListeners() {
               break;
             }
 
-            videoStatusesByRound[r][pIdx] = 'Sent / Cooldown';
+            videoStatusesByRound[r][pIdx] = isAutoRetry ? 'Retried / Cooldown' : 'Sent / Cooldown';
             renderVideoPromptsForRound(r);
 
             await runVideoCooldown(r, randomCooldown);
@@ -4493,6 +4658,8 @@ function initVideoGenListeners() {
         else btnRunGoogleFlow.textContent = '▶️ RUN GOOGLE FLOW AUTOMATION';
         if (btnStopVideoGeneration) btnStopVideoGeneration.style.display = 'none';
         
+        // Restore currently viewed round prompts to DOM
+        renderVideoPromptsForRound(currentVideoPromptRound);
         await saveVideoPrompts(true);
       }
     });
@@ -4514,15 +4681,15 @@ function initVideoGenListeners() {
       const port = selected ? Number(selected.debug_port || 9222) : 9222;
 
       try {
-        writeConsoleLine(`Force Stop: Closing Chrome browser on port ${port}...`, 'warning', 'videoConsole');
+        writeConsoleLine(`Force Stop: Stopping active operations on port ${port}...`, 'warning', 'videoConsole');
         const res = await jsonFetch('/api/profiles/force-kill', {
           method: 'POST',
           body: JSON.stringify({ port: port })
         });
         if (res && res.ok) {
-          writeConsoleLine(`Force Stop: Successfully terminated Chrome browser on port ${port}.`, 'success', 'videoConsole');
+          writeConsoleLine(`Force Stop: Successfully stopped operations on port ${port}.`, 'success', 'videoConsole');
         } else {
-          writeConsoleLine(`Force Stop: Browser was already closed or not found on port ${port}.`, 'info', 'videoConsole');
+          writeConsoleLine(`Force Stop: Operation stop status: ${res ? res.message : 'Unknown'}`, 'info', 'videoConsole');
         }
       } catch (err) {
         writeConsoleLine(`Force Stop: Error calling force-kill endpoint: ${err.message}`, 'error', 'videoConsole');

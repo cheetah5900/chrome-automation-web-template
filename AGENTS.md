@@ -79,3 +79,8 @@ Before outputting any final code, you MUST think step-by-step internally and str
 - Webdriver commands and AppleScript dialog automation must always verify driver session validity (`is_driver_alive`) before starting or retrying, to prevent sending system key-events to the wrong application if Chrome is closed.
 - If the browser session is closed, raise a runtime error immediately to break backend automation loops, letting the frontend know it should stop processing further rounds.
 
+## Google Flow JS & React State Limitations
+- DO NOT use JavaScript DOM manipulation (such as modifying `textContent`, `innerHTML`, or appending text nodes) to input text into the Google Flow (React/ProseMirror) prompt editor. Bypassing the React state and ProseMirror models causes the Virtual DOM to get out of sync, breaking the editor's submission state and causing empty or corrupted submissions.
+- Always use native Selenium `send_keys` commands to input prompt text into Google Flow, as it simulates native OS-level keyboard events and correctly updates the React and ProseMirror state models.
+- When entering multiline prompts via Selenium `send_keys` in Google Flow, DO NOT send raw newlines (`\n`) in one go, as this triggers the browser's default `Enter` event and submits the form prematurely. Instead, split the text by `\n` and use Selenium's `ActionChains` to perform a `Shift + Enter` sequence between lines before typing the next line.
+

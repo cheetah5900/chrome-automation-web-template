@@ -36,6 +36,36 @@ _ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2"
 
 app = FastAPI(title="Chrome Automation Template")
 last_submit_time = 0.0
+
+import time
+_original_sleep = time.sleep
+_force_stop_requested = False
+
+def check_force_stop():
+    global _force_stop_requested
+    if _force_stop_requested:
+        raise RuntimeError("Force Stop Requested by user.")
+
+def custom_sleep(seconds: float):
+    slept = 0.0
+    while slept < seconds:
+        check_force_stop()
+        _original_sleep(min(0.1, seconds - slept))
+        slept += 0.1
+
+time.sleep = custom_sleep
+
+@app.middleware("http")
+async def reset_force_stop_middleware(request, call_next):
+    global _force_stop_requested
+    path = request.url.path
+    if request.method == "POST" and (path.startswith("/api/step/") or path.startswith("/api/video/") or path.startswith("/api/utils/")):
+        if path != "/api/profiles/force-kill" and path != "/api/step/stop-upload-google-flow":
+            _force_stop_requested = False
+    
+    response = await call_next(request)
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -545,51 +575,12 @@ def close_profile():
 
 @app.post("/api/profiles/force-kill")
 def force_kill_profile(payload: ForceKillPayload):
-    import subprocess
-    import signal
-    import os
-
+    global _force_stop_requested
+    _force_stop_requested = True
     port = payload.port
-    killed_any = False
-
-    # 1. Close current Selenium connection
-    try:
-        browser_manager.close()
-    except Exception as e:
-        print(f"Error closing browser manager: {e}")
-
-    # 2. Terminate process listening on TCP port
-    try:
-        output = subprocess.check_output(["lsof", "-t", "-i", f"tcp:{port}"], text=True)
-        pids = [int(pid.strip()) for pid in output.strip().split("\n") if pid.strip()]
-        for pid in pids:
-            try:
-                os.kill(pid, signal.SIGKILL)
-                killed_any = True
-                print(f"Killed process {pid} on port {port}")
-            except Exception as e:
-                print(f"Failed to kill PID {pid}: {e}")
-    except Exception as e:
-        print(f"lsof failed or no process listening on port {port}: {e}")
-
-    # 3. Terminate process with remote-debugging-port argument matching the port
-    try:
-        output = subprocess.check_output(["ps", "aux"], text=True)
-        for line in output.splitlines():
-            if f"--remote-debugging-port={port}" in line and "Google Chrome" in line:
-                parts = line.split()
-                if len(parts) > 1:
-                    try:
-                        pid = int(parts[1])
-                        os.kill(pid, signal.SIGKILL)
-                        killed_any = True
-                        print(f"Killed Chrome process {pid} matching debugging port")
-                    except Exception as e:
-                        print(f"Failed to kill PID {pid} from ps list: {e}")
-    except Exception as e:
-        print(f"ps scan failed: {e}")
-
-    return {"ok": True, "killed": killed_any, "message": f"Closed Chrome browser on port {port}"}
+    print(f"Force Stop requested. Stopped active operations on port {port}.")
+    log(f"Force Stop: บังคับให้หยุดทำงานเรียบร้อยแล้ว โดยไม่ปิดเบราว์เซอร์")
+    return {"ok": True, "killed": False, "message": f"Force stop requested. Chrome browser on port {port} will not be closed."}
 
 
 
@@ -2245,6 +2236,35 @@ def make_video_cover(
     import json
     import shutil
     from datetime import datetime
+    from fastapi.params import Form as FormParam
+
+    def clean_form_val(v):
+        if isinstance(v, FormParam):
+            return None
+        return v
+
+    video_path = clean_form_val(video_path)
+    image_path = clean_form_val(image_path)
+    output_path = clean_form_val(output_path)
+    prefix = clean_form_val(prefix)
+    no = clean_form_val(no)
+    mode = clean_form_val(mode)
+    amount = clean_form_val(amount)
+    suffix = clean_form_val(suffix)
+    folders_json = clean_form_val(folders_json)
+    folder_range = clean_form_val(folder_range)
+    sub_mode = clean_form_val(sub_mode)
+    audio_path = clean_form_val(audio_path)
+    durations_json = clean_form_val(durations_json)
+    audio_boost = clean_form_val(audio_boost)
+    video_audio_boost = clean_form_val(video_audio_boost)
+    contrast = clean_form_val(contrast)
+    saturation = clean_form_val(saturation)
+    brightness = clean_form_val(brightness)
+    gamma = clean_form_val(gamma)
+    unsharp = clean_form_val(unsharp)
+    overwrite = clean_form_val(overwrite)
+    job_id = clean_form_val(job_id)
 
     def update_progress(percent: int, status: str):
         if job_id:
@@ -2301,13 +2321,23 @@ def make_video_cover(
     def build_folder_label(folder_names: list[str]) -> str:
         if not folder_names:
             return "combined"
-        if len(folder_names) == 1:
-            return folder_names[0]
+        
+        # Extract basename for any path (absolute or relative with slashes)
+        names = []
+        for name in folder_names:
+            clean_name = str(name).strip()
+            if os.path.isabs(clean_name) or "/" in clean_name or "\\" in clean_name:
+                names.append(os.path.basename(clean_name.rstrip("/\\")))
+            else:
+                names.append(clean_name)
 
-        nums = [int(name) for name in folder_names if str(name).isdigit()]
-        if len(nums) == len(folder_names) and nums == list(range(nums[0], nums[-1] + 1)):
-            return f"{folder_names[0]}-{folder_names[-1]}"
-        return "_".join(folder_names)
+        if len(names) == 1:
+            return names[0]
+
+        nums = [int(name) for name in names if str(name).isdigit()]
+        if len(nums) == len(names) and nums == list(range(nums[0], nums[-1] + 1)):
+            return f"{names[0]}-{names[-1]}"
+        return "_".join(names)
 
     src_video_path = ""
     video_filename = ""
@@ -2391,11 +2421,10 @@ def make_video_cover(
                 durations = [float(d) for d in dur_list if str(d).strip()]
             except Exception as e:
                 log(f"Combine Mode Warning: Failed to parse durations_json: {e}")
+        prefix_str = prefix.strip() if prefix else ""
 
         for folder_name in combine_folders:
             subfolder = os.path.join(base_dir, folder_name)
-            if sub_mode == "view_channel":
-                subfolder = os.path.join(subfolder, "video")
                 
             if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
                 raise HTTPException(status_code=400, detail=f"Set {folder_name}: Subfolder '{subfolder}' does not exist")
@@ -2403,6 +2432,28 @@ def make_video_cover(
             media_files = []
             for f in os.listdir(subfolder):
                 f_lower = f.lower()
+                
+                # Exclude output files from list of input media files
+                is_output = False
+                if "_combined" in f_lower:
+                    is_output = True
+                elif prefix_str:
+                    import re
+                    p_esc = re.escape(prefix_str)
+                    c_esc = re.escape(combine_label)
+                    pattern1 = f"^{p_esc}{c_esc}\\.mp4$"
+                    pattern2 = f"^{p_esc}\\.mp4$"
+                    pattern3 = f"^{p_esc}{c_esc}_\\d+\\.mp4$"
+                    pattern4 = f"^{p_esc}_\\d+\\.mp4$"
+                    if (re.match(pattern1, f, re.IGNORECASE) or 
+                        re.match(pattern2, f, re.IGNORECASE) or 
+                        re.match(pattern3, f, re.IGNORECASE) or 
+                        re.match(pattern4, f, re.IGNORECASE)):
+                        is_output = True
+                
+                if is_output:
+                    continue
+
                 if any(f_lower.endswith(ext) for ext in combine_media_exts) and os.path.isfile(os.path.join(subfolder, f)):
                     media_files.append(f)
                     
@@ -2424,6 +2475,14 @@ def make_video_cover(
                 resolved_media_name = media_files[0]
                 resolved_media_path = os.path.join(subfolder, resolved_media_name)
                 combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
+
+        if sub_mode == "view_channel":
+            total_videos = len(combine_sources)
+            if total_videos % 5 != 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"จำนวนวิดีโอในโฟลเดอร์ต้องหารด้วย 5 ลงตัว (พบทั้งหมด {total_videos} ไฟล์)"
+                )
 
         src_video_path = combine_sources[0][1]
         video_filename = combine_sources[0][2]
@@ -2448,203 +2507,241 @@ def make_video_cover(
     if is_combine_mode:
         if combine_folders:
             out_dir = os.path.join(base_dir, combine_folders[0])
-            
-        if prefix_str:
-            if prefix_str.endswith("-") or prefix_str.endswith("_"):
-                video_filename = f"{prefix_str}{combine_label}.mp4"
-            else:
-                video_filename = f"{prefix_str}.mp4"
         else:
-            video_filename = f"{combine_label}_combined.mp4"
-            
-        final_output_path = os.path.join(out_dir, video_filename)
-    else:
-        if no and no.strip():
-            out_dir = os.path.join(out_dir, no.strip())
-        orig_name = os.path.splitext(video_filename)[0]
-        final_output_path = os.path.join(out_dir, f"{prefix_str}{orig_name}_with_cover.mp4")
+            out_dir = base_dir
 
-    os.makedirs(out_dir, exist_ok=True)
-    log(f"Output Target Path: '{final_output_path}'")
-    
-    if os.path.exists(final_output_path):
-        if str(overwrite).lower() == "true":
-            log(f"Set {no or 'default'}: Destination file already exists: '{final_output_path}'. Overwrite requested.")
+        os.makedirs(out_dir, exist_ok=True)
+
+        if sub_mode == "view_channel":
+            chunks = [combine_sources[i:i+5] for i in range(0, len(combine_sources), 5)]
         else:
-            log(f"Set {no or 'default'}: Destination file already exists: '{final_output_path}'. Skipping processing.")
-            return {"ok": True, "output_path": final_output_path, "skipped": True}
+            chunks = [combine_sources]
 
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            temp_input_video = src_video_path
-            temp_input_second = src_second_path
-            
-            ffmpeg_bin = "/opt/homebrew/bin/ffmpeg"
-            if not os.path.exists(ffmpeg_bin):
-                ffmpeg_bin = "ffmpeg"
-                
-            list_txt = os.path.join(tmpdir, "list.txt")
+        num_chunks = len(chunks)
+        processed_outputs = []
 
-            if is_combine_mode:
-                if sub_mode == "view_channel":
-                    combine_sources = combine_sources[:5]
-                
-                amount_val = len(combine_sources)
-                log(f"Combine Mode: Will merge {amount_val} matched files for '{combine_label}'")
-
-                aligned_paths = []
-                for idx, (folder_name, v_path, resolved_media_name) in enumerate(combine_sources, 1):
-                    update_progress(int((idx - 1) / amount_val * 70), f"Processing video {idx} of {amount_val}...")
-                    has_video_v, has_audio_v = probe_media_streams(v_path)
-                    out_aligned = os.path.join(tmpdir, f"aligned_{idx}.mp4")
-                    log(f"Combine Mode [{idx}/{amount_val}]: Aligning '{folder_name}/{resolved_media_name}' to 9:16 vertical 4K 60fps...")
-
-                    if has_video_v and has_audio_v:
-                        v_cmd = [
-                            ffmpeg_bin, "-y", "-i", v_path,
-                            "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                        ]
-                    elif has_video_v:
-                        v_cmd = [
-                            ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                            "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
-                            "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                        ]
-                    elif has_audio_v:
-                        v_cmd = [
-                            ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
-                            "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                        ]
+        for chunk_idx, chunk_sources in enumerate(chunks, 1):
+            if prefix_str:
+                if num_chunks == 1:
+                    if prefix_str.endswith("-") or prefix_str.endswith("_"):
+                        video_filename = f"{prefix_str}{combine_label}.mp4"
                     else:
-                        raise RuntimeError(f"Matched file '{resolved_media_name}' has no usable audio or video stream")
-
-                    if sub_mode == "view_channel" and len(durations) >= idx:
-                        dur = durations[idx - 1]
-                        v_cmd.extend(["-t", str(dur)])
-                    
-                    v_cmd.append(out_aligned)
-
-                    res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    if res.returncode != 0:
-                        raise RuntimeError(f"FFmpeg failed aligning video {idx}: {res.stderr}")
-                    aligned_paths.append(out_aligned)
-                    
-                log(f"Combine Mode: Concatenating {amount_val} clips...")
-                update_progress(75, "Concatenating videos...")
-                with open(list_txt, "w", encoding="utf-8") as f:
-                    for ap in aligned_paths:
-                        f.write(f"file '{ap}'\n")
-
-                clean_audio_path = audio_path.strip().strip('"').strip("'") if audio_path else ""
-                
-                eq_parts = []
-                if contrast and contrast.strip(): eq_parts.append(f"contrast={contrast.strip()}")
-                if saturation and saturation.strip(): eq_parts.append(f"saturation={saturation.strip()}")
-                if brightness and brightness.strip(): eq_parts.append(f"brightness={brightness.strip()}")
-                if gamma and gamma.strip(): eq_parts.append(f"gamma={gamma.strip()}")
-                
-                video_filter_str = ""
-                if eq_parts:
-                    video_filter_str = "eq=" + ":".join(eq_parts)
-                if unsharp and unsharp.strip():
-                    if video_filter_str:
-                        video_filter_str += f",unsharp={unsharp.strip()}"
-                    else:
-                        video_filter_str = f"unsharp={unsharp.strip()}"
-
-                if sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path):
-                    concat_out = os.path.join(tmpdir, "concat_temp.mp4")
-                    concat_cmd = [
-                        ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                        "-c", "copy", concat_out
-                    ]
-                    res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    if res.returncode != 0:
-                        raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
-
-                    log(f"View Channel Mode: Mixing original audio with background music... ({clean_audio_path})")
-                    log(f"Received audio_boost: '{audio_boost}'")
-                    
-                    update_progress(90, "Mixing background music...")
-
-                    # Probe background audio duration
-                    ffprobe_bin = "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe"
-                    bgm_dur = None
-                    try:
-                        probe_cmd = [ffprobe_bin, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path]
-                        dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
-                        if dur_str:
-                            bgm_dur = float(dur_str)
-                    except Exception as e:
-                        log(f"Warning: Could not probe background music duration: {e}")
-
-                    volume_filter = ""
-                    if audio_boost and audio_boost.strip():
-                        try:
-                            boost_val = float(audio_boost.strip())
-                            volume_filter = f"volume={boost_val}dB,"
-                        except ValueError:
-                            pass
-                            
-                    video_volume_filter = ""
-                    if video_audio_boost and video_audio_boost.strip():
-                        try:
-                            v_boost_val = float(video_audio_boost.strip())
-                            video_volume_filter = f"volume={v_boost_val}dB"
-                        except ValueError:
-                            pass
-
-                    if video_volume_filter:
-                        filter_complex_str = f"[0:a:0]{video_volume_filter}[fg];[1:a:0]{volume_filter}apad[bgm];[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
-                    else:
-                        filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
-                    
-                    v_map = "0:v:0"
-                    v_codec = "copy"
-                    v_enc_args = []
-                    
-                    if video_filter_str:
-                        filter_complex_str += f";[0:v:0]{video_filter_str}[vout]"
-                        v_map = "[vout]"
-                        v_codec = "libx264"
-                        v_enc_args = ["-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
-                            
-                    final_cmd = [
-                        ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
-                        "-filter_complex", filter_complex_str,
-                        "-map", v_map, "-map", "[aout]", "-c:v", v_codec
-                    ] + v_enc_args + [
-                        "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
-                    ]
-
-                    if bgm_dur is not None:
-                        final_cmd.extend(["-t", str(bgm_dur)])
-                    
-                    final_cmd.extend([
-                        "-disposition:a:0", "default", final_output_path
-                    ])
-                    res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    if res.returncode != 0:
-                        raise RuntimeError(f"FFmpeg failed audio replacement: {res.stderr}")
+                        video_filename = f"{prefix_str}.mp4"
                 else:
-                    if video_filter_str:
-                        concat_cmd = [
-                            ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                            "-vf", video_filter_str, "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
-                            "-c:a", "copy", final_output_path
-                        ]
+                    if prefix_str.endswith("-") or prefix_str.endswith("_"):
+                        video_filename = f"{prefix_str}{combine_label}_{chunk_idx}.mp4"
                     else:
+                        video_filename = f"{prefix_str}_{chunk_idx}.mp4"
+            else:
+                if num_chunks == 1:
+                    video_filename = f"{combine_label}_combined.mp4"
+                else:
+                    video_filename = f"{combine_label}_combined_{chunk_idx}.mp4"
+            
+            final_output_path = os.path.join(out_dir, video_filename)
+            log(f"Combine Mode Output Target [Chunk {chunk_idx}/{num_chunks}]: '{final_output_path}'")
+
+            if os.path.exists(final_output_path):
+                if str(overwrite).lower() == "true":
+                    log(f"Chunk {chunk_idx}: Destination file already exists: '{final_output_path}'. Overwrite requested.")
+                else:
+                    log(f"Chunk {chunk_idx}: Destination file already exists: '{final_output_path}'. Skipping processing.")
+                    processed_outputs.append(final_output_path)
+                    continue
+
+            def update_chunk_progress(percent: int, status: str):
+                if job_id:
+                    chunk_base = (chunk_idx - 1) / num_chunks * 100
+                    scaled_percent = int(chunk_base + (percent / 100 * (100 / num_chunks)))
+                    global_video_progress[job_id] = {
+                        "percent": scaled_percent,
+                        "status": f"[Chunk {chunk_idx}/{num_chunks}] {status}"
+                    }
+
+            try:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    ffmpeg_bin = "/opt/homebrew/bin/ffmpeg"
+                    if not os.path.exists(ffmpeg_bin):
+                        ffmpeg_bin = "ffmpeg"
+                        
+                    list_txt = os.path.join(tmpdir, "list.txt")
+                    amount_val = len(chunk_sources)
+
+                    aligned_paths = []
+                    for idx, (folder_name, v_path, resolved_media_name) in enumerate(chunk_sources, 1):
+                        update_chunk_progress(int((idx - 1) / amount_val * 70), f"Processing video {idx} of {amount_val}...")
+                        has_video_v, has_audio_v = probe_media_streams(v_path)
+                        out_aligned = os.path.join(tmpdir, f"aligned_{idx}.mp4")
+                        log(f"Combine Mode Chunk {chunk_idx} [{idx}/{amount_val}]: Aligning '{folder_name}/{resolved_media_name}' to 9:16 vertical 4K 60fps...")
+
+                        if has_video_v and has_audio_v:
+                            v_cmd = [
+                                ffmpeg_bin, "-y", "-i", v_path,
+                                "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                            ]
+                        elif has_video_v:
+                            v_cmd = [
+                                ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                                "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                                "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                            ]
+                        elif has_audio_v:
+                            v_cmd = [
+                                ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
+                                "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                            ]
+                        else:
+                            raise RuntimeError(f"Matched file '{resolved_media_name}' has no usable audio or video stream")
+
+                        if sub_mode == "view_channel" and len(durations) >= idx:
+                            dur = durations[idx - 1]
+                            v_cmd.extend(["-t", str(dur)])
+                        
+                        v_cmd.append(out_aligned)
+
+                        res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        if res.returncode != 0:
+                            raise RuntimeError(f"FFmpeg failed aligning video {idx}: {res.stderr}")
+                        aligned_paths.append(out_aligned)
+                        
+                    log(f"Combine Mode Chunk {chunk_idx}: Concatenating {amount_val} clips...")
+                    update_chunk_progress(75, "Concatenating videos...")
+                    with open(list_txt, "w", encoding="utf-8") as f:
+                        for ap in aligned_paths:
+                            f.write(f"file '{ap}'\n")
+
+                    clean_audio_path = audio_path.strip().strip('"').strip("'") if audio_path else ""
+                    
+                    eq_parts = []
+                    if contrast and contrast.strip(): eq_parts.append(f"contrast={contrast.strip()}")
+                    if saturation and saturation.strip(): eq_parts.append(f"saturation={saturation.strip()}")
+                    if brightness and brightness.strip(): eq_parts.append(f"brightness={brightness.strip()}")
+                    if gamma and gamma.strip(): eq_parts.append(f"gamma={gamma.strip()}")
+                    
+                    video_filter_str = ""
+                    if eq_parts:
+                        video_filter_str = "eq=" + ":".join(eq_parts)
+                    if unsharp and unsharp.strip():
+                        if video_filter_str:
+                            video_filter_str += f",unsharp={unsharp.strip()}"
+                        else:
+                            video_filter_str = f"unsharp={unsharp.strip()}"
+
+                    if sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path):
+                        concat_out = os.path.join(tmpdir, "concat_temp.mp4")
                         concat_cmd = [
                             ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                            "-c", "copy", final_output_path
+                            "-c", "copy", concat_out
                         ]
-                    res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    if res.returncode != 0:
-                        raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
+                        res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        if res.returncode != 0:
+                            raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
+
+                        log(f"View Channel Mode Chunk {chunk_idx}: Mixing original audio with background music... ({clean_audio_path})")
+                        update_chunk_progress(90, "Mixing background music...")
+
+                        bgm_dur = None
+                        try:
+                            probe_cmd = [
+                                "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe",
+                                "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path
+                            ]
+                            dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
+                            if dur_str:
+                                bgm_dur = float(dur_str)
+                        except Exception as e:
+                            log(f"Warning: Could not probe background music duration: {e}")
+
+                        volume_filter = ""
+                        if audio_boost and audio_boost.strip():
+                            try:
+                                boost_val = float(audio_boost.strip())
+                                volume_filter = f"volume={boost_val}dB,"
+                            except ValueError:
+                                pass
+                                
+                        video_volume_filter = ""
+                        if video_audio_boost and video_audio_boost.strip():
+                            try:
+                                v_boost_val = float(video_audio_boost.strip())
+                                video_volume_filter = f"volume={v_boost_val}dB"
+                            except ValueError:
+                                pass
+
+                        if video_volume_filter:
+                            filter_complex_str = f"[0:a:0]{video_volume_filter}[fg];[1:a:0]{volume_filter}apad[bgm];[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                        else:
+                            filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
                         
-            else:
-                # Cover Mode: Video 1 + 2s Black + 3s Image
+                        v_map = "0:v:0"
+                        v_codec = "copy"
+                        v_enc_args = []
+                        
+                        if video_filter_str:
+                            filter_complex_str += f";[0:v:0]{video_filter_str}[vout]"
+                            v_map = "[vout]"
+                            v_codec = "libx264"
+                            v_enc_args = ["-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
+                                
+                        final_cmd = [
+                            ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
+                            "-filter_complex", filter_complex_str,
+                            "-map", v_map, "-map", "[aout]", "-c:v", v_codec
+                        ] + v_enc_args + [
+                            "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
+                        ]
+
+                        if bgm_dur is not None:
+                            final_cmd.extend(["-t", str(bgm_dur)])
+                        
+                        final_cmd.extend([
+                            "-disposition:a:0", "default", final_output_path
+                        ])
+                        res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        if res.returncode != 0:
+                            raise RuntimeError(f"FFmpeg failed audio replacement: {res.stderr}")
+                    else:
+                        if video_filter_str:
+                            concat_cmd = [
+                                ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                                "-vf", video_filter_str, "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
+                                "-c:a", "copy", final_output_path
+                            ]
+                        else:
+                            concat_cmd = [
+                                ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                                "-c", "copy", final_output_path
+                            ]
+                        res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        if res.returncode != 0:
+                            raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
+
+                processed_outputs.append(final_output_path)
+                update_chunk_progress(100, "Completed!")
+            except Exception as e:
+                log(f"Error processing chunk {chunk_idx}: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed processing chunk {chunk_idx}: {e}")
+
+        return {
+            "ok": True,
+            "output_paths": processed_outputs,
+            "output_path": processed_outputs[0] if processed_outputs else ""
+        }
+
+    else:
+        # Cover Mode: Video 1 + 2s Black + 3s Image
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                temp_input_video = src_video_path
+                temp_input_second = src_second_path
+                
+                ffmpeg_bin = "/opt/homebrew/bin/ffmpeg"
+                if not os.path.exists(ffmpeg_bin):
+                    ffmpeg_bin = "ffmpeg"
+                    
+                list_txt = os.path.join(tmpdir, "list.txt")
+
                 temp_video = os.path.join(tmpdir, "temp_video.mp4")
                 temp_black = os.path.join(tmpdir, "temp_black.mp4")
                 temp_second = os.path.join(tmpdir, "temp_second.mp4")
@@ -2710,7 +2807,6 @@ def make_video_cover(
                     f.write(f"file '{temp_black}'\n")
                     f.write(f"file '{temp_second}'\n")
                     
-            if not is_combine_mode:
                 concat_cmd = [
                     ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
                     "-c", "copy", final_output_path
@@ -2719,17 +2815,16 @@ def make_video_cover(
                 if res.returncode != 0:
                     raise RuntimeError(f"FFmpeg failed concatenating video: {res.stderr}")
                 
-            # Caption.md generation has been removed as per user request
-
-            log(f"Video Helper Success: Saved final video to '{final_output_path}'")
-            update_progress(100, "Done")
-        return {
-            "ok": True,
-            "output_path": final_output_path
-        }
-    except Exception as e:
-        log(f"Video Helper Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+                log(f"Video Helper Success: Saved final video to '{final_output_path}'")
+                update_progress(100, "Done")
+                
+            return {
+                "ok": True,
+                "output_path": final_output_path
+            }
+        except Exception as e:
+            log(f"Video Helper Error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/utils/browse-directory")
 def browse_directory() -> dict[str, Any]:
@@ -3380,28 +3475,59 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     if not switched:
         raise HTTPException(status_code=400, detail="ไม่พบแท็บ Google Flow ที่เปิดอยู่ กรุณาเปิดแท็บ Google Flow ค้างไว้ก่อนทำการรัน")
 
-    # Bring Chrome window to front
-    _activate_chrome()
+    # Bring Chrome window to front (Commented out to run completely in background)
+    # _activate_chrome()
 
     # 3. Find and click prompt input field
     if not video_input_selector:
-        video_input_selector = "#__next > div.sc-c7ee1759-1.jhwuTJ > div.sc-7175135e-1.dIpEew > div > div > div > div > div.sc-26b30722-3.kezgTH > div > p"
+        video_input_selector = "div[contenteditable='true'] p, div[contenteditable='true'], [role='textbox'] p, textarea"
 
-    log(f"[กำลังค้นหาช่องพรอพต์] ค้นหาช่องป้อนพรอพต์ด้วย CSS Selector: {video_input_selector}")
+    # Wait for the card list to render the new box if it's not the first run
+    if not payload.is_first_run:
+        log("[รอการ์ดใหม่] รอให้ Google Flow โหลดกล่องป้อนพรอพต์ใหม่ขึ้นมาบนหน้าจอ...")
+        for wait_attempt in range(12):
+            try:
+                boxes_check = driver.find_elements(By.CSS_SELECTOR, video_input_selector)
+                if len(boxes_check) >= 2:
+                    log(f"[การ์ดใหม่พร้อม] พบกล่องข้อความใหม่แล้ว (จำนวนกล่องทั้งหมด: {len(boxes_check)})")
+                    break
+            except Exception:
+                pass
+            time.sleep(1.0)
+
+    log(f"[กำลังค้นหาช่องพรอพต์] ค้นหาช่องป้อนพรอพต์ด้วย CSS Selector: {video_input_selector} (รอบที่ {round_idx})")
     try:
-        box = WebDriverWait(driver, 15).until(
+        WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, video_input_selector))
         )
+        boxes = driver.find_elements(By.CSS_SELECTOR, video_input_selector)
+        if len(boxes) >= round_idx:
+            box = boxes[round_idx - 1]
+            log(f"[เลือกช่องพรอพต์] เลือกลำดับกล่องข้อความที่ {round_idx - 1} สำหรับรอบที่ {round_idx}")
+        else:
+            box = boxes[-1]
+            log(f"[เลือกช่องพรอพต์] ไม่พบหมายเลขกล่องตรงรอบ ใช้กล่องสุดท้ายลำดับที่ {len(boxes) - 1}")
     except Exception as e1:
-        log(f"ไม่พบช่องพรอพต์ด้วยตัวเลือกหลัก ({e1}) ลองใช้ตัวเลือกสำรอง (contenteditable)...")
+        log(f"ไม่พบช่องพรอพต์ด้วยตัวเลือกหลัก ({e1}) ลองใช้ตัวเลือกสำรอง (hashed class selector)...")
         try:
-            box = WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div[contenteditable='true'] p, div[contenteditable='true'], [role='textbox'] p, textarea"))
+            WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#__next > div.sc-c7ee1759-1.jhwuTJ > div.sc-7175135e-1.dIpEew > div > div > div > div > div.sc-26b30722-3.kezgTH > div > p"))
             )
+            boxes = driver.find_elements(By.CSS_SELECTOR, "#__next > div.sc-c7ee1759-1.jhwuTJ > div.sc-7175135e-1.dIpEew > div > div > div > div > div.sc-26b30722-3.kezgTH > div > p")
+            if len(boxes) >= round_idx:
+                box = boxes[round_idx - 1]
+            else:
+                box = boxes[-1]
         except Exception as e2:
             raise HTTPException(status_code=400, detail="ไม่พบช่องป้อนพรอพต์บนหน้าเว็บ Google Flow")
 
     # Click the input box to focus
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", box)
+        time.sleep(0.5)
+    except Exception:
+        pass
+
     try:
         from selenium.webdriver.common.action_chains import ActionChains
         actions = ActionChains(driver)
@@ -3476,32 +3602,29 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         log(f"กด Spacebar ล้มเหลว: {e}")
     time.sleep(1.5)
 
-    # 5. Paste the animation prompt
+    # 5. Paste the animation prompt using Selenium's native send_keys
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
-    log(f"[ป้อนข้อมูล] วางพรอพต์ของฉาก: {prompt}")
-    import subprocess
+    log(f"[ป้อนข้อมูล] พิมพ์พรอพต์ของฉากด้วย Selenium send_keys: {prompt}")
     try:
-        process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, text=True)
-        process.communicate(input=prompt)
-        
-        if not is_driver_alive(driver):
-            raise RuntimeError("Browser connection lost.")
-        
-        paste_script = """
-        tell application "Google Chrome" to activate
-        delay 0.9
-        tell application "System Events"
-            keystroke "v" using command down
-        end tell
-        """
-        subprocess.run(["osascript", "-e", paste_script], check=False)
-        log("[ป้อนข้อมูลสำเร็จ] วางพรอพต์สำเร็จผ่าน macOS clipboard")
+        # Split prompt by newlines and send shift+enter in between to avoid triggering early submits
+        lines = prompt.split('\n')
+        for idx, line in enumerate(lines):
+            if idx > 0:
+                actions = ActionChains(driver)
+                actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
+                time.sleep(0.2)
+            
+            # Prepend space on the first line to separate from mention chip
+            text_chunk = (" " if idx == 0 else "") + line
+            if text_chunk:
+                box.send_keys(text_chunk)
+        log("[ป้อนข้อมูลสำเร็จ] วางพรอพต์สำเร็จผ่าน Selenium send_keys")
     except Exception as e:
         if not is_driver_alive(driver):
             raise RuntimeError("Browser connection lost.")
-        log(f"วางผ่าน Clipboard ล้มเหลว, ใช้ send_keys สำรอง: {e}")
-        box.send_keys(prompt)
+        log(f"พิมพ์ผ่าน Selenium send_keys ล้มเหลว: {e}")
+        raise HTTPException(status_code=500, detail=f"ไม่สามารถกรอกพรอพต์ได้: {e}")
     time.sleep(3.0)
 
     # Press Enter to submit the prompt
@@ -3559,6 +3682,83 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
     log(f"วางพรอพต์เรียบร้อยแล้ว เริ่มเวลารอ {video_wait_seconds} วินาที...")
     return {"ok": True, "message": "วางพรอพต์และเริ่มต้นการรอ"}
+
+
+class VideoRetryPayload(BaseModel):
+    round_idx: int
+
+@app.post("/api/step/video-retry")
+def step_video_retry(payload: VideoRetryPayload):
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    import time
+
+    bot = None
+    try:
+        bot = browser_manager.get()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ไม่สามารถเชื่อมต่อ Browser ได้: {e}")
+
+    driver = bot.driver
+
+    # 1. Switch to Google Flow tab if it exists
+    switched = False
+    for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+        if bot.switch_to_tab_containing(url_part):
+            switched = True
+            break
+
+    if not switched:
+        raise HTTPException(status_code=400, detail="ไม่พบแท็บ Google Flow ที่เปิดอยู่")
+
+    if not is_driver_alive(driver):
+        raise RuntimeError("Browser connection lost.")
+
+    round_str = f"{payload.round_idx:02d}"
+    log(f"[Retry] ค้นหาปุ่มลองอีกครั้ง (Retry) สำหรับรอบที่ {payload.round_idx}")
+
+    # Build possible XPath selectors to locate the retry button for the specific round/card
+    retry_btn = None
+    possible_xpaths = [
+        # Strategy A: Find card containing round mention text (e.g. "@01" or "@01.png" or "round_01.png") and locate the refresh button inside it
+        f"//div[contains(., '@{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+        f"//div[contains(., 'round_{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+        f"//div[contains(., '{round_str}.png')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+        # Strategy B: Fallback to general retry buttons, click the last one (latest)
+        "//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]"
+    ]
+
+    for xpath in possible_xpaths:
+        try:
+            elements = driver.find_elements(By.XPATH, xpath)
+            if elements:
+                # If we matched Strategy B, take the last one
+                if xpath == "//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]":
+                    retry_btn = elements[-1]
+                else:
+                    retry_btn = elements[0]
+                break
+        except Exception:
+            continue
+
+    if not retry_btn:
+        raise HTTPException(status_code=400, detail="ไม่พบปุ่ม 'ลองอีกครั้ง' (Retry) บนหน้าเว็บ")
+
+    # 3. Click the retry button
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", retry_btn)
+        time.sleep(0.5)
+        retry_btn.click()
+        log(f"[Retry สำเร็จ] คลิกปุ่มลองอีกครั้งสำหรับรอบที่ {payload.round_idx} สำเร็จ")
+    except Exception:
+        try:
+            driver.execute_script("arguments[0].click();", retry_btn)
+            log(f"[Retry สำเร็จ] คลิกปุ่มลองอีกครั้งด้วย JS สำหรับรอบที่ {payload.round_idx} สำเร็จ")
+        except Exception as click_err:
+            raise HTTPException(status_code=500, detail=f"ไม่สามารถคลิกปุ่มลองอีกครั้งได้: {click_err}")
+
+    return {"ok": True, "message": f"คลิกปุ่มลองอีกครั้งรอบที่ {payload.round_idx} เรียบร้อยแล้ว"}
 
 
 class SeedancePayload(BaseModel):
