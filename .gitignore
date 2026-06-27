@@ -6,3 +6,18 @@ runtime/*.local.json
 /runtime
 web/node_modules/
 /.venv_system
+
+# Temporary media files
+*.mp4
+*.mp3
+*.aac
+
+# Log and output files
+*.log
+output.txt
+stderr.txt
+stdout.txt
+
+# Test and regression scripts
+test_*.py
+run_regression_test.py
