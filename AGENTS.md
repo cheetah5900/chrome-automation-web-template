@@ -63,6 +63,7 @@ Before outputting any final code, you MUST think step-by-step internally and str
 - For ChatGPT file upload flows, use the composer plus button first, then click `Add photos & files`, then interact with the native macOS picker.
 - Do not rely on `Cmd+U` as a file upload trigger in Chrome debugging flows; treat browser-level shortcuts as potentially conflicting with Chrome features.
 - When a native file picker is involved, keep the browser focused on a single upload attempt until the picker behavior is understood.
+- When downloading images in ChatGPT's lightbox mode, verify if the currently displayed image `src` changes after navigating to the next image (using the Arrow Right key). If the `src` does not change, the end of the actual slides list is reached; break the loop early to prevent downloading duplicates of the last image (caused by the main page containing extra thumbnail/preview matches).
 
 ## Code Path Verification Rules
 - When a fix is reported as applied, re-read the exact target code path to confirm the change landed in the intended flow.

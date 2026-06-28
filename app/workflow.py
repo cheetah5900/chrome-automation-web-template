@@ -1355,8 +1355,39 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     # Wait 3 seconds as requested
     time.sleep(3.0)
     
+    def _get_current_lightbox_src():
+        try:
+            selectors = [
+                "div[role='dialog'] img",
+                "div.react-modal-sheet-container img",
+                "img.max-h-full",
+                "img.object-contain",
+                ".react-modal-sheet-content img"
+            ]
+            for sel in selectors:
+                try:
+                    elements = driver.find_elements(By.CSS_SELECTOR, sel)
+                    for el in elements:
+                        if el.is_displayed():
+                            src = el.get_attribute("src")
+                            if src and (src.startswith("http") or src.startswith("blob:")):
+                                return src
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return None
+
+    last_src = None
     # Loop over all images from first to last
     for i in range(total_images):
+        current_src = _get_current_lightbox_src()
+        if current_src and last_src and current_src == last_src:
+            log(f"Step 4 ChatGPT: ตรวจพบรูปซ้ำเดิม (ถึงรูปสุดท้ายใน Lightbox แล้ว) หยุดการดาวน์โหลดที่รูป {i}/{total_images}")
+            break
+        if current_src:
+            last_src = current_src
+
         log(f"Step 4 ChatGPT: Downloading image {i+1}/{total_images}...")
         
         # 2. Wait 1 second, then keep checking Save button
