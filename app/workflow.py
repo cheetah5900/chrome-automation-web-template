@@ -1357,37 +1357,30 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     
     def _get_current_lightbox_src():
         try:
-            selectors = [
-                "div[role='dialog'] img",
-                "div.react-modal-sheet-container img",
-                "img.max-h-full",
-                "img.object-contain",
-                ".react-modal-sheet-content img"
-            ]
-            for sel in selectors:
-                try:
-                    elements = driver.find_elements(By.CSS_SELECTOR, sel)
-                    for el in elements:
-                        if el.is_displayed():
-                            src = el.get_attribute("src")
-                            if src and (src.startswith("http") or src.startswith("blob:")):
-                                # Prioritize actual ChatGPT files/blobs to avoid matching small UI icons
-                                if "oaiusercontent.com" in src or "oaistatic.com" in src or src.startswith("blob:"):
-                                    return src
-                except Exception:
-                    pass
-            # Fallback to any visible image in the dialog
-            try:
-                dialog_imgs = driver.find_elements(By.CSS_SELECTOR, "div[role='dialog'] img")
-                for img in dialog_imgs:
-                    if img.is_displayed():
-                        src = img.get_attribute("src")
-                        if src and (src.startswith("http") or src.startswith("blob:")):
-                            return src
-            except Exception:
-                pass
-        except Exception:
-            pass
+            js_script = """
+                var imgs = document.querySelectorAll("div[role='dialog'] img, div.react-modal-sheet-container img, img.max-h-full, img.object-contain");
+                var viewportWidth = window.innerWidth;
+                var centerImg = null;
+                var minDistance = Infinity;
+                for (var i = 0; i < imgs.length; i++) {
+                    var rect = imgs[i].getBoundingClientRect();
+                    // Exclude small UI icons/avatars
+                    if (rect.width > 150 && rect.height > 150) {
+                        var imgCenter = rect.left + rect.width / 2;
+                        var distance = Math.abs(imgCenter - viewportWidth / 2);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            centerImg = imgs[i];
+                        }
+                    }
+                }
+                return centerImg ? centerImg.src : null;
+            """
+            src = driver.execute_script(js_script)
+            if src and (src.startswith("http") or src.startswith("blob:")):
+                return src
+        except Exception as e:
+            log(f"Error in JS lightbox src detection: {e}")
         return None
 
     # Loop over all images from first to last
