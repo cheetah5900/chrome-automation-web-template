@@ -1371,9 +1371,21 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
                         if el.is_displayed():
                             src = el.get_attribute("src")
                             if src and (src.startswith("http") or src.startswith("blob:")):
-                                return src
+                                # Prioritize actual ChatGPT files/blobs to avoid matching small UI icons
+                                if "oaiusercontent.com" in src or "oaistatic.com" in src or src.startswith("blob:"):
+                                    return src
                 except Exception:
                     pass
+            # Fallback to any visible image in the dialog
+            try:
+                dialog_imgs = driver.find_elements(By.CSS_SELECTOR, "div[role='dialog'] img")
+                for img in dialog_imgs:
+                    if img.is_displayed():
+                        src = img.get_attribute("src")
+                        if src and (src.startswith("http") or src.startswith("blob:")):
+                            return src
+            except Exception:
+                pass
         except Exception:
             pass
         return None
@@ -1435,13 +1447,16 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
             if before_src:
                 # Wait up to 3.0 seconds (15 * 0.2s) for image src to change to next image
                 src_changed = False
+                last_checked_src = None
                 for check in range(15):
                     time.sleep(0.2)
                     current_src = _get_current_lightbox_src()
-                    if current_src and current_src != before_src:
-                        src_changed = True
-                        break
-                if not src_changed:
+                    if current_src:
+                        last_checked_src = current_src
+                        if current_src != before_src:
+                            src_changed = True
+                            break
+                if not src_changed and last_checked_src == before_src:
                     log(f"Step 4 ChatGPT: ตรวจพบรูปซ้ำเดิมหลังการกดเลื่อน (ถึงรูปสุดท้ายใน Lightbox แล้ว) หยุดดาวน์โหลดที่รูป {i+1}/{total_images}")
                     break
             else:
