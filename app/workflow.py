@@ -1323,8 +1323,20 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     if not imgs:
         raise RuntimeError("No generated images found in ChatGPT history")
         
-    total_images = len(imgs)
-    log(f"Step 4 ChatGPT: Found {total_images} generated images.")
+    # Filter unique image sources to get accurate count of generated images
+    unique_srcs = []
+    for img in imgs:
+        try:
+            src = img.get_attribute("src")
+            if src and (src.startswith("http") or src.startswith("blob:")):
+                if "oaiusercontent.com" in src or "oaistatic.com" in src or src.startswith("blob:"):
+                    if src not in unique_srcs:
+                        unique_srcs.append(src)
+        except Exception:
+            pass
+            
+    total_images = len(unique_srcs) if unique_srcs else len(imgs)
+    log(f"Step 4 ChatGPT: Found {total_images} unique generated images (total raw elements: {len(imgs)}).")
     
     # Track files before starting downloads
     downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
@@ -1355,33 +1367,6 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     # Wait 3 seconds as requested
     time.sleep(3.0)
     
-    def _get_current_lightbox_src():
-        try:
-            js_script = """
-                var imgs = document.querySelectorAll("div[role='dialog'] img, div.react-modal-sheet-container img, img.max-h-full, img.object-contain");
-                var viewportWidth = window.innerWidth;
-                var centerImg = null;
-                var minDistance = Infinity;
-                for (var i = 0; i < imgs.length; i++) {
-                    var rect = imgs[i].getBoundingClientRect();
-                    // Exclude small UI icons/avatars
-                    if (rect.width > 150 && rect.height > 150) {
-                        var imgCenter = rect.left + rect.width / 2;
-                        var distance = Math.abs(imgCenter - viewportWidth / 2);
-                        if (distance < minDistance) {
-                            minDistance = distance;
-                            centerImg = imgs[i];
-                        }
-                    }
-                }
-                return centerImg ? centerImg.src : null;
-            """
-            src = driver.execute_script(js_script)
-            if src and (src.startswith("http") or src.startswith("blob:")):
-                return src
-        except Exception as e:
-            log(f"Error in JS lightbox src detection: {e}")
-        return None
 
     # Loop over all images from first to last
     for i in range(total_images):
@@ -1426,8 +1411,6 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
         
         # 3. Press Right arrow via Selenium if not the last image to go to the next generated image
         if i < total_images - 1:
-            before_src = _get_current_lightbox_src()
-            
             log("Step 4 ChatGPT: Pressing Arrow Right via Selenium to go to the next image...")
             try:
                 driver.switch_to.active_element.send_keys(Keys.RIGHT)
@@ -1437,24 +1420,8 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
                 except Exception as e:
                     log(f"Step 4 ChatGPT: Selenium press Right Arrow failed: {e}")
             
-            if before_src:
-                # Wait up to 3.0 seconds (15 * 0.2s) for image src to change to next image
-                src_changed = False
-                last_checked_src = None
-                for check in range(15):
-                    time.sleep(0.2)
-                    current_src = _get_current_lightbox_src()
-                    if current_src:
-                        last_checked_src = current_src
-                        if current_src != before_src:
-                            src_changed = True
-                            break
-                if not src_changed and last_checked_src == before_src:
-                    log(f"Step 4 ChatGPT: ตรวจพบรูปซ้ำเดิมหลังการกดเลื่อน (ถึงรูปสุดท้ายใน Lightbox แล้ว) หยุดดาวน์โหลดที่รูป {i+1}/{total_images}")
-                    break
-            else:
-                # Fallback: simple wait if we couldn't resolve the before_src
-                time.sleep(2.5)
+            # Wait for next image to render in viewer
+            time.sleep(2.5)
             
     # Close the image viewer
     try:
