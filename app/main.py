@@ -1747,44 +1747,48 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     _activate_chrome()
                     time.sleep(1.0)
                     
-                    # Try clicking ChatGPT attach button first (UI-based flow)
-                    attach_triggered = False
-                    try:
-                        attach_triggered = click_chatgpt_attach_button()
-                    except Exception as click_err:
-                        log(f"UI attach trigger failed: {click_err}")
+                    # We will try to upload using Cmd + U first (Primary).
+                    # If that fails, we will try the '+' button (Fallback).
+                    upload_success = False
                     
-                    if not attach_triggered:
-                        if not is_driver_alive(driver):
-                            raise RuntimeError("Browser connection lost.")
-                        # press Cmd + U directly to open file modal
-                        log("Fallback: Sending Cmd + U keystroke via System Events directly to trigger file modal...")
-                        _activate_chrome()
-                        time.sleep(2.5)
-                        
-                        import subprocess
+                    log("Primary: Sending Cmd + U keystroke via System Events to trigger file modal...")
+                    try:
                         cmd_u_script = """
                         tell application "Google Chrome" to activate
-                        delay 1.0
+                        delay 0.5
                         tell application "System Events"
                             key code 32 using command down
                         end tell
                         """
-                        try:
-                            subprocess.run(["osascript", "-e", cmd_u_script], check=False)
-                        except Exception as e:
-                            log(f"Fallback Keystroke Cmd + U failed: {e}")
+                        subprocess.run(["osascript", "-e", cmd_u_script], check=False)
+                        log("Waiting 1.5 seconds for file modal to fully open...")
+                        time.sleep(1.5)
                         
-                    log("Waiting 1.5 seconds for file modal to fully open...")
-                    time.sleep(1.5)
-                    
-                    log("Triggering AppleScript folder path sheet to select file...")
-                    if upload_macos_file_dialog(reference_image):
-                        log("Reference image uploaded successfully via macOS File Dialog AppleScript automation!")
+                        log("Triggering AppleScript folder path sheet to select file (Cmd + U method)...")
+                        if upload_macos_file_dialog(reference_image):
+                            upload_success = True
+                            log("Reference image uploaded successfully via macOS File Dialog AppleScript automation!")
+                    except Exception as e:
+                        log(f"Primary Cmd + U upload method failed: {e}")
+                        
+                    if not upload_success:
+                        log("Fallback: Cmd + U method did not succeed. Attempting UI click attach button...")
+                        try:
+                            if click_chatgpt_attach_button():
+                                log("Waiting 1.5 seconds for file modal to fully open...")
+                                time.sleep(1.5)
+                                log("Triggering AppleScript folder path sheet to select file (UI Click method)...")
+                                if upload_macos_file_dialog(reference_image):
+                                    upload_success = True
+                                    log("Reference image uploaded successfully via macOS File Dialog AppleScript automation!")
+                        except Exception as click_err:
+                            log(f"UI attach trigger fallback failed: {click_err}")
+                            
+                    if upload_success:
                         log("Waiting 2.5 seconds for file upload to settle...")
                         time.sleep(2.5)
                     else:
-                        log("Warning: AppleScript file-dialog automation encountered an issue.")
+                        log("Warning: AppleScript file-dialog automation encountered an issue and could not upload file.")
 
                 # Re-resolve the input box after files have finished uploading, as DOM updates may make the old reference stale
                 box = None

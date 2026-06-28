@@ -60,8 +60,7 @@ Before outputting any final code, you MUST think step-by-step internally and str
 
 ## Automation Debugging Rules
 - When debugging browser automation, prefer reproducing the exact visible UI flow over using inferred browser shortcuts.
-- For ChatGPT file upload flows, use the composer plus button first, then click `Add photos & files`, then interact with the native macOS picker.
-- Do not rely on `Cmd+U` as a file upload trigger in Chrome debugging flows; treat browser-level shortcuts as potentially conflicting with Chrome features.
+- For ChatGPT file upload flows, use the keyboard shortcut `Cmd + U` via AppleScript first (Primary). If that fails, click the composer plus button in the UI and click `Add photos & files` (Fallback).
 - When a native file picker is involved, keep the browser focused on a single upload attempt until the picker behavior is understood.
 - When downloading images in ChatGPT's lightbox mode, verify if the currently displayed image `src` changes after navigating to the next image (using the Arrow Right key). If the `src` does not change, the end of the actual slides list is reached; break the loop early to prevent downloading duplicates of the last image (caused by the main page containing extra thumbnail/preview matches).
 
