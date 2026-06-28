@@ -1378,16 +1378,8 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
             pass
         return None
 
-    last_src = None
     # Loop over all images from first to last
     for i in range(total_images):
-        current_src = _get_current_lightbox_src()
-        if current_src and last_src and current_src == last_src:
-            log(f"Step 4 ChatGPT: ตรวจพบรูปซ้ำเดิม (ถึงรูปสุดท้ายใน Lightbox แล้ว) หยุดการดาวน์โหลดที่รูป {i}/{total_images}")
-            break
-        if current_src:
-            last_src = current_src
-
         log(f"Step 4 ChatGPT: Downloading image {i+1}/{total_images}...")
         
         # 2. Wait 1 second, then keep checking Save button
@@ -1429,6 +1421,8 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
         
         # 3. Press Right arrow via Selenium if not the last image to go to the next generated image
         if i < total_images - 1:
+            before_src = _get_current_lightbox_src()
+            
             log("Step 4 ChatGPT: Pressing Arrow Right via Selenium to go to the next image...")
             try:
                 driver.switch_to.active_element.send_keys(Keys.RIGHT)
@@ -1438,8 +1432,21 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
                 except Exception as e:
                     log(f"Step 4 ChatGPT: Selenium press Right Arrow failed: {e}")
             
-            # Wait for next image to render in viewer (increased delay)
-            time.sleep(2.5)
+            if before_src:
+                # Wait up to 3.0 seconds (15 * 0.2s) for image src to change to next image
+                src_changed = False
+                for check in range(15):
+                    time.sleep(0.2)
+                    current_src = _get_current_lightbox_src()
+                    if current_src and current_src != before_src:
+                        src_changed = True
+                        break
+                if not src_changed:
+                    log(f"Step 4 ChatGPT: ตรวจพบรูปซ้ำเดิมหลังการกดเลื่อน (ถึงรูปสุดท้ายใน Lightbox แล้ว) หยุดดาวน์โหลดที่รูป {i+1}/{total_images}")
+                    break
+            else:
+                # Fallback: simple wait if we couldn't resolve the before_src
+                time.sleep(2.5)
             
     # Close the image viewer
     try:
