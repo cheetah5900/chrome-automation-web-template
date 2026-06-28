@@ -1808,11 +1808,26 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 driver.execute_script("arguments[0].focus();", box)
                 time.sleep(0.75)
                 
-                # Clear the box to prevent double-pasting
-                driver.execute_script(
-                    "if(arguments[0].textContent !== undefined) { arguments[0].textContent = ''; } else { arguments[0].innerText = ''; } if(arguments[0].value !== undefined) { arguments[0].value = ''; }",
-                    box
-                )
+                # Clear the box to prevent double-pasting (simulating delete event to sync React/ProseMirror state)
+                driver.execute_script("""
+                    var el = arguments[0];
+                    el.focus();
+                    if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+                        el.value = '';
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                    } else {
+                        if (typeof window.getSelection !== 'undefined' && document.createRange) {
+                            var range = document.createRange();
+                            range.selectNodeContents(el);
+                            var sel = window.getSelection();
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                            document.execCommand('delete', false, null);
+                        } else {
+                            el.innerHTML = '';
+                        }
+                    }
+                """, box)
                 time.sleep(0.75)
 
                 if not is_driver_alive(driver):
