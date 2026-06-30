@@ -1677,7 +1677,49 @@ function renderVideoPresetsSelect(selectedKey = '') {
 }
 
 function applyVideoPreset(presetName) {
-  if (!presetName || !globalVideoPresets[presetName]) return;
+  if (!presetName || !globalVideoPresets[presetName]) {
+    const useBGMCheckbox = document.getElementById('viewChannelUseBGM');
+    if (useBGMCheckbox) {
+      useBGMCheckbox.checked = true;
+      const bgmGroup = document.getElementById('videoBGMInputsGroup');
+      if (bgmGroup) bgmGroup.classList.remove('hidden');
+    }
+    const vChanFolder = document.getElementById('viewChannelFolderText');
+    if (vChanFolder) vChanFolder.value = '';
+    
+    const vChanAudio = document.getElementById('viewChannelAudioPath');
+    if (vChanAudio) vChanAudio.value = '';
+    
+    const vChanAudioBoost = document.getElementById('viewChannelAudioBoost');
+    if (vChanAudioBoost) vChanAudioBoost.value = '';
+    
+    const vChanVideoAudioBoost = document.getElementById('viewChannelVideoAudioBoost');
+    if (vChanVideoAudioBoost) vChanVideoAudioBoost.value = '';
+    
+    const vChanContrast = document.getElementById('viewChannelContrast');
+    if (vChanContrast) vChanContrast.value = '';
+    
+    const vChanSaturation = document.getElementById('viewChannelSaturation');
+    if (vChanSaturation) vChanSaturation.value = '';
+    
+    const vChanBrightness = document.getElementById('viewChannelBrightness');
+    if (vChanBrightness) vChanBrightness.value = '';
+    
+    const vChanGamma = document.getElementById('viewChannelGamma');
+    if (vChanGamma) vChanGamma.value = '';
+    
+    const vChanUnsharp = document.getElementById('viewChannelUnsharp');
+    if (vChanUnsharp) vChanUnsharp.value = '';
+
+    syncDurationFields(5);
+    for (let i = 1; i <= 5; i++) {
+      const d = document.getElementById(`viewDur${i}`);
+      if (d) d.value = '';
+    }
+    updateDurationsSum();
+    updateTooltips();
+    return;
+  }
   const preset = globalVideoPresets[presetName];
   
   const useBGMCheckbox = document.getElementById('viewChannelUseBGM');
