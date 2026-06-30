@@ -966,16 +966,16 @@ def _default_config() -> dict[str, Any]:
             "video_presets": {
                 "ตึกสวย": {
                     "use_bgm": True,
-                    "target_folder": "/Users/litarcopperkaikem/Downloads/beautiful_buildings",
-                    "audio_path": "/Users/litarcopperkaikem/Downloads/music.mp3",
-                    "audio_boost": "0.0",
-                    "video_audio_boost": "-10.0",
+                    "target_folder": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/",
+                    "audio_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3",
+                    "audio_boost": "",
+                    "video_audio_boost": "-10",
                     "contrast": "1.10",
-                    "saturation": "1.80",
-                    "brightness": "0.01",
+                    "saturation": "1.75",
+                    "brightness": "0.02",
                     "gamma": "1.02",
                     "unsharp": "5:5:0.7:3:3:0.3",
-                    "durations": [12.0, 10.0, 12.0, 10.0, 14.0]
+                    "durations": [3.56, 5.2, 5.6, 4.8, 4.88]
                 }
             }
         }
@@ -1028,16 +1028,16 @@ def _default_config() -> dict[str, Any]:
             "video_presets": {
                 "ตึกสวย": {
                     "use_bgm": True,
-                    "target_folder": "/Users/litarcopperkaikem/Downloads/beautiful_buildings",
-                    "audio_path": "/Users/litarcopperkaikem/Downloads/music.mp3",
-                    "audio_boost": "0.0",
-                    "video_audio_boost": "-10.0",
+                    "target_folder": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/",
+                    "audio_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3",
+                    "audio_boost": "",
+                    "video_audio_boost": "-10",
                     "contrast": "1.10",
-                    "saturation": "1.80",
-                    "brightness": "0.01",
+                    "saturation": "1.75",
+                    "brightness": "0.02",
                     "gamma": "1.02",
                     "unsharp": "5:5:0.7:3:3:0.3",
-                    "durations": [12.0, 10.0, 12.0, 10.0, 14.0]
+                    "durations": [3.56, 5.2, 5.6, 4.8, 4.88]
                 }
             }
         }
