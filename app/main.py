@@ -2484,23 +2484,19 @@ def make_video_cover(
             if len(media_files) == 0:
                 raise HTTPException(status_code=400, detail=f"Set {folder_name}: No video file found in subfolder '{subfolder}'")
             
-            if sub_mode == "view_channel":
-                for resolved_media_name in media_files:
-                    resolved_media_path = os.path.join(subfolder, resolved_media_name)
-                    combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
-            else:
-                if len(media_files) > 1:
-                    raise HTTPException(status_code=400, detail=f"Set {folder_name}: Multiple video files found in subfolder '{subfolder}'. Only 1 video is allowed (Found: {len(media_files)})")
-                resolved_media_name = media_files[0]
+            for resolved_media_name in media_files:
                 resolved_media_path = os.path.join(subfolder, resolved_media_name)
                 combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
 
         if sub_mode == "view_channel":
             total_videos = len(combine_sources)
-            if total_videos % 5 != 0:
+            K = len(durations)
+            if K == 0:
+                raise HTTPException(status_code=400, detail="กรุณาระบุความยาววิดีโออย่างน้อย 1 ช่อง")
+            if total_videos % K != 0:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"จำนวนวิดีโอในโฟลเดอร์ต้องหารด้วย 5 ลงตัว (พบทั้งหมด {total_videos} ไฟล์)"
+                    detail=f"จำนวนวิดีโอในโฟลเดอร์ต้องหารด้วย {K} ลงตัว (พบทั้งหมด {total_videos} ไฟล์)"
                 )
 
         src_video_path = combine_sources[0][1]
@@ -2532,7 +2528,8 @@ def make_video_cover(
         os.makedirs(out_dir, exist_ok=True)
 
         if sub_mode == "view_channel":
-            chunks = [combine_sources[i:i+5] for i in range(0, len(combine_sources), 5)]
+            K = len(durations)
+            chunks = [combine_sources[i:i+K] for i in range(0, len(combine_sources), K)]
         else:
             chunks = [combine_sources]
 

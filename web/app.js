@@ -209,32 +209,25 @@ ${modeDescription}
     } else {
       const subModeSelect = document.getElementById('combineSubModeSelect');
       const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
+      const viewFolderVal = document.getElementById('viewChannelFolderText')?.value || 'ไม่ได้กำหนด';
       
       if (subModeVal === 'view_channel') {
         const audioPathVal = document.getElementById('viewChannelAudioPath')?.value || 'ไม่ได้กำหนด';
-        const viewFolderVal = document.getElementById('viewChannelFolderText')?.value || 'ไม่ได้กำหนด';
-        const d1 = document.getElementById('viewDur1')?.value || '-';
-        const d2 = document.getElementById('viewDur2')?.value || '-';
-        const d3 = document.getElementById('viewDur3')?.value || '-';
-        const d4 = document.getElementById('viewDur4')?.value || '-';
-        const d5 = document.getElementById('viewDur5')?.value || '-';
-        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ View Channel Mode:
+        const durationInputs = Array.from(document.getElementById('viewDurationsContainer')?.querySelectorAll('input') || []);
+        const durationVals = durationInputs.map(input => input.value || '-').join(', ');
+        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ วิดีโอ + เพลง:
 1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
-2. อ่านข้อมูลวิดีโอ 1 ถึง 5 จากโฟลเดอร์นั้นโดยตรง
-3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${d1}, ${d2}, ${d3}, ${d4}, ${d5}] วินาที
+2. อ่านข้อมูลวิดีโอจากโฟลเดอร์นั้นตามลำดับ
+3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${durationVals}] วินาที
 4. นำวิดีโอที่ตัดแล้วมาต่อกันแบบไร้รอยต่อ
 5. ผสมเสียงเดิมเข้ากับเพลงจากไฟล์: ${audioPathVal}
 6. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
       } else {
-        const combineSets = collectVideoCombineBatchSets();
-        const combineSetsSummary = combineSets.map((folders, idx) => `เซ็ตที่ ${idx + 1}: [${folders.join(', ')}]`).join('\n') || 'ไม่มี';
-        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Combine Mode:
-1. ระบบตรวจสอบ Path หลักที่ตั้งค่าไว้ (${outputPathVal})
-2. อ่านข้อมูลกลุ่มโฟลเดอร์ที่จะนำมารวมกัน (เซ็ต):
-${combineSetsSummary}
-3. เริ่มวนลูปทีละเซ็ต: นำไฟล์วิดีโอจากหมายเลขโฟลเดอร์ในแต่ละเซ็ตมาชนกัน
-4. ส่งคำสั่งให้ระบบหลังบ้าน (API) ทำการรวมไฟล์วิดีโอแบบไร้รอยต่อ (ไม่มีหน้าจอดำคั่นกลาง)
-5. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
+        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ รวมวิดีโอเข้าด้วยกัน:
+1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
+2. สแกนหาไฟล์วิดีโอทั้งหมดที่อยู่ในโฟลเดอร์นั้นโดยตรง
+3. นำไฟล์วิดีโอทั้งหมดมารวมเรียงต่อกันตามลำดับชื่อไฟล์ (Natural Sort)
+4. บันทึกผลลัพธ์ลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
       }
     }
   }
@@ -769,14 +762,15 @@ async function loadConfig() {
     if (vChanUnsharp) vChanUnsharp.value = config.view_channel_unsharp || '5:5:0.7:3:3:0.3';
     
     if (config.view_channel_durations && Array.isArray(config.view_channel_durations)) {
-      for (let i = 1; i <= 5; i++) {
-        const d = document.getElementById(`viewDur${i}`);
-        if (d && config.view_channel_durations[i-1] !== null && config.view_channel_durations[i-1] !== undefined) {
-          d.value = config.view_channel_durations[i-1];
-        } else if (d) {
-          d.value = '';
+      syncDurationFields(config.view_channel_durations.length);
+      config.view_channel_durations.forEach((val, idx) => {
+        const d = document.getElementById(`viewDur${idx + 1}`);
+        if (d) {
+          d.value = val !== null && val !== undefined ? val : '';
         }
-      }
+      });
+    } else {
+      syncDurationFields(5);
     }
 
     const lakornPathInput = document.getElementById('cfg_lakorn_path');
@@ -1602,23 +1596,28 @@ function toggleVideoCombineBatchUI(isCombine) {
   const subModeGroup = document.getElementById('combineSubModeGroup');
   const viewChannelGroup = document.getElementById('viewChannelGroup');
   const outputPathGroup = document.getElementById('videoOutputPathGroup');
+  const targetFolderGroup = document.getElementById('videoTargetFolderGroup');
   
   if (coverGroup) {
-    if (!isCombine) {
-      coverGroup.classList.remove('hidden');
-    } else {
-      coverGroup.classList.add('hidden');
-    }
+    coverGroup.classList.toggle('hidden', isCombine);
   }
-  
+  if (outputPathGroup) {
+    outputPathGroup.classList.toggle('hidden', isCombine);
+  }
+  if (targetFolderGroup) {
+    targetFolderGroup.classList.toggle('hidden', !isCombine);
+  }
   if (subModeGroup) {
     subModeGroup.classList.toggle('hidden', !isCombine);
   }
 
+  // Always hide batch group since batch mode of normal combine is removed
+  if (batchGroup) {
+    batchGroup.classList.add('hidden');
+  }
+
   if (!isCombine) {
-    if (batchGroup) batchGroup.classList.add('hidden');
     if (viewChannelGroup) viewChannelGroup.classList.add('hidden');
-    if (outputPathGroup) outputPathGroup.classList.remove('hidden');
     return;
   }
 
@@ -1626,20 +1625,44 @@ function toggleVideoCombineBatchUI(isCombine) {
   const subMode = document.getElementById('combineSubModeSelect')?.value || 'normal';
   
   if (subMode === 'normal') {
-    if (batchGroup) batchGroup.classList.remove('hidden');
     if (viewChannelGroup) viewChannelGroup.classList.add('hidden');
-    if (outputPathGroup) outputPathGroup.classList.remove('hidden');
-    
-    const rows = document.getElementById('videoCombineSetRows');
-    if (rows && rows.children.length === 0) {
-      rows.appendChild(createVideoCombineSetRow(''));
-      refreshVideoCombineSetLabels();
-    }
   } else if (subMode === 'view_channel') {
-    if (batchGroup) batchGroup.classList.add('hidden');
     if (viewChannelGroup) viewChannelGroup.classList.remove('hidden');
-    if (outputPathGroup) outputPathGroup.classList.add('hidden');
   }
+}
+
+function syncDurationFields(count) {
+  const container = document.getElementById('viewDurationsContainer');
+  if (!container) return;
+  
+  count = Math.max(1, count);
+  const currentCount = container.children.length;
+  
+  if (currentCount < count) {
+    for (let i = currentCount + 1; i <= count; i++) {
+      const div = document.createElement('div');
+      div.id = `viewDurDiv_${i}`;
+      div.innerHTML = `
+        <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">วิดีโอที่ ${i}</label>
+        <input id="viewDur${i}" type="number" step="0.01" min="0" placeholder="วินาที" style="width: 100%; margin-bottom: 0;" />
+      `;
+      container.appendChild(div);
+      
+      const input = div.querySelector('input');
+      if (input) {
+        input.addEventListener('input', () => { updateTooltips(); updateDurationsSum(); });
+        input.addEventListener('change', () => { updateTooltips(); updateDurationsSum(); });
+      }
+    }
+  } else if (currentCount > count) {
+    for (let i = currentCount; i > count; i--) {
+      const el = document.getElementById(`viewDurDiv_${i}`);
+      if (el) el.remove();
+    }
+  }
+  
+  updateDurationsSum();
+  updateTooltips();
 }
 
 function buildVideoCombineSetValue(startNumber, amountInSet) {
@@ -1691,12 +1714,11 @@ async function runVideoHelper(btnElement) {
 
   // Collect active sets
   const activeSets = [];
-  if (!outputPathVal) {
-    alert('Please configure the Path at the top.');
-    return;
-  }
-
   if (modeVal === 'cover') {
+    if (!outputPathVal) {
+      alert('Please configure the Path at the top.');
+      return;
+    }
     const foldersInput = document.getElementById('videoCoverFoldersText');
     const foldersVal = foldersInput ? foldersInput.value.trim() : '';
     if (!foldersVal) {
@@ -1717,46 +1739,46 @@ async function runVideoHelper(btnElement) {
         foldersJson: ''
       });
     }
-    } else {
-      const subModeSelect = document.getElementById('combineSubModeSelect');
-      const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
-      
-      let combineSets = [];
-      let durations = [];
-      let viewChannelData = null;
-      
-      if (subModeVal === 'view_channel') {
-        const folderInput = document.getElementById('viewChannelFolderText');
-        const folderVal = folderInput ? folderInput.value.trim() : '';
-        if (!folderVal) {
-          alert('Please select a target folder for View Channel mode.');
-          return;
-        }
-        combineSets = [[folderVal]];
-        
-        const dur1 = document.getElementById('viewDur1')?.value || '';
-        const dur2 = document.getElementById('viewDur2')?.value || '';
-        const dur3 = document.getElementById('viewDur3')?.value || '';
-        const dur4 = document.getElementById('viewDur4')?.value || '';
-        const dur5 = document.getElementById('viewDur5')?.value || '';
-        durations = [dur1, dur2, dur3, dur4, dur5].filter(d => d.trim() !== '');
-        if (durations.length === 0) {
-          alert('Please enter at least one duration for View Channel mode.');
-          return;
-        }
-        viewChannelData = {
-          audioPath: document.getElementById('viewChannelAudioPath')?.value || '',
-          audioBoost: document.getElementById('viewChannelAudioBoost')?.value || '',
-          videoAudioBoost: document.getElementById('viewChannelVideoAudioBoost')?.value || '',
-          contrast: document.getElementById('viewChannelContrast')?.value || '',
-          saturation: document.getElementById('viewChannelSaturation')?.value || '',
-          brightness: document.getElementById('viewChannelBrightness')?.value || '',
-          gamma: document.getElementById('viewChannelGamma')?.value || '',
-          unsharp: document.getElementById('viewChannelUnsharp')?.value || ''
-        };
-      } else {
-        combineSets = collectVideoCombineBatchSets();
+  } else {
+    const subModeSelect = document.getElementById('combineSubModeSelect');
+    const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
+    
+    let combineSets = [];
+    let durations = [];
+    let viewChannelData = null;
+    
+    const folderInput = document.getElementById('viewChannelFolderText');
+    const folderVal = folderInput ? folderInput.value.trim() : '';
+    if (!folderVal) {
+      alert('Please select a target folder.');
+      return;
+    }
+    combineSets = [[folderVal]];
+    
+    if (subModeVal === 'view_channel') {
+      const container = document.getElementById('viewDurationsContainer');
+      if (container) {
+        const inputs = container.querySelectorAll('input');
+        inputs.forEach(input => {
+          const val = input.value.trim();
+          if (val) durations.push(val);
+        });
       }
+      if (durations.length === 0) {
+        alert('Please enter at least one duration.');
+        return;
+      }
+      viewChannelData = {
+        audioPath: document.getElementById('viewChannelAudioPath')?.value || '',
+        audioBoost: document.getElementById('viewChannelAudioBoost')?.value || '',
+        videoAudioBoost: document.getElementById('viewChannelVideoAudioBoost')?.value || '',
+        contrast: document.getElementById('viewChannelContrast')?.value || '',
+        saturation: document.getElementById('viewChannelSaturation')?.value || '',
+        brightness: document.getElementById('viewChannelBrightness')?.value || '',
+        gamma: document.getElementById('viewChannelGamma')?.value || '',
+        unsharp: document.getElementById('viewChannelUnsharp')?.value || ''
+      };
+    }
 
       combineSets.forEach((folders, idx) => {
         const setObj = {
@@ -2165,9 +2187,12 @@ async function setViewChannelColorDefault() {
 
 async function setViewChannelDurationsDefault() {
   const durations = [];
-  for (let i = 1; i <= 5; i++) {
-    const input = document.getElementById(`viewDur${i}`);
-    durations.push(input && input.value !== '' ? parseFloat(input.value) : null);
+  const container = document.getElementById('viewDurationsContainer');
+  if (container) {
+    const inputs = container.querySelectorAll('input');
+    inputs.forEach(input => {
+      durations.push(input.value !== '' ? parseFloat(input.value) : null);
+    });
   }
   try {
     await jsonFetch('/api/config/set-default', {
@@ -2554,10 +2579,14 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
   }
   function updateDurationsSum() {
     let total = 0;
-    ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5'].forEach(id => {
-      const val = parseFloat(document.getElementById(id)?.value);
-      if (!isNaN(val) && val > 0) total += val;
-    });
+    const container = document.getElementById('viewDurationsContainer');
+    if (container) {
+      const inputs = container.querySelectorAll('input');
+      inputs.forEach(input => {
+        const val = parseFloat(input.value);
+        if (!isNaN(val) && val > 0) total += val;
+      });
+    }
     const totalEl = document.getElementById('viewTotalDuration');
     if (totalEl) {
       totalEl.textContent = total.toFixed(2) + ' วินาที';
@@ -2771,15 +2800,34 @@ function initWorkflowActionListeners() {
     });
   }
 
-  const viewDurInputs = ['viewDur1', 'viewDur2', 'viewDur3', 'viewDur4', 'viewDur5', 'viewChannelAudioPath', 'viewChannelFolderText'];
-
-  viewDurInputs.forEach(id => {
+  const viewStaticInputs = ['viewChannelAudioPath', 'viewChannelFolderText'];
+  viewStaticInputs.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener('input', () => { updateTooltips(); updateDurationsSum(); });
       el.addEventListener('change', () => { updateTooltips(); updateDurationsSum(); });
     }
   });
+
+  const addBtn = document.getElementById('addDurationFieldBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      const container = document.getElementById('viewDurationsContainer');
+      const count = container ? container.children.length : 5;
+      syncDurationFields(count + 1);
+    });
+  }
+
+  const removeBtn = document.getElementById('removeDurationFieldBtn');
+  if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+      const container = document.getElementById('viewDurationsContainer');
+      const count = container ? container.children.length : 5;
+      if (count > 1) {
+        syncDurationFields(count - 1);
+      }
+    });
+  }
 
   // Trigger initial change event to sync with the checked option on load
   setTimeout(() => {

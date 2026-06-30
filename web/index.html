@@ -546,19 +546,18 @@
                 </select>
               </div>
 
+              <!-- Target Video Folder -->
+              <div id="videoTargetFolderGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
+                <label for="viewChannelFolderText" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ที่ต้องการรวมวิดีโอ (Target Video Folder)</label>
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์ที่มีวิดีโอที่ต้องการรวมกัน</div>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <input id="viewChannelFolderText" placeholder="e.g. /Users/litarcopperkaikem/Downloads/my_view_videos" style="margin-bottom: 0; flex-grow: 1;" />
+                  <button id="browseViewChannelFolderBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                  <button id="setViewChannelFolderDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
+              </div>
 
               <div id="viewChannelGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
-                <!-- Target Folder for View Channel -->
-                <div style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
-                  <label for="viewChannelFolderText" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ที่ต้องการรวมวิดีโอ (Target Video Folder)</label>
-                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์ที่มีวิดีโอ 1-5 ที่ต้องการรวมกัน</div>
-                  <div style="display: flex; gap: 10px; width: 100%;">
-                    <input id="viewChannelFolderText" placeholder="e.g. /Users/litarcopperkaikem/Downloads/my_view_videos" style="margin-bottom: 0; flex-grow: 1;" />
-                    <button id="browseViewChannelFolderBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
-                    <button id="setViewChannelFolderDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
-                  </div>
-                </div>
-
                 <label style="font-weight: bold; color: #8da6ff;">เลือกเพลง (Audio Track)</label>
                 <div style="display: flex; gap: 10px; width: 100%; margin-bottom: 15px; margin-top: 5px;">
                   <input id="viewChannelAudioPath" placeholder="e.g. /path/to/audio.mp3" style="margin-bottom: 0; flex-grow: 1;" />
@@ -623,30 +622,15 @@
                 
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <label style="font-weight: bold; color: #8da6ff; margin: 0;">ความยาววิดีโอ (วินาที)</label>
-                  <button id="setViewChannelDurationsDefaultBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Set Default</button>
+                  <div style="display: flex; gap: 8px;">
+                    <button id="addDurationFieldBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">+ เพิ่มวิดีโอ</button>
+                    <button id="removeDurationFieldBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px; border-color: #ff5e5e; color: #ff5e5e;">- ลบวิดีโอ</button>
+                    <button id="setViewChannelDurationsDefaultBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Set Default</button>
+                  </div>
                 </div>
-                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">ระบุความยาวของวิดีโอแต่ละตัว (สูงสุด 5 วิดีโอ) หากไม่ต้องการใช้ช่องไหนให้เว้นว่างไว้</div>
-                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;">
-                  <div>
-                    <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">วิดีโอที่ 1</label>
-                    <input id="viewDur1" type="number" step="0.01" min="0" placeholder="e.g. 3.72" style="width: 100%; margin-bottom: 0;" />
-                  </div>
-                  <div>
-                    <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">วิดีโอที่ 2</label>
-                    <input id="viewDur2" type="number" step="0.01" min="0" placeholder="e.g. 2.66" style="width: 100%; margin-bottom: 0;" />
-                  </div>
-                  <div>
-                    <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">วิดีโอที่ 3</label>
-                    <input id="viewDur3" type="number" step="0.01" min="0" placeholder="" style="width: 100%; margin-bottom: 0;" />
-                  </div>
-                  <div>
-                    <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">วิดีโอที่ 4</label>
-                    <input id="viewDur4" type="number" step="0.01" min="0" placeholder="" style="width: 100%; margin-bottom: 0;" />
-                  </div>
-                  <div>
-                    <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">วิดีโอที่ 5</label>
-                    <input id="viewDur5" type="number" step="0.01" min="0" placeholder="" style="width: 100%; margin-bottom: 0;" />
-                  </div>
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">ระบุความยาวของวิดีโอแต่ละตัวตามลำดับที่จะนำมารวมกันใน 1 คลิป</div>
+                <div id="viewDurationsContainer" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;">
+                  <!-- Dynamic fields populated by JavaScript -->
                 </div>
                 <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
                   <span style="font-size: 0.85rem; color: rgba(255,255,255,0.8);">เวลารวมทั้งหมด:</span>
