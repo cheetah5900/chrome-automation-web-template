@@ -776,6 +776,9 @@ async function loadConfig() {
     if (lakornTonInput) lakornTonInput.value = config.lakorn_ton || '';
     const lakornEpInput = document.getElementById('cfg_lakorn_ep');
     if (lakornEpInput) lakornEpInput.value = config.lakorn_ep || '';
+    
+    applyVideoPreset('');
+    
     updateTooltips();
     if (typeof updateDurationsSum === 'function') {
       updateDurationsSum();
