@@ -430,6 +430,7 @@
     "reference_image_round_20_7": "",
     "video_presets": {
         "ตึกสวย": {
+            "use_bgm": true,
             "target_folder": "/Users/litarcopperkaikem/Downloads/beautiful_buildings",
             "audio_path": "/Users/litarcopperkaikem/Downloads/music.mp3",
             "audio_boost": "0.0",

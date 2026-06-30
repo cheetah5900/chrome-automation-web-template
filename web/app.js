@@ -207,16 +207,23 @@ ${modeDescription}
 5. ระบบจะแทรกภาพหน้าจอดำ (Black Screen) เป็นเวลา 2.0 วินาที เพื่อคั่นระหว่างจุดจบของวิดีโอกับภาพปก
 6. บันทึกผลลัพธ์เป็นไฟล์วิดีโอใหม่โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
     } else {
+      const useBGM = document.getElementById('viewChannelUseBGM')?.checked !== false;
       const viewFolderVal = document.getElementById('viewChannelFolderText')?.value || 'ไม่ได้กำหนด';
-      const audioPathVal = document.getElementById('viewChannelAudioPath')?.value || 'ไม่ได้กำหนด';
       const durationInputs = Array.from(document.getElementById('viewDurationsContainer')?.querySelectorAll('input') || []);
       const durationVals = durationInputs.map(input => input.value || '-').join(', ');
+      
+      let step5 = '5. คงเสียงเดิมของวิดีโอทั้งหมดไว้';
+      if (useBGM) {
+        const audioPathVal = document.getElementById('viewChannelAudioPath')?.value || 'ไม่ได้กำหนด';
+        step5 = `5. ผสมเสียงเดิมเข้ากับเพลงจากไฟล์: ${audioPathVal}`;
+      }
+      
       tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ วิดีโอ + เพลง:
 1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
 2. อ่านข้อมูลวิดีโอจากโฟลเดอร์นั้นตามลำดับ
 3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${durationVals}] วินาที
 4. นำวิดีโอที่ตัดแล้วมาต่อกันแบบไร้รอยต่อ
-5. ผสมเสียงเดิมเข้ากับเพลงจากไฟล์: ${audioPathVal}
+${step5}
 6. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
     }
   }
@@ -1673,6 +1680,15 @@ function applyVideoPreset(presetName) {
   if (!presetName || !globalVideoPresets[presetName]) return;
   const preset = globalVideoPresets[presetName];
   
+  const useBGMCheckbox = document.getElementById('viewChannelUseBGM');
+  if (useBGMCheckbox) {
+    useBGMCheckbox.checked = preset.use_bgm !== false;
+    const bgmGroup = document.getElementById('videoBGMInputsGroup');
+    if (bgmGroup) {
+      bgmGroup.classList.toggle('hidden', !useBGMCheckbox.checked);
+    }
+  }
+
   const vChanFolder = document.getElementById('viewChannelFolderText');
   if (vChanFolder && preset.target_folder !== undefined) vChanFolder.value = preset.target_folder;
   
@@ -1730,6 +1746,7 @@ async function saveVideoPreset() {
   }
   
   const preset = {
+    use_bgm: document.getElementById('viewChannelUseBGM')?.checked !== false,
     target_folder: document.getElementById('viewChannelFolderText')?.value || '',
     audio_path: document.getElementById('viewChannelAudioPath')?.value || '',
     audio_boost: document.getElementById('viewChannelAudioBoost')?.value || '',
@@ -1886,9 +1903,10 @@ async function runVideoHelper(btnElement) {
         alert('Please enter at least one duration.');
         return;
       }
+      const useBGM = document.getElementById('viewChannelUseBGM')?.checked !== false;
       viewChannelData = {
-        audioPath: document.getElementById('viewChannelAudioPath')?.value || '',
-        audioBoost: document.getElementById('viewChannelAudioBoost')?.value || '',
+        audioPath: useBGM ? (document.getElementById('viewChannelAudioPath')?.value || '') : '',
+        audioBoost: useBGM ? (document.getElementById('viewChannelAudioBoost')?.value || '') : '',
         videoAudioBoost: document.getElementById('viewChannelVideoAudioBoost')?.value || '',
         contrast: document.getElementById('viewChannelContrast')?.value || '',
         saturation: document.getElementById('viewChannelSaturation')?.value || '',
@@ -2905,7 +2923,7 @@ function initWorkflowActionListeners() {
 
 
 
-  const viewStaticInputs = ['viewChannelAudioPath', 'viewChannelFolderText'];
+  const viewStaticInputs = ['viewChannelAudioPath', 'viewChannelFolderText', 'viewChannelUseBGM'];
   viewStaticInputs.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
@@ -2952,6 +2970,17 @@ function initWorkflowActionListeners() {
   if (deletePresetBtn) {
     deletePresetBtn.addEventListener('click', () => {
       deleteVideoPreset();
+    });
+  }
+
+  const useBGMCheckbox = document.getElementById('viewChannelUseBGM');
+  if (useBGMCheckbox) {
+    useBGMCheckbox.addEventListener('change', () => {
+      const bgmGroup = document.getElementById('videoBGMInputsGroup');
+      if (bgmGroup) {
+        bgmGroup.classList.toggle('hidden', !useBGMCheckbox.checked);
+      }
+      updateTooltips();
     });
   }
 

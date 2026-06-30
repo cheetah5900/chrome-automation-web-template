@@ -965,6 +965,7 @@ def _default_config() -> dict[str, Any]:
             "video_lakorn_ton": "",
             "video_presets": {
                 "ตึกสวย": {
+                    "use_bgm": True,
                     "target_folder": "/Users/litarcopperkaikem/Downloads/beautiful_buildings",
                     "audio_path": "/Users/litarcopperkaikem/Downloads/music.mp3",
                     "audio_boost": "0.0",
@@ -1026,6 +1027,7 @@ def _default_config() -> dict[str, Any]:
             "video_lakorn_ton": "",
             "video_presets": {
                 "ตึกสวย": {
+                    "use_bgm": True,
                     "target_folder": "/Users/litarcopperkaikem/Downloads/beautiful_buildings",
                     "audio_path": "/Users/litarcopperkaikem/Downloads/music.mp3",
                     "audio_boost": "0.0",
