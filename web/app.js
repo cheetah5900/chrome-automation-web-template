@@ -207,28 +207,17 @@ ${modeDescription}
 5. ระบบจะแทรกภาพหน้าจอดำ (Black Screen) เป็นเวลา 2.0 วินาที เพื่อคั่นระหว่างจุดจบของวิดีโอกับภาพปก
 6. บันทึกผลลัพธ์เป็นไฟล์วิดีโอใหม่โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
     } else {
-      const subModeSelect = document.getElementById('combineSubModeSelect');
-      const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
       const viewFolderVal = document.getElementById('viewChannelFolderText')?.value || 'ไม่ได้กำหนด';
-      
-      if (subModeVal === 'view_channel') {
-        const audioPathVal = document.getElementById('viewChannelAudioPath')?.value || 'ไม่ได้กำหนด';
-        const durationInputs = Array.from(document.getElementById('viewDurationsContainer')?.querySelectorAll('input') || []);
-        const durationVals = durationInputs.map(input => input.value || '-').join(', ');
-        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ วิดีโอ + เพลง:
+      const audioPathVal = document.getElementById('viewChannelAudioPath')?.value || 'ไม่ได้กำหนด';
+      const durationInputs = Array.from(document.getElementById('viewDurationsContainer')?.querySelectorAll('input') || []);
+      const durationVals = durationInputs.map(input => input.value || '-').join(', ');
+      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ วิดีโอ + เพลง:
 1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
 2. อ่านข้อมูลวิดีโอจากโฟลเดอร์นั้นตามลำดับ
 3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${durationVals}] วินาที
 4. นำวิดีโอที่ตัดแล้วมาต่อกันแบบไร้รอยต่อ
 5. ผสมเสียงเดิมเข้ากับเพลงจากไฟล์: ${audioPathVal}
 6. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
-      } else {
-        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ รวมวิดีโอเข้าด้วยกัน:
-1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
-2. สแกนหาไฟล์วิดีโอทั้งหมดที่อยู่ในโฟลเดอร์นั้นโดยตรง
-3. นำไฟล์วิดีโอทั้งหมดมารวมเรียงต่อกันตามลำดับชื่อไฟล์ (Natural Sort)
-4. บันทึกผลลัพธ์ลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
-      }
     }
   }
 
@@ -713,6 +702,7 @@ function initTabNavigation() {
 async function loadConfig() {
   try {
     const config = await jsonFetch('/api/config');
+    loadVideoPresets(config.video_presets);
     const folderInput = document.getElementById('cfg_folder_name');
     if (folderInput) folderInput.value = config.folder_name || '';
     const localInput = document.getElementById('cfg_local_path');
@@ -1593,7 +1583,7 @@ function collectVideoCombineBatchSets() {
 function toggleVideoCombineBatchUI(isCombine) {
   const batchGroup = document.getElementById('videoCombineBatchGroup');
   const coverGroup = document.getElementById('videoHelperCoverFoldersGroup');
-  const subModeGroup = document.getElementById('combineSubModeGroup');
+  const presetsGroup = document.getElementById('videoPresetsGroup');
   const viewChannelGroup = document.getElementById('viewChannelGroup');
   const outputPathGroup = document.getElementById('videoOutputPathGroup');
   const targetFolderGroup = document.getElementById('videoTargetFolderGroup');
@@ -1607,27 +1597,16 @@ function toggleVideoCombineBatchUI(isCombine) {
   if (targetFolderGroup) {
     targetFolderGroup.classList.toggle('hidden', !isCombine);
   }
-  if (subModeGroup) {
-    subModeGroup.classList.toggle('hidden', !isCombine);
+  if (presetsGroup) {
+    presetsGroup.classList.toggle('hidden', !isCombine);
+  }
+  if (viewChannelGroup) {
+    viewChannelGroup.classList.toggle('hidden', !isCombine);
   }
 
   // Always hide batch group since batch mode of normal combine is removed
   if (batchGroup) {
     batchGroup.classList.add('hidden');
-  }
-
-  if (!isCombine) {
-    if (viewChannelGroup) viewChannelGroup.classList.add('hidden');
-    return;
-  }
-
-  // If isCombine is true, check the subMode
-  const subMode = document.getElementById('combineSubModeSelect')?.value || 'normal';
-  
-  if (subMode === 'normal') {
-    if (viewChannelGroup) viewChannelGroup.classList.add('hidden');
-  } else if (subMode === 'view_channel') {
-    if (viewChannelGroup) viewChannelGroup.classList.remove('hidden');
   }
 }
 
@@ -1663,6 +1642,146 @@ function syncDurationFields(count) {
   
   updateDurationsSum();
   updateTooltips();
+}
+
+let globalVideoPresets = {};
+
+function loadVideoPresets(presets) {
+  globalVideoPresets = presets || {};
+  renderVideoPresetsSelect();
+}
+
+function renderVideoPresetsSelect(selectedKey = '') {
+  const select = document.getElementById('videoPresetSelect');
+  if (!select) return;
+  
+  select.innerHTML = '<option value="">-- เลือก Preset หรือตั้งค่าเอง --</option>';
+  
+  Object.keys(globalVideoPresets).forEach(key => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = key;
+    select.appendChild(opt);
+  });
+  
+  if (selectedKey) {
+    select.value = selectedKey;
+  }
+}
+
+function applyVideoPreset(presetName) {
+  if (!presetName || !globalVideoPresets[presetName]) return;
+  const preset = globalVideoPresets[presetName];
+  
+  const vChanFolder = document.getElementById('viewChannelFolderText');
+  if (vChanFolder && preset.target_folder !== undefined) vChanFolder.value = preset.target_folder;
+  
+  const vChanAudio = document.getElementById('viewChannelAudioPath');
+  if (vChanAudio && preset.audio_path !== undefined) vChanAudio.value = preset.audio_path;
+  
+  const vChanAudioBoost = document.getElementById('viewChannelAudioBoost');
+  if (vChanAudioBoost && preset.audio_boost !== undefined) vChanAudioBoost.value = preset.audio_boost;
+  
+  const vChanVideoAudioBoost = document.getElementById('viewChannelVideoAudioBoost');
+  if (vChanVideoAudioBoost && preset.video_audio_boost !== undefined) vChanVideoAudioBoost.value = preset.video_audio_boost;
+  
+  const vChanContrast = document.getElementById('viewChannelContrast');
+  if (vChanContrast && preset.contrast !== undefined) vChanContrast.value = preset.contrast;
+  
+  const vChanSaturation = document.getElementById('viewChannelSaturation');
+  if (vChanSaturation && preset.saturation !== undefined) vChanSaturation.value = preset.saturation;
+  
+  const vChanBrightness = document.getElementById('viewChannelBrightness');
+  if (vChanBrightness && preset.brightness !== undefined) vChanBrightness.value = preset.brightness;
+  
+  const vChanGamma = document.getElementById('viewChannelGamma');
+  if (vChanGamma && preset.gamma !== undefined) vChanGamma.value = preset.gamma;
+  
+  const vChanUnsharp = document.getElementById('viewChannelUnsharp');
+  if (vChanUnsharp && preset.unsharp !== undefined) vChanUnsharp.value = preset.unsharp;
+  
+  if (preset.durations && Array.isArray(preset.durations)) {
+    syncDurationFields(preset.durations.length);
+    preset.durations.forEach((val, idx) => {
+      const d = document.getElementById(`viewDur${idx + 1}`);
+      if (d) d.value = (val !== null && val !== undefined) ? val : '';
+    });
+  }
+  
+  updateDurationsSum();
+  updateTooltips();
+}
+
+async function saveVideoPreset() {
+  const select = document.getElementById('videoPresetSelect');
+  const currentKey = select ? select.value : '';
+  const presetName = prompt('ระบุชื่อ Preset หรือระบุชื่อเดิมเพื่อบันทึกทับ:', currentKey || '');
+  if (!presetName) return;
+  const cleanName = presetName.trim();
+  if (!cleanName) return;
+  
+  const durations = [];
+  const container = document.getElementById('viewDurationsContainer');
+  if (container) {
+    const inputs = container.querySelectorAll('input');
+    inputs.forEach(input => {
+      durations.push(input.value !== '' ? parseFloat(input.value) : null);
+    });
+  }
+  
+  const preset = {
+    target_folder: document.getElementById('viewChannelFolderText')?.value || '',
+    audio_path: document.getElementById('viewChannelAudioPath')?.value || '',
+    audio_boost: document.getElementById('viewChannelAudioBoost')?.value || '',
+    video_audio_boost: document.getElementById('viewChannelVideoAudioBoost')?.value || '',
+    contrast: document.getElementById('viewChannelContrast')?.value || '',
+    saturation: document.getElementById('viewChannelSaturation')?.value || '',
+    brightness: document.getElementById('viewChannelBrightness')?.value || '',
+    gamma: document.getElementById('viewChannelGamma')?.value || '',
+    unsharp: document.getElementById('viewChannelUnsharp')?.value || '',
+    durations: durations
+  };
+  
+  globalVideoPresets[cleanName] = preset;
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'video_presets', value: globalVideoPresets })
+    });
+    writeConsoleLine(`Preset "${cleanName}" saved successfully`, 'success', 'videoConsole');
+    renderVideoPresetsSelect(cleanName);
+    alert(`บันทึก Preset "${cleanName}" สำเร็จ`);
+  } catch (e) {
+    writeConsoleLine(`Failed to save preset: ${e.message}`, 'error', 'videoConsole');
+  }
+}
+
+async function deleteVideoPreset() {
+  const select = document.getElementById('videoPresetSelect');
+  const selectedKey = select ? select.value : '';
+  if (!selectedKey) {
+    alert('กรุณาเลือก Preset ที่ต้องการลบก่อน');
+    return;
+  }
+  
+  if (!confirm(`คุณต้องการลบ Preset "${selectedKey}" ใช่หรือไม่?`)) return;
+  
+  delete globalVideoPresets[selectedKey];
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'video_presets', value: globalVideoPresets })
+    });
+    writeConsoleLine(`Preset "${selectedKey}" deleted`, 'success', 'videoConsole');
+    renderVideoPresetsSelect('');
+    alert(`ลบ Preset "${selectedKey}" สำเร็จ`);
+  } catch (e) {
+    writeConsoleLine(`Failed to delete preset: ${e.message}`, 'error', 'videoConsole');
+  }
 }
 
 function buildVideoCombineSetValue(startNumber, amountInSet) {
@@ -1740,8 +1859,7 @@ async function runVideoHelper(btnElement) {
       });
     }
   } else {
-    const subModeSelect = document.getElementById('combineSubModeSelect');
-    const subModeVal = subModeSelect ? subModeSelect.value : 'normal';
+    const subModeVal = 'view_channel';
     
     let combineSets = [];
     let durations = [];
@@ -2785,20 +2903,7 @@ function initWorkflowActionListeners() {
     }
   }
 
-  const savedCombineSubMode = localStorage.getItem('combineSubMode');
-  const combineSubModeSelect = document.getElementById('combineSubModeSelect');
-  if (combineSubModeSelect) {
-    if (savedCombineSubMode) {
-      combineSubModeSelect.value = savedCombineSubMode;
-    }
-    combineSubModeSelect.addEventListener('change', (e) => {
-      localStorage.setItem('combineSubMode', e.target.value);
-      const mode = document.querySelector('input[name="videoHelperMode"]:checked')?.value;
-      const isCombine = mode === 'combine';
-      toggleVideoCombineBatchUI(isCombine);
-      updateTooltips();
-    });
-  }
+
 
   const viewStaticInputs = ['viewChannelAudioPath', 'viewChannelFolderText'];
   viewStaticInputs.forEach(id => {
@@ -2826,6 +2931,27 @@ function initWorkflowActionListeners() {
       if (count > 1) {
         syncDurationFields(count - 1);
       }
+    });
+  }
+
+  const presetSelect = document.getElementById('videoPresetSelect');
+  if (presetSelect) {
+    presetSelect.addEventListener('change', (e) => {
+      applyVideoPreset(e.target.value);
+    });
+  }
+
+  const savePresetBtn = document.getElementById('saveVideoPresetBtn');
+  if (savePresetBtn) {
+    savePresetBtn.addEventListener('click', () => {
+      saveVideoPreset();
+    });
+  }
+
+  const deletePresetBtn = document.getElementById('deleteVideoPresetBtn');
+  if (deletePresetBtn) {
+    deletePresetBtn.addEventListener('click', () => {
+      deleteVideoPreset();
     });
   }
 

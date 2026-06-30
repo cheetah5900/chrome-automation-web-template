@@ -538,12 +538,16 @@
                 </div>
               </div>
 
-              <div id="combineSubModeGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
-                <label style="font-weight: bold; color: #8da6ff;">รูปแบบการรวมวิดีโอ (Combine Sub-Mode)</label>
-                <select id="combineSubModeSelect" style="width: 100%; padding: 10px; border-radius: 8px; margin-top: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
-                  <option value="normal">รวมวิดีโอเข้าด้วยกัน</option>
-                  <option value="view_channel">วิดีโอ + เพลง</option>
-                </select>
+              <!-- Presets Manager -->
+              <div id="videoPresetsGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
+                <label style="font-weight: bold; color: #ffb86c; margin-bottom: 8px; display: block;">Preset การตั้งค่า</label>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <select id="videoPresetSelect" style="flex-grow: 1; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
+                    <option value="">-- เลือก Preset หรือตั้งค่าเอง --</option>
+                  </select>
+                  <button id="saveVideoPresetBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; border-color: #5eff5e; color: #5eff5e;">Save Preset</button>
+                  <button id="deleteVideoPresetBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; border-color: #ff5e5e; color: #ff5e5e;">Delete</button>
+                </div>
               </div>
 
               <!-- Target Video Folder -->

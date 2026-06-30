@@ -963,6 +963,20 @@ def _default_config() -> dict[str, Any]:
             "video_lakorn_path": "",
             "video_lakorn_ep": "",
             "video_lakorn_ton": "",
+            "video_presets": {
+                "ตึกสวย": {
+                    "target_folder": "/Users/litarcopperkaikem/Downloads/beautiful_buildings",
+                    "audio_path": "/Users/litarcopperkaikem/Downloads/music.mp3",
+                    "audio_boost": "0.0",
+                    "video_audio_boost": "-10.0",
+                    "contrast": "1.10",
+                    "saturation": "1.80",
+                    "brightness": "0.01",
+                    "gamma": "1.02",
+                    "unsharp": "5:5:0.7:3:3:0.3",
+                    "durations": [12.0, 10.0, 12.0, 10.0, 14.0]
+                }
+            }
         }
     else:
         h = os.path.expanduser("~")
@@ -1010,6 +1024,20 @@ def _default_config() -> dict[str, Any]:
             "video_lakorn_path": "",
             "video_lakorn_ep": "",
             "video_lakorn_ton": "",
+            "video_presets": {
+                "ตึกสวย": {
+                    "target_folder": "/Users/litarcopperkaikem/Downloads/beautiful_buildings",
+                    "audio_path": "/Users/litarcopperkaikem/Downloads/music.mp3",
+                    "audio_boost": "0.0",
+                    "video_audio_boost": "-10.0",
+                    "contrast": "1.10",
+                    "saturation": "1.80",
+                    "brightness": "0.01",
+                    "gamma": "1.02",
+                    "unsharp": "5:5:0.7:3:3:0.3",
+                    "durations": [12.0, 10.0, 12.0, 10.0, 14.0]
+                }
+            }
         }
 
     # Dynamically ensure all 30 rounds of image prompts and 10 rounds of video prompts are initialized in config
