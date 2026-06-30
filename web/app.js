@@ -228,7 +228,7 @@ ${modeDescription}
       } else {
         const combineSets = collectVideoCombineBatchSets();
         const combineSetsSummary = combineSets.map((folders, idx) => `เซ็ตที่ ${idx + 1}: [${folders.join(', ')}]`).join('\n') || 'ไม่มี';
-        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Combine Across Folder Mode:
+        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Combine Mode:
 1. ระบบตรวจสอบ Path หลักที่ตั้งค่าไว้ (${outputPathVal})
 2. อ่านข้อมูลกลุ่มโฟลเดอร์ที่จะนำมารวมกัน (เซ็ต):
 ${combineSetsSummary}
@@ -1601,6 +1601,7 @@ function toggleVideoCombineBatchUI(isCombine) {
   const coverGroup = document.getElementById('videoHelperCoverFoldersGroup');
   const subModeGroup = document.getElementById('combineSubModeGroup');
   const viewChannelGroup = document.getElementById('viewChannelGroup');
+  const outputPathGroup = document.getElementById('videoOutputPathGroup');
   
   if (coverGroup) {
     if (!isCombine) {
@@ -1617,6 +1618,7 @@ function toggleVideoCombineBatchUI(isCombine) {
   if (!isCombine) {
     if (batchGroup) batchGroup.classList.add('hidden');
     if (viewChannelGroup) viewChannelGroup.classList.add('hidden');
+    if (outputPathGroup) outputPathGroup.classList.remove('hidden');
     return;
   }
 
@@ -1626,6 +1628,7 @@ function toggleVideoCombineBatchUI(isCombine) {
   if (subMode === 'normal') {
     if (batchGroup) batchGroup.classList.remove('hidden');
     if (viewChannelGroup) viewChannelGroup.classList.add('hidden');
+    if (outputPathGroup) outputPathGroup.classList.remove('hidden');
     
     const rows = document.getElementById('videoCombineSetRows');
     if (rows && rows.children.length === 0) {
@@ -1635,6 +1638,7 @@ function toggleVideoCombineBatchUI(isCombine) {
   } else if (subMode === 'view_channel') {
     if (batchGroup) batchGroup.classList.add('hidden');
     if (viewChannelGroup) viewChannelGroup.classList.remove('hidden');
+    if (outputPathGroup) outputPathGroup.classList.add('hidden');
   }
 }
 
@@ -1788,7 +1792,7 @@ async function runVideoHelper(btnElement) {
     if (modeVal === 'cover') {
       alert('Please enter at least one Sub folder name/range to process in Cover Mode.');
     } else {
-      alert('Please enter at least one Sub folder name/range to process in Combine Across Folder.');
+      alert('Please enter at least one Sub folder name/range to process in Combine.');
     }
     return;
   }
