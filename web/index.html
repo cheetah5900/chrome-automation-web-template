@@ -552,12 +552,25 @@
 
               <!-- Target Video Folder -->
               <div id="videoTargetFolderGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
-                <label for="viewChannelFolderText" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ที่ต้องการรวมวิดีโอ (Target Video Folder)</label>
-                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์ที่มีวิดีโอที่ต้องการรวมกัน</div>
-                <div style="display: flex; gap: 10px; width: 100%;">
+                <label id="viewChannelFolderLabel" for="viewChannelFolderText" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ที่ต้องการรวมวิดีโอ (Target Video Folder)</label>
+                <div id="viewChannelFolderDesc" style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์ที่มีวิดีโอที่ต้องการรวมกัน</div>
+                <div style="display: flex; gap: 10px; width: 100%; margin-bottom: 10px;">
                   <input id="viewChannelFolderText" placeholder="e.g. /Users/litarcopperkaikem/Downloads/my_view_videos" style="margin-bottom: 0; flex-grow: 1;" />
                   <button id="browseViewChannelFolderBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
-                  <button id="setViewChannelFolderDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
+                <!-- Checkbox for Batch Mode in Combine Mode -->
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input id="videoCombineBatchMode" type="checkbox" style="width: 18px; height: 18px; cursor: pointer; margin: 0;" />
+                  <label for="videoCombineBatchMode" style="font-size: 0.85rem; color: #ffb86c; margin: 0; cursor: pointer; font-weight: bold;">Batch Mode (รันรวมวิดีโอแบบกลุ่มโฟลเดอร์ย่อย)</label>
+                </div>
+              </div>
+
+              <!-- Combine Sub Folders (Conditional) -->
+              <div id="videoCombineSubFoldersGroup" class="form-group hidden" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
+                <label for="videoCombineSubFoldersText" style="font-weight: bold; color: #8da6ff; margin: 0;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">ระบุชื่อโฟลเดอร์ย่อยหรือช่วงตัวเลขแยกด้วยคอมมา เช่น 1,2,3 หรือ 1-3</div>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <input id="videoCombineSubFoldersText" placeholder="e.g. 1,2,3-10 or 1-3" style="margin-bottom: 0; flex: 1 1 100%;" />
                 </div>
               </div>
 
@@ -579,7 +592,6 @@
                     <input id="viewChannelAudioPath" placeholder="e.g. /path/to/audio.mp3" style="margin-bottom: 0; flex-grow: 1;" />
                     <button id="browseAudioBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
                     <button id="verifyAudioBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; border-color: #8da6ff; color: #8da6ff;">Verify Audio</button>
-                    <button id="setViewChannelAudioDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
                   </div>
                   <div id="verifyAudioResult" style="font-size: 0.85rem; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: none; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);"></div>
                   
@@ -590,7 +602,6 @@
                     </div>
                     <div style="display: flex; gap: 8px; align-items: center;">
                       <input id="viewChannelAudioBoost" type="number" step="0.1" placeholder="e.g. 20" style="width: 100px; margin-bottom: 0;" />
-                      <button id="setViewChannelAudioBoostDefaultBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Set Default</button>
                     </div>
                   </div>
                 </div>
@@ -602,7 +613,6 @@
                   </div>
                   <div style="display: flex; gap: 8px; align-items: center;">
                     <input id="viewChannelVideoAudioBoost" type="number" step="0.1" placeholder="e.g. -10" style="width: 100px; margin-bottom: 0;" />
-                    <button id="setViewChannelVideoAudioBoostDefaultBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Set Default</button>
                   </div>
                 </div>
                 <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">
@@ -611,7 +621,6 @@
                       <label style="font-weight: bold; color: #ffb86c; margin: 0;">Color & Sharpness Adjustments</label>
                       <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 0 0; line-height: 1.4;">ปรับค่าสีและความคมชัดของวิดีโอ (ปล่อยว่างเพื่อไม่ปรับ)</div>
                     </div>
-                    <button id="setViewChannelColorDefaultBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Set Default</button>
                   </div>
                   <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;">
                     <div>
@@ -642,7 +651,6 @@
                   <div style="display: flex; gap: 8px;">
                     <button id="addDurationFieldBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">+ เพิ่มวิดีโอ</button>
                     <button id="removeDurationFieldBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px; border-color: #ff5e5e; color: #ff5e5e;">- ลบวิดีโอ</button>
-                    <button id="setViewChannelDurationsDefaultBtn" class="secondary" style="padding: 6px 12px; font-size: 0.75rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Set Default</button>
                   </div>
                 </div>
                 <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">ระบุความยาวของวิดีโอแต่ละตัวตามลำดับที่จะนำมารวมกันใน 1 คลิป</div>

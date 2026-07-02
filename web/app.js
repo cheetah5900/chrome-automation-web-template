@@ -218,13 +218,26 @@ ${modeDescription}
         step5 = `5. ผสมเสียงเดิมเข้ากับเพลงจากไฟล์: ${audioPathVal}`;
       }
       
-      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ วิดีโอ + เพลง:
+      const isBatch = document.getElementById('videoCombineBatchMode')?.checked;
+      if (isBatch) {
+        const subFoldersVal = document.getElementById('videoCombineSubFoldersText')?.value || 'ไม่ได้กำหนด';
+        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Combine (Batch Mode):
+1. ระบบตรวจสอบโฟลเดอร์หลักที่ตั้งค่าไว้ (${viewFolderVal})
+2. ดึงรายชื่อโฟลเดอร์ย่อยที่จะประมวลผล (${subFoldersVal})
+3. สำหรับแต่ละโฟลเดอร์ย่อย:
+   - นำวิดีโอแต่ละตัวภายในโฟลเดอร์ย่อยนั้นมาตัดตามความยาวที่ระบุ: [${durationVals}] วินาที
+   - นำวิดีโอที่ตัดแล้วมารวมกันแบบไร้รอยต่อ
+   - ${useBGM ? 'ผสมเสียงเข้ากับเพลงพื้นหลัง' : 'คงเสียงเดิมไว้'}
+   - บันทึกไฟล์รวมวิดีโอผลลัพธ์เป็น '{โฟลเดอร์ย่อย}_combined.mp4' ไว้ในโฟลเดอร์ย่อยนั้น`;
+      } else {
+        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ วิดีโอ + เพลง:
 1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
 2. อ่านข้อมูลวิดีโอจากโฟลเดอร์นั้นตามลำดับ
 3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${durationVals}] วินาที
 4. นำวิดีโอที่ตัดแล้วมาต่อกันแบบไร้รอยต่อ
 ${step5}
 6. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
+      }
     }
   }
 
@@ -733,6 +746,18 @@ async function loadConfig() {
     
     const vChanFolder = document.getElementById('viewChannelFolderText');
     if (vChanFolder) vChanFolder.value = config.view_channel_folder || '';
+
+    const vCombineBatchMode = document.getElementById('videoCombineBatchMode');
+    if (vCombineBatchMode) {
+      vCombineBatchMode.checked = !!config.view_channel_combine_batch_mode;
+    }
+
+    const vCombineSubFolders = document.getElementById('videoCombineSubFoldersText');
+    if (vCombineSubFolders) {
+      vCombineSubFolders.value = config.view_channel_combine_sub_folders || '';
+    }
+
+    updateCombineBatchUI();
     
     const vChanAudio = document.getElementById('viewChannelAudioPath');
     if (vChanAudio) vChanAudio.value = config.view_channel_audio_path || '';
@@ -1590,6 +1615,31 @@ function collectVideoCombineBatchSets() {
   return sets;
 }
 
+function updateCombineBatchUI() {
+  const batchModeCheckbox = document.getElementById('videoCombineBatchMode');
+  const isBatch = batchModeCheckbox ? batchModeCheckbox.checked : false;
+  
+  const subFoldersGroup = document.getElementById('videoCombineSubFoldersGroup');
+  if (subFoldersGroup) {
+    subFoldersGroup.classList.toggle('hidden', !isBatch);
+  }
+  
+  const folderLabel = document.getElementById('viewChannelFolderLabel');
+  const folderDesc = document.getElementById('viewChannelFolderDesc');
+  if (folderLabel) {
+    folderLabel.textContent = isBatch 
+      ? "โฟลเดอร์หลัก (Main Video Folder)" 
+      : "โฟลเดอร์ที่ต้องการรวมวิดีโอ (Target Video Folder)";
+  }
+  if (folderDesc) {
+    folderDesc.textContent = isBatch 
+      ? "เลือกโฟลเดอร์หลักที่มีโฟลเดอร์ย่อยอยู่ข้างใน" 
+      : "เลือกโฟลเดอร์ที่มีวิดีโอที่ต้องการรวมกัน";
+  }
+  
+  updateTooltips();
+}
+
 function toggleVideoCombineBatchUI(isCombine) {
   const batchGroup = document.getElementById('videoCombineBatchGroup');
   const coverGroup = document.getElementById('videoHelperCoverFoldersGroup');
@@ -1597,6 +1647,7 @@ function toggleVideoCombineBatchUI(isCombine) {
   const viewChannelGroup = document.getElementById('viewChannelGroup');
   const outputPathGroup = document.getElementById('videoOutputPathGroup');
   const targetFolderGroup = document.getElementById('videoTargetFolderGroup');
+  const subFoldersGroup = document.getElementById('videoCombineSubFoldersGroup');
   
   if (coverGroup) {
     coverGroup.classList.toggle('hidden', isCombine);
@@ -1617,6 +1668,16 @@ function toggleVideoCombineBatchUI(isCombine) {
   // Always hide batch group since batch mode of normal combine is removed
   if (batchGroup) {
     batchGroup.classList.add('hidden');
+  }
+  
+  if (subFoldersGroup) {
+    if (!isCombine) {
+      subFoldersGroup.classList.add('hidden');
+    } else {
+      const batchModeCheckbox = document.getElementById('videoCombineBatchMode');
+      const isBatch = batchModeCheckbox ? batchModeCheckbox.checked : false;
+      subFoldersGroup.classList.toggle('hidden', !isBatch);
+    }
   }
 }
 
@@ -1714,6 +1775,16 @@ function applyVideoPreset(presetName) {
     const vChanUnsharp = document.getElementById('viewChannelUnsharp');
     if (vChanUnsharp) vChanUnsharp.value = '';
 
+    const videoCombineBatchMode = document.getElementById('videoCombineBatchMode');
+    if (videoCombineBatchMode) {
+      videoCombineBatchMode.checked = false;
+    }
+    const videoCombineSubFoldersText = document.getElementById('videoCombineSubFoldersText');
+    if (videoCombineSubFoldersText) {
+      videoCombineSubFoldersText.value = '';
+    }
+    updateCombineBatchUI();
+
     syncDurationFields(5);
     for (let i = 1; i <= 5; i++) {
       const d = document.getElementById(`viewDur${i}`);
@@ -1769,6 +1840,16 @@ function applyVideoPreset(presetName) {
     });
   }
   
+  const videoCombineBatchMode = document.getElementById('videoCombineBatchMode');
+  if (videoCombineBatchMode) {
+    videoCombineBatchMode.checked = !!preset.combine_batch_mode;
+  }
+  const videoCombineSubFoldersText = document.getElementById('videoCombineSubFoldersText');
+  if (videoCombineSubFoldersText) {
+    videoCombineSubFoldersText.value = preset.combine_sub_folders || '';
+  }
+  updateCombineBatchUI();
+
   updateDurationsSum();
   updateTooltips();
 }
@@ -1793,6 +1874,8 @@ async function saveVideoPreset() {
   const preset = {
     use_bgm: document.getElementById('viewChannelUseBGM')?.checked !== false,
     target_folder: document.getElementById('viewChannelFolderText')?.value || '',
+    combine_batch_mode: document.getElementById('videoCombineBatchMode')?.checked || false,
+    combine_sub_folders: document.getElementById('videoCombineSubFoldersText')?.value || '',
     audio_path: document.getElementById('viewChannelAudioPath')?.value || '',
     audio_boost: document.getElementById('viewChannelAudioBoost')?.value || '',
     video_audio_boost: document.getElementById('viewChannelVideoAudioBoost')?.value || '',
@@ -1891,7 +1974,7 @@ async function runVideoHelper(btnElement) {
   const prefixVal = videoPrefix ? videoPrefix.value.trim() : '';
   const videoOutputPath = document.getElementById('videoOutputPathText');
   const consoleBox = document.getElementById('videoConsole');
-  const outputPathVal = videoOutputPath ? videoOutputPath.value.trim() : '';
+  let outputPathVal = videoOutputPath ? videoOutputPath.value.trim() : '';
 
   // Collect active sets
   const activeSets = [];
@@ -1933,7 +2016,25 @@ async function runVideoHelper(btnElement) {
       alert('Please select a target folder.');
       return;
     }
-    combineSets = [[folderVal]];
+    
+    const isBatch = document.getElementById('videoCombineBatchMode')?.checked;
+    if (isBatch) {
+      const subFoldersInput = document.getElementById('videoCombineSubFoldersText');
+      const subFoldersVal = subFoldersInput ? subFoldersInput.value.trim() : '';
+      if (!subFoldersVal) {
+        alert('Please enter sub folders (e.g. 1,2,3 or 1-3) to process.');
+        return;
+      }
+      const folderList = parseFolderRanges(subFoldersVal);
+      if (folderList.length === 0) {
+        alert('No valid sub folders parsed.');
+        return;
+      }
+      outputPathVal = folderVal;
+      combineSets = folderList.map(f => [f]);
+    } else {
+      combineSets = [[folderVal]];
+    }
     
     if (subModeVal === 'view_channel') {
       const container = document.getElementById('viewDurationsContainer');
@@ -2272,121 +2373,6 @@ async function setVideoPrefixDefault() {
   }
 }
 
-async function setViewChannelFolderDefault() {
-  const input = document.getElementById('viewChannelFolderText');
-  const val = input ? input.value.trim() : '';
-  try {
-    await jsonFetch('/api/config/set-default', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'view_channel_folder', value: val })
-    });
-    writeConsoleLine(`View Channel Target Folder default saved: ${val || 'None'}`, 'success', 'videoConsole');
-    alert(`Default View Channel Target Folder set to: ${val || 'None'}`);
-  } catch (e) {
-    writeConsoleLine(`Failed to set default target folder: ${e.message}`, 'error', 'videoConsole');
-  }
-}
-
-async function setViewChannelAudioDefault() {
-  const input = document.getElementById('viewChannelAudioPath');
-  const val = input ? input.value.trim() : '';
-  try {
-    await jsonFetch('/api/config/set-default', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'view_channel_audio_path', value: val })
-    });
-    writeConsoleLine(`View Channel Audio Path default saved: ${val || 'None'}`, 'success', 'videoConsole');
-    alert(`Default View Channel Audio Path set to: ${val || 'None'}`);
-  } catch (e) {
-    writeConsoleLine(`Failed to set default audio path: ${e.message}`, 'error', 'videoConsole');
-  }
-}
-
-async function setViewChannelAudioBoostDefault() {
-  const input = document.getElementById('viewChannelAudioBoost');
-  const val = input ? input.value.trim() : '';
-  try {
-    await jsonFetch('/api/config/set-default', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'view_channel_audio_boost', value: val })
-    });
-    writeConsoleLine(`View Channel Audio Boost default saved: ${val || 'None'}`, 'success', 'videoConsole');
-    alert(`Default Audio Volume Boost set to: ${val || 'None'}`);
-  } catch (e) {
-    writeConsoleLine(`Failed to set default audio boost: ${e.message}`, 'error', 'videoConsole');
-  }
-}
-
-async function setViewChannelVideoAudioBoostDefault() {
-  const input = document.getElementById('viewChannelVideoAudioBoost');
-  const val = input ? input.value.trim() : '';
-  try {
-    await jsonFetch('/api/config/set-default', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'view_channel_video_audio_boost', value: val })
-    });
-    writeConsoleLine(`View Channel Video Audio Boost default saved: ${val || 'None'}`, 'success', 'videoConsole');
-    alert(`Default Video Volume Boost set to: ${val || 'None'}`);
-  } catch (e) {
-    writeConsoleLine(`Failed to set default video audio boost: ${e.message}`, 'error', 'videoConsole');
-  }
-}
-
-async function setViewChannelColorDefault() {
-  const contrast = document.getElementById('viewChannelContrast')?.value.trim() || '';
-  const saturation = document.getElementById('viewChannelSaturation')?.value.trim() || '';
-  const brightness = document.getElementById('viewChannelBrightness')?.value.trim() || '';
-  const gamma = document.getElementById('viewChannelGamma')?.value.trim() || '';
-  const unsharp = document.getElementById('viewChannelUnsharp')?.value.trim() || '';
-  
-  try {
-    const currentConfig = await jsonFetch('/api/config');
-    const newConfig = {
-      ...currentConfig,
-      view_channel_contrast: contrast,
-      view_channel_saturation: saturation,
-      view_channel_brightness: brightness,
-      view_channel_gamma: gamma,
-      view_channel_unsharp: unsharp
-    };
-    
-    await jsonFetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newConfig)
-    });
-    writeConsoleLine(`View Channel Color defaults saved`, 'success', 'videoConsole');
-    alert(`Default Color Adjustments saved successfully.`);
-  } catch (e) {
-    writeConsoleLine(`Failed to set default color settings: ${e.message}`, 'error', 'videoConsole');
-  }
-}
-
-async function setViewChannelDurationsDefault() {
-  const durations = [];
-  const container = document.getElementById('viewDurationsContainer');
-  if (container) {
-    const inputs = container.querySelectorAll('input');
-    inputs.forEach(input => {
-      durations.push(input.value !== '' ? parseFloat(input.value) : null);
-    });
-  }
-  try {
-    await jsonFetch('/api/config/set-default', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'view_channel_durations', value: durations })
-    });
-    writeConsoleLine(`View Channel Durations default saved`, 'success', 'videoConsole');
-    alert(`Default View Channel Durations set successfully.`);
-  } catch (e) {
-    writeConsoleLine(`Failed to set default durations: ${e.message}`, 'error', 'videoConsole');
-  }
-}
 
 async function saveImagePrompts(silent = false) {
   const isSilent = silent === true;
@@ -3052,23 +3038,7 @@ function initWorkflowActionListeners() {
   const setVideoPrefixBtn = document.getElementById('setVideoPrefixDefaultBtn');
   if (setVideoPrefixBtn) setVideoPrefixBtn.addEventListener('click', setVideoPrefixDefault);
 
-  const setViewChannelAudioDefaultBtn = document.getElementById('setViewChannelAudioDefaultBtn');
-  if (setViewChannelAudioDefaultBtn) setViewChannelAudioDefaultBtn.addEventListener('click', setViewChannelAudioDefault);
 
-  const setViewChannelFolderDefaultBtn = document.getElementById('setViewChannelFolderDefaultBtn');
-  if (setViewChannelFolderDefaultBtn) setViewChannelFolderDefaultBtn.addEventListener('click', setViewChannelFolderDefault);
-
-  const setViewChannelDurationsDefaultBtn = document.getElementById('setViewChannelDurationsDefaultBtn');
-  if (setViewChannelDurationsDefaultBtn) setViewChannelDurationsDefaultBtn.addEventListener('click', setViewChannelDurationsDefault);
-
-  const setViewChannelColorDefaultBtn = document.getElementById('setViewChannelColorDefaultBtn');
-  if (setViewChannelColorDefaultBtn) setViewChannelColorDefaultBtn.addEventListener('click', setViewChannelColorDefault);
-
-  const setViewChannelAudioBoostDefaultBtn = document.getElementById('setViewChannelAudioBoostDefaultBtn');
-  if (setViewChannelAudioBoostDefaultBtn) setViewChannelAudioBoostDefaultBtn.addEventListener('click', setViewChannelAudioBoostDefault);
-
-  const setViewChannelVideoAudioBoostDefaultBtn = document.getElementById('setViewChannelVideoAudioBoostDefaultBtn');
-  if (setViewChannelVideoAudioBoostDefaultBtn) setViewChannelVideoAudioBoostDefaultBtn.addEventListener('click', setViewChannelVideoAudioBoostDefault);
 
   const addVideoCombineSetBtn = document.getElementById('addVideoCombineSetBtn');
   const videoCombineSetRows = document.getElementById('videoCombineSetRows');
@@ -3123,6 +3093,18 @@ function initWorkflowActionListeners() {
         showToast(`Failed to browse directory: ${e.message}`, 'error');
       }
     });
+  }
+
+  const videoCombineBatchMode = document.getElementById('videoCombineBatchMode');
+  const videoCombineSubFoldersText = document.getElementById('videoCombineSubFoldersText');
+
+  if (videoCombineBatchMode) {
+    videoCombineBatchMode.addEventListener('change', () => {
+      updateCombineBatchUI();
+    });
+  }
+  if (videoCombineSubFoldersText) {
+    videoCombineSubFoldersText.addEventListener('input', updateTooltips);
   }
 
   const browseViewChannelFolderBtn = document.getElementById('browseViewChannelFolderBtn');
@@ -3395,8 +3377,22 @@ function initWorkflowActionListeners() {
         });
 
         if (res && res.ok) {
-          promptsByRound = res.prompts_by_round;
-          refImagesByRound = res.ref_images_by_round;
+          // Normalize string keys from JSON response to integer keys
+          promptsByRound = {};
+          refImagesByRound = {};
+          if (res.prompts_by_round) {
+            for (const key in res.prompts_by_round) {
+              promptsByRound[parseInt(key, 10)] = res.prompts_by_round[key];
+            }
+          }
+          if (res.ref_images_by_round) {
+            for (const key in res.ref_images_by_round) {
+              refImagesByRound[parseInt(key, 10)] = res.ref_images_by_round[key];
+            }
+          }
+
+          // Reset current active round to 1 on import for consistency
+          currentPromptRound = 1;
 
           const maxRounds = getImageGenMaxRound();
           for (let r = 1; r <= maxRounds; r++) {
