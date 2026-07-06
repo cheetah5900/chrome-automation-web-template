@@ -1491,7 +1491,7 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     for idx, f in enumerate(downloaded_images):
         src_path = os.path.join(downloads_dir, f)
         ext = os.path.splitext(f)[1] or ".png"
-        new_name = f"{idx + 1}{ext}"
+        new_name = f"{idx + 1:02d}{ext}"
         dst_path = os.path.join(dest_dir, new_name)
         
         if os.path.exists(dst_path):

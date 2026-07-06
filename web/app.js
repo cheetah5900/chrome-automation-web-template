@@ -2627,6 +2627,14 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
   return success;
 }
 
+function saveImageGenActiveState() {
+  const state = {};
+  document.querySelectorAll('.round-active-checkbox').forEach(cb => {
+    state[cb.dataset.round] = cb.checked;
+  });
+  localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(state));
+}
+
 // Initialize steps listeners
   function renderImageGenTabs() {
     const container = document.getElementById('promptTabsContainer');
@@ -2641,14 +2649,6 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
       if (stored) savedActiveState = JSON.parse(stored);
     } catch(e) {}
 
-    const saveActiveState = () => {
-      const state = {};
-      document.querySelectorAll('.round-active-checkbox').forEach(cb => {
-        state[cb.dataset.round] = cb.checked;
-      });
-      localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(state));
-    };
-
     for (let r = 1; r <= getImageGenMaxRound(); r++) {
       const isChecked = savedActiveState.hasOwnProperty(r) ? savedActiveState[r] : true;
       
@@ -2660,7 +2660,7 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
       cbLabel.innerHTML = `<div style="flex: 0 0 10%; display: flex; justify-content: flex-start; align-items: center;"><input type="checkbox" class="round-active-checkbox" data-round="${r}" ${isChecked ? 'checked' : ''} style="margin: 0; cursor: pointer;" /></div><div style="flex: 0 0 90%; user-select: none;">Round ${r}</div>`;
       
       const cbInput = cbLabel.querySelector('input');
-      cbInput.addEventListener('change', saveActiveState);
+      cbInput.addEventListener('change', saveImageGenActiveState);
       
       checkboxContainer.appendChild(cbLabel);
 
@@ -2699,35 +2699,8 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
 
     updateImageGenTabIndicators();
 
-    // Dropdown Toggle Logic
-    const activeRoundsBtn = document.getElementById('activeRoundsBtn');
-    const activeRoundsMenu = document.getElementById('activeRoundsMenu');
-    if (activeRoundsBtn && activeRoundsMenu) {
-      activeRoundsBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        activeRoundsMenu.style.display = activeRoundsMenu.style.display === 'none' ? 'block' : 'none';
-      });
-      document.addEventListener('click', () => activeRoundsMenu.style.display = 'none');
-      activeRoundsMenu.addEventListener('click', (e) => e.stopPropagation());
-    }
-
-    const selectAllBtn = document.getElementById('selectAllRoundsBtn');
-    const deselectAllBtn = document.getElementById('deselectAllRoundsBtn');
-    if (selectAllBtn) {
-      selectAllBtn.addEventListener('click', () => {
-        document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = true);
-        saveActiveState();
-      });
-    }
-    if (deselectAllBtn) {
-      deselectAllBtn.addEventListener('click', () => {
-        document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = false);
-        saveActiveState();
-      });
-    }
-
     if (!localStorage.getItem('imageGenActiveRoundsState')) {
-      saveActiveState();
+      saveImageGenActiveState();
     }
   }
 
@@ -2766,6 +2739,35 @@ function initWorkflowActionListeners() {
     if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
   });
 
+
+  // Active Rounds Dropdown toggle and selection bindings for Image Gen
+  const activeRoundsBtn = document.getElementById('activeRoundsBtn');
+  const activeRoundsMenu = document.getElementById('activeRoundsMenu');
+  if (activeRoundsBtn && activeRoundsMenu) {
+    activeRoundsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      activeRoundsMenu.style.display = activeRoundsMenu.style.display === 'none' ? 'block' : 'none';
+    });
+    document.addEventListener('click', () => {
+      activeRoundsMenu.style.display = 'none';
+    });
+    activeRoundsMenu.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  const selectAllBtn = document.getElementById('selectAllRoundsBtn');
+  const deselectAllBtn = document.getElementById('deselectAllRoundsBtn');
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = true);
+      saveImageGenActiveState();
+    });
+  }
+  if (deselectAllBtn) {
+    deselectAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = false);
+      saveImageGenActiveState();
+    });
+  }
 
   const addRoundBtn = document.getElementById('addRoundBtn');
   if (addRoundBtn) {
