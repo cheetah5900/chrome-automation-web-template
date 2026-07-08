@@ -3397,9 +3397,12 @@ function initWorkflowActionListeners() {
           currentPromptRound = 1;
 
           const maxRounds = getImageGenMaxRound();
+          const activeRoundsState = {};
           for (let r = 1; r <= maxRounds; r++) {
             initImageGenRound(r);
+            activeRoundsState[r] = true;
           }
+          localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(activeRoundsState));
 
           if (res.ref_images_dir) {
             // Update refImagesDirByRound for all rounds
@@ -3488,9 +3491,9 @@ function initWorkflowActionListeners() {
           if (rSpan) rSpan.textContent = `${r} (Interval รอบที่ ${r - 1} - Preparing)`;
         }
 
-        // Wait 10 seconds first
-        writeConsoleLine(`Cooldown: Waiting 10 seconds after previous round before preparing Round ${r}...`, 'info', 'imageConsole');
-        for (let s = 10; s > 0; s--) {
+        // Wait 5 seconds first
+        writeConsoleLine(`Cooldown: Waiting 5 seconds after previous round before preparing Round ${r}...`, 'info', 'imageConsole');
+        for (let s = 5; s > 0; s--) {
           if (shouldStopGeneration) break;
           // if (tSpan) tSpan.textContent = `${s} วินาที`; -- DO NOT OVERWRITE COOLDOWN TIMER
           await new Promise(res => setTimeout(res, 1000));
@@ -4714,9 +4717,12 @@ function initVideoGenListeners() {
           videoStatusesByRound = {};
           
           const maxRounds = getVideoGenMaxRound();
+          const videoActiveState = {};
           for (let r = 1; r <= maxRounds; r++) {
             initVideoGenRound(r);
+            videoActiveState[r] = true;
           }
+          localStorage.setItem('videoGenActiveRoundsState', JSON.stringify(videoActiveState));
           
           renderVideoGenTabs();
           renderVideoActiveRoundsDropdown();
