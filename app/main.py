@@ -4026,6 +4026,27 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             log(f"[แผงตั้งค่าเตือน] ไม่สามารถคลิกเลือกแท็บ Frames ได้: {tab_err}")
         time.sleep(0.8)
 
+        # 1.7 Click the "9:16" (Portrait) ratio tab inside the settings panel
+        ratio_916_xpath = "//button[@role='tab' and (contains(., '9:16') or contains(@id, 'PORTRAIT') or contains(@aria-controls, 'PORTRAIT'))]"
+        log("[แผงตั้งค่า] คลิกเลือกอัตราส่วน 9:16...")
+        try:
+            ratio_tab = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, ratio_916_xpath))
+            )
+            state = ratio_tab.get_attribute("data-state")
+            if state != "active":
+                try:
+                    ratio_tab.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", ratio_tab)
+                log("[แผงตั้งค่า] คลิกเลือกอัตราส่วน 9:16 สำเร็จ")
+                time.sleep(1.0) # Wait for animation
+            else:
+                log("[แผงตั้งค่า] อัตราส่วนเป็น 9:16 อยู่แล้ว")
+        except Exception as ratio_err:
+            log(f"[แผงตั้งค่าเตือน] ไม่สามารถคลิกเลือกอัตราส่วน 9:16 ได้: {ratio_err}")
+        time.sleep(0.8)
+
         # 2. Locate the model selection dropdown button inside the panel
         model_dropdown_xpath = "//button[(contains(@class, 'eaVRLg') or contains(@class, 'sc-3f41cc92-1') or contains(., 'Omni') or contains(., 'Veo') or contains(., 'Flash') or contains(., 'Lite')) and (contains(., 'arrow_drop_down') or .//i[text()='arrow_drop_down'])]"
         model_option_xpath = "//button[.//span[text()='Veo 3.1 - Lite'] or contains(., 'Veo 3.1 - Lite')]"
