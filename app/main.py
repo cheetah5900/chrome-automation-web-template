@@ -2085,10 +2085,10 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             
             # Find the input box first to ensure tab is ready
             input_strats = [
-                "//div[@id='prompt-textarea']//p",
                 "//div[@id='prompt-textarea']",
                 "//textarea[@id='prompt-textarea']",
                 "//div[@contenteditable='true']",
+                "//div[@id='prompt-textarea']//p",
             ]
             box = None
             for s in input_strats:
@@ -2297,13 +2297,19 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 # Primary: Use document.execCommand('insertText') to insert prompt without triggering Enter key submits
                 input_success = False
                 try:
-                    driver.execute_script("document.execCommand('insertText', false, arguments[0]);", custom_prompt)
+                    # Re-locate box dynamically to ensure it is fresh
+                    try:
+                        box = driver.find_element(By.XPATH, "//div[@id='prompt-textarea'] | //textarea[@id='prompt-textarea'] | //div[@contenteditable='true']")
+                    except Exception:
+                        pass
+                    driver.execute_script("arguments[0].focus(); document.execCommand('insertText', false, arguments[1]);", box, custom_prompt)
                     time.sleep(0.75)
-                    # Verify text inside the entire #prompt-textarea div instead of just the (potentially detached) box element
+                    # Verify text inside the entire #prompt-textarea div without passing box to prevent StaleElementReferenceException
                     entered_text = driver.execute_script("""
-                        var target = document.getElementById('prompt-textarea') || arguments[0];
+                        var target = document.getElementById('prompt-textarea');
+                        if (!target) return '';
                         return target.value || target.innerText || target.textContent || '';
-                    """, box)
+                    """)
                     if entered_text and entered_text.strip() != "":
                         log("Prompt input populated successfully via browser insertText command.")
                         input_success = True
@@ -2314,6 +2320,11 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 if not input_success:
                     log("Browser insertText failed or could not be verified. Typing prompt via background-safe native send_keys with SHIFT+ENTER for newlines...")
                     try:
+                        # Re-locate box dynamically to ensure it is fresh
+                        try:
+                            box = driver.find_element(By.XPATH, "//div[@id='prompt-textarea'] | //textarea[@id='prompt-textarea'] | //div[@contenteditable='true']")
+                        except Exception:
+                            pass
                         box.click()
                         # Type character by character or chunk by chunk to handle newlines safely
                         parts = custom_prompt.split('\n')
@@ -2322,6 +2333,11 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                                 box.send_keys(part)
                             if idx < len(parts) - 1:
                                 box.send_keys(Keys.SHIFT + Keys.ENTER)
+                        # Re-locate box one more time before dispatching event
+                        try:
+                            box = driver.find_element(By.XPATH, "//div[@id='prompt-textarea'] | //textarea[@id='prompt-textarea'] | //div[@contenteditable='true']")
+                        except Exception:
+                            pass
                         driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", box)
                         log("Typed prompt successfully via safe send_keys.")
                     except Exception as fallback_err:
