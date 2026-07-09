@@ -344,12 +344,14 @@ async function createProfile() {
   }
 
   try {
+    const browserType = document.getElementById('profileBrowserType').value;
     await jsonFetch('/api/profiles/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name,
         debug_port: port,
         startup_urls: splitUrls(document.getElementById('startupUrls').value),
+        browser_type: browserType,
       }),
     });
     msg.textContent = 'Profile created successfully!'; 
@@ -383,6 +385,7 @@ async function updateProfile() {
   }
 
   try {
+    const browserType = document.getElementById('profileBrowserType').value;
     await jsonFetch('/api/profiles/update', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -390,6 +393,7 @@ async function updateProfile() {
         new_name: newName,
         debug_port: port,
         startup_urls: splitUrls(document.getElementById('startupUrls').value),
+        browser_type: browserType,
       }),
     });
     msg.textContent = 'Profile updated successfully!';
@@ -523,6 +527,7 @@ function initModal() {
     nameInput.disabled = false;
     portInput.value = '9222';
     urlsInput.value = 'https://chatgpt.com\nhttps://gemini.google.com/app';
+    document.getElementById('profileBrowserType').value = 'canary';
     
     // Toggle buttons
     createBtn.style.display = 'inline-block';
@@ -552,6 +557,7 @@ function initModal() {
     nameInput.disabled = false;
     portInput.value = selected.debug_port || 9222;
     urlsInput.value = (selected.startup_urls || []).join('\n');
+    document.getElementById('profileBrowserType').value = selected.browser_type || 'chrome';
     
     // Toggle buttons
     createBtn.style.display = 'none';

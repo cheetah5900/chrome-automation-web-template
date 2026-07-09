@@ -88,6 +88,7 @@ class CreateProfilePayload(BaseModel):
     name: str
     debug_port: int = 9222
     startup_urls: list[str] = []
+    browser_type: str = "chrome"
 
 
 class UpdateProfilePayload(BaseModel):
@@ -95,6 +96,7 @@ class UpdateProfilePayload(BaseModel):
     new_name: str
     debug_port: int = 9222
     startup_urls: list[str] = []
+    browser_type: str = "chrome"
 
 
 class SelectProfilePayload(BaseModel):
@@ -200,13 +202,42 @@ def _is_local_port_open(port: int) -> bool:
         return False
 
 
-def _get_active_browser_binary() -> str:
+def _get_selected_profile_browser_type() -> str:
+    try:
+        if DEFAULTS_FILE.exists() and PROFILES_FILE.exists():
+            defaults = _read_json(DEFAULTS_FILE)
+            selected_name = defaults.get("selected_profile", "")
+            if selected_name:
+                profiles_data = _read_json(PROFILES_FILE)
+                profiles = profiles_data.get("profiles", [])
+                profile = next((p for p in profiles if p.get("name") == selected_name), None)
+                if profile:
+                    return profile.get("browser_type", "chrome")
+    except Exception:
+        pass
+    return "chrome"
+
+
+def _get_active_browser_binary(browser_type: str = None) -> str:
     import os
+    if browser_type is None:
+        browser_type = _get_selected_profile_browser_type()
+        
     canary_binary = "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
     chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     brave_binary = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
     edge_binary = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
     
+    if browser_type == "canary":
+        return canary_binary
+    elif browser_type == "brave":
+        return brave_binary
+    elif browser_type == "edge":
+        return edge_binary
+    elif browser_type == "chrome":
+        return chrome_binary
+        
+    # Auto-detect fallback if profile browser type is default/missing
     if os.path.exists(canary_binary):
         return canary_binary
     elif os.path.exists(chrome_binary):
@@ -218,8 +249,21 @@ def _get_active_browser_binary() -> str:
     return chrome_binary
 
 
-def _get_active_browser_app_name() -> str:
+def _get_active_browser_app_name(browser_type: str = None) -> str:
     import os
+    if browser_type is None:
+        browser_type = _get_selected_profile_browser_type()
+        
+    if browser_type == "canary":
+        return "Google Chrome Canary"
+    elif browser_type == "brave":
+        return "Brave Browser"
+    elif browser_type == "edge":
+        return "Microsoft Edge"
+    elif browser_type == "chrome":
+        return "Google Chrome"
+        
+    # Auto-detect fallback
     canary_binary = "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
     chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     brave_binary = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
@@ -421,6 +465,7 @@ def create_profile(payload: CreateProfilePayload):
         "path": str(profile_dir),
         "debug_port": port,
         "startup_urls": startup_urls,
+        "browser_type": payload.browser_type,
     }
     data["profiles"].append(profile_obj)
 
@@ -513,6 +558,7 @@ def update_profile(payload: UpdateProfilePayload):
     profile["path"] = str(new_dir)
     profile["debug_port"] = port
     profile["startup_urls"] = _normalize_urls(payload.startup_urls)
+    profile["browser_type"] = payload.browser_type
 
     if data.get("selected_profile") == old_name:
         data["selected_profile"] = new_name
@@ -568,7 +614,7 @@ async def launch_profile(payload: LaunchProfilePayload):
         except Exception:
             pass
 
-    chrome_binary = _get_active_browser_binary()
+    chrome_binary = _get_active_browser_binary(profile.get("browser_type", "chrome"))
     # Launch without --user-data-dir if it is the Everyday Chrome profile, to load untouched daily sessions directly
     if profile_path == "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome":
         cmd = [

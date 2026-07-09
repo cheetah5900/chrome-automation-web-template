@@ -1,13 +1,23 @@
 {
-  "selected_profile": "Generate Image Dino",
+  "selected_profile": "Google Chrome Canary",
   "profiles": [
+    {
+      "name": "Google Chrome Canary",
+      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Google Chrome Canary",
+      "debug_port": 9222,
+      "startup_urls": [
+        "https://labs.google/fx/tools/flow"
+      ],
+      "browser_type": "canary"
+    },
     {
       "name": "Generate Image Dino",
       "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Generate Image Dino",
-      "debug_port": 9222,
+      "debug_port": 9223,
       "startup_urls": [
         "https://chatgpt.com/"
-      ]
+      ],
+      "browser_type": "chrome"
     }
   ]
 }
