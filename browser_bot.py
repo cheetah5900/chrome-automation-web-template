@@ -30,17 +30,81 @@ class BrowserBot:
             options.add_experimental_option("detach", True)
 
         try:
-            global _cached_driver_path
-            if _cached_driver_path is None:
-                _cached_driver_path = ChromeDriverManager().install()
-                # Automatically codesign the chromedriver on macOS to prevent SIGKILL (status code -9) crashes
-                import subprocess
-                try:
-                    subprocess.run(["codesign", "--force", "--deep", "--sign", "-", _cached_driver_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                except Exception:
-                    pass
+            import os
+            import json
+            from pathlib import Path
             
-            driver_path = _cached_driver_path
+            # 1. Determine active browser type
+            browser_type = "chrome"
+            base_dir = Path(__file__).resolve().parent
+            defaults_file = base_dir / "runtime" / "defaults.json"
+            profiles_file = base_dir / "runtime" / "profiles.json"
+            try:
+                if defaults_file.exists() and profiles_file.exists():
+                    defaults = json.loads(defaults_file.read_text())
+                    selected_name = defaults.get("selected_profile", "")
+                    if selected_name:
+                        profiles_data = json.loads(profiles_file.read_text())
+                        profiles = profiles_data.get("profiles", [])
+                        profile = next((p for p in profiles if p.get("name") == selected_name), None)
+                        if profile:
+                            browser_type = profile.get("browser_type", "chrome")
+            except Exception:
+                pass
+
+            # 2. Resolve driver path
+            driver_path = None
+            if browser_type == "canary":
+                canary_driver_dir = base_dir / "runtime" / "chromedriver_canary"
+                canary_driver_bin = canary_driver_dir / "chromedriver-mac-arm64" / "chromedriver"
+                
+                if not canary_driver_bin.exists():
+                    canary_driver_bin = canary_driver_dir / "chromedriver"
+                
+                if canary_driver_bin.exists():
+                    driver_path = str(canary_driver_bin)
+                    print(f"Using manual ChromeDriver Canary: {driver_path}")
+                else:
+                    print("Downloading matched ChromeDriver 152.0.7940.0 for Chrome Canary...")
+                    canary_driver_dir.mkdir(parents=True, exist_ok=True)
+                    zip_path = canary_driver_dir / "chromedriver.zip"
+                    
+                    import urllib.request
+                    import zipfile
+                    try:
+                        url = "https://storage.googleapis.com/chrome-for-testing-public/152.0.7940.0/mac-arm64/chromedriver-mac-arm64.zip"
+                        urllib.request.urlretrieve(url, zip_path)
+                        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                            zip_ref.extractall(canary_driver_dir)
+                        
+                        extracted_bin = canary_driver_dir / "chromedriver-mac-arm64" / "chromedriver"
+                        if extracted_bin.exists():
+                            driver_path = str(extracted_bin)
+                        else:
+                            driver_path = str(canary_driver_dir / "chromedriver")
+                            
+                        import subprocess
+                        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", driver_path], check=False)
+                        os.chmod(driver_path, 0o755)
+                        
+                        if zip_path.exists():
+                            zip_path.unlink()
+                            
+                        print(f"Successfully downloaded and installed Canary ChromeDriver: {driver_path}")
+                    except Exception as download_err:
+                        print(f"Failed to download Canary ChromeDriver: {download_err}")
+            
+            if not driver_path:
+                global _cached_driver_path
+                if _cached_driver_path is None:
+                    _cached_driver_path = ChromeDriverManager().install()
+                    import subprocess
+                    try:
+                        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", _cached_driver_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    except Exception:
+                        pass
+                driver_path = _cached_driver_path
+            
             service = Service(driver_path, args=["--disable-build-check"])
             
             # Add retry logic for connection (optimized timeout)
