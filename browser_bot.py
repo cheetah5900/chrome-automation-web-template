@@ -41,7 +41,7 @@ class BrowserBot:
                     pass
             
             driver_path = _cached_driver_path
-            service = Service(driver_path)
+            service = Service(driver_path, args=["--disable-build-check"])
             
             # Add retry logic for connection (optimized timeout)
             for attempt in range(2):
