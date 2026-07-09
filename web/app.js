@@ -717,8 +717,20 @@ function initTabNavigation() {
       tab.btn.classList.add('active');
       if (tab.view) tab.view.classList.remove('hidden');
       if (tab.onLoad) tab.onLoad();
+      
+      // Save active tab ID to localStorage
+      localStorage.setItem('activeNavigationTab', tab.btn.id);
     });
   });
+
+  // Restore active tab from localStorage
+  const savedTabId = localStorage.getItem('activeNavigationTab');
+  if (savedTabId) {
+    const savedTab = tabs.find(t => t.btn && t.btn.id === savedTabId);
+    if (savedTab && savedTab.btn) {
+      savedTab.btn.click();
+    }
+  }
 }
 
 // Load and populate configuration
