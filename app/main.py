@@ -1279,8 +1279,8 @@ def open_google_flow_project_if_needed(driver, project_name: str) -> None:
 
     # Check if we are already inside a project editor page
     current_url = driver.current_url.lower()
-    if "/project/" in current_url and "/edit/" in current_url:
-        log("[โครงการ] ตรวจพบว่าอยู่ในหน้าแก้ไขโครงการเรียบร้อยแล้ว ไม่ต้องกดเปิดใหม่")
+    if "/project/" in current_url:
+        log("[โครงการ] ตรวจพบว่าอยู่ในหน้าโครงการเรียบร้อยแล้ว (มี '/project/' ใน URL) ไม่ต้องเปิดโครงการใหม่")
         return
 
     log(f"[โครงการ] เริ่มค้นหาและเปิดโครงการชื่อ: '{project_name}'...")
@@ -3989,6 +3989,26 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             )
             
         time.sleep(1.0) # Wait for panel to load
+
+        # 1.2 Click the "Video" tab if it is not selected
+        video_tab_xpath = "//button[@role='tab' and (contains(., 'Video') or contains(@id, 'VIDEO') or contains(@aria-controls, 'VIDEO'))]"
+        log("[แผงตั้งค่า] คลิกเลือกแท็บหลัก Video...")
+        try:
+            video_tab = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, video_tab_xpath))
+            )
+            state = video_tab.get_attribute("data-state")
+            if state != "active":
+                try:
+                    video_tab.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", video_tab)
+                log("[แผงตั้งค่า] คลิกเลือกแท็บหลัก Video สำเร็จ")
+                time.sleep(1.0) # Wait for tab switch
+            else:
+                log("[แผงตั้งค่า] แท็บหลักเป็น Video อยู่แล้ว")
+        except Exception as tab_err:
+            log(f"[แผงตั้งค่าเตือน] ไม่สามารถคลิกเลือกแท็บหลัก Video ได้: {tab_err}")
 
         # 1.5 Click the "Frames" tab inside the settings panel
         frames_tab_xpath = "//button[@role='tab' and (contains(., 'Frames') or contains(@id, 'VIDEO_FRAMES') or contains(@aria-controls, 'VIDEO_FRAMES'))]"
