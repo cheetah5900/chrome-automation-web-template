@@ -3822,9 +3822,30 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # 4. Type @ using ActionChains keyboard events
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
-    log("[ป้อนข้อมูล] พิมพ์ @ ด้วยคีย์บอร์ดเสมือน")
+        
+    # Re-focus prompt input box to ensure it has focus after closing settings
+    log("[ป้อนข้อมูล] โฟกัสช่องพรอพต์อีกครั้งก่อนป้อน @")
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", box)
+        time.sleep(0.3)
+    except Exception:
+        pass
     try:
         from selenium.webdriver.common.action_chains import ActionChains
+        actions = ActionChains(driver)
+        actions.move_to_element(box).click().perform()
+        log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย ActionChains")
+    except Exception:
+        try:
+            box.click()
+            log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย Standard Click")
+        except Exception:
+            driver.execute_script("arguments[0].click();", box)
+            log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
+    time.sleep(0.8)
+
+    log("[ป้อนข้อมูล] พิมพ์ @ ด้วยคีย์บอร์ดเสมือน")
+    try:
         actions = ActionChains(driver)
         actions.send_keys("@").perform()
     except Exception as e:
@@ -3834,11 +3855,11 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         box.send_keys("@")
     time.sleep(3.0) # Wait 3.0s after typing @
 
-    # Type round number using ActionChains keyboard events
+    # Type round number and extension using ActionChains keyboard events
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
-    text_to_type = f"{round_idx:02d}"
-    log(f"[ป้อนข้อมูล] พิมพ์หมายเลขอ้างอิง (01, 02, ...) ด้วยคีย์บอร์ดเสมือน: {text_to_type}")
+    text_to_type = f"{round_idx:02d}.png"
+    log(f"[ป้อนข้อมูล] พิมพ์หมายเลขอ้างอิงและนามสกุล (.png) ด้วยคีย์บอร์ดเสมือน: {text_to_type}")
     try:
         actions = ActionChains(driver)
         actions.send_keys(text_to_type).perform()
