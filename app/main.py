@@ -139,6 +139,7 @@ class VideoGenStepPayload(BaseModel):
     video_submit_selector: str = ""
     video_wait_seconds: int = 60
     is_first_run: bool = True
+    google_flow_email: str = "dogdadcatmom@gmail.com"
 
 
 
@@ -956,6 +957,7 @@ def _default_config() -> dict[str, Any]:
             "lakorn_ep": "",
             "lakorn_ton": "",
             "google_flow_path": "",
+            "google_flow_email": "dogdadcatmom@gmail.com",
             "video_wait_seconds": 60,
             "video_input_selector": "",
             "video_settings_selector": "",
@@ -1018,6 +1020,7 @@ def _default_config() -> dict[str, Any]:
             "lakorn_ep": "",
             "lakorn_ton": "",
             "google_flow_path": "",
+            "google_flow_email": "dogdadcatmom@gmail.com",
             "video_wait_seconds": 60,
             "video_input_selector": "",
             "video_settings_selector": "",
@@ -1094,7 +1097,7 @@ def log(msg: str) -> None:
         pass
 
 
-def check_unusual_activity_and_clear(driver) -> None:
+def check_unusual_activity_and_clear(driver, target_email: str = "dogdadcatmom@gmail.com") -> None:
     from selenium.webdriver.common.by import By
     # Target only elements inside the virtuoso-item-list container where the video/image generation cards live
     unusual_activity_xpath = "//*[@data-testid='virtuoso-item-list']//*[contains(text(), 'เราพบกิจกรรมที่ผิดปกติ') or contains(text(), 'unusual activity') or contains(., 'เราพบกิจกรรมที่ผิดปกติ') or contains(., 'unusual activity')]"
@@ -1134,17 +1137,87 @@ def check_unusual_activity_and_clear(driver) -> None:
             try:
                 driver.refresh()
                 log("[ระบบกู้คืน] สั่งรีเฟรชหน้าเว็บเรียบร้อย")
-            except Exception:
-                pass
+                time.sleep(3.0)
+                handle_google_flow_login_if_needed(driver, target_email)
+            except Exception as login_err:
+                log(f"[ระบบกู้คืนเตือน] ล็อกอินใหม่อัตโนมัติหลังกู้คืนล้มเหลว: {login_err}")
                 
             raise HTTPException(
                 status_code=400,
-                detail="ตรวจพบกิจกรรมที่ผิดปกติของบัญชี Google! ระบบได้ทำการเคลียร์คุ้กกี้ของ Google Flow และแคชเบราว์เซอร์แล้ว หน้าเว็บกำลังรีเฟรช กรุณาเข้าสู่ระบบ Google Flow ใหม่อีกครั้งบนเบราว์เซอร์ Chrome ก่อนที่จะเริ่มรันบอทอีกครั้ง"
+                detail=f"ตรวจพบกิจกรรมที่ผิดปกติของบัญชี Google! ระบบได้ทำการเคลียร์คุ้กกี้และล้างแคชเรียบร้อย และได้ดำเนินการล็อกอินเข้าสู่ระบบบัญชี {target_email} ให้โดยอัตโนมัติแล้ว กรุณากดเริ่มรันบอทอีกครั้งเพื่อทำงานต่อ"
             )
     except HTTPException:
         raise
     except Exception as e:
         log(f"Warning: การตรวจสอบระบบเตือนกิจกรรมผิดปกติขัดข้อง: {e}")
+
+
+def handle_google_flow_login_if_needed(driver, target_email: str) -> None:
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    import time
+
+    if not is_driver_alive(driver):
+        return
+
+    # 1. Check if the "Create with Google Flow" button is visible
+    create_btn_xpath = "//button[.//span[text()='Create with Google Flow'] or contains(., 'Create with Google Flow') or contains(text(), 'Create with Google Flow')]"
+    try:
+        create_btns = driver.find_elements(By.XPATH, create_btn_xpath)
+        visible_create_btns = [b for b in create_btns if b.is_displayed()]
+        if visible_create_btns:
+            log("[ล็อกอินอัตโนมัติ] พบปุ่ม 'Create with Google Flow' กำลังคลิกปุ่มเพื่อล็อกอิน...")
+            try:
+                visible_create_btns[0].click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", visible_create_btns[0])
+            time.sleep(4.0) # Wait for accounts chooser page to load
+    except Exception as e:
+        log(f"[ล็อกอินอัตโนมัติ] ไม่พบปุ่ม Create with Google Flow หรือคลิกมีปัญหา: {e}")
+
+    if not is_driver_alive(driver):
+        return
+
+    # 2. Check if we are on accounts.google.com page
+    current_url = driver.current_url.lower()
+    if "accounts.google.com" in current_url or "accounts.google" in current_url:
+        log(f"[ล็อกอินอัตโนมัติ] อยู่ในหน้าบัญชี Google กำลังค้นหาอีเมลเป้าหมาย: {target_email}")
+        
+        email_selectors = [
+            f"//div[@data-identifier='{target_email}']",
+            f"//div[@data-email='{target_email}']",
+            f"//div[contains(@class, 'VV3oRb') and contains(., '{target_email}')]",
+            f"//*[not(self::script or self::style) and text()='{target_email}']",
+            f"//*[not(self::script or self::style) and contains(., '{target_email}')]"
+        ]
+        
+        selected_item = None
+        for selector in email_selectors:
+            try:
+                items = driver.find_elements(By.XPATH, selector)
+                visible_items = [item for item in items if item.is_displayed()]
+                if visible_items:
+                    selected_item = visible_items[0]
+                    log(f"[ล็อกอินอัตโนมัติ] ตรวจพบตัวเลือกอีเมลด้วย XPath: {selector}")
+                    break
+            except Exception:
+                pass
+                
+        if selected_item:
+            try:
+                selected_item.click()
+                log(f"[ล็อกอินอัตโนมัติ] คลิกเลือกบัญชี {target_email} เรียบร้อยแล้ว")
+                time.sleep(6.0) # Wait for authentication redirect
+            except Exception as e:
+                log(f"[ล็อกอินอัตโนมัติ] คลิกบัญชีเป้าหมายล้มเหลว ลองด้วย JS: {e}")
+                try:
+                    driver.execute_script("arguments[0].click();", selected_item)
+                    time.sleep(6.0)
+                except Exception as js_e:
+                    log(f"[ล็อกอินอัตโนมัติ] JS Click ล้มเหลว: {js_e}")
+        else:
+            log(f"[ล็อกอินอัตโนมัติเตือน] ไม่พบบัญชีอีเมล {target_email} ในหน้าตัวเลือกบัญชี Google")
 
 
 def _should_focus_tabs() -> bool:
@@ -3648,7 +3721,10 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # _activate_chrome()
 
     # 2. Check for unusual activity and clear cache/cookies if found
-    check_unusual_activity_and_clear(driver)
+    check_unusual_activity_and_clear(driver, payload.google_flow_email)
+
+    # 2.5 Ensure logged in if on landing page or accounts chooser page
+    handle_google_flow_login_if_needed(driver, payload.google_flow_email)
 
     # 3. Find and click prompt input field
     if not video_input_selector:
@@ -4036,7 +4112,18 @@ def step_video_retry(payload: VideoRetryPayload):
         raise HTTPException(status_code=400, detail="ไม่พบแท็บ Google Flow ที่เปิดอยู่")
 
     # 1.5 Check for unusual activity and clear cache/cookies if found
-    check_unusual_activity_and_clear(driver)
+    target_email = "dogdadcatmom@gmail.com"
+    try:
+        import json
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                target_email = cfg.get("google_flow_email", "dogdadcatmom@gmail.com")
+    except Exception:
+        pass
+
+    check_unusual_activity_and_clear(driver, target_email)
+    handle_google_flow_login_if_needed(driver, target_email)
 
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")

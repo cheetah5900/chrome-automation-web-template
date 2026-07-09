@@ -4134,6 +4134,9 @@ async function loadVideoPrompts() {
     const flowPath = document.getElementById('cfg_google_flow_path');
     if (flowPath) flowPath.value = config.google_flow_path || '';
 
+    const flowEmail = document.getElementById('cfg_google_flow_email');
+    if (flowEmail) flowEmail.value = config.google_flow_email || 'dogdadcatmom@gmail.com';
+
     const autoRetry = document.getElementById('cfg_auto_retry_mode');
     if (autoRetry) autoRetry.checked = !!config.auto_retry_mode;
 
@@ -4280,6 +4283,11 @@ async function saveVideoPrompts(silent = false) {
     const payload = { 
       ...currentConfig, 
       auto_retry_mode: !!document.getElementById('cfg_auto_retry_mode')?.checked,
+      google_flow_email: document.getElementById('cfg_google_flow_email')?.value.trim() || 'dogdadcatmom@gmail.com',
+      video_wait_seconds: document.getElementById('cfg_video_wait_seconds')?.value.trim() || '10-30',
+      video_input_selector: document.getElementById('cfg_video_input_selector')?.value.trim() || '',
+      video_settings_selector: document.getElementById('cfg_video_settings_selector')?.value.trim() || '',
+      video_submit_selector: document.getElementById('cfg_video_submit_selector')?.value.trim() || '',
     };
     
     for (const k in payload) {
@@ -4693,6 +4701,7 @@ function initVideoGenListeners() {
   };
 
 
+  setupSetDefaultBtn('setGoogleFlowEmailDefaultBtn', 'cfg_google_flow_email', 'google_flow_email', 'ตั้งค่าอีเมลล็อกอิน Google Flow เรียบร้อยแล้ว');
   setupSetDefaultBtn('setVideoWaitSecondsDefaultBtn', 'cfg_video_wait_seconds', 'video_wait_seconds', 'ตั้งค่าเวลารอเป็นค่าเริ่มต้นเรียบร้อยแล้ว');
   setupSetDefaultBtn('setVideoInputSelectorDefaultBtn', 'cfg_video_input_selector', 'video_input_selector', 'ตั้งค่า CSS Selector ช่องป้อนพรอพต์เรียบร้อยแล้ว');
   setupSetDefaultBtn('setVideoSettingsSelectorDefaultBtn', 'cfg_video_settings_selector', 'video_settings_selector', 'ตั้งค่า CSS Selector ปุ่มตั้งค่าเรียบร้อยแล้ว');
@@ -4714,6 +4723,7 @@ function initVideoGenListeners() {
     btnRunGoogleFlow.addEventListener('click', async () => {
       commitCurrentVideoRoundFromDOM();
       const googleFlowPathVal = '';
+      const googleFlowEmailVal = document.getElementById('cfg_google_flow_email')?.value.trim() || 'dogdadcatmom@gmail.com';
       const inputSelectorVal = document.getElementById('cfg_video_input_selector')?.value.trim() || '';
       const settingsSelectorVal = document.getElementById('cfg_video_settings_selector')?.value.trim() || '';
       const submitSelectorVal = document.getElementById('cfg_video_submit_selector')?.value.trim() || '';
@@ -4807,6 +4817,7 @@ function initVideoGenListeners() {
                 prompt: p,
                 round_idx: r,
                 google_flow_path: googleFlowPathVal,
+                google_flow_email: googleFlowEmailVal,
                 video_input_selector: inputSelectorVal,
                 video_settings_selector: settingsSelectorVal,
                 video_submit_selector: submitSelectorVal,
