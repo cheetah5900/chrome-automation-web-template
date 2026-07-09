@@ -4434,92 +4434,7 @@ function initVideoGenListeners() {
     });
   }
 
-  const btnBrowseGoogleFlowImages = document.getElementById('btnBrowseGoogleFlowImages');
-  const btnStartGoogleFlowUpload = document.getElementById('btnStartGoogleFlowUpload');
-  const btnStopGoogleFlowUpload = document.getElementById('btnStopGoogleFlowUpload');
-  const inputUploadFolderPath = document.getElementById('cfg_upload_folder_path');
-  
-  if (btnBrowseGoogleFlowImages) {
-    btnBrowseGoogleFlowImages.addEventListener('click', async () => {
-      try {
-        btnBrowseGoogleFlowImages.disabled = true;
-        const res = await jsonFetch('/api/utils/browse-directory');
-        if (res && res.ok && res.path) {
-          if (inputUploadFolderPath) inputUploadFolderPath.value = res.path;
-          if (btnStartGoogleFlowUpload) {
-            btnStartGoogleFlowUpload.disabled = false;
-            btnStartGoogleFlowUpload.style.opacity = '1';
-          }
-        }
-      } catch (err) {
-        showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
-      } finally {
-        btnBrowseGoogleFlowImages.disabled = false;
-      }
-    });
-  }
 
-  if (btnStartGoogleFlowUpload) {
-    btnStartGoogleFlowUpload.addEventListener('click', async () => {
-      const folderPath = inputUploadFolderPath ? inputUploadFolderPath.value : '';
-      if (!folderPath) {
-        showToast('กรุณาเลือกโฟลเดอร์รูปภาพก่อน', 'warning');
-        return;
-      }
-
-      try {
-        btnStartGoogleFlowUpload.style.display = 'none';
-        if (btnStopGoogleFlowUpload) {
-          btnStopGoogleFlowUpload.style.display = 'block';
-          btnStopGoogleFlowUpload.disabled = false;
-        }
-
-        writeConsoleLine(`Upload: Starting image upload from ${folderPath}...`, 'info', 'videoConsole');
-        const uploadRes = await jsonFetch('/api/step/upload-google-flow-images', {
-          method: 'POST',
-          body: JSON.stringify({ folder_path: folderPath })
-        });
-        
-        if (uploadRes.ok) {
-          showToast(uploadRes.message, 'success');
-          writeConsoleLine(`Upload Success: ${uploadRes.message}`, 'success', 'videoConsole');
-        } else {
-          showToast(uploadRes.message || 'การอัพโหลดถูกยกเลิกหรือล้มเหลว', 'error');
-          writeConsoleLine(`Upload Interrupted: ${uploadRes.message}`, 'warning', 'videoConsole');
-        }
-      } catch (err) {
-        showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
-        writeConsoleLine(`Upload Error: ${err.message}`, 'error', 'videoConsole');
-      } finally {
-        if (btnStopGoogleFlowUpload) {
-          btnStopGoogleFlowUpload.style.display = 'none';
-          btnStopGoogleFlowUpload.disabled = false;
-          const stopBtnText = btnStopGoogleFlowUpload.querySelector('.btn-text');
-          if (stopBtnText) stopBtnText.textContent = '🛑 FORCE STOP';
-        }
-        btnStartGoogleFlowUpload.style.display = 'block';
-      }
-    });
-  }
-
-  if (btnStopGoogleFlowUpload) {
-    btnStopGoogleFlowUpload.addEventListener('click', async () => {
-      try {
-        btnStopGoogleFlowUpload.disabled = true;
-        const btnText = btnStopGoogleFlowUpload.querySelector('.btn-text');
-        if (btnText) btnText.textContent = 'กำลังหยุด...';
-        
-        writeConsoleLine('Force Stop: Stopping image upload...', 'warning', 'videoConsole');
-        await jsonFetch('/api/step/stop-upload-google-flow', { method: 'POST' });
-      } catch (err) {
-        showToast(`Force Stop Error: ${err.message}`, 'error');
-        writeConsoleLine(`Force Stop Error: ${err.message}`, 'error', 'videoConsole');
-        btnStopGoogleFlowUpload.disabled = false;
-        const btnText = btnStopGoogleFlowUpload.querySelector('.btn-text');
-        if (btnText) btnText.textContent = '🛑 FORCE STOP';
-      }
-    });
-  }
 
   const resetAllVideoRoundsBtn = document.getElementById('resetAllVideoRoundsBtn');
   const resetAllVideoRoundsBtn2 = document.getElementById('resetAllVideoRoundsBtn2');
@@ -5236,11 +5151,7 @@ const staticTooltips = {
   "addVideoPromptBtn": "➕ เพิ่มพรอพต์วิดีโอ (Add Prompt)",
   "saveVideoPromptsBtn": "💾 บันทึกพรอพต์วิดีโอ (Save Prompts)",
   "deleteAllVideoPromptsBtn": "🗑️ ลบพรอพต์ทั้งหมด (Delete All)",
-  "setGoogleFlowPathDefaultBtn": "📌 ตั้งลิงก์เริ่มต้น (Set Default)",
   "setVideoWaitSecondsDefaultBtn": "📌 ตั้งค่าดีเลย์ (Set Default)",
-  "btnBrowseGoogleFlowImages": "📁 เลือกโฟลเดอร์ภาพ (Browse Folder):<br>- สำหรับ Google Flow",
-  "btnStartGoogleFlowUpload": "⬆️ เริ่มอัปโหลดภาพ (Start Upload)",
-  "btnStopGoogleFlowUpload": "🛑 หยุดอัปโหลดภาพ (Stop Upload)",
   "clearVideoConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)",
 
   // Video Helper
