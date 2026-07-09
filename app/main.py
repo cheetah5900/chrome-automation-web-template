@@ -1101,27 +1101,16 @@ def check_unusual_activity_and_clear(driver) -> None:
         elements = driver.find_elements(By.XPATH, unusual_activity_xpath)
         visible_elements = [el for el in elements if el.is_displayed()]
         if visible_elements:
-            log("[ตรวจพบกิจกรรมผิดปกติ] พบข้อความเตือนกิจกรรมที่ผิดปกติบนหน้าเว็บ! เริ่มต้นกระบวนการเคลียร์ cache และ cookies...")
-            
-            # Clear storage, cookies, and cache
-            try:
-                driver.execute_script("window.localStorage.clear(); window.sessionStorage.clear();")
-                log("[ระบบกู้คืน] ล้าง Local Storage และ Session Storage สำเร็จ")
-            except Exception as e:
-                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Storage ได้: {e}")
+            log("[ตรวจพบกิจกรรมผิดปกติ] พบข้อความเตือนกิจกรรมที่ผิดปกติบนหน้าเว็บ! เริ่มต้นกระบวนการล้างข้อมูล Cache และ Cookies สำหรับ Google Flow...")
 
+            # 1. Clear cookies for the current domain only (labs.google / vids.google.com)
             try:
                 driver.delete_all_cookies()
-                log("[ระบบกู้คืน] ล้าง Cookies ในขอบเขตโดเมนปัจจุบัน (delete_all_cookies) สำเร็จ")
+                log("[ระบบกู้คืน] ล้าง Cookies สำหรับขอบเขตโดเมน Google Flow ในปัจจุบันสำเร็จ")
             except Exception as e:
-                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Cookies ขอบเขตปัจจุบันได้: {e}")
+                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Cookies สำหรับโดเมนปัจจุบันได้: {e}")
 
-            try:
-                driver.execute_cdp_cmd("Network.clearBrowserCookies", {})
-                log("[ระบบกู้คืน] ล้าง Cookies ทั้งหมดในเบราว์เซอร์ผ่าน CDP (Network.clearBrowserCookies) สำเร็จ")
-            except Exception as e:
-                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Cookies ทั้งหมดผ่าน CDP ได้: {e}")
-
+            # 2. Clear browser cache via CDP
             try:
                 driver.execute_cdp_cmd("Network.clearBrowserCache", {})
                 log("[ระบบกู้คืน] ล้าง Cache ทั้งหมดในเบราว์เซอร์ผ่าน CDP (Network.clearBrowserCache) สำเร็จ")
@@ -1137,7 +1126,7 @@ def check_unusual_activity_and_clear(driver) -> None:
                 
             raise HTTPException(
                 status_code=400,
-                detail="ตรวจพบกิจกรรมที่ผิดปกติของบัญชี Google! ระบบได้ทำการเคลียร์คุ้กกี้และแคชของเบราว์เซอร์ทั้งหมดแล้ว หน้าเว็บกำลังรีเฟรช กรุณาเข้าสู่ระบบ Google ใหม่อีกครั้งบนเบราว์เซอร์ Chrome ก่อนที่จะเริ่มรันบอทอีกครั้ง"
+                detail="ตรวจพบกิจกรรมที่ผิดปกติของบัญชี Google! ระบบได้ทำการเคลียร์คุ้กกี้ของ Google Flow และแคชเบราว์เซอร์แล้ว หน้าเว็บกำลังรีเฟรช กรุณาเข้าสู่ระบบ Google Flow ใหม่อีกครั้งบนเบราว์เซอร์ Chrome ก่อนที่จะเริ่มรันบอทอีกครั้ง"
             )
     except HTTPException:
         raise
