@@ -45,7 +45,8 @@ class BrowserManager:
                 self._bot = BrowserBot()
                 ok = self._bot.start_browser(attach=True, port=port)
                 if not ok:
-                    raise RuntimeError(f"Failed to attach to Chrome on port {port}")
+                    from fastapi import HTTPException
+                    raise HTTPException(status_code=400, detail=f"ไม่สามารถเชื่อมต่อ Chrome Debug Port ({port}) ได้ กรุณาตรวจสอบว่ามีหน้าเว็บ Chrome เปิดอยู่และมีแท็บระบบทำความร้อนเปิดอยู่")
             return self._bot
 
     def close(self) -> None:

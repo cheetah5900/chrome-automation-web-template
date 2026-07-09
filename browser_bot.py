@@ -6,6 +6,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 
+_cached_driver_path = None
+
 class BrowserBot:
     def __init__(self):
         self.driver = None
@@ -28,26 +30,29 @@ class BrowserBot:
             options.add_experimental_option("detach", True)
 
         try:
-            driver_path = ChromeDriverManager().install()
-            # Automatically codesign the chromedriver on macOS to prevent SIGKILL (status code -9) crashes
-            import subprocess
-            try:
-                subprocess.run(["codesign", "--force", "--deep", "--sign", "-", driver_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except Exception:
-                pass
-
+            global _cached_driver_path
+            if _cached_driver_path is None:
+                _cached_driver_path = ChromeDriverManager().install()
+                # Automatically codesign the chromedriver on macOS to prevent SIGKILL (status code -9) crashes
+                import subprocess
+                try:
+                    subprocess.run(["codesign", "--force", "--deep", "--sign", "-", _cached_driver_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
+            
+            driver_path = _cached_driver_path
             service = Service(driver_path)
             
-            # Add retry logic for connection
-            for attempt in range(3):
+            # Add retry logic for connection (optimized timeout)
+            for attempt in range(2):
                 try:
                     self.driver = webdriver.Chrome(service=service, options=options)
-                    self.wait = WebDriverWait(self.driver, 10) # 10 seconds timeout
+                    self.wait = WebDriverWait(self.driver, 5) # 5 seconds timeout
                     print("Browser connected/started successfully.")
                     return True
                 except Exception as conn_err:
                     print(f"Connection attempt {attempt+1} failed: {conn_err}")
-                    time.sleep(2) # Wait before retry
+                    time.sleep(0.5) # Wait before retry
             
             print("All connection attempts failed.")
             return False
