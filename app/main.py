@@ -3701,148 +3701,158 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
     time.sleep(1.0)
 
-    # 3.5 Check and configure Model (Veo 3.1 - Lite) and Settings
-    if not is_driver_alive(driver):
-        raise RuntimeError("Browser connection lost.")
+    # 3.5 Check and configure Model (Veo 3.1 - Lite) and Settings (Only on the first run of the batch)
+    opened_settings_panel = False
+    if payload.is_first_run:
+        if not is_driver_alive(driver):
+            raise RuntimeError("Browser connection lost.")
 
-    # 1. Click settings button to open the panel
-    trigger_xpath = "//button[@aria-haspopup='menu' and (contains(@class, 'ldbhld') or contains(@class, 'sc-93abd9dc-1'))]"
-    log("[แผงตั้งค่า] คลิกเปิดแผงตั้งค่าตัวเลือก...")
-    try:
-        trigger_btn = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable((By.XPATH, trigger_xpath))
-        )
+        # 1. Click settings button to open the panel
+        trigger_xpath = "//button[@aria-haspopup='menu' and (contains(@class, 'ldbhld') or contains(@class, 'sc-93abd9dc-1'))]"
+        log("[แผงตั้งค่า] คลิกเปิดแผงตั้งค่าตัวเลือก...")
         try:
-            trigger_btn.click()
-        except Exception:
-            driver.execute_script("arguments[0].click();", trigger_btn)
-        log("[แผงตั้งค่า] คลิกเปิดแผงตั้งค่าสำเร็จ")
-    except Exception as open_err:
-        log(f"[แผงตั้งค่าล้มเหลว] ไม่สามารถคลิกเปิดแผงตั้งค่าได้: {open_err}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"เปิดแผงตั้งค่าวิดีโอล้มเหลว: {open_err}"
-        )
-        
-    time.sleep(1.0) # Wait for panel to load
-
-    # 2. Locate the model selection dropdown button inside the panel
-    model_dropdown_xpath = "//button[(contains(@class, 'eaVRLg') or contains(@class, 'sc-3f41cc92-1') or contains(., 'Omni') or contains(., 'Veo') or contains(., 'Flash') or contains(., 'Lite')) and (contains(., 'arrow_drop_down') or .//i[text()='arrow_drop_down'])]"
-    model_option_xpath = "//button[.//span[text()='Veo 3.1 - Lite'] or contains(., 'Veo 3.1 - Lite')]"
-    
-    try:
-        log("[แผงตั้งค่า] ค้นหาปุ่มเลือกโมเดล (Model Button)...")
-        model_dropdown = WebDriverWait(driver, 5).until(
-            EC.presence_of_element_located((By.XPATH, model_dropdown_xpath))
-        )
-        current_model_text = model_dropdown.text.strip()
-        log(f"[แผงตั้งค่า] โมเดลที่เลือกอยู่ในปัจจุบันคือ: '{current_model_text}'")
-        
-        if "Veo 3.1 - Lite" not in current_model_text:
-            log(f"[แผงตั้งค่า] โมเดลไม่ใช่ Veo 3.1 - Lite (เป็น '{current_model_text}'), กำลังคลิกปุ่มนี้เพื่อเปลี่ยนโมเดล...")
-            
-            opened = False
-            for click_attempt in range(3):
-                log(f"[แผงตั้งค่า] พยายามคลิกเปิดเมนูโมเดล รอบที่ {click_attempt+1}...")
+            trigger_btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, trigger_xpath))
+            )
+            is_already_open = trigger_btn.get_attribute("aria-expanded") == "true" or trigger_btn.get_attribute("data-state") == "open"
+            if not is_already_open:
                 try:
-                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", model_dropdown)
-                    time.sleep(0.3)
-                    model_dropdown.click()
+                    trigger_btn.click()
                 except Exception:
-                    try:
-                        driver.execute_script("arguments[0].click();", model_dropdown)
-                    except Exception:
-                        pass
-                
-                time.sleep(0.8) # Wait for dropdown animation
-                
-                # Check if option is visible in DOM
-                options = driver.find_elements(By.XPATH, model_option_xpath)
-                if any(opt.is_displayed() for opt in options):
-                    log("[แผงตั้งค่า] ตรวจพบเมนูตัวเลือกโมเดลเปิดสำเร็จแล้ว!")
-                    opened = True
-                    break
+                    driver.execute_script("arguments[0].click();", trigger_btn)
+                log("[แผงตั้งค่า] คลิกเปิดแผงตั้งค่าสำเร็จ")
+                opened_settings_panel = True
+            else:
+                log("[แผงตั้งค่า] แผงตั้งค่าเปิดอยู่แล้ว ไม่ต้องคลิกเปิดซ้ำ")
+                opened_settings_panel = True
+        except Exception as open_err:
+            log(f"[แผงตั้งค่าล้มเหลว] ไม่สามารถคลิกเปิดแผงตั้งค่าได้: {open_err}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"เปิดแผงตั้งค่าวิดีโอล้มเหลว: {open_err}"
+            )
             
-            if not opened:
-                # Debugging: scan all buttons while settings panel is open
-                try:
-                    log("=== [DEBUG] เริ่มการดึงข้อมูลปุ่มทั้งหมดในขณะที่แผงตั้งค่าเปิดอยู่ ===")
-                    buttons = driver.find_elements(By.TAG_NAME, "button")
-                    log(f"พบปุ่มทั้งหมด {len(buttons)} ปุ่ม")
-                    for idx, btn in enumerate(buttons):
+        time.sleep(1.0) # Wait for panel to load
+
+        # 2. Locate the model selection dropdown button inside the panel
+        model_dropdown_xpath = "//button[(contains(@class, 'eaVRLg') or contains(@class, 'sc-3f41cc92-1') or contains(., 'Omni') or contains(., 'Veo') or contains(., 'Flash') or contains(., 'Lite')) and (contains(., 'arrow_drop_down') or .//i[text()='arrow_drop_down'])]"
+        model_option_xpath = "//button[.//span[text()='Veo 3.1 - Lite'] or contains(., 'Veo 3.1 - Lite')]"
+        
+        try:
+            log("[แผงตั้งค่า] ค้นหาปุ่มเลือกโมเดล (Model Button)...")
+            model_dropdown = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, model_dropdown_xpath))
+            )
+            current_model_text = model_dropdown.text.strip()
+            log(f"[แผงตั้งค่า] โมเดลที่เลือกอยู่ในปัจจุบันคือ: '{current_model_text}'")
+            
+            if "Veo 3.1 - Lite" not in current_model_text:
+                log(f"[แผงตั้งค่า] โมเดลไม่ใช่ Veo 3.1 - Lite (เป็น '{current_model_text}'), กำลังคลิกปุ่มนี้เพื่อเปลี่ยนโมเดล...")
+                
+                opened = False
+                for click_attempt in range(3):
+                    log(f"[แผงตั้งค่า] พยายามคลิกเปิดเมนูโมเดล รอบที่ {click_attempt+1}...")
+                    try:
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", model_dropdown)
+                        time.sleep(0.3)
+                        model_dropdown.click()
+                    except Exception:
                         try:
-                            btn_id = btn.get_attribute("id") or "ไม่มี ID"
-                            btn_class = btn.get_attribute("class") or "ไม่มี Class"
-                            btn_text = btn.text.strip().replace('\n', ' ') or "ไม่มี Text"
-                            btn_html = btn.get_attribute("outerHTML")
-                            log(f"ปุ่มที่ #{idx}: ID='{btn_id}', Class='{btn_class}', Text='{btn_text}' | HTML={btn_html[:350]}...")
+                            driver.execute_script("arguments[0].click();", model_dropdown)
                         except Exception:
                             pass
-                    log("=== [DEBUG] สิ้นสุดการดึงข้อมูลปุ่ม ===")
+                    
+                    time.sleep(0.8) # Wait for dropdown animation
+                    
+                    # Check if option is visible in DOM
+                    options = driver.find_elements(By.XPATH, model_option_xpath)
+                    if any(opt.is_displayed() for opt in options):
+                        log("[แผงตั้งค่า] ตรวจพบเมนูตัวเลือกโมเดลเปิดสำเร็จแล้ว!")
+                        opened = True
+                        break
+                
+                if not opened:
+                    # Debugging: scan all buttons while settings panel is open
+                    try:
+                        log("=== [DEBUG] เริ่มการดึงข้อมูลปุ่มทั้งหมดในขณะที่แผงตั้งค่าเปิดอยู่ ===")
+                        buttons = driver.find_elements(By.TAG_NAME, "button")
+                        log(f"พบปุ่มทั้งหมด {len(buttons)} ปุ่ม")
+                        for idx, btn in enumerate(buttons):
+                            try:
+                                btn_id = btn.get_attribute("id") or "ไม่มี ID"
+                                btn_class = btn.get_attribute("class") or "ไม่มี Class"
+                                btn_text = btn.text.strip().replace('\n', ' ') or "ไม่มี Text"
+                                btn_html = btn.get_attribute("outerHTML")
+                                log(f"ปุ่มที่ #{idx}: ID='{btn_id}', Class='{btn_class}', Text='{btn_text}' | HTML={btn_html[:350]}...")
+                            except Exception:
+                                pass
+                        log("=== [DEBUG] สิ้นสุดการดึงข้อมูลปุ่ม ===")
+                    except Exception:
+                        pass
+                    raise RuntimeError("ไม่สามารถเปิดเมนูตัวเลือกโมเดลได้")
+
+                # Select Model Option: "Veo 3.1 - Lite"
+                log("[แผงตั้งค่า] คลิกเลือกโมเดล Veo 3.1 - Lite จากดรอปดาวน์...")
+                model_option = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, model_option_xpath))
+                )
+                try:
+                    model_option.click()
                 except Exception:
-                    pass
-                raise RuntimeError("ไม่สามารถเปิดเมนูตัวเลือกโมเดลได้")
+                    driver.execute_script("arguments[0].click();", model_option)
+                time.sleep(1.0)
+            else:
+                log("[แผงตั้งค่า] โมเดลเป็น Veo 3.1 - Lite อยู่แล้ว ข้ามการคลิกเลือกโมเดล")
+                
+            # 3. Press ESCAPE to close settings panel
+            if opened_settings_panel:
+                log("[แผงตั้งค่า] กดปุ่ม Escape เพื่อปิดหน้าต่างการตั้งค่า...")
+                try:
+                    driver.switch_to.active_element.send_keys(Keys.ESCAPE)
+                except Exception:
+                    try:
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        actions = ActionChains(driver)
+                        actions.send_keys(Keys.ESCAPE).perform()
+                    except Exception:
+                        pass
+                time.sleep(1.0)
 
-            # Select Model Option: "Veo 3.1 - Lite"
-            log("[แผงตั้งค่า] คลิกเลือกโมเดล Veo 3.1 - Lite จากดรอปดาวน์...")
-            model_option = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, model_option_xpath))
+        except Exception as model_err:
+            log(f"[แผงตั้งค่าล้มเหลว] ไม่สามารถเลือกโมเดลได้: {model_err}")
+            import traceback
+            tb = traceback.format_exc()
+            log(f"Traceback:\n{tb}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"เลือกโมเดล Veo 3.1 - Lite ล้มเหลว: {model_err}"
             )
-            try:
-                model_option.click()
-            except Exception:
-                driver.execute_script("arguments[0].click();", model_option)
-            time.sleep(1.0)
-        else:
-            log("[แผงตั้งค่า] โมเดลเป็น Veo 3.1 - Lite อยู่แล้ว ข้ามการคลิกเลือกโมเดล")
-            
-        # 3. Press ESCAPE to close settings panel
-        log("[แผงตั้งค่า] กดปุ่ม Escape เพื่อปิดหน้าต่างการตั้งค่า...")
-        try:
-            driver.switch_to.active_element.send_keys(Keys.ESCAPE)
-        except Exception:
-            try:
-                from selenium.webdriver.common.action_chains import ActionChains
-                actions = ActionChains(driver)
-                actions.send_keys(Keys.ESCAPE).perform()
-            except Exception:
-                pass
-        time.sleep(1.0)
-
-    except Exception as model_err:
-        log(f"[แผงตั้งค่าล้มเหลว] ไม่สามารถเลือกโมเดลได้: {model_err}")
-        import traceback
-        tb = traceback.format_exc()
-        log(f"Traceback:\n{tb}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"เลือกโมเดล Veo 3.1 - Lite ล้มเหลว: {model_err}"
-        )
 
     # 4. Type @ using ActionChains keyboard events
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
         
-    # Re-focus prompt input box to ensure it has focus after closing settings
-    log("[ป้อนข้อมูล] โฟกัสช่องพรอพต์อีกครั้งก่อนป้อน @")
-    try:
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", box)
-        time.sleep(0.3)
-    except Exception:
-        pass
-    try:
-        from selenium.webdriver.common.action_chains import ActionChains
-        actions = ActionChains(driver)
-        actions.move_to_element(box).click().perform()
-        log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย ActionChains")
-    except Exception:
+    # Re-focus prompt input box only if settings panel was opened (and defocused the box)
+    if opened_settings_panel:
+        log("[ป้อนข้อมูล] โฟกัสช่องพรอพต์อีกครั้งก่อนป้อน @")
         try:
-            box.click()
-            log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย Standard Click")
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", box)
+            time.sleep(0.3)
         except Exception:
-            driver.execute_script("arguments[0].click();", box)
-            log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
-    time.sleep(0.8)
+            pass
+        try:
+            from selenium.webdriver.common.action_chains import ActionChains
+            actions = ActionChains(driver)
+            actions.move_to_element(box).click().perform()
+            log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย ActionChains")
+        except Exception:
+            try:
+                box.click()
+                log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย Standard Click")
+            except Exception:
+                driver.execute_script("arguments[0].click();", box)
+                log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
+        time.sleep(0.8)
 
     log("[ป้อนข้อมูล] พิมพ์ @ ด้วยคีย์บอร์ดเสมือน")
     try:
