@@ -3560,7 +3560,28 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
 
     if not switched:
-        raise HTTPException(status_code=400, detail="ไม่พบแท็บ Google Flow ที่เปิดอยู่ กรุณาเปิดแท็บ Google Flow ค้างไว้ก่อนทำการรัน")
+        opened_urls = []
+        try:
+            current_handle = driver.current_window_handle
+            for handle in driver.window_handles:
+                try:
+                    driver.switch_to.window(handle)
+                    opened_urls.append(driver.current_url)
+                except Exception:
+                    pass
+            try:
+                driver.switch_to.window(current_handle)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        
+        urls_str = ", ".join(opened_urls) if opened_urls else "ไม่พบแท็บใดๆ"
+        log(f"[ไม่พบแท็บ Flow] สแกนเจอแท็บอื่นๆ ในเบราว์เซอร์: {urls_str}")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"ไม่พบแท็บ Google Flow ที่เปิดอยู่ (แท็บที่สแกนเจอในเบราว์เซอร์อัตโนมัติ: {urls_str}) กรุณาตรวจสอบว่าได้เปิดหน้า Google Flow ในเบราว์เซอร์ที่เปิดขึ้นมานี้"
+        )
 
     # Bring Chrome window to front (Commented out to run completely in background)
     # _activate_chrome()
