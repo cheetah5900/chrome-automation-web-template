@@ -114,6 +114,10 @@ class LaunchProfilePayload(BaseModel):
 class ForceKillPayload(BaseModel):
     port: int
 
+class CloseProfilePayload(BaseModel):
+    port: int = 9222
+
+
 
 class ImportLakornPayload(BaseModel):
     lakorn_path: str
@@ -663,21 +667,23 @@ async def launch_profile(payload: LaunchProfilePayload):
 
 
 @app.post("/api/profiles/close")
-def close_profile():
+def close_profile(payload: CloseProfilePayload = None):
     try:
-        port = 9222
-        try:
-            if DEFAULTS_FILE.exists() and PROFILES_FILE.exists():
-                defaults = _read_json(DEFAULTS_FILE)
-                selected_name = defaults.get("selected_profile", "")
-                if selected_name:
-                    profiles_data = _read_json(PROFILES_FILE)
-                    profiles = profiles_data.get("profiles", [])
-                    profile = next((p for p in profiles if p.get("name") == selected_name), None)
-                    if profile:
-                        port = int(profile.get("debug_port", 9222))
-        except Exception:
-            pass
+        port = payload.port if payload else None
+        if port is None:
+            port = 9222
+            try:
+                if DEFAULTS_FILE.exists() and PROFILES_FILE.exists():
+                    defaults = _read_json(DEFAULTS_FILE)
+                    selected_name = defaults.get("selected_profile", "")
+                    if selected_name:
+                        profiles_data = _read_json(PROFILES_FILE)
+                        profiles = profiles_data.get("profiles", [])
+                        profile = next((p for p in profiles if p.get("name") == selected_name), None)
+                        if profile:
+                            port = int(profile.get("debug_port", 9222))
+            except Exception:
+                pass
 
         try:
             browser_manager.close()

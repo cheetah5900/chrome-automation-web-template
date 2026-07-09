@@ -639,7 +639,7 @@ document.getElementById('closeBrowser').addEventListener('click', async () => {
     msg.textContent = 'Closing browser...';
   }
   try {
-    const res = await jsonFetch('/api/profiles/force-kill', {
+    const res = await jsonFetch('/api/profiles/close', {
       method: 'POST',
       body: JSON.stringify({ port })
     });
