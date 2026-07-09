@@ -3629,6 +3629,134 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
     time.sleep(1.0)
 
+    # 3.5 Check and configure Video options (Video, 6s, 9:16, x2, Veo 3.1 - Lite) if not already set
+    if not is_driver_alive(driver):
+        raise RuntimeError("Browser connection lost.")
+    
+    # Check if correct options are already set (Video, 6s, 9:16, x2)
+    correct_xpath = "//button[@aria-haspopup='menu' and (contains(@class, 'ldbhld') or contains(@class, 'sc-93abd9dc-1')) and contains(., 'Video · 6s') and contains(., 'x2') and (contains(., 'crop_9_16') or .//i[text()='crop_9_16'])]"
+    is_options_correct = False
+    try:
+        correct_btns = driver.find_elements(By.XPATH, correct_xpath)
+        if any(b.is_displayed() for b in correct_btns):
+            log("[ตัวเลือกถูกต้อง] ตรวจพบตัวเลือก Video, 6s, 9:16, x2 ถูกเลือกอยู่แล้ว ข้ามขั้นตอนการตั้งค่า")
+            is_options_correct = True
+    except Exception:
+        pass
+
+    if not is_options_correct:
+        log("[ตั้งค่าตัวเลือก] ไม่พบตัวเลือกที่ถูกต้อง เริ่มขั้นตอนเปิดแผงตั้งค่า...")
+        trigger_xpath = "//button[@aria-haspopup='menu' and (contains(@class, 'ldbhld') or contains(@class, 'sc-93abd9dc-1'))]"
+        try:
+            trigger_btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, trigger_xpath))
+            )
+            try:
+                trigger_btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", trigger_btn)
+            log("[แผงตั้งค่า] คลิกเปิดแผงตั้งค่าตัวเลือกแล้ว")
+            time.sleep(1.5)
+            
+            # Click Option 1: Tab "Video"
+            video_tab_xpath = "//button[@role='tab' and contains(., 'Video') and (contains(., 'play_circle') or .//i[text()='play_circle'])]"
+            log("[แผงตั้งค่า] คลิกเลือกแท็บ Video...")
+            video_tab = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, video_tab_xpath))
+            )
+            try:
+                video_tab.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", video_tab)
+            time.sleep(0.8)
+
+            # Click Option 2: Tab "Frames"
+            frames_tab_xpath = "//button[@role='tab' and contains(., 'Frames') and (contains(., 'crop_free') or .//i[text()='crop_free'])]"
+            log("[แผงตั้งค่า] คลิกเลือกแท็บ Frames...")
+            frames_tab = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, frames_tab_xpath))
+            )
+            try:
+                frames_tab.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", frames_tab)
+            time.sleep(0.8)
+
+            # Click Option 3: Tab "9:16"
+            ratio_tab_xpath = "//button[@role='tab' and contains(., '9:16') and (contains(., 'crop_9_16') or .//i[text()='crop_9_16'])]"
+            log("[แผงตั้งค่า] คลิกเลือกอัตราส่วน 9:16...")
+            ratio_tab = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, ratio_tab_xpath))
+            )
+            try:
+                ratio_tab.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", ratio_tab)
+            time.sleep(0.8)
+
+            # Click Option 4: Tab "x2"
+            x2_tab_xpath = "//button[@role='tab' and (text()='x2' or contains(., 'x2'))]"
+            log("[แผงตั้งค่า] คลิกเลือกความละเอียด x2...")
+            x2_tab = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, x2_tab_xpath))
+            )
+            try:
+                x2_tab.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", x2_tab)
+            time.sleep(0.8)
+
+            # Click Option 5: Model Selection Dropdown
+            model_dropdown_xpath = "//button[contains(@class, 'eaVRLg') or contains(@class, 'sc-3f41cc92-1')]"
+            log("[แผงตั้งค่า] คลิกเปิดดรอปดาวน์เลือกโมเดล...")
+            model_dropdown = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, model_dropdown_xpath))
+            )
+            try:
+                model_dropdown.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", model_dropdown)
+            time.sleep(1.0)
+
+            # Select Model Option: "Veo 3.1 - Lite"
+            model_option_xpath = "//button[.//span[text()='Veo 3.1 - Lite'] or contains(., 'Veo 3.1 - Lite')]"
+            log("[แผงตั้งค่า] คลิกเลือกโมเดล Veo 3.1 - Lite...")
+            model_option = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, model_option_xpath))
+            )
+            try:
+                model_option.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", model_option)
+            time.sleep(0.8)
+
+            # Click Option 6: Tab "6s"
+            duration_tab_xpath = "//button[@role='tab' and (text()='6s' or contains(., '6s'))]"
+            log("[แผงตั้งค่า] คลิกเลือกเวลาความยาว 6s...")
+            duration_tab = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, duration_tab_xpath))
+            )
+            try:
+                duration_tab.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", duration_tab)
+            time.sleep(0.8)
+            
+            # Press ESCAPE to close settings panel/popups
+            log("[แผงตั้งค่า] กดปุ่ม Escape เพื่อปิดหน้าต่างการตั้งค่า...")
+            try:
+                driver.switch_to.active_element.send_keys(Keys.ESCAPE)
+            except Exception:
+                try:
+                    from selenium.webdriver.common.action_chains import ActionChains
+                    actions = ActionChains(driver)
+                    actions.send_keys(Keys.ESCAPE).perform()
+                except Exception:
+                    pass
+            time.sleep(1.0)
+
+        except Exception as opt_err:
+            log(f"[แผงตั้งค่าเตือน] มีข้อผิดพลาดในกระบวนการเลือกตัวเลือก: {opt_err}")
 
     # 4. Type @ using ActionChains keyboard events
     if not is_driver_alive(driver):
