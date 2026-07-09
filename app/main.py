@@ -2209,8 +2209,9 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     
                     log("Primary: Sending Cmd + U keystroke via System Events to trigger file modal...")
                     try:
-                        cmd_u_script = """
-                        tell application "Google Chrome" to activate
+                        app_name = _get_active_browser_app_name()
+                        cmd_u_script = f"""
+                        tell application "{app_name}" to activate
                         delay 0.5
                         tell application "System Events"
                             key code 32 using command down
