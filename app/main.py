@@ -3740,6 +3740,22 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             
         time.sleep(1.0) # Wait for panel to load
 
+        # 1.5 Click the "Frames" tab inside the settings panel
+        frames_tab_xpath = "//button[@role='tab' and (contains(., 'Frames') or contains(@id, 'VIDEO_FRAMES') or contains(@aria-controls, 'VIDEO_FRAMES'))]"
+        log("[แผงตั้งค่า] คลิกเลือกแท็บ Frames...")
+        try:
+            frames_tab = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, frames_tab_xpath))
+            )
+            try:
+                frames_tab.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", frames_tab)
+            log("[แผงตั้งค่า] คลิกเลือกแท็บ Frames สำเร็จ")
+        except Exception as tab_err:
+            log(f"[แผงตั้งค่าเตือน] ไม่สามารถคลิกเลือกแท็บ Frames ได้: {tab_err}")
+        time.sleep(0.8)
+
         # 2. Locate the model selection dropdown button inside the panel
         model_dropdown_xpath = "//button[(contains(@class, 'eaVRLg') or contains(@class, 'sc-3f41cc92-1') or contains(., 'Omni') or contains(., 'Veo') or contains(., 'Flash') or contains(., 'Lite')) and (contains(., 'arrow_drop_down') or .//i[text()='arrow_drop_down'])]"
         model_option_xpath = "//button[.//span[text()='Veo 3.1 - Lite'] or contains(., 'Veo 3.1 - Lite')]"
