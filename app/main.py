@@ -1096,12 +1096,24 @@ def log(msg: str) -> None:
 
 def check_unusual_activity_and_clear(driver) -> None:
     from selenium.webdriver.common.by import By
-    unusual_activity_xpath = "//*[contains(text(), 'เราพบกิจกรรมที่ผิดปกติ') or contains(., 'เราพบกิจกรรมที่ผิดปกติ') or contains(text(), 'unusual activity') or contains(., 'unusual activity')]"
+    unusual_activity_xpath = "//*[not(self::html or self::body or self::script or self::style or self::noscript) and (contains(text(), 'เราพบกิจกรรมที่ผิดปกติ') or contains(text(), 'unusual activity'))]"
     try:
         elements = driver.find_elements(By.XPATH, unusual_activity_xpath)
-        visible_elements = [el for el in elements if el.is_displayed()]
+        visible_elements = []
+        for el in elements:
+            try:
+                if el.is_displayed():
+                    tag = el.tag_name.lower()
+                    text = el.text.strip()
+                    if tag in ["html", "body", "script", "style", "noscript"] or not text:
+                        continue
+                    visible_elements.append(el)
+                    log(f"[ตรวจพบกิจกรรมผิดปกติ] พบธาตุข้อความแจ้งเตือนจริง: Tag='{tag}', Text='{text[:100]}'")
+            except Exception:
+                pass
+
         if visible_elements:
-            log("[ตรวจพบกิจกรรมผิดปกติ] พบข้อความเตือนกิจกรรมที่ผิดปกติบนหน้าเว็บ! เริ่มต้นกระบวนการล้างข้อมูล Cache และ Cookies สำหรับ Google Flow...")
+            log("[ตรวจพบกิจกรรมผิดปกติ] ตรวจพบข้อความแจ้งเตือนกิจกรรมผิดปกติที่มองเห็นได้จริง! เริ่มต้นกระบวนการล้างข้อมูล Cache และ Cookies สำหรับ Google Flow...")
 
             # 1. Clear cookies for the current domain only (labs.google / vids.google.com)
             try:
