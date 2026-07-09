@@ -1207,6 +1207,8 @@ def handle_google_flow_login_if_needed(driver, target_email: str) -> None:
         log(f"[ล็อกอินอัตโนมัติ] อยู่ในหน้าบัญชี Google กำลังค้นหาอีเมลเป้าหมาย: {target_email} (รอโหลดไม่เกิน 15 วินาที)...")
         
         email_selectors = [
+            f"//*[@data-email='{target_email}']",
+            f"//div[contains(@class, 'yAlK0b') and (text()='{target_email}' or contains(., '{target_email}'))]",
             f"//div[@data-identifier='{target_email}']",
             f"//div[@data-email='{target_email}']",
             f"//div[contains(@class, 'VV3oRb') and contains(., '{target_email}')]",
@@ -1233,17 +1235,32 @@ def handle_google_flow_login_if_needed(driver, target_email: str) -> None:
             time.sleep(1.0)
                 
         if selected_item:
+            # Click target strategy
+            click_target = selected_item
             try:
-                selected_item.click()
+                ancestor = selected_item.find_element(By.XPATH, "./ancestor::div[@role='button' or @role='link'] | ./ancestor::button | ./ancestor::a | ./ancestor::li")
+                if ancestor:
+                    click_target = ancestor
+                    log(f"[ล็อกอินอัตโนมัติ] พบบัญชีในตัวหุ้มปุ่ม: Tag='{ancestor.tag_name}'")
+            except Exception:
+                pass
+                
+            try:
+                click_target.click()
                 log(f"[ล็อกอินอัตโนมัติ] คลิกเลือกบัญชี {target_email} เรียบร้อยแล้ว")
                 time.sleep(6.0) # Wait for authentication redirect
             except Exception as e:
-                log(f"[ล็อกอินอัตโนมัติ] คลิกบัญชีเป้าหมายล้มเหลว ลองด้วย JS: {e}")
+                log(f"[ล็อกอินอัตโนมัติ] คลิกปกติล้มเหลว ลองด้วย JS: {e}")
                 try:
-                    driver.execute_script("arguments[0].click();", selected_item)
+                    driver.execute_script("arguments[0].click();", click_target)
                     time.sleep(6.0)
                 except Exception as js_e:
                     log(f"[ล็อกอินอัตโนมัติ] JS Click ล้มเหลว: {js_e}")
+                    try:
+                        driver.execute_script("arguments[0].click();", selected_item)
+                        time.sleep(6.0)
+                    except Exception:
+                        pass
         else:
             log(f"[ล็อกอินอัตโนมัติเตือน] ไม่พบบัญชีอีเมล {target_email} ในหน้าตัวเลือกบัญชี Google")
 
