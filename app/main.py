@@ -1096,7 +1096,8 @@ def log(msg: str) -> None:
 
 def check_unusual_activity_and_clear(driver) -> None:
     from selenium.webdriver.common.by import By
-    unusual_activity_xpath = "//*[not(self::html or self::body or self::script or self::style or self::noscript) and (contains(text(), 'เราพบกิจกรรมที่ผิดปกติ') or contains(text(), 'unusual activity'))]"
+    # Target only elements inside the virtuoso-item-list container where the video/image generation cards live
+    unusual_activity_xpath = "//*[@data-testid='virtuoso-item-list']//*[contains(text(), 'เราพบกิจกรรมที่ผิดปกติ') or contains(text(), 'unusual activity') or contains(., 'เราพบกิจกรรมที่ผิดปกติ') or contains(., 'unusual activity')]"
     try:
         elements = driver.find_elements(By.XPATH, unusual_activity_xpath)
         visible_elements = []
@@ -1108,12 +1109,12 @@ def check_unusual_activity_and_clear(driver) -> None:
                     if tag in ["html", "body", "script", "style", "noscript"] or not text:
                         continue
                     visible_elements.append(el)
-                    log(f"[ตรวจพบกิจกรรมผิดปกติ] พบธาตุข้อความแจ้งเตือนจริง: Tag='{tag}', Text='{text[:100]}'")
+                    log(f"[ตรวจพบกิจกรรมผิดปกติ] พบธาตุข้อความแจ้งเตือนจริงในรายการสร้างวิดีโอ: Tag='{tag}', Text='{text[:100]}'")
             except Exception:
                 pass
 
         if visible_elements:
-            log("[ตรวจพบกิจกรรมผิดปกติ] ตรวจพบข้อความแจ้งเตือนกิจกรรมผิดปกติที่มองเห็นได้จริง! เริ่มต้นกระบวนการล้างข้อมูล Cache และ Cookies สำหรับ Google Flow...")
+            log("[ตรวจพบกิจกรรมผิดปกติ] ตรวจพบข้อความแจ้งเตือนกิจกรรมผิดปกติที่มองเห็นได้จริงในรายการสร้างวิดีโอ! เริ่มต้นกระบวนการล้างข้อมูล Cache และ Cookies สำหรับ Google Flow...")
 
             # 1. Clear cookies for the current domain only (labs.google / vids.google.com)
             try:
