@@ -3727,20 +3727,41 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 driver.execute_script("arguments[0].click();", x2_tab)
             time.sleep(0.8)
 
-            # Click Option 5: Model Selection Dropdown
-            model_dropdown_xpath = "//button[contains(@class, 'eaVRLg') or contains(@class, 'sc-3f41cc92-1')]"
-            log("[แผงตั้งค่า] คลิกเปิดดรอปดาวน์เลือกโมเดล...")
+            # Click Option 5: Model Selection Dropdown (with retry loop until option is visible)
+            model_dropdown_xpath = "//button[contains(., 'Veo') and (contains(., 'arrow_drop_down') or .//i[text()='arrow_drop_down'] or contains(@class, 'eaVRLg'))]"
+            model_option_xpath = "//button[.//span[text()='Veo 3.1 - Lite'] or contains(., 'Veo 3.1 - Lite')]"
+            
+            log("[แผงตั้งค่า] ค้นหาและคลิกปุ่มโมเดล...")
             model_dropdown = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, model_dropdown_xpath))
+                EC.presence_of_element_located((By.XPATH, model_dropdown_xpath))
             )
-            try:
-                model_dropdown.click()
-            except Exception:
-                driver.execute_script("arguments[0].click();", model_dropdown)
-            time.sleep(1.0)
+            
+            opened = False
+            for click_attempt in range(3):
+                log(f"[แผงตั้งค่า] พยายามคลิกเปิดเมนูโมเดล รอบที่ {click_attempt+1}...")
+                try:
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", model_dropdown)
+                    time.sleep(0.3)
+                    model_dropdown.click()
+                except Exception:
+                    try:
+                        driver.execute_script("arguments[0].click();", model_dropdown)
+                    except Exception:
+                        pass
+                
+                time.sleep(0.8) # Wait for dropdown animation
+                
+                # Check if option is visible in DOM
+                options = driver.find_elements(By.XPATH, model_option_xpath)
+                if any(opt.is_displayed() for opt in options):
+                    log("[แผงตั้งค่า] ตรวจพบเมนูตัวเลือกโมเดลเปิดสำเร็จแล้ว!")
+                    opened = True
+                    break
+            
+            if not opened:
+                raise RuntimeError("ไม่สามารถเปิดเมนูตัวเลือกโมเดลได้")
 
             # Select Model Option: "Veo 3.1 - Lite"
-            model_option_xpath = "//button[.//span[text()='Veo 3.1 - Lite'] or contains(., 'Veo 3.1 - Lite')]"
             log("[แผงตั้งค่า] คลิกเลือกโมเดล Veo 3.1 - Lite...")
             model_option = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.XPATH, model_option_xpath))
@@ -3749,7 +3770,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 model_option.click()
             except Exception:
                 driver.execute_script("arguments[0].click();", model_option)
-            time.sleep(0.8)
+            time.sleep(1.0) # Wait for selection to apply and dropdown to close
 
             # Click Option 6: Tab "6s"
             duration_tab_xpath = "//button[@role='tab' and (text()='6s' or contains(., '6s'))]"
