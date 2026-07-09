@@ -3702,7 +3702,6 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     time.sleep(1.0)
 
     # 3.5 Check and configure Model (Veo 3.1 - Lite) and Settings (Only on the first run of the batch)
-    opened_settings_panel = False
     if payload.is_first_run:
         if not is_driver_alive(driver):
             raise RuntimeError("Browser connection lost.")
@@ -3714,17 +3713,11 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             trigger_btn = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.XPATH, trigger_xpath))
             )
-            is_already_open = trigger_btn.get_attribute("aria-expanded") == "true" or trigger_btn.get_attribute("data-state") == "open"
-            if not is_already_open:
-                try:
-                    trigger_btn.click()
-                except Exception:
-                    driver.execute_script("arguments[0].click();", trigger_btn)
-                log("[แผงตั้งค่า] คลิกเปิดแผงตั้งค่าสำเร็จ")
-                opened_settings_panel = True
-            else:
-                log("[แผงตั้งค่า] แผงตั้งค่าเปิดอยู่แล้ว ไม่ต้องคลิกเปิดซ้ำ")
-                opened_settings_panel = True
+            try:
+                trigger_btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", trigger_btn)
+            log("[แผงตั้งค่า] คลิกเปิดแผงตั้งค่าสำเร็จ")
         except Exception as open_err:
             log(f"[แผงตั้งค่าล้มเหลว] ไม่สามารถคลิกเปิดแผงตั้งค่าได้: {open_err}")
             raise HTTPException(
@@ -3805,18 +3798,17 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 log("[แผงตั้งค่า] โมเดลเป็น Veo 3.1 - Lite อยู่แล้ว ข้ามการคลิกเลือกโมเดล")
                 
             # 3. Press ESCAPE to close settings panel
-            if opened_settings_panel:
-                log("[แผงตั้งค่า] กดปุ่ม Escape เพื่อปิดหน้าต่างการตั้งค่า...")
+            log("[แผงตั้งค่า] กดปุ่ม Escape เพื่อปิดหน้าต่างการตั้งค่า...")
+            try:
+                driver.switch_to.active_element.send_keys(Keys.ESCAPE)
+            except Exception:
                 try:
-                    driver.switch_to.active_element.send_keys(Keys.ESCAPE)
+                    from selenium.webdriver.common.action_chains import ActionChains
+                    actions = ActionChains(driver)
+                    actions.send_keys(Keys.ESCAPE).perform()
                 except Exception:
-                    try:
-                        from selenium.webdriver.common.action_chains import ActionChains
-                        actions = ActionChains(driver)
-                        actions.send_keys(Keys.ESCAPE).perform()
-                    except Exception:
-                        pass
-                time.sleep(1.0)
+                    pass
+            time.sleep(1.0)
 
         except Exception as model_err:
             log(f"[แผงตั้งค่าล้มเหลว] ไม่สามารถเลือกโมเดลได้: {model_err}")
@@ -3828,12 +3820,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 detail=f"เลือกโมเดล Veo 3.1 - Lite ล้มเหลว: {model_err}"
             )
 
-    # 4. Type @ using ActionChains keyboard events
-    if not is_driver_alive(driver):
-        raise RuntimeError("Browser connection lost.")
-        
-    # Re-focus prompt input box only if settings panel was opened (and defocused the box)
-    if opened_settings_panel:
+        # 4. Refocus prompt input box on the first run (because settings panel was opened and closed)
         log("[ป้อนข้อมูล] โฟกัสช่องพรอพต์อีกครั้งก่อนป้อน @")
         try:
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", box)
