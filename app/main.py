@@ -1184,10 +1184,19 @@ def handle_google_flow_login_if_needed(driver, target_email: str) -> None:
     if not is_driver_alive(driver):
         return
 
-    # 2. Check if we are on accounts.google.com page
-    current_url = driver.current_url.lower()
-    if "accounts.google.com" in current_url or "accounts.google" in current_url:
-        log(f"[ล็อกอินอัตโนมัติ] อยู่ในหน้าบัญชี Google กำลังค้นหาอีเมลเป้าหมาย: {target_email}")
+    # 2. Check if we are on accounts.google.com page (wait/poll for up to 10 seconds for redirect)
+    is_google_accounts = False
+    for check_url_attempt in range(10):
+        if not is_driver_alive(driver):
+            return
+        current_url = driver.current_url.lower()
+        if "accounts.google.com" in current_url or "accounts.google" in current_url or "signin" in current_url:
+            is_google_accounts = True
+            break
+        time.sleep(1.0)
+
+    if is_google_accounts:
+        log(f"[ล็อกอินอัตโนมัติ] อยู่ในหน้าบัญชี Google กำลังค้นหาอีเมลเป้าหมาย: {target_email} (รอโหลดไม่เกิน 15 วินาที)...")
         
         email_selectors = [
             f"//div[@data-identifier='{target_email}']",
@@ -1198,16 +1207,22 @@ def handle_google_flow_login_if_needed(driver, target_email: str) -> None:
         ]
         
         selected_item = None
-        for selector in email_selectors:
-            try:
-                items = driver.find_elements(By.XPATH, selector)
-                visible_items = [item for item in items if item.is_displayed()]
-                if visible_items:
-                    selected_item = visible_items[0]
-                    log(f"[ล็อกอินอัตโนมัติ] ตรวจพบตัวเลือกอีเมลด้วย XPath: {selector}")
-                    break
-            except Exception:
-                pass
+        for attempt in range(15):
+            if not is_driver_alive(driver):
+                return
+            for selector in email_selectors:
+                try:
+                    items = driver.find_elements(By.XPATH, selector)
+                    visible_items = [item for item in items if item.is_displayed()]
+                    if visible_items:
+                        selected_item = visible_items[0]
+                        log(f"[ล็อกอินอัตโนมัติ] ตรวจพบตัวเลือกอีเมลด้วย XPath: {selector}")
+                        break
+                except Exception:
+                    pass
+            if selected_item:
+                break
+            time.sleep(1.0)
                 
         if selected_item:
             try:
@@ -1240,7 +1255,7 @@ def open_google_flow_project_if_needed(driver, project_name: str) -> None:
 
     log(f"[โครงการ] เริ่มค้นหาและเปิดโครงการชื่อ: '{project_name}'...")
     
-    # 1. Look for the virtuoso-item-list container
+    # 1. Look for the virtuoso-item-list container (wait/poll for up to 15 seconds)
     list_selectors = [
         "//*[@data-testid='virtuoso-item-list']",
         "//*[@id='__next']/div[2]/div/div/div/div[2]/div/div/div[2]",
@@ -1248,21 +1263,27 @@ def open_google_flow_project_if_needed(driver, project_name: str) -> None:
     ]
     
     list_el = None
-    for selector in list_selectors:
-        try:
-            elements = driver.find_elements(By.XPATH, selector)
-            visible_elements = [el for el in elements if el.is_displayed()]
-            if visible_elements:
-                list_el = visible_elements[0]
-                break
-        except Exception:
-            pass
+    for attempt in range(15):
+        if not is_driver_alive(driver):
+            return
+        for selector in list_selectors:
+            try:
+                elements = driver.find_elements(By.XPATH, selector)
+                visible_elements = [el for el in elements if el.is_displayed()]
+                if visible_elements:
+                    list_el = visible_elements[0]
+                    break
+            except Exception:
+                pass
+        if list_el:
+            break
+        time.sleep(1.0)
             
     if not list_el:
         log("[โครงการเตือน] ไม่พบตู้คอนเทนเนอร์รายการโครงการ (virtuoso-item-list) บอทอาจจะยังไม่อยู่ในหน้ารายการหลัก")
         return
 
-    # 2. Find the project span/element containing the project name text (e.g. "7-1")
+    # 2. Find the project span/element containing the project name text (e.g. "7-1") (wait/poll for up to 10 seconds)
     project_selectors = [
         f".//span[contains(@class, 'kJLHvy') and (text()='{project_name}' or contains(., '{project_name}'))]",
         f".//*[not(self::script or self::style) and text()='{project_name}']",
@@ -1270,16 +1291,22 @@ def open_google_flow_project_if_needed(driver, project_name: str) -> None:
     ]
     
     target_el = None
-    for selector in project_selectors:
-        try:
-            elements = list_el.find_elements(By.XPATH, selector)
-            visible_elements = [el for el in elements if el.is_displayed()]
-            if visible_elements:
-                target_el = visible_elements[0]
-                log(f"[โครงการ] ตรวจพบตัวเลือกชื่อโครงการด้วย XPath: {selector}")
-                break
-        except Exception:
-            pass
+    for attempt in range(10):
+        if not is_driver_alive(driver):
+            return
+        for selector in project_selectors:
+            try:
+                elements = list_el.find_elements(By.XPATH, selector)
+                visible_elements = [el for el in elements if el.is_displayed()]
+                if visible_elements:
+                    target_el = visible_elements[0]
+                    log(f"[โครงการ] ตรวจพบตัวเลือกชื่อโครงการด้วย XPath: {selector}")
+                    break
+            except Exception:
+                pass
+        if target_el:
+            break
+        time.sleep(1.0)
 
     if target_el:
         log(f"[โครงการ] พบเป้าหมายโครงการชื่อ '{project_name}' ดึงลิงก์โครงการเพื่อเปลี่ยนเส้นทางโดยตรง...")
