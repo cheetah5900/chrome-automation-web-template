@@ -3557,14 +3557,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             switched = True
             break
 
-    if not switched and google_flow_path:
-        try:
-            from urllib.parse import urlparse
-            parsed = urlparse(google_flow_path)
-            if parsed.netloc and bot.switch_to_tab_containing(parsed.netloc):
-                switched = True
-        except Exception:
-            pass
+
 
     if not switched:
         raise HTTPException(status_code=400, detail="ไม่พบแท็บ Google Flow ที่เปิดอยู่ กรุณาเปิดแท็บ Google Flow ค้างไว้ก่อนทำการรัน")

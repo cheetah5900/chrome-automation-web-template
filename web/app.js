@@ -4762,7 +4762,7 @@ function initVideoGenListeners() {
     }
   };
 
-  setupSetDefaultBtn('setGoogleFlowPathDefaultBtn', 'cfg_google_flow_path', 'google_flow_path', 'ตั้งค่า Google Flow Path เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+
   setupSetDefaultBtn('setVideoWaitSecondsDefaultBtn', 'cfg_video_wait_seconds', 'video_wait_seconds', 'ตั้งค่าเวลารอเป็นค่าเริ่มต้นเรียบร้อยแล้ว');
   setupSetDefaultBtn('setVideoInputSelectorDefaultBtn', 'cfg_video_input_selector', 'video_input_selector', 'ตั้งค่า CSS Selector ช่องป้อนพรอพต์เรียบร้อยแล้ว');
   setupSetDefaultBtn('setVideoSettingsSelectorDefaultBtn', 'cfg_video_settings_selector', 'video_settings_selector', 'ตั้งค่า CSS Selector ปุ่มตั้งค่าเรียบร้อยแล้ว');
@@ -4783,7 +4783,7 @@ function initVideoGenListeners() {
   if (btnRunGoogleFlow) {
     btnRunGoogleFlow.addEventListener('click', async () => {
       commitCurrentVideoRoundFromDOM();
-      const googleFlowPathVal = document.getElementById('cfg_google_flow_path')?.value.trim() || '';
+      const googleFlowPathVal = '';
       const inputSelectorVal = document.getElementById('cfg_video_input_selector')?.value.trim() || '';
       const settingsSelectorVal = document.getElementById('cfg_video_settings_selector')?.value.trim() || '';
       const submitSelectorVal = document.getElementById('cfg_video_submit_selector')?.value.trim() || '';
