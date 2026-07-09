@@ -201,6 +201,18 @@ def _is_local_port_open(port: int) -> bool:
     except Exception:
         return False
 
+def _kill_port_processes(port: int):
+    try:
+        res = subprocess.run(["lsof", "-t", "-i", f"tcp:{port}"], capture_output=True, text=True)
+        pids = res.stdout.strip().split("\n")
+        for pid in pids:
+            if pid.strip().isdigit():
+                subprocess.run(["kill", "-9", pid.strip()], check=False)
+                print(f"Killed process {pid} on port {port}")
+    except Exception as e:
+        print(f"Error killing processes on port {port}: {e}")
+
+
 
 def _get_selected_profile_browser_type() -> str:
     try:
@@ -653,8 +665,27 @@ async def launch_profile(payload: LaunchProfilePayload):
 @app.post("/api/profiles/close")
 def close_profile():
     try:
-        browser_manager.close()
-        return {"ok": True, "message": "Browser profile disconnected successfully."}
+        port = 9222
+        try:
+            if DEFAULTS_FILE.exists() and PROFILES_FILE.exists():
+                defaults = _read_json(DEFAULTS_FILE)
+                selected_name = defaults.get("selected_profile", "")
+                if selected_name:
+                    profiles_data = _read_json(PROFILES_FILE)
+                    profiles = profiles_data.get("profiles", [])
+                    profile = next((p for p in profiles if p.get("name") == selected_name), None)
+                    if profile:
+                        port = int(profile.get("debug_port", 9222))
+        except Exception:
+            pass
+
+        try:
+            browser_manager.close()
+        except Exception:
+            pass
+
+        _kill_port_processes(port)
+        return {"ok": True, "message": f"Browser profile on port {port} closed successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed closing browser: {e}")
 
