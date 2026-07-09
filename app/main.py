@@ -140,6 +140,7 @@ class VideoGenStepPayload(BaseModel):
     video_wait_seconds: int = 60
     is_first_run: bool = True
     google_flow_email: str = "dogdadcatmom@gmail.com"
+    google_flow_project_name: str = "7-1"
 
 
 
@@ -958,6 +959,7 @@ def _default_config() -> dict[str, Any]:
             "lakorn_ton": "",
             "google_flow_path": "",
             "google_flow_email": "dogdadcatmom@gmail.com",
+            "google_flow_project_name": "7-1",
             "video_wait_seconds": 60,
             "video_input_selector": "",
             "video_settings_selector": "",
@@ -1021,6 +1023,7 @@ def _default_config() -> dict[str, Any]:
             "lakorn_ton": "",
             "google_flow_path": "",
             "google_flow_email": "dogdadcatmom@gmail.com",
+            "google_flow_project_name": "7-1",
             "video_wait_seconds": 60,
             "video_input_selector": "",
             "video_settings_selector": "",
@@ -1097,7 +1100,7 @@ def log(msg: str) -> None:
         pass
 
 
-def check_unusual_activity_and_clear(driver, target_email: str = "dogdadcatmom@gmail.com") -> None:
+def check_unusual_activity_and_clear(driver, target_email: str = "dogdadcatmom@gmail.com", target_project_name: str = "7-1") -> None:
     from selenium.webdriver.common.by import By
     # Target only elements inside the virtuoso-item-list container where the video/image generation cards live
     unusual_activity_xpath = "//*[@data-testid='virtuoso-item-list']//*[contains(text(), 'เราพบกิจกรรมที่ผิดปกติ') or contains(text(), 'unusual activity') or contains(., 'เราพบกิจกรรมที่ผิดปกติ') or contains(., 'unusual activity')]"
@@ -1139,12 +1142,14 @@ def check_unusual_activity_and_clear(driver, target_email: str = "dogdadcatmom@g
                 log("[ระบบกู้คืน] สั่งรีเฟรชหน้าเว็บเรียบร้อย")
                 time.sleep(3.0)
                 handle_google_flow_login_if_needed(driver, target_email)
+                time.sleep(2.0)
+                open_google_flow_project_if_needed(driver, target_project_name)
             except Exception as login_err:
-                log(f"[ระบบกู้คืนเตือน] ล็อกอินใหม่อัตโนมัติหลังกู้คืนล้มเหลว: {login_err}")
+                log(f"[ระบบกู้คืนเตือน] ล็อกอินหรือเปิดโปรเจกต์ใหม่อัตโนมัติหลังกู้คืนล้มเหลว: {login_err}")
                 
             raise HTTPException(
                 status_code=400,
-                detail=f"ตรวจพบกิจกรรมที่ผิดปกติของบัญชี Google! ระบบได้ทำการเคลียร์คุ้กกี้และล้างแคชเรียบร้อย และได้ดำเนินการล็อกอินเข้าสู่ระบบบัญชี {target_email} ให้โดยอัตโนมัติแล้ว กรุณากดเริ่มรันบอทอีกครั้งเพื่อทำงานต่อ"
+                detail=f"ตรวจพบกิจกรรมที่ผิดปกติของบัญชี Google! ระบบได้ทำการเคลียร์คุ้กกี้และล้างแคชเรียบร้อย และได้ดำเนินการล็อกอินเข้าสู่ระบบบัญชี {target_email} และเปิดโปรเจกต์ '{target_project_name}' ให้โดยอัตโนมัติแล้ว กรุณากดเริ่มรันบอทอีกครั้งเพื่อทำงานต่อ"
             )
     except HTTPException:
         raise
@@ -1218,6 +1223,87 @@ def handle_google_flow_login_if_needed(driver, target_email: str) -> None:
                     log(f"[ล็อกอินอัตโนมัติ] JS Click ล้มเหลว: {js_e}")
         else:
             log(f"[ล็อกอินอัตโนมัติเตือน] ไม่พบบัญชีอีเมล {target_email} ในหน้าตัวเลือกบัญชี Google")
+
+
+def open_google_flow_project_if_needed(driver, project_name: str) -> None:
+    from selenium.webdriver.common.by import By
+    import time
+    
+    if not is_driver_alive(driver):
+        return
+
+    # Check if we are already inside a project editor page
+    current_url = driver.current_url.lower()
+    if "/project/" in current_url and "/edit/" in current_url:
+        log("[โครงการ] ตรวจพบว่าอยู่ในหน้าแก้ไขโครงการเรียบร้อยแล้ว ไม่ต้องกดเปิดใหม่")
+        return
+
+    log(f"[โครงการ] เริ่มค้นหาและเปิดโครงการชื่อ: '{project_name}'...")
+    
+    # 1. Look for the virtuoso-item-list container
+    list_selectors = [
+        "//*[@data-testid='virtuoso-item-list']",
+        "//*[@id='__next']/div[2]/div/div/div/div[2]/div/div/div[2]",
+        "//div[contains(@class, 'virtuoso-item-list')]"
+    ]
+    
+    list_el = None
+    for selector in list_selectors:
+        try:
+            elements = driver.find_elements(By.XPATH, selector)
+            visible_elements = [el for el in elements if el.is_displayed()]
+            if visible_elements:
+                list_el = visible_elements[0]
+                break
+        except Exception:
+            pass
+            
+    if not list_el:
+        log("[โครงการเตือน] ไม่พบตู้คอนเทนเนอร์รายการโครงการ (virtuoso-item-list) บอทอาจจะยังไม่อยู่ในหน้ารายการหลัก")
+        return
+
+    # 2. Find the project span/element containing the project name text (e.g. "7-1")
+    project_selectors = [
+        f".//span[contains(@class, 'kJLHvy') and (text()='{project_name}' or contains(., '{project_name}'))]",
+        f".//*[not(self::script or self::style) and text()='{project_name}']",
+        f".//*[not(self::script or self::style) and contains(., '{project_name}')]"
+    ]
+    
+    target_el = None
+    for selector in project_selectors:
+        try:
+            elements = list_el.find_elements(By.XPATH, selector)
+            visible_elements = [el for el in elements if el.is_displayed()]
+            if visible_elements:
+                target_el = visible_elements[0]
+                log(f"[โครงการ] ตรวจพบตัวเลือกชื่อโครงการด้วย XPath: {selector}")
+                break
+        except Exception:
+            pass
+
+    if target_el:
+        log(f"[โครงการ] พบเป้าหมายโครงการชื่อ '{project_name}' กำลังดำเนินการคลิกเพื่อเปิด...")
+        
+        # Try to click the parent card or the element itself
+        try:
+            # Click the card wrapper (usually an ancestor link or role=button)
+            parent_card = target_el.find_element(By.XPATH, "./ancestor::a | ./ancestor::div[contains(@role, 'button')]")
+            parent_card.click()
+            log(f"[โครงการ] คลิกเปิดโครงการ '{project_name}' ผ่านแรปเปอร์สำเร็จ")
+        except Exception:
+            try:
+                target_el.click()
+                log(f"[โครงการ] คลิกเปิดโครงการ '{project_name}' ตรงตัวสำเร็จ")
+            except Exception:
+                try:
+                    driver.execute_script("arguments[0].click();", target_el)
+                    log(f"[โครงการ] คลิกเปิดโครงการ '{project_name}' ด้วย JS สำเร็จ")
+                except Exception as click_err:
+                    log(f"[โครงการเตือน] คลิกเปิดโครงการล้มเหลว: {click_err}")
+                    
+        time.sleep(6.0) # Wait for project editor page to load
+    else:
+        log(f"[โครงการเตือน] ไม่พบชื่อโครงการ '{project_name}' ที่กำลังแสดงผลอยู่ภายในรายการโครงการ")
 
 
 def _should_focus_tabs() -> bool:
@@ -3721,10 +3807,13 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # _activate_chrome()
 
     # 2. Check for unusual activity and clear cache/cookies if found
-    check_unusual_activity_and_clear(driver, payload.google_flow_email)
+    check_unusual_activity_and_clear(driver, payload.google_flow_email, payload.google_flow_project_name)
 
     # 2.5 Ensure logged in if on landing page or accounts chooser page
     handle_google_flow_login_if_needed(driver, payload.google_flow_email)
+
+    # 2.7 Ensure target project is opened
+    open_google_flow_project_if_needed(driver, payload.google_flow_project_name)
 
     # 3. Find and click prompt input field
     if not video_input_selector:
@@ -4113,17 +4202,20 @@ def step_video_retry(payload: VideoRetryPayload):
 
     # 1.5 Check for unusual activity and clear cache/cookies if found
     target_email = "dogdadcatmom@gmail.com"
+    target_project_name = "7-1"
     try:
         import json
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
                 target_email = cfg.get("google_flow_email", "dogdadcatmom@gmail.com")
+                target_project_name = cfg.get("google_flow_project_name", "7-1")
     except Exception:
         pass
 
-    check_unusual_activity_and_clear(driver, target_email)
+    check_unusual_activity_and_clear(driver, target_email, target_project_name)
     handle_google_flow_login_if_needed(driver, target_email)
+    open_google_flow_project_if_needed(driver, target_project_name)
 
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
