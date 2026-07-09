@@ -1094,6 +1094,57 @@ def log(msg: str) -> None:
         pass
 
 
+def check_unusual_activity_and_clear(driver) -> None:
+    from selenium.webdriver.common.by import By
+    unusual_activity_xpath = "//*[contains(text(), 'เราพบกิจกรรมที่ผิดปกติ') or contains(., 'เราพบกิจกรรมที่ผิดปกติ') or contains(text(), 'unusual activity') or contains(., 'unusual activity')]"
+    try:
+        elements = driver.find_elements(By.XPATH, unusual_activity_xpath)
+        visible_elements = [el for el in elements if el.is_displayed()]
+        if visible_elements:
+            log("[ตรวจพบกิจกรรมผิดปกติ] พบข้อความเตือนกิจกรรมที่ผิดปกติบนหน้าเว็บ! เริ่มต้นกระบวนการเคลียร์ cache และ cookies...")
+            
+            # Clear storage, cookies, and cache
+            try:
+                driver.execute_script("window.localStorage.clear(); window.sessionStorage.clear();")
+                log("[ระบบกู้คืน] ล้าง Local Storage และ Session Storage สำเร็จ")
+            except Exception as e:
+                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Storage ได้: {e}")
+
+            try:
+                driver.delete_all_cookies()
+                log("[ระบบกู้คืน] ล้าง Cookies ในขอบเขตโดเมนปัจจุบัน (delete_all_cookies) สำเร็จ")
+            except Exception as e:
+                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Cookies ขอบเขตปัจจุบันได้: {e}")
+
+            try:
+                driver.execute_cdp_cmd("Network.clearBrowserCookies", {})
+                log("[ระบบกู้คืน] ล้าง Cookies ทั้งหมดในเบราว์เซอร์ผ่าน CDP (Network.clearBrowserCookies) สำเร็จ")
+            except Exception as e:
+                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Cookies ทั้งหมดผ่าน CDP ได้: {e}")
+
+            try:
+                driver.execute_cdp_cmd("Network.clearBrowserCache", {})
+                log("[ระบบกู้คืน] ล้าง Cache ทั้งหมดในเบราว์เซอร์ผ่าน CDP (Network.clearBrowserCache) สำเร็จ")
+            except Exception as e:
+                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Cache ทั้งหมดผ่าน CDP ได้: {e}")
+                
+            # Refresh to clean slate
+            try:
+                driver.refresh()
+                log("[ระบบกู้คืน] สั่งรีเฟรชหน้าเว็บเรียบร้อย")
+            except Exception:
+                pass
+                
+            raise HTTPException(
+                status_code=400,
+                detail="ตรวจพบกิจกรรมที่ผิดปกติของบัญชี Google! ระบบได้ทำการเคลียร์คุ้กกี้และแคชของเบราว์เซอร์ทั้งหมดแล้ว หน้าเว็บกำลังรีเฟรช กรุณาเข้าสู่ระบบ Google ใหม่อีกครั้งบนเบราว์เซอร์ Chrome ก่อนที่จะเริ่มรันบอทอีกครั้ง"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        log(f"Warning: การตรวจสอบระบบเตือนกิจกรรมผิดปกติขัดข้อง: {e}")
+
+
 def _should_focus_tabs() -> bool:
     try:
         import json
@@ -3594,6 +3645,9 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # Bring Chrome window to front (Commented out to run completely in background)
     # _activate_chrome()
 
+    # 2. Check for unusual activity and clear cache/cookies if found
+    check_unusual_activity_and_clear(driver)
+
     # 3. Find and click prompt input field
     if not video_input_selector:
         video_input_selector = "div[contenteditable='true'] p, div[contenteditable='true'], [role='textbox'] p, textarea"
@@ -3944,6 +3998,9 @@ def step_video_retry(payload: VideoRetryPayload):
 
     if not switched:
         raise HTTPException(status_code=400, detail="ไม่พบแท็บ Google Flow ที่เปิดอยู่")
+
+    # 1.5 Check for unusual activity and clear cache/cookies if found
+    check_unusual_activity_and_clear(driver)
 
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
