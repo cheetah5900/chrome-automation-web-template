@@ -32,6 +32,11 @@ class BrowserBot:
         try:
             import os
             import json
+            import re
+            import urllib.request
+            import zipfile
+            import platform
+            import subprocess
             from pathlib import Path
             
             # 1. Determine active browser type
@@ -52,59 +57,104 @@ class BrowserBot:
             except Exception:
                 pass
 
-            # 2. Resolve driver path
-            driver_path = None
-            if browser_type == "canary":
-                canary_driver_dir = base_dir / "runtime" / "chromedriver_canary"
-                canary_driver_bin = canary_driver_dir / "chromedriver-mac-arm64" / "chromedriver"
-                
-                if not canary_driver_bin.exists():
-                    canary_driver_bin = canary_driver_dir / "chromedriver"
-                
-                if canary_driver_bin.exists():
-                    driver_path = str(canary_driver_bin)
-                    print(f"Using manual ChromeDriver Canary: {driver_path}")
-                else:
-                    print("Downloading matched ChromeDriver 152.0.7940.0 for Chrome Canary...")
-                    canary_driver_dir.mkdir(parents=True, exist_ok=True)
-                    zip_path = canary_driver_dir / "chromedriver.zip"
+            # 2. Get milestone of the selected browser dynamically
+            milestone = None
+            paths = {
+                "canary": "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+                "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "brave": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                "edge": "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+            }
+            binary = paths.get(browser_type)
+            if binary and Path(binary).exists():
+                try:
+                    res = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=5)
+                    out = res.stdout.strip()
+                    m = re.search(r"(\d+)\.\d+", out)
+                    if m:
+                        milestone = int(m.group(1))
+                except Exception:
+                    pass
                     
-                    import urllib.request
-                    import zipfile
+                if milestone is None:
                     try:
-                        url = "https://storage.googleapis.com/chrome-for-testing-public/152.0.7940.0/mac-arm64/chromedriver-mac-arm64.zip"
-                        urllib.request.urlretrieve(url, zip_path)
-                        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                            zip_ref.extractall(canary_driver_dir)
+                        plist_path = binary.split("/Contents/MacOS/")[0] + "/Contents/Info.plist"
+                        if Path(plist_path).exists():
+                            res = subprocess.run(["defaults", "read", plist_path, "CFBundleShortVersionString"], capture_output=True, text=True, timeout=5)
+                            out = res.stdout.strip()
+                            m = re.search(r"^(\d+)", out)
+                            if m:
+                                milestone = int(m.group(1))
+                    except Exception:
+                        pass
+
+            # 3. Resolve driver path using Google CFT per milestone
+            driver_path = None
+            if milestone:
+                print(f"Detected browser milestone version: {milestone}")
+                drivers_dir = base_dir / "runtime" / "matched_drivers"
+                drivers_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Fetch matching CFT version
+                version = None
+                try:
+                    url = "https://googlechromelabs.github.io/chrome-for-testing/latest-versions-per-milestone.json"
+                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        data = json.loads(response.read().decode('utf-8'))
+                        milestone_data = data.get("milestones", {}).get(str(milestone))
+                        if milestone_data:
+                            version = milestone_data.get("version")
+                except Exception as e:
+                    print(f"Error fetching milestone version: {e}")
+                    
+                if version:
+                    is_arm = platform.machine() == 'arm64' or platform.processor() == 'arm'
+                    platform_name = "mac-arm64" if is_arm else "mac-x64"
+                    
+                    driver_bin_path = drivers_dir / f"chromedriver-{version}" / f"chromedriver-{platform_name}" / "chromedriver"
+                    if driver_bin_path.exists():
+                        try:
+                            os.chmod(driver_bin_path, 0o755)
+                            subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(driver_bin_path)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        except Exception:
+                            pass
+                        driver_path = str(driver_bin_path)
+                        print(f"Using matched ChromeDriver: {driver_path}")
+                    else:
+                        zip_url = f"https://storage.googleapis.com/chrome-for-testing-public/{version}/{platform_name}/chromedriver-{platform_name}.zip"
+                        zip_file_path = drivers_dir / f"chromedriver-{version}.zip"
                         
-                        extracted_bin = canary_driver_dir / "chromedriver-mac-arm64" / "chromedriver"
-                        if extracted_bin.exists():
-                            driver_path = str(extracted_bin)
-                        else:
-                            driver_path = str(canary_driver_dir / "chromedriver")
-                            
-                        import subprocess
-                        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", driver_path], check=False)
-                        os.chmod(driver_path, 0o755)
-                        
-                        if zip_path.exists():
-                            zip_path.unlink()
-                            
-                        print(f"Successfully downloaded and installed Canary ChromeDriver: {driver_path}")
-                    except Exception as download_err:
-                        print(f"Failed to download Canary ChromeDriver: {download_err}")
-            
+                        print(f"Downloading matched ChromeDriver version {version} from CFT...")
+                        try:
+                            urllib.request.urlretrieve(zip_url, zip_file_path)
+                            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+                                zip_ref.extractall(drivers_dir / f"chromedriver-{version}")
+                                
+                            if driver_bin_path.exists():
+                                subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(driver_bin_path)], check=False)
+                                os.chmod(driver_bin_path, 0o755)
+                                driver_path = str(driver_bin_path)
+                                print(f"Successfully installed matched ChromeDriver: {driver_path}")
+                                
+                            if zip_file_path.exists():
+                                zip_file_path.unlink()
+                        except Exception as download_err:
+                            print(f"Failed to download matched ChromeDriver: {download_err}")
+                            if zip_file_path.exists():
+                                zip_file_path.unlink()
+
+            # 4. Fallback to ChromeDriverManager if no driver resolved
             if not driver_path:
                 global _cached_driver_path
                 if _cached_driver_path is None:
                     _cached_driver_path = ChromeDriverManager().install()
-                    import subprocess
                     try:
                         subprocess.run(["codesign", "--force", "--deep", "--sign", "-", _cached_driver_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     except Exception:
                         pass
                 driver_path = _cached_driver_path
-            
+
             service = Service(driver_path, args=["--disable-build-check"])
             
             # Add retry logic for connection (optimized timeout)
