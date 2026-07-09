@@ -3634,7 +3634,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         except Exception:
             driver.execute_script("arguments[0].click();", box)
             log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย JS Click")
-    time.sleep(1.5)
+    time.sleep(1.0)
 
 
     # 4. Type @ using ActionChains keyboard events
@@ -3665,7 +3665,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(text_to_type)
-    time.sleep(3.0) # Wait 3.0s for autocomplete
+    time.sleep(1.5) # Wait 1.5s for autocomplete
 
     # Press Enter using ActionChains keyboard events
     if not is_driver_alive(driver):
@@ -3683,17 +3683,17 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # Wait 3.0 seconds after selecting autocomplete
     time.sleep(3.0)
 
-    # Press Spacebar 1 time
+    # Press Shift+Enter 1 time
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
-    log("[ป้อนข้อมูล] กด Spacebar ด้วยคีย์บอร์ดเสมือน 1 ครั้ง")
+    log("[ป้อนข้อมูล] กด Shift+Enter ด้วยคีย์บอร์ดเสมือน 1 ครั้ง")
     try:
         actions = ActionChains(driver)
-        actions.send_keys(Keys.SPACE).perform()
+        actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
     except Exception as e:
         if not is_driver_alive(driver):
             raise RuntimeError("Browser connection lost.")
-        log(f"กด Spacebar ล้มเหลว: {e}")
+        log(f"กด Shift+Enter ล้มเหลว: {e}")
     time.sleep(1.5)
 
     # 5. Paste the animation prompt using Selenium's native send_keys
@@ -3719,7 +3719,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ผ่าน Selenium send_keys ล้มเหลว: {e}")
         raise HTTPException(status_code=500, detail=f"ไม่สามารถกรอกพรอพต์ได้: {e}")
-    time.sleep(3.0)
+    time.sleep(1.0)
 
     # Press Enter to submit the prompt
     if not is_driver_alive(driver):
