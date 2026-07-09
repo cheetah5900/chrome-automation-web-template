@@ -1282,11 +1282,39 @@ def open_google_flow_project_if_needed(driver, project_name: str) -> None:
             pass
 
     if target_el:
-        log(f"[โครงการ] พบเป้าหมายโครงการชื่อ '{project_name}' กำลังดำเนินการคลิกเพื่อเปิด...")
+        log(f"[โครงการ] พบเป้าหมายโครงการชื่อ '{project_name}' ดึงลิงก์โครงการเพื่อเปลี่ยนเส้นทางโดยตรง...")
         
-        # Try to click the parent card or the element itself
+        href = None
         try:
-            # Click the card wrapper (usually an ancestor link or role=button)
+            # Let's search inside the project's main wrapper card.
+            parent_card = target_el.find_element(By.XPATH, "./ancestor::div[contains(@class, 'jJBbql') or contains(@class, 'sc-42dc016-0') or .//a]")
+            a_el = parent_card.find_element(By.TAG_NAME, "a")
+            href = a_el.get_attribute("href")
+        except Exception as e:
+            log(f"[โครงการเตือน] ไม่สามารถหาแท็ก a จากตัวหุ้มการ์ดหลักได้: {e}")
+            try:
+                # Fallback: search for any anchor with href relative to target_el's ancestor
+                a_el = target_el.find_element(By.XPATH, "./ancestor::div[contains(@class, 'kRvDFG')]/preceding-sibling::a")
+                href = a_el.get_attribute("href")
+            except Exception:
+                try:
+                    a_el = target_el.find_element(By.XPATH, "./ancestor::div[1]//a[contains(@href, '/project/')]")
+                    href = a_el.get_attribute("href")
+                except Exception:
+                    pass
+
+        if href:
+            log(f"[โครงการ] ตรวจพบ URL โครงการสำเร็จ: '{href}' กำลังดำเนินการเปิดโดยตรง (driver.get)...")
+            try:
+                driver.get(href)
+                time.sleep(6.0) # Wait for project editor page to load
+                return
+            except Exception as get_err:
+                log(f"[โครงการเตือน] มีข้อผิดพลาดในขณะเปิดลิงก์โครงการโดยตรง: {get_err}")
+
+        # Fallback to click if href extraction fails
+        log("[โครงการ] ตรวจไม่พบ URL ของโครงการ พยายามเปิดโดยคลิกอิลิเมนต์ตัวเลือกแทน...")
+        try:
             parent_card = target_el.find_element(By.XPATH, "./ancestor::a | ./ancestor::div[contains(@role, 'button')]")
             parent_card.click()
             log(f"[โครงการ] คลิกเปิดโครงการ '{project_name}' ผ่านแรปเปอร์สำเร็จ")
