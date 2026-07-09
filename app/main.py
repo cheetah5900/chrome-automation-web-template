@@ -1129,12 +1129,13 @@ def check_unusual_activity_and_clear(driver, target_email: str = "dogdadcatmom@g
             except Exception as e:
                 log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Cookies สำหรับโดเมนปัจจุบันได้: {e}")
 
-            # 2. Clear browser cache via CDP
+            # 2. Clear LocalStorage and SessionStorage for the Google Flow domain specifically
             try:
-                driver.execute_cdp_cmd("Network.clearBrowserCache", {})
-                log("[ระบบกู้คืน] ล้าง Cache ทั้งหมดในเบราว์เซอร์ผ่าน CDP (Network.clearBrowserCache) สำเร็จ")
+                driver.execute_script("window.localStorage.clear();")
+                driver.execute_script("window.sessionStorage.clear();")
+                log("[ระบบกู้คืน] ล้าง LocalStorage และ SessionStorage ของ Google Flow ในโดเมนปัจจุบันสำเร็จ")
             except Exception as e:
-                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Cache ทั้งหมดผ่าน CDP ได้: {e}")
+                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง LocalStorage/SessionStorage ได้: {e}")
                 
             # Refresh to clean slate
             try:
