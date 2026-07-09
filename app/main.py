@@ -200,9 +200,46 @@ def _is_local_port_open(port: int) -> bool:
         return False
 
 
+def _get_active_browser_binary() -> str:
+    import os
+    canary_binary = "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
+    chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    brave_binary = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+    edge_binary = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    
+    if os.path.exists(canary_binary):
+        return canary_binary
+    elif os.path.exists(chrome_binary):
+        return chrome_binary
+    elif os.path.exists(brave_binary):
+        return brave_binary
+    elif os.path.exists(edge_binary):
+        return edge_binary
+    return chrome_binary
+
+
+def _get_active_browser_app_name() -> str:
+    import os
+    canary_binary = "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
+    chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    brave_binary = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+    edge_binary = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    
+    if os.path.exists(canary_binary):
+        return "Google Chrome Canary"
+    elif os.path.exists(chrome_binary):
+        return "Google Chrome"
+    elif os.path.exists(brave_binary):
+        return "Brave Browser"
+    elif os.path.exists(edge_binary):
+        return "Microsoft Edge"
+    return "Google Chrome"
+
+
 def _activate_chrome():
-    script = """
-    tell application "Google Chrome"
+    app_name = _get_active_browser_app_name()
+    script = f"""
+    tell application "{app_name}"
         activate
         repeat with w in windows
             if minimized of w is true then
@@ -215,7 +252,7 @@ def _activate_chrome():
         subprocess.run(["osascript", "-e", script], check=False)
     except Exception:
         try:
-            subprocess.run(["open", "-a", "Google Chrome"], check=False)
+            subprocess.run(["open", "-a", app_name], check=False)
         except Exception:
             pass
 
@@ -230,8 +267,9 @@ def is_driver_alive(driver) -> bool:
 
 def _physical_switch_to_tab(url_part):
     import subprocess
+    app_name = _get_active_browser_app_name()
     script = f"""
-    tell application "Google Chrome"
+    tell application "{app_name}"
         repeat with w in windows
             set tabIndex to 1
             repeat with t in tabs of w
@@ -530,7 +568,7 @@ async def launch_profile(payload: LaunchProfilePayload):
         except Exception:
             pass
 
-    chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    chrome_binary = _get_active_browser_binary()
     # Launch without --user-data-dir if it is the Everyday Chrome profile, to load untouched daily sessions directly
     if profile_path == "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome":
         cmd = [
@@ -551,10 +589,10 @@ async def launch_profile(payload: LaunchProfilePayload):
     except FileNotFoundError:
         raise HTTPException(
             status_code=400,
-            detail="ไม่พบ Google Chrome ที่ /Applications/Google Chrome.app (macOS)",
+            detail=f"ไม่พบตัวติดตั้งเบราว์เซอร์เป้าหมายที่ {chrome_binary}",
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"เปิด Chrome ไม่สำเร็จ: {e}")
+        raise HTTPException(status_code=400, detail=f"เปิดเบราว์เซอร์ไม่สำเร็จ: {e}")
 
     return {
         "ok": True,
@@ -805,7 +843,7 @@ async def dispatch_prompt(payload: PromptDispatchPayload):
                             already_open_targets.append(t)
                         else:
                             # Open tab by calling Chrome binary with user data dir to bypass CDP URL encoding issues
-                            chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                            chrome_binary = _get_active_browser_binary()
                             cmd = [
                                 chrome_binary,
                                 f"--user-data-dir={profile_path}",
