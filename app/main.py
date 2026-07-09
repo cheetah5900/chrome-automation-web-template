@@ -1136,6 +1136,13 @@ def check_unusual_activity_and_clear(driver, target_email: str = "dogdadcatmom@g
                 log("[ระบบกู้คืน] ล้าง LocalStorage และ SessionStorage ของ Google Flow ในโดเมนปัจจุบันสำเร็จ")
             except Exception as e:
                 log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง LocalStorage/SessionStorage ได้: {e}")
+
+            # 3. Clear browser cache via CDP
+            try:
+                driver.execute_cdp_cmd("Network.clearBrowserCache", {})
+                log("[ระบบกู้คืน] ล้าง Cache ทั้งหมดในเบราว์เซอร์ผ่าน CDP (Network.clearBrowserCache) สำเร็จ")
+            except Exception as e:
+                log(f"[ระบบกู้คืน] Warning: ไม่สามารถล้าง Cache ทั้งหมดผ่าน CDP ได้: {e}")
                 
             # Refresh to clean slate
             try:
