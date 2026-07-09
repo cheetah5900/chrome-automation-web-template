@@ -3798,7 +3798,11 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             time.sleep(1.0)
 
         except Exception as opt_err:
-            log(f"[แผงตั้งค่าเตือน] มีข้อผิดพลาดในกระบวนการเลือกตัวเลือก: {opt_err}")
+            log(f"[แผงตั้งค่าล้มเหลว] มีข้อผิดพลาดในกระบวนการเลือกตัวเลือก: {opt_err}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"ตั้งค่าคุณสมบัติวิดีโอล้มเหลว: {opt_err}"
+            )
 
     # 4. Type @ using ActionChains keyboard events
     if not is_driver_alive(driver):
