@@ -24,13 +24,13 @@ This project is a web-based automation controller for managing Google Chrome pro
 
 ## Current Runtime Status
 - **Backend Server**: Running locally on `http://127.0.0.1:6969`.
-- **Chrome Automation Port**: Configured to `9222`.
-- **Active Git Branch**: `feat/video-helper-batch-process`.
+- **Chrome Automation Port**: Configured to `9222` (Chrome) and `9223` (Brave).
+- **Active Git Branch**: `feat/chatgpt-wait-and-google-flow-delays`.
 - **Latest Fixes & Features**:
-  - **Force Stop Safety**: Implemented `is_driver_alive` session validation inside all selenium click/upload functions. If Chrome is force-killed, the backend immediately raises an exception and aborts execution, completely preventing AppleScript keystrokes from leaking into other active desktop windows.
-  - **Google Flow Optimization**: Modified the video generation workflow to skip settings configuration (ratio, speed, model selection) after the first round has successfully completed, significantly speeding up subsequent rounds.
-  - **Close Browser Button**: Added a dedicated button to the Profile Manager UI to close Chrome profiles cleanly.
-  - **Delay Optimizations**: Doubled keyboard typing delays for stable autocompletion, and randomized the human simulation delay interval.
+  - **Dynamic Milestone ChromeDriver Resolution**: Replaced the hardcoded Canary downloader with a dynamic milestone detector. It queries active browser binaries (Chrome, Canary, Brave, Edge), checks their milestone version, fetches the exact CFT (Chrome for Testing) release version, downloads, unzips, permission-sets (`chmod +x`), and signs it (`codesign`) dynamically.
+  - **Port-based Clean Close**: Upgraded the close browser logic to run `lsof -t -i tcp:{port}` and `kill -9` to cleanly terminate any background browser process holding the active profile's debug port on macOS.
+  - **Dynamic AppleScript Target Resolution**: Modified macOS activation scripts to target `_get_active_browser_app_name()` dynamically (e.g. "Brave Browser" or "Google Chrome Canary") instead of hardcoding "Google Chrome", preventing focus hangs and Gatekeeper blockages.
+  - **ChatGPT Stale Element Prevention**: Optimized prompt insertion inside ProseMirror/ChatGPT to target the stable container `#prompt-textarea` instead of transient `<p>` child tags, refreshes element references before typing, and avoids passing stale elements as arguments to `execute_script`.
 
 ---
 
@@ -74,6 +74,7 @@ Before outputting any final code, you MUST think step-by-step internally and str
 - DO NOT add complex window existence checks (like `exists windows of process "Google Chrome"`) inside the AppleScript dialog workflow. These queries require Accessibility (Assistive device) permissions in macOS, which standard Terminal/Python processes do not have, causing the script to bypass the keystrokes or crash. Use a simple, reliable `delay 1.0` before sending keystrokes instead.
 - Use clipboard pasting (`keystroke "v" using {command down}`) for putting the filepath into the path sheet, as it is 10x faster and layout-independent compared to character-by-character typing.
 - Always perform the file upload sequence *before* typing/submitting the prompt, and wait at least 3 seconds after pasting the prompt before clicking send.
+- When activating the browser to bring it forward before keystroke triggers, always resolve the active application name dynamically using `_get_active_browser_app_name()` (e.g. "Brave Browser" or "Google Chrome Canary") instead of hardcoding "Google Chrome".
 
 ## Force Stop Handling & Session Validation
 - Webdriver commands and AppleScript dialog automation must always verify driver session validity (`is_driver_alive`) before starting or retrying, to prevent sending system key-events to the wrong application if Chrome is closed.
@@ -84,4 +85,5 @@ Before outputting any final code, you MUST think step-by-step internally and str
 - To input text: Always use native Selenium `send_keys` commands or `document.execCommand('insertText')` as they simulate native OS-level keyboard events and properly update React state models.
 - To clear text: Simulating delete actions is required. Use selection APIs to select all text (`range.selectNodeContents`) and trigger native deletion (`document.execCommand('delete', false, null)`). This forces React/ProseMirror listeners to receive the deletion events and sync the state to empty.
 - When entering multiline prompts via Selenium `send_keys` in Google Flow, DO NOT send raw newlines (`\n`) in one go, as this triggers the browser's default `Enter` event and submits the form prematurely. Instead, split the text by `\n` and use Selenium's `ActionChains` to perform a `Shift + Enter` sequence between lines before typing the next line.
+- When typing or verifying text in React/ProseMirror editors, be aware that editor re-renders can instantly make elements stale. Prioritize targeting stable container elements (like `#prompt-textarea`) directly rather than transient child elements (like inner `<p>` tags), dynamically refresh Selenium references, and avoid passing potentially stale element references as arguments inside `driver.execute_script()` (use raw document queries inside JS instead).
 
