@@ -4089,11 +4089,22 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         pass
 
     try:
-        from selenium.webdriver.common.action_chains import ActionChains
-        actions = ActionChains(driver)
-        actions.move_to_element(box).click().perform()
-        log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย ActionChains")
-    except Exception:
+        # Use bulletproof contenteditable JS focus
+        driver.execute_script(
+            "var el = arguments[0]; "
+            "if (el.tagName !== 'DIV') { el = el.closest('div[contenteditable=\"true\"]') || el; } "
+            "el.focus(); "
+            "var range = document.createRange(); "
+            "var sel = window.getSelection(); "
+            "range.selectNodeContents(el); "
+            "range.collapse(false); "
+            "sel.removeAllRanges(); "
+            "sel.addRange(range);", 
+            box
+        )
+        log("[โฟกัสสำเร็จ] โฟกัสและจัดตำแหน่งเคอร์เซอร์ด้วย JS contenteditable focus")
+    except Exception as focus_err:
+        log(f"Warning: โฟกัสด้วย JS contenteditable ล้มเหลว: {focus_err}")
         try:
             box.click()
             log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย Standard Click")
@@ -4286,11 +4297,22 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         except Exception:
             pass
         try:
-            from selenium.webdriver.common.action_chains import ActionChains
-            actions = ActionChains(driver)
-            actions.move_to_element(box).click().perform()
-            log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย ActionChains")
-        except Exception:
+            # Use bulletproof contenteditable JS focus
+            driver.execute_script(
+                "var el = arguments[0]; "
+                "if (el.tagName !== 'DIV') { el = el.closest('div[contenteditable=\"true\"]') || el; } "
+                "el.focus(); "
+                "var range = document.createRange(); "
+                "var sel = window.getSelection(); "
+                "range.selectNodeContents(el); "
+                "range.collapse(false); "
+                "sel.removeAllRanges(); "
+                "sel.addRange(range);", 
+                box
+            )
+            log("[โฟกัสสำเร็จ] โฟกัสและจัดตำแหน่งเคอร์เซอร์ด้วย JS contenteditable focus")
+        except Exception as focus_err:
+            log(f"Warning: โฟกัสด้วย JS contenteditable ล้มเหลว: {focus_err}")
             try:
                 box.click()
                 log("[โฟกัสสำเร็จ] โฟกัสช่องพรอพต์ด้วย Standard Click")
@@ -4308,7 +4330,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ @ ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys("@")
-    time.sleep(0.5) # Wait 0.5s after typing @
+    time.sleep(1.5) # Wait 1.5s after typing @ to allow autocomplete to open
 
     # Type round number and extension using ActionChains keyboard events
     if not is_driver_alive(driver):
@@ -4323,7 +4345,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(text_to_type)
-    time.sleep(0.5) # Wait 0.5s for autocomplete
+    time.sleep(1.0) # Wait 1.0s for autocomplete to search and filter
 
     # Press Enter using ActionChains keyboard events
     if not is_driver_alive(driver):
@@ -4338,8 +4360,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         log(f"กด Enter ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(Keys.ENTER)
     
-    # Wait 0.05 seconds after selecting autocomplete
-    time.sleep(0.05)
+    # Wait 0.3 seconds after selecting autocomplete to let the chip insert and DOM settle
+    time.sleep(0.3)
 
     # Press Shift+Enter 1 time
     if not is_driver_alive(driver):
@@ -4352,7 +4374,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         if not is_driver_alive(driver):
             raise RuntimeError("Browser connection lost.")
         log(f"กด Shift+Enter ล้มเหลว: {e}")
-    time.sleep(0.05)
+    time.sleep(0.3)
 
     # 5. Paste the animation prompt using Selenium's native send_keys
     if not is_driver_alive(driver):
