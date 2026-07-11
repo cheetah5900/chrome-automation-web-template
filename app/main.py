@@ -4308,7 +4308,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ @ ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys("@")
-    time.sleep(0.5) # Wait 0.5s after typing @
+    time.sleep(1.0) # Wait 1.0s after typing @
 
     # Type round number and extension using ActionChains keyboard events
     if not is_driver_alive(driver):
@@ -4323,7 +4323,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"พิมพ์ด้วย ActionChains ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(text_to_type)
-    time.sleep(0.5) # Wait 0.5s for autocomplete
+    time.sleep(1.0) # Wait 1.0s for autocomplete
 
     # Press Enter using ActionChains keyboard events
     if not is_driver_alive(driver):
@@ -4340,6 +4340,10 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     
     # Wait 0.05 seconds after selecting autocomplete
     time.sleep(0.05)
+
+    # DEBUG: Stop here as requested by user
+    log("[DEBUG] บังคับหยุดการทำงานตามคำขอของผู้ใช้ (หลังพิมพ์เลขและกด Enter เสร็จ)")
+    return {"ok": True, "message": "DEBUG: หยุดการทำงานหลังเลือก Autocomplete"}
 
     # Press Shift+Enter 1 time
     if not is_driver_alive(driver):
