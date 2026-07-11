@@ -3978,6 +3978,7 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
     from selenium.webdriver.common.by import By
     from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.common.action_chains import ActionChains
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     import time
@@ -4272,7 +4273,6 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 driver.switch_to.active_element.send_keys(Keys.ESCAPE)
             except Exception:
                 try:
-                    from selenium.webdriver.common.action_chains import ActionChains
                     actions = ActionChains(driver)
                     actions.send_keys(Keys.ESCAPE).perform()
                 except Exception:
