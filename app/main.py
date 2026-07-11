@@ -4370,7 +4370,11 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             # Prepend space on the first line to separate from mention chip
             text_chunk = (" " if idx == 0 else "") + line
             if text_chunk:
-                box.send_keys(text_chunk)
+                try:
+                    actions = ActionChains(driver)
+                    actions.send_keys(text_chunk).perform()
+                except Exception:
+                    box.send_keys(text_chunk)
         log("[ป้อนข้อมูลสำเร็จ] วางพรอพต์สำเร็จผ่าน Selenium send_keys")
     except Exception as e:
         if not is_driver_alive(driver):
