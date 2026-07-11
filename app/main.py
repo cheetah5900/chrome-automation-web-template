@@ -4341,10 +4341,6 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # Wait 0.05 seconds after selecting autocomplete
     time.sleep(0.05)
 
-    # DEBUG: Stop here as requested by user
-    log("[DEBUG] บังคับหยุดการทำงานตามคำขอของผู้ใช้ (หลังพิมพ์เลขและกด Enter เสร็จ)")
-    return {"ok": True, "message": "DEBUG: หยุดการทำงานหลังเลือก Autocomplete"}
-
     # Press Shift+Enter 1 time
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
