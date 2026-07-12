@@ -3964,7 +3964,7 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
 
 @app.post("/api/step/video-gen")
 def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
-    _activate_chrome()
+    # _activate_chrome()
     prompt = payload.prompt.strip()
     round_idx = payload.round_idx
     google_flow_path = payload.google_flow_path.strip()
