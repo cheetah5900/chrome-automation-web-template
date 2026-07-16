@@ -147,6 +147,7 @@ class VideoGenStepPayload(BaseModel):
     is_first_run: bool = True
     google_flow_email: str = "dogdadcatmom@gmail.com"
     google_flow_project_name: str = "7-1"
+    auto_retry_mode: bool = False
 
 
 
@@ -632,7 +633,7 @@ async def launch_profile(payload: LaunchProfilePayload):
 
     chrome_binary = _get_active_browser_binary(profile.get("browser_type", "chrome"))
     # Launch without --user-data-dir if it is the Everyday Chrome profile, to load untouched daily sessions directly
-    if profile_path == "/Users/litarcopperkaikem/Library/Application Support/Google/Chrome":
+    if profile_path == "/Users/litar/Library/Application Support/Google/Chrome":
         cmd = [
             chrome_binary,
             f"--remote-debugging-port={debug_port}",
@@ -1091,8 +1092,8 @@ def _default_config() -> dict[str, Any]:
             "video_presets": {
                 "ตึกสวย": {
                     "use_bgm": True,
-                    "target_folder": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/",
-                    "audio_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3",
+                    "target_folder": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/",
+                    "audio_path": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3",
                     "audio_boost": "",
                     "video_audio_boost": "-10",
                     "contrast": "1.10",
@@ -1111,7 +1112,7 @@ def _default_config() -> dict[str, Any]:
             "element_name": "Songkran",
             "element_path": os.path.join(h, "Documents/DDCM/Elements"),
             "local_path": os.path.join(h, "Documents/DDCM"),
-            "remote_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/DDCM/Cliparts DDCM",
+            "remote_path": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/DDCM/Cliparts DDCM",
             "watermark_path": os.path.join(h, "Documents/DDCM/Watermark.png"),
             "first_preview_watermark_path": "",
             "single_count": "12",
@@ -1155,8 +1156,8 @@ def _default_config() -> dict[str, Any]:
             "video_presets": {
                 "ตึกสวย": {
                     "use_bgm": True,
-                    "target_folder": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/",
-                    "audio_path": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3",
+                    "target_folder": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/",
+                    "audio_path": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3",
                     "audio_boost": "",
                     "video_audio_boost": "-10",
                     "contrast": "1.10",
@@ -3652,7 +3653,7 @@ def import_lakorn_auto(payload: ImportLakornPayload):
 
     # 1.5. Resolve character sheet directory (Strictly Global Path)
     resolved_ref_dir = None
-    global_char_sheet = Path("/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/ผักกาดการละคร - ละครไทย/Character Sheet")
+    global_char_sheet = Path("/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/ผักกาดการละคร - ละครไทย/Character Sheet")
     if global_char_sheet.exists() and global_char_sheet.is_dir():
         resolved_ref_dir = global_char_sheet
     else:
@@ -4038,6 +4039,43 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # 2.7 Ensure target project is opened
     open_google_flow_project_if_needed(driver, payload.google_flow_project_name)
 
+    # 2.8 Check if auto_retry_mode is enabled and try to find/click the retry button
+    if payload.auto_retry_mode:
+        log(f"[Auto Retry Check] ตรวจสอบว่ามีปุ่ม 'ลองอีกครั้ง' (Retry) สำหรับรอบที่ {round_idx} หรือไม่...")
+        round_str = f"{round_idx:02d}"
+        possible_xpaths = [
+            f"//div[contains(., '@{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+            f"//div[contains(., 'round_{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+            f"//div[contains(., '{round_str}.png')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+        ]
+        retry_btn = None
+        for xpath in possible_xpaths:
+            try:
+                elements = driver.find_elements(By.XPATH, xpath)
+                if elements:
+                    retry_btn = elements[0]
+                    break
+            except Exception:
+                continue
+        
+        if retry_btn:
+            log(f"[Auto Retry] พบปุ่ม 'ลองอีกครั้ง' สำหรับรอบที่ {round_idx} จะทำการคลิกแทนการส่งพรอพต์ใหม่")
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", retry_btn)
+                time.sleep(0.5)
+                retry_btn.click()
+                log(f"[Auto Retry สำเร็จ] คลิกปุ่มลองอีกครั้งสำหรับรอบที่ {round_idx} เรียบร้อยแล้ว")
+                return {"ok": True, "message": f"คลิกปุ่มลองอีกครั้งรอบที่ {round_idx} เรียบร้อยแล้ว (Auto Retry)"}
+            except Exception:
+                try:
+                    driver.execute_script("arguments[0].click();", retry_btn)
+                    log(f"[Auto Retry สำเร็จ] คลิกปุ่มลองอีกครั้งด้วย JS สำหรับรอบที่ {round_idx} เรียบร้อยแล้ว")
+                    return {"ok": True, "message": f"คลิกปุ่มลองอีกครั้งรอบที่ {round_idx} เรียบร้อยแล้ว (Auto Retry)"}
+                except Exception as click_err:
+                    log(f"[Auto Retry Warning] ไม่สามารถคลิกปุ่มลองอีกครั้งได้: {click_err}. จะดำเนินการป้อนพรอพต์ตามปกติ")
+        else:
+            log(f"[Auto Retry] ไม่พบปุ่ม 'ลองอีกครั้ง' สำหรับรอบที่ {round_idx} ดำเนินการป้อนพรอพต์ตามปกติ")
+
     # 3. Find and click prompt input field
     if not video_input_selector:
         video_input_selector = "div[contenteditable='true']"
@@ -4354,10 +4392,10 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
         log(f"กด Shift+Enter ล้มเหลว: {e}")
     time.sleep(0.05)
 
-    # 5. Paste the animation prompt using Selenium's native send_keys
+    # 5. Paste the animation prompt using ActionChains (simulating active caret input)
     if not is_driver_alive(driver):
         raise RuntimeError("Browser connection lost.")
-    log(f"[ป้อนข้อมูล] พิมพ์พรอพต์ของฉากด้วย Selenium send_keys: {prompt}")
+    log(f"[ป้อนข้อมูล] พิมพ์พรอพต์ของฉากด้วย ActionChains: {prompt}")
     try:
         # Split prompt by newlines and send shift+enter in between to avoid triggering early submits
         lines = prompt.split('\n')
@@ -4370,12 +4408,17 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             # Prepend space on the first line to separate from mention chip
             text_chunk = (" " if idx == 0 else "") + line
             if text_chunk:
-                box.send_keys(text_chunk)
-        log("[ป้อนข้อมูลสำเร็จ] วางพรอพต์สำเร็จผ่าน Selenium send_keys")
+                try:
+                    actions = ActionChains(driver)
+                    actions.send_keys(text_chunk).perform()
+                except Exception as ac_err:
+                    log(f"พิมพ์ด้วย ActionChains ล้มเหลว: {ac_err}, ลองใช้ box.send_keys")
+                    box.send_keys(text_chunk)
+        log("[ป้อนข้อมูลสำเร็จ] วางพรอพต์สำเร็จ")
     except Exception as e:
         if not is_driver_alive(driver):
             raise RuntimeError("Browser connection lost.")
-        log(f"พิมพ์ผ่าน Selenium send_keys ล้มเหลว: {e}")
+        log(f"พิมพ์พรอพต์ล้มเหลว: {e}")
         raise HTTPException(status_code=500, detail=f"ไม่สามารถกรอกพรอพต์ได้: {e}")
     time.sleep(1.0)
 
@@ -4431,6 +4474,42 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail=f"ไม่พบปุ่มส่งพรอพต์: {e}")
     else:
         log("ยกเลิกการกดปุ่ม Enter บังคับส่งพรอพต์เพื่อรอให้ผู้ใช้ตรวจทานข้อความ")
+
+    # 6.5 If auto_retry_mode is enabled, check after sending if any previous round needs retry
+    if payload.auto_retry_mode:
+        log("[Auto Retry Post-Submit] สแกนหาปุ่ม 'ลองอีกครั้ง' (Retry) สำหรับรอบก่อนหน้านี้...")
+        for prev_r in range(1, round_idx + 1):
+            round_str = f"{prev_r:02d}"
+            possible_xpaths = [
+                f"//div[contains(., '@{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+                f"//div[contains(., 'round_{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+                f"//div[contains(., '{round_str}.png')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+            ]
+            retry_btn = None
+            for xpath in possible_xpaths:
+                try:
+                    elements = driver.find_elements(By.XPATH, xpath)
+                    if elements:
+                        retry_btn = elements[0]
+                        break
+                except Exception:
+                    continue
+            
+            if retry_btn:
+                log(f"[Auto Retry] พบปุ่ม 'ลองอีกครั้ง' สำหรับรอบที่ {prev_r} กำลังทำการคลิก...")
+                try:
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", retry_btn)
+                    time.sleep(0.5)
+                    retry_btn.click()
+                    log(f"[Auto Retry สำเร็จ] คลิกปุ่มลองอีกครั้งสำหรับรอบที่ {prev_r} สำเร็จ")
+                    time.sleep(1.0)
+                except Exception:
+                    try:
+                        driver.execute_script("arguments[0].click();", retry_btn)
+                        log(f"[Auto Retry สำเร็จ] คลิกปุ่มลองอีกครั้งด้วย JS สำหรับรอบที่ {prev_r} สำเร็จ")
+                        time.sleep(1.0)
+                    except Exception as click_err:
+                        log(f"[Auto Retry Warning] ไม่สามารถคลิกปุ่มลองอีกครั้งสำหรับรอบที่ {prev_r} ได้: {click_err}")
 
     log(f"วางพรอพต์เรียบร้อยแล้ว เริ่มเวลารอ {video_wait_seconds} วินาที...")
     return {"ok": True, "message": "วางพรอพต์และเริ่มต้นการรอ"}

@@ -3,7 +3,7 @@
   "profiles": [
     {
       "name": "Brave Flow",
-      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Brave Flow",
+      "path": "/Users/litar/Documents/GitHub/chrome-automation-web-template/runtime/chrome-profiles/Brave Flow",
       "debug_port": 9223,
       "startup_urls": [
         "https://labs.google/fx/tools/flow"
@@ -12,7 +12,7 @@
     },
     {
       "name": "Generate Image Dino",
-      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Generate Image Dino",
+      "path": "/Users/litar/Documents/GitHub/chrome-automation-web-template/runtime/chrome-profiles/Generate Image Dino",
       "debug_port": 9222,
       "startup_urls": [
         "https://chatgpt.com/"
@@ -21,7 +21,7 @@
     },
     {
       "name": "Google Chrome Canary",
-      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Google Chrome Canary",
+      "path": "/Users/litar/Documents/GitHub/chrome-automation-web-template/runtime/chrome-profiles/Google Chrome Canary",
       "debug_port": 9224,
       "startup_urls": [
         "https://labs.google/fx/tools/flow"

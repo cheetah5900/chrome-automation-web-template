@@ -892,7 +892,7 @@ function imagePromptRowTemplate(text = '') {
   row.style.padding = '12px';
   
   row.innerHTML = `
-    <textarea class="image-prompt-input" rows="4" style="margin-bottom:0; width: 100%;" placeholder="เช่น A cute baby lion, isolated background...">${text.replace(/</g, '&lt;')}</textarea>
+    <textarea class="image-prompt-input" rows="8" style="margin-bottom:0; width: 100%;" placeholder="เช่น A cute baby lion, isolated background...">${text.replace(/</g, '&lt;')}</textarea>
     <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 4px;">
       <span class="row-status" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; font-weight: bold; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); min-width: 95px; text-align: center; white-space: nowrap; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.25s ease;">Not start</span>
       <button class="secondary delete-btn" style="padding: 6px 12px; font-size: 0.85rem; margin-bottom: 0;" type="button">Delete</button>
@@ -2689,7 +2689,7 @@ function saveImageGenActiveState() {
       const btn = document.createElement('button');
       btn.className = 'prompt-tab-btn' + (r === 1 ? ' active' : '');
       btn.dataset.round = r;
-      btn.style.cssText = `display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; font-size: 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; white-space: nowrap; height: 35px; flex-shrink: 0;`;
+      btn.style.cssText = `display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; font-size: 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; white-space: nowrap; height: 35px; flex-shrink: 0; min-width: 45px;`;
       if (r === 1) {
         btn.style.background = 'rgba(255,255,255,0.05)';
         btn.style.color = '#fff';
@@ -2943,7 +2943,7 @@ function initWorkflowActionListeners() {
         pathDesc.style.display = 'block';
       }
       if (pathInput) {
-        pathInput.placeholder = 'เช่น /Users/litarcopperkaikem/Downloads/my_project_folder';
+        pathInput.placeholder = 'เช่น /Users/litar/Downloads/my_project_folder';
       }
       toggleVideoCombineBatchUI(isCombine);
       
@@ -4046,7 +4046,7 @@ function renderVideoGenTabs() {
     const fw = isCurrent ? 'bold' : 'normal';
 
     html += `
-      <button class="video-prompt-tab-btn ${activeClass}" data-round="${r}" style="display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; font-size: 0.8rem; border-radius: 8px; border: ${border}; background: ${bg}; color: ${color}; cursor: pointer; white-space: nowrap; height: 35px; font-weight: ${fw}; flex-shrink: 0;">
+      <button class="video-prompt-tab-btn ${activeClass}" data-round="${r}" style="display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; font-size: 0.8rem; border-radius: 8px; border: ${border}; background: ${bg}; color: ${color}; cursor: pointer; white-space: nowrap; height: 35px; font-weight: ${fw}; flex-shrink: 0; min-width: 45px;">
         R${r}
       </button>
     `;
@@ -4206,7 +4206,7 @@ function renderVideoPromptsForRound(roundNum) {
       <div style="padding: 10px; font-weight: bold; font-size: 0.85rem; color: #8da6ff; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; min-width: 30px; text-align: center; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">
         ${idx + 1}
       </div>
-      <textarea class="video-prompt-input" placeholder="วาง Animation Prompt ตรงนี้..." style="flex: 1; padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); color: #fff; min-height: 80px; resize: vertical; margin-bottom: 0;">${p}</textarea>
+      <textarea class="video-prompt-input" placeholder="วาง Animation Prompt ตรงนี้..." style="flex: 1; padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); color: #fff; min-height: 160px; resize: vertical; margin-bottom: 0;">${p}</textarea>
       <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
         <span class="status-badge ${statusClass}" style="padding: 6px 12px; font-size: 0.78rem; font-weight: bold; border-radius: 8px; min-width: 90px; text-align: center;">${status}</span>
         <div style="display: flex; gap: 6px;">
@@ -4372,7 +4372,7 @@ function videoPromptRowTemplate(val, status = 'Idle') {
     <div style="padding: 10px; font-weight: bold; font-size: 0.85rem; color: #8da6ff; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; min-width: 30px; text-align: center; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">
       ${idx + 1}
     </div>
-    <textarea class="video-prompt-input" placeholder="วาง Animation Prompt ตรงนี้..." style="flex: 1; padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); color: #fff; min-height: 80px; resize: vertical; margin-bottom: 0;">${val}</textarea>
+    <textarea class="video-prompt-input" placeholder="วาง Animation Prompt ตรงนี้..." style="flex: 1; padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); color: #fff; min-height: 160px; resize: vertical; margin-bottom: 0;">${val}</textarea>
     <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
       <span class="status-badge ${statusClass}" style="padding: 6px 12px; font-size: 0.78rem; font-weight: bold; border-radius: 8px; min-width: 90px; text-align: center;">${status}</span>
       <button class="secondary delete-video-prompt-btn" data-idx="${idx}" style="padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; background: rgba(245, 101, 101, 0.08); border-color: rgba(245, 101, 101, 0.15); color: #f56565; margin: 0; height: auto;">Delete</button>
@@ -4819,25 +4819,19 @@ function initVideoGenListeners() {
             const isAutoRetry = !!document.getElementById('cfg_auto_retry_mode')?.checked;
             let success = false;
 
-            if (isAutoRetry) {
-              writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] [Auto Retry Mode] กำลังส่งคำสั่งกด Retry...`, 'info', 'videoConsole');
-              success = await executeStep('/api/step/video-retry', {
-                round_idx: r
-              }, null, 'videoConsole');
-            } else {
-              success = await executeStep('/api/step/video-gen', {
-                prompt: p,
-                round_idx: r,
-                google_flow_path: googleFlowPathVal,
-                google_flow_email: googleFlowEmailVal,
-                google_flow_project_name: googleFlowProjectNameVal,
-                video_input_selector: inputSelectorVal,
-                video_settings_selector: settingsSelectorVal,
-                video_submit_selector: submitSelectorVal,
-                video_wait_seconds: randomCooldown,
-                is_first_run: isFirstPrompt
-              }, null, 'videoConsole');
-            }
+            success = await executeStep('/api/step/video-gen', {
+              prompt: p,
+              round_idx: r,
+              google_flow_path: googleFlowPathVal,
+              google_flow_email: googleFlowEmailVal,
+              google_flow_project_name: googleFlowProjectNameVal,
+              video_input_selector: inputSelectorVal,
+              video_settings_selector: settingsSelectorVal,
+              video_submit_selector: submitSelectorVal,
+              video_wait_seconds: randomCooldown,
+              is_first_run: isFirstPrompt,
+              auto_retry_mode: isAutoRetry
+            }, null, 'videoConsole');
 
             isFirstPrompt = false;
 
@@ -4920,7 +4914,7 @@ function seedancePromptRowTemplate(text = '') {
   row.style.padding = '12px';
   
   row.innerHTML = `
-    <textarea class="seedance-prompt-input" rows="4" style="margin-bottom:0; width: 100%;" placeholder="เช่น A realistic Thai drama character dancing...">${text.replace(/</g, '&lt;')}</textarea>
+    <textarea class="seedance-prompt-input" rows="8" style="margin-bottom:0; width: 100%;" placeholder="เช่น A realistic Thai drama character dancing...">${text.replace(/</g, '&lt;')}</textarea>
     <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 4px;">
       <span class="row-status" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; font-weight: bold; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); min-width: 95px; text-align: center; white-space: nowrap; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.25s ease;">Not start</span>
       <div style="display: flex; gap: 8px;">
