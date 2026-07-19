@@ -30,6 +30,34 @@ def _ensure_json(path: Path, default_obj: dict):
 
 _ensure_json(DEFAULTS_FILE, {"selected_profile": "", "theme": "sunset-glass"})
 _ensure_json(PROFILES_FILE, {"selected_profile": "", "profiles": []})
+
+def _normalize_profiles_paths():
+    if not PROFILES_FILE.exists():
+        return
+    try:
+        data = json.loads(PROFILES_FILE.read_text())
+        changed = False
+        profiles = data.get("profiles", [])
+        for p in profiles:
+            path_str = p.get("path", "")
+            if "chrome-profiles" in path_str:
+                parts = Path(path_str).parts
+                if "chrome-profiles" in parts:
+                    idx = parts.index("chrome-profiles")
+                    if idx + 1 < len(parts):
+                        profile_name = parts[idx + 1]
+                        new_path = RUNTIME_DIR / "chrome-profiles" / profile_name
+                        if path_str != str(new_path):
+                            p["path"] = str(new_path)
+                            changed = True
+        if changed:
+            PROFILES_FILE.write_text(json.dumps(data, indent=2))
+            print("Normalized profiles.json paths to match current project directory.")
+    except Exception as e:
+        print(f"Error normalizing profile paths: {e}")
+
+_normalize_profiles_paths()
+
 _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openrouter_api_key": ""})
 _ensure_json(PROMPTS_FILE, {"prompts": [""]})
 _ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2": "", "reference_image_3": "", "reference_image_4": "", "reference_image_5": "", "reference_image_6": "", "reference_image_7": "", "reference_images_dir": ""})
@@ -633,7 +661,9 @@ async def launch_profile(payload: LaunchProfilePayload):
 
     chrome_binary = _get_active_browser_binary(profile.get("browser_type", "chrome"))
     # Launch without --user-data-dir if it is the Everyday Chrome profile, to load untouched daily sessions directly
-    if profile_path == "/Users/litar/Library/Application Support/Google/Chrome":
+    from pathlib import Path
+    everyday_profile = str(Path.home() / "Library/Application Support/Google/Chrome")
+    if profile_path == "/Users/litar/Library/Application Support/Google/Chrome" or profile_path == everyday_profile:
         cmd = [
             chrome_binary,
             f"--remote-debugging-port={debug_port}",
@@ -2768,6 +2798,7 @@ def make_video_cover(
     brightness: str | None = Form(None),
     gamma: str | None = Form(None),
     unsharp: str | None = Form(None),
+    video_speed: str | None = Form(None),
     overwrite: str | None = Form(None),
     job_id: str | None = Form(None)
 ) -> dict[str, Any]:
@@ -2804,8 +2835,34 @@ def make_video_cover(
     brightness = clean_form_val(brightness)
     gamma = clean_form_val(gamma)
     unsharp = clean_form_val(unsharp)
+    video_speed = clean_form_val(video_speed)
     overwrite = clean_form_val(overwrite)
     job_id = clean_form_val(job_id)
+
+    speed_factor = 1.0
+    if video_speed and video_speed.strip():
+        try:
+            speed_factor = float(video_speed.strip())
+        except ValueError:
+            log(f"Warning: Invalid video_speed '{video_speed}', defaulting to 1.0")
+
+    video_speed_filter = ""
+    audio_speed_filter = ""
+    if speed_factor != 1.0:
+        video_speed_filter = f",setpts={1.0 / speed_factor}*PTS"
+        
+        # Build atempo filter chain
+        filters = []
+        temp_speed = speed_factor
+        while temp_speed > 2.0:
+            filters.append("atempo=2.0")
+            temp_speed /= 2.0
+        while temp_speed < 0.5:
+            filters.append("atempo=0.5")
+            temp_speed /= 0.5
+        if temp_speed != 1.0:
+            filters.append(f"atempo={temp_speed}")
+        audio_speed_filter = "," + ",".join(filters)
 
     def update_progress(percent: int, status: str):
         if job_id:
@@ -3115,20 +3172,27 @@ def make_video_cover(
                         if has_video_v and has_audio_v:
                             v_cmd = [
                                 ffmpeg_bin, "-y", "-i", v_path,
-                                "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
                                 "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
                             ]
                         elif has_video_v:
                             v_cmd = [
                                 ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                                "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                                "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v]",
                                 "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
                             ]
                         elif has_audio_v:
-                            v_cmd = [
-                                ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
-                                "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                            ]
+                            if speed_factor != 1.0:
+                                v_cmd = [
+                                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
+                                    "-filter_complex", f"[1:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                    "-map", "0:v", "-map", "[a]", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                ]
+                            else:
+                                v_cmd = [
+                                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
+                                    "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                ]
                         else:
                             raise RuntimeError(f"Matched file '{resolved_media_name}' has no usable audio or video stream")
 
@@ -3304,13 +3368,13 @@ def make_video_cover(
                 if has_audio:
                     v_cmd = [
                         ffmpeg_bin, "-y", "-i", temp_input_video,
-                        "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v];[0:a]aresample=async=1,aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                        "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
                         "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
                     ]
                 else:
                     v_cmd = [
                         ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                        "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
+                        "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v]",
                         "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
                     ]
                     
@@ -3657,7 +3721,11 @@ def import_lakorn_auto(payload: ImportLakornPayload):
     if global_char_sheet.exists() and global_char_sheet.is_dir():
         resolved_ref_dir = global_char_sheet
     else:
-        raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์รูปภาพตัวละคร (Character Sheet) ใน Path หลักที่ตั้งค่าไว้")
+        fallback_char_sheet = Path.home() / "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/ผักกาดการละคร - ละครไทย/Character Sheet"
+        if fallback_char_sheet.exists() and fallback_char_sheet.is_dir():
+            resolved_ref_dir = fallback_char_sheet
+        else:
+            raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์รูปภาพตัวละคร (Character Sheet) ใน Path หลักที่ตั้งค่าไว้")
 
     ref_images_dir = str(resolved_ref_dir)
 
@@ -4030,8 +4098,8 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # Bring Chrome window to front (Commented out to run completely in background)
     # _activate_chrome()
 
-    # 2. Check for unusual activity and clear cache/cookies if found
-    check_unusual_activity_and_clear(driver, payload.google_flow_email, payload.google_flow_project_name)
+    # 2. Check for unusual activity and clear cache/cookies if found (Disabled by user request)
+    # check_unusual_activity_and_clear(driver, payload.google_flow_email, payload.google_flow_project_name)
 
     # 2.5 Ensure logged in if on landing page or accounts chooser page
     handle_google_flow_login_if_needed(driver, payload.google_flow_email)
@@ -4543,7 +4611,7 @@ def step_video_retry(payload: VideoRetryPayload):
     if not switched:
         raise HTTPException(status_code=400, detail="ไม่พบแท็บ Google Flow ที่เปิดอยู่")
 
-    # 1.5 Check for unusual activity and clear cache/cookies if found
+    # 1.5 Check for unusual activity and clear cache/cookies if found (Disabled by user request)
     target_email = "dogdadcatmom@gmail.com"
     target_project_name = "7-1"
     try:
@@ -4556,7 +4624,7 @@ def step_video_retry(payload: VideoRetryPayload):
     except Exception:
         pass
 
-    check_unusual_activity_and_clear(driver, target_email, target_project_name)
+    # check_unusual_activity_and_clear(driver, target_email, target_project_name)
     handle_google_flow_login_if_needed(driver, target_email)
     open_google_flow_project_if_needed(driver, target_project_name)
 

@@ -243,11 +243,10 @@ button.gear { font-size: 1.2rem; padding: 10px 12px; }
 }
 .prompt-tabs {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   flex-wrap: wrap;
-  max-height: 410px;
   gap: 6px;
-  width: auto;
+  flex: 1;
   min-width: 0;
   padding-bottom: 4px;
 }

@@ -199,13 +199,15 @@ ${modeDescription}
     const modeVal = videoMode ? videoMode.value : 'cover';
     const outputPathVal = document.getElementById('videoOutputPathText')?.value.trim() || 'ไม่ได้กำหนด';
     const prefixVal = document.getElementById('videoPrefixText')?.value.trim() || 'ไม่มี';
+    const speedVal = document.getElementById('videoSpeedText')?.value.trim() || '1.0';
+    const speedText = speedVal !== '1.0' && speedVal !== '' ? ` (เร่งความเร็ว ${speedVal} เท่า)` : '';
     
     if (modeVal === 'cover') {
       const foldersVal = document.getElementById('videoCoverFoldersText')?.value.trim() || 'ไม่ได้กำหนด';
       tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Cover Mode:
 1. ระบบตรวจสอบ Path หลักที่ตั้งค่าไว้ (${outputPathVal})
 2. ดึงรายชื่อโฟลเดอร์ย่อยที่จะเข้าไปทำงาน (${foldersVal})
-3. เริ่มวนลูปเข้าโฟลเดอร์ทีละอัน: ค้นหาไฟล์วิดีโอ (.mp4/.mov) 1 ไฟล์ และรูปภาพปกที่อยู่ในโฟลเดอร์ย่อย 'cover/'
+3. เริ่มวนลูปเข้าโฟลเดอร์ทีละอัน: ค้นหาไฟล์วิดีโอ (.mp4/.mov) 1 ไฟล์${speedText} และรูปภาพปกที่อยู่ในโฟลเดอร์ย่อย 'cover/'
 4. ส่งคำสั่งให้ระบบหลังบ้าน (API) ประมวลผลวิดีโอ
 5. ระบบจะแทรกภาพหน้าจอดำ (Black Screen) เป็นเวลา 2.0 วินาที เพื่อคั่นระหว่างจุดจบของวิดีโอกับภาพปก
 6. บันทึกผลลัพธ์เป็นไฟล์วิดีโอใหม่โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
@@ -228,7 +230,7 @@ ${modeDescription}
 1. ระบบตรวจสอบโฟลเดอร์หลักที่ตั้งค่าไว้ (${viewFolderVal})
 2. ดึงรายชื่อโฟลเดอร์ย่อยที่จะประมวลผล (${subFoldersVal})
 3. สำหรับแต่ละโฟลเดอร์ย่อย:
-   - นำวิดีโอแต่ละตัวภายในโฟลเดอร์ย่อยนั้นมาตัดตามความยาวที่ระบุ: [${durationVals}] วินาที
+   - นำวิดีโอแต่ละตัวภายในโฟลเดอร์ย่อยนั้นมาตัดตามความยาวที่ระบุ: [${durationVals}] วินาที${speedText}
    - นำวิดีโอที่ตัดแล้วมารวมกันแบบไร้รอยต่อ
    - ${useBGM ? 'ผสมเสียงเข้ากับเพลงพื้นหลัง' : 'คงเสียงเดิมไว้'}
    - บันทึกไฟล์รวมวิดีโอผลลัพธ์เป็น '{โฟลเดอร์ย่อย}_combined.mp4' ไว้ในโฟลเดอร์ย่อยนั้น`;
@@ -236,7 +238,7 @@ ${modeDescription}
         tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ วิดีโอ + เพลง:
 1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
 2. อ่านข้อมูลวิดีโอจากโฟลเดอร์นั้นตามลำดับ
-3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${durationVals}] วินาที
+3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${durationVals}] วินาที${speedText}
 4. นำวิดีโอที่ตัดแล้วมาต่อกันแบบไร้รอยต่อ
 ${step5}
 6. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
@@ -764,6 +766,9 @@ async function loadConfig() {
     
     const vOut = document.getElementById('videoOutputPathText');
     if (vOut) vOut.value = config.video_output_path || '';
+    
+    const vSpeed = document.getElementById('videoSpeedText');
+    if (vSpeed) vSpeed.value = config.video_speed || '1.0';
     
     const vChanFolder = document.getElementById('viewChannelFolderText');
     if (vChanFolder) vChanFolder.value = config.view_channel_folder || '';
@@ -1804,6 +1809,10 @@ function applyVideoPreset(presetName) {
     if (videoCombineSubFoldersText) {
       videoCombineSubFoldersText.value = '';
     }
+    const vChanSpeed = document.getElementById('videoSpeedText');
+    if (vChanSpeed) {
+      vChanSpeed.value = '1.0';
+    }
     updateCombineBatchUI();
 
     syncDurationFields(5);
@@ -1852,6 +1861,9 @@ function applyVideoPreset(presetName) {
   
   const vChanUnsharp = document.getElementById('viewChannelUnsharp');
   if (vChanUnsharp && preset.unsharp !== undefined) vChanUnsharp.value = preset.unsharp;
+  
+  const vChanSpeedVal = document.getElementById('videoSpeedText');
+  if (vChanSpeedVal && preset.video_speed !== undefined) vChanSpeedVal.value = preset.video_speed;
   
   if (preset.durations && Array.isArray(preset.durations)) {
     syncDurationFields(preset.durations.length);
@@ -1905,6 +1917,7 @@ async function saveVideoPreset() {
     brightness: document.getElementById('viewChannelBrightness')?.value || '',
     gamma: document.getElementById('viewChannelGamma')?.value || '',
     unsharp: document.getElementById('viewChannelUnsharp')?.value || '',
+    video_speed: document.getElementById('videoSpeedText')?.value || '1.0',
     durations: durations
   };
   
@@ -1997,6 +2010,9 @@ async function runVideoHelper(btnElement) {
   const consoleBox = document.getElementById('videoConsole');
   let outputPathVal = videoOutputPath ? videoOutputPath.value.trim() : '';
 
+  const videoSpeedInput = document.getElementById('videoSpeedText');
+  const speedVal = videoSpeedInput ? videoSpeedInput.value.trim() : '1.0';
+
   // Collect active sets
   const activeSets = [];
   if (modeVal === 'cover') {
@@ -2021,7 +2037,8 @@ async function runVideoHelper(btnElement) {
         imagePathVal: '',
         no: folder,
         amount: '2',
-        foldersJson: ''
+        foldersJson: '',
+        videoSpeed: speedVal
       });
     }
   } else {
@@ -2093,7 +2110,8 @@ async function runVideoHelper(btnElement) {
           imagePathVal: '',
           no: folders[0] || '',
           amount: String(folders.length || 1),
-          foldersJson: JSON.stringify(folders)
+          foldersJson: JSON.stringify(folders),
+          videoSpeed: speedVal
         };
         
         if (subModeVal === 'view_channel' && viewChannelData) {
@@ -2197,6 +2215,7 @@ async function runVideoHelper(btnElement) {
       if (set.brightness) formData.append('brightness', set.brightness);
       if (set.gamma) formData.append('gamma', set.gamma);
       if (set.unsharp) formData.append('unsharp', set.unsharp);
+      if (set.videoSpeed) formData.append('video_speed', set.videoSpeed);
 
       const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).substring(7);
       formData.append('job_id', jobId);
@@ -2391,6 +2410,22 @@ async function setVideoPrefixDefault() {
     alert(`Default video prefix for ${activeVideoMode} mode set to: ${val || 'None'}`);
   } catch (e) {
     writeConsoleLine(`Failed to set default video prefix: ${e.message}`, 'error', 'videoConsole');
+  }
+}
+
+async function setVideoSpeedDefault() {
+  const input = document.getElementById('videoSpeedText');
+  const val = input ? input.value.trim() : '1.0';
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'video_speed', value: val })
+    });
+    writeConsoleLine(`Video speed default saved: ${val}`, 'success', 'videoConsole');
+    alert(`Default video speed set to: ${val}`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default video speed: ${e.message}`, 'error', 'videoConsole');
   }
 }
 
@@ -2977,7 +3012,7 @@ function initWorkflowActionListeners() {
 
 
 
-  const viewStaticInputs = ['viewChannelAudioPath', 'viewChannelFolderText', 'viewChannelUseBGM'];
+  const viewStaticInputs = ['viewChannelAudioPath', 'viewChannelFolderText', 'viewChannelUseBGM', 'videoSpeedText'];
   viewStaticInputs.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
@@ -3060,6 +3095,9 @@ function initWorkflowActionListeners() {
 
   const setVideoPrefixBtn = document.getElementById('setVideoPrefixDefaultBtn');
   if (setVideoPrefixBtn) setVideoPrefixBtn.addEventListener('click', setVideoPrefixDefault);
+
+  const setVideoSpeedBtn = document.getElementById('setVideoSpeedDefaultBtn');
+  if (setVideoSpeedBtn) setVideoSpeedBtn.addEventListener('click', setVideoSpeedDefault);
 
 
 

@@ -57,15 +57,20 @@ class BrowserBot:
             except Exception:
                 pass
 
-            # 2. Get milestone of the selected browser dynamically
+            # 2. Get milestone of the selected browser dynamically on macOS
             milestone = None
-            paths = {
-                "canary": "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
-                "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                "brave": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-                "edge": "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
-            }
-            binary = paths.get(browser_type)
+            binary = None
+            sys_name = platform.system()
+            
+            if sys_name == "Darwin":
+                paths = {
+                    "canary": "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+                    "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    "brave": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                    "edge": "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+                }
+                binary = paths.get(browser_type)
+
             if binary and Path(binary).exists():
                 try:
                     res = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=5)
@@ -76,7 +81,7 @@ class BrowserBot:
                 except Exception:
                     pass
                     
-                if milestone is None:
+                if milestone is None and sys_name == "Darwin":
                     try:
                         plist_path = binary.split("/Contents/MacOS/")[0] + "/Contents/Info.plist"
                         if Path(plist_path).exists():
@@ -88,10 +93,10 @@ class BrowserBot:
                     except Exception:
                         pass
 
-            # 3. Resolve driver path using Google CFT per milestone
+            # 3. Resolve driver path using Google CFT per milestone (macOS only)
             driver_path = None
-            if milestone:
-                print(f"Detected browser milestone version: {milestone}")
+            if milestone and sys_name == "Darwin":
+                print(f"Detected macOS browser milestone version: {milestone}")
                 drivers_dir = base_dir / "runtime" / "matched_drivers"
                 drivers_dir.mkdir(parents=True, exist_ok=True)
                 
@@ -109,10 +114,12 @@ class BrowserBot:
                     print(f"Error fetching milestone version: {e}")
                     
                 if version:
+                    # Detect Apple Silicon (M1/M2/M3/M4) vs Intel dynamically
                     is_arm = platform.machine() == 'arm64' or platform.processor() == 'arm'
                     platform_name = "mac-arm64" if is_arm else "mac-x64"
+                    driver_exe = "chromedriver"
                     
-                    driver_bin_path = drivers_dir / f"chromedriver-{version}" / f"chromedriver-{platform_name}" / "chromedriver"
+                    driver_bin_path = drivers_dir / f"chromedriver-{version}" / f"chromedriver-{platform_name}" / driver_exe
                     if driver_bin_path.exists():
                         try:
                             os.chmod(driver_bin_path, 0o755)
@@ -120,12 +127,12 @@ class BrowserBot:
                         except Exception:
                             pass
                         driver_path = str(driver_bin_path)
-                        print(f"Using matched ChromeDriver: {driver_path}")
+                        print(f"Using matched ChromeDriver for macOS: {driver_path}")
                     else:
                         zip_url = f"https://storage.googleapis.com/chrome-for-testing-public/{version}/{platform_name}/chromedriver-{platform_name}.zip"
                         zip_file_path = drivers_dir / f"chromedriver-{version}.zip"
                         
-                        print(f"Downloading matched ChromeDriver version {version} from CFT...")
+                        print(f"Downloading matched ChromeDriver version {version} ({platform_name}) from CFT...")
                         try:
                             urllib.request.urlretrieve(zip_url, zip_file_path)
                             with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
@@ -135,7 +142,7 @@ class BrowserBot:
                                 subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(driver_bin_path)], check=False)
                                 os.chmod(driver_bin_path, 0o755)
                                 driver_path = str(driver_bin_path)
-                                print(f"Successfully installed matched ChromeDriver: {driver_path}")
+                                print(f"Successfully installed matched ChromeDriver for macOS: {driver_path}")
                                 
                             if zip_file_path.exists():
                                 zip_file_path.unlink()
@@ -144,23 +151,21 @@ class BrowserBot:
                             if zip_file_path.exists():
                                 zip_file_path.unlink()
 
-            # 4. Fallback to ChromeDriverManager if no driver resolved
-            if not driver_path:
-                global _cached_driver_path
-                if _cached_driver_path is None:
-                    _cached_driver_path = ChromeDriverManager().install()
-                    try:
-                        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", _cached_driver_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    except Exception:
-                        pass
-                driver_path = _cached_driver_path
+            # 4. Fallback to Selenium Manager if no custom driver resolved
+            service = None
+            if driver_path:
+                service = Service(driver_path, args=["--disable-build-check"])
+                print(f"Starting Chrome with Service pointing to custom driver: {driver_path}")
+            else:
+                print("No custom macOS driver path resolved. Falling back to Selenium Manager (built-in)...")
 
-            service = Service(driver_path, args=["--disable-build-check"])
-            
             # Add retry logic for connection (optimized timeout)
             for attempt in range(2):
                 try:
-                    self.driver = webdriver.Chrome(service=service, options=options)
+                    if service:
+                        self.driver = webdriver.Chrome(service=service, options=options)
+                    else:
+                        self.driver = webdriver.Chrome(options=options)
                     self.wait = WebDriverWait(self.driver, 5) # 5 seconds timeout
                     print("Browser connected/started successfully.")
                     return True
