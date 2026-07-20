@@ -4107,6 +4107,42 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # 2.7 Ensure target project is opened
     open_google_flow_project_if_needed(driver, payload.google_flow_project_name)
 
+    # 2.75 If auto_retry_mode is enabled, check before anything if any previous round needs retry
+    if payload.auto_retry_mode and round_idx > 1:
+        log("[Auto Retry Pre-Submit] สแกนหาปุ่ม 'ลองอีกครั้ง' (Retry) สำหรับรอบก่อนหน้านี้...")
+        for prev_r in range(1, round_idx):
+            round_str = f"{prev_r:02d}"
+            possible_xpaths = [
+                f"//div[contains(., '@{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+                f"//div[contains(., 'round_{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+                f"//div[contains(., '{round_str}.png')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+            ]
+            retry_btn = None
+            for xpath in possible_xpaths:
+                try:
+                    elements = driver.find_elements(By.XPATH, xpath)
+                    if elements:
+                        retry_btn = elements[0]
+                        break
+                except Exception:
+                    continue
+            
+            if retry_btn:
+                log(f"[Auto Retry] พบปุ่ม 'ลองอีกครั้ง' สำหรับรอบที่ {prev_r} กำลังทำการคลิก...")
+                try:
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", retry_btn)
+                    time.sleep(0.5)
+                    retry_btn.click()
+                    log(f"[Auto Retry สำเร็จ] คลิกปุ่มลองอีกครั้งสำหรับรอบที่ {prev_r} สำเร็จ")
+                    time.sleep(1.0)
+                except Exception:
+                    try:
+                        driver.execute_script("arguments[0].click();", retry_btn)
+                        log(f"[Auto Retry สำเร็จ] คลิกปุ่มลองอีกครั้งด้วย JS สำหรับรอบที่ {prev_r} สำเร็จ")
+                        time.sleep(1.0)
+                    except Exception as click_err:
+                        log(f"[Auto Retry Warning] ไม่สามารถคลิกปุ่มลองอีกครั้งสำหรับรอบที่ {prev_r} ได้: {click_err}")
+
     # 2.8 Check if auto_retry_mode is enabled and try to find/click the retry button
     if payload.auto_retry_mode:
         log(f"[Auto Retry Check] ตรวจสอบว่ามีปุ่ม 'ลองอีกครั้ง' (Retry) สำหรับรอบที่ {round_idx} หรือไม่...")
@@ -4502,8 +4538,6 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             raise RuntimeError("Browser connection lost.")
         log(f"ส่ง Enter ล้มเหลว, ใช้ box.send_keys: {e}")
         box.send_keys(Keys.ENTER)
-    time.sleep(3.0)
-
     # 5. Click settings button to check/verify settings if specified
     if video_settings_selector:
         if not is_driver_alive(driver):
@@ -4517,7 +4551,6 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 settings_btn.click()
             except Exception:
                 driver.execute_script("arguments[0].click();", settings_btn)
-            time.sleep(1.5) # Wait for settings panel to verify/load
         except Exception as e:
             if not is_driver_alive(driver):
                 raise RuntimeError("Browser connection lost.")
@@ -4540,47 +4573,9 @@ def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             if not is_driver_alive(driver):
                 raise RuntimeError("Browser connection lost.")
             raise HTTPException(status_code=400, detail=f"ไม่พบปุ่มส่งพรอพต์: {e}")
-    else:
-        log("ยกเลิกการกดปุ่ม Enter บังคับส่งพรอพต์เพื่อรอให้ผู้ใช้ตรวจทานข้อความ")
 
-    # 6.5 If auto_retry_mode is enabled, check after sending if any previous round needs retry
-    if payload.auto_retry_mode:
-        log("[Auto Retry Post-Submit] สแกนหาปุ่ม 'ลองอีกครั้ง' (Retry) สำหรับรอบก่อนหน้านี้...")
-        for prev_r in range(1, round_idx + 1):
-            round_str = f"{prev_r:02d}"
-            possible_xpaths = [
-                f"//div[contains(., '@{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
-                f"//div[contains(., 'round_{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
-                f"//div[contains(., '{round_str}.png')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
-            ]
-            retry_btn = None
-            for xpath in possible_xpaths:
-                try:
-                    elements = driver.find_elements(By.XPATH, xpath)
-                    if elements:
-                        retry_btn = elements[0]
-                        break
-                except Exception:
-                    continue
-            
-            if retry_btn:
-                log(f"[Auto Retry] พบปุ่ม 'ลองอีกครั้ง' สำหรับรอบที่ {prev_r} กำลังทำการคลิก...")
-                try:
-                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", retry_btn)
-                    time.sleep(0.5)
-                    retry_btn.click()
-                    log(f"[Auto Retry สำเร็จ] คลิกปุ่มลองอีกครั้งสำหรับรอบที่ {prev_r} สำเร็จ")
-                    time.sleep(1.0)
-                except Exception:
-                    try:
-                        driver.execute_script("arguments[0].click();", retry_btn)
-                        log(f"[Auto Retry สำเร็จ] คลิกปุ่มลองอีกครั้งด้วย JS สำหรับรอบที่ {prev_r} สำเร็จ")
-                        time.sleep(1.0)
-                    except Exception as click_err:
-                        log(f"[Auto Retry Warning] ไม่สามารถคลิกปุ่มลองอีกครั้งสำหรับรอบที่ {prev_r} ได้: {click_err}")
-
-    log(f"วางพรอพต์เรียบร้อยแล้ว เริ่มเวลารอ {video_wait_seconds} วินาที...")
-    return {"ok": True, "message": "วางพรอพต์และเริ่มต้นการรอ"}
+    log(f"วางพรอพต์เรียบร้อยแล้วและส่งเรียบร้อย")
+    return {"ok": True, "message": "วางพรอพต์และส่งเรียบร้อย"}
 
 
 class VideoRetryPayload(BaseModel):
