@@ -4672,6 +4672,80 @@ def step_video_retry(payload: VideoRetryPayload):
     return {"ok": True, "message": f"คลิกปุ่มลองอีกครั้งรอบที่ {payload.round_idx} เรียบร้อยแล้ว"}
 
 
+class VideoRetryScanPayload(BaseModel):
+    max_round_idx: int
+
+
+@app.post("/api/step/video-retry-scan")
+def step_video_retry_scan(payload: VideoRetryScanPayload) -> dict[str, Any]:
+    from selenium.webdriver.common.by import By
+    import time
+
+    bot = None
+    try:
+        bot = browser_manager.get()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ไม่สามารถเชื่อมต่อ Browser ได้: {e}")
+
+    driver = bot.driver
+
+    # 1. Switch to Google Flow tab if it exists
+    switched = False
+    for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+        if bot.switch_to_tab_containing(url_part):
+            switched = True
+            break
+
+    if not switched:
+        return {"ok": False, "message": "ไม่พบแท็บ Google Flow ที่เปิดอยู่", "clicked_rounds": []}
+
+    if not is_driver_alive(driver):
+        return {"ok": False, "message": "Browser session is not alive", "clicked_rounds": []}
+
+    clicked_rounds = []
+    
+    # Scan from round 1 up to max_round_idx
+    for r in range(1, payload.max_round_idx + 1):
+        round_str = f"{r:02d}"
+        possible_xpaths = [
+            f"//div[contains(., '@{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+            f"//div[contains(., 'round_{round_str}')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+            f"//div[contains(., '{round_str}.png')]//button[.//span[text()='ลองอีกครั้ง' or text()='Try again'] or .//i[text()='refresh']]",
+        ]
+        
+        retry_btn = None
+        for xpath in possible_xpaths:
+            try:
+                elements = driver.find_elements(By.XPATH, xpath)
+                if elements:
+                    retry_btn = elements[0]
+                    break
+            except Exception:
+                continue
+        
+        if retry_btn:
+            log(f"[Scan Retry] พบปุ่ม 'ลองอีกครั้ง' สำหรับรอบที่ {r} ระหว่างรอนับถอยหลัง กำลังคลิก...")
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", retry_btn)
+                time.sleep(0.3)
+                retry_btn.click()
+                log(f"[Scan Retry สำเร็จ] คลิกปุ่มลองอีกครั้งสำหรับรอบที่ {r} สำเร็จ")
+                clicked_rounds.append(r)
+                time.sleep(0.5)
+            except Exception:
+                try:
+                    driver.execute_script("arguments[0].click();", retry_btn)
+                    log(f"[Scan Retry สำเร็จ] คลิกปุ่มลองอีกครั้งด้วย JS สำหรับรอบที่ {r} สำเร็จ")
+                    clicked_rounds.append(r)
+                    time.sleep(0.5)
+                except Exception as click_err:
+                    log(f"[Scan Retry Warning] ไม่สามารถคลิกปุ่มลองอีกครั้งสำหรับรอบที่ {r} ได้: {click_err}")
+
+    if clicked_rounds:
+        return {"ok": True, "message": f"คลิกปุ่มลองอีกครั้งสำหรับรอบ {clicked_rounds} เรียบร้อยแล้ว", "clicked_rounds": clicked_rounds}
+    return {"ok": True, "message": "ไม่พบรอบที่ต้องกดลองอีกครั้ง", "clicked_rounds": []}
+
+
 class SeedancePayload(BaseModel):
     prompt: str
 

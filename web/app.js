@@ -4142,6 +4142,7 @@ function renderVideoActiveRoundsDropdown() {
 
 let shouldStopVideoGeneration = false;
 let videoCooldownInterval = null;
+let isScanningRetry = false;
 
 async function loadVideoPrompts() {
   try {
@@ -4444,9 +4445,41 @@ function runVideoCooldown(roundNum, seconds) {
     if (rSpan) rSpan.textContent = roundNum;
     if (tSpan) tSpan.textContent = `${timeLeft} วินาที`;
 
-    videoCooldownInterval = setInterval(() => {
+    videoCooldownInterval = setInterval(async () => {
       timeLeft--;
       if (tSpan) tSpan.textContent = `${timeLeft} วินาที`;
+
+      // Scan for retry buttons of failed rounds every 5 seconds during cooldown
+      const isAutoRetry = !!document.getElementById('cfg_auto_retry_mode')?.checked;
+      if (isAutoRetry && timeLeft > 0 && (timeLeft % 5 === 0) && !isScanningRetry) {
+        isScanningRetry = true;
+        try {
+          const res = await jsonFetch('/api/step/video-retry-scan', {
+            method: 'POST',
+            body: JSON.stringify({ max_round_idx: roundNum })
+          });
+          if (res && res.clicked_rounds && res.clicked_rounds.length > 0) {
+            writeConsoleLine(`[Cooldown Scan] คลิกปุ่มลองอีกครั้งของรอบ: ${res.clicked_rounds.join(', ')}`, 'success', 'videoConsole');
+            res.clicked_rounds.forEach(r => {
+              if (videoStatusesByRound[r]) {
+                videoStatusesByRound[r] = videoStatusesByRound[r].map(s => {
+                  if (s === 'Failed' || s === 'Idle') return 'Retried / Cooldown';
+                  return s;
+                });
+                if (r === currentVideoPromptRound) {
+                  renderVideoPromptsForRound(r);
+                }
+              }
+            });
+            await saveVideoPrompts(true);
+          }
+        } catch (err) {
+          console.warn('Retry scan failed:', err);
+        } finally {
+          isScanningRetry = false;
+        }
+      }
+
       if (timeLeft <= 0 || shouldStopVideoGeneration) {
         stopVideoCooldown();
         resolve();
