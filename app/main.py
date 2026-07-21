@@ -3715,17 +3715,35 @@ def import_lakorn_auto(payload: ImportLakornPayload):
     if not ep_dir:
         raise HTTPException(status_code=400, detail=f"ไม่พบโฟลเดอร์ตอนละครที่ระบุใน Drama Path (ค้นหาด้วยตอน: {ton_num})")
 
-    # 1.5. Resolve character sheet directory (Strictly Global Path)
+    # 1.5. Resolve character sheet directory relative to lakorn_path
     resolved_ref_dir = None
-    global_char_sheet = Path("/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/ผักกาดการละคร - ละครไทย/Character Sheet")
-    if global_char_sheet.exists() and global_char_sheet.is_dir():
-        resolved_ref_dir = global_char_sheet
-    else:
-        fallback_char_sheet = Path.home() / "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/ผักกาดการละคร - ละครไทย/Character Sheet"
-        if fallback_char_sheet.exists() and fallback_char_sheet.is_dir():
-            resolved_ref_dir = fallback_char_sheet
+    lakorn_path_obj = Path(lakorn_path)
+    
+    # Try finding Character Sheet folder directly inside lakorn_path
+    for candidate in ["Character Sheet", "2 - Character Sheet", "2-Character Sheet", "character_sheet"]:
+        path = lakorn_path_obj / candidate
+        if path.exists() and path.is_dir():
+            resolved_ref_dir = path
+            break
+            
+    # Fallback to legacy hardcoded paths if not found relative to lakorn_path
+    if not resolved_ref_dir:
+        global_char_sheet = Path("/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/ผักกาดการละคร - ละครไทย/Character Sheet")
+        if global_char_sheet.exists() and global_char_sheet.is_dir():
+            resolved_ref_dir = global_char_sheet
         else:
-            raise HTTPException(status_code=400, detail="ไม่พบโฟลเดอร์รูปภาพตัวละคร (Character Sheet) ใน Path หลักที่ตั้งค่าไว้")
+            fallback_char_sheet = Path.home() / "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/ผักกาดการละคร - ละครไทย/Character Sheet"
+            if fallback_char_sheet.exists() and fallback_char_sheet.is_dir():
+                resolved_ref_dir = fallback_char_sheet
+            else:
+                new_fallback_char_sheet = Path.home() / "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย/Character Sheet"
+                if new_fallback_char_sheet.exists() and new_fallback_char_sheet.is_dir():
+                    resolved_ref_dir = new_fallback_char_sheet
+                else:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"ไม่พบโฟลเดอร์รูปภาพตัวละคร (Character Sheet) ใน Path ละคร: '{lakorn_path}'"
+                    )
 
     ref_images_dir = str(resolved_ref_dir)
 
