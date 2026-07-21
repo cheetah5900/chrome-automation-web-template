@@ -2031,7 +2031,113 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 bot = browser_manager.get()
                 
             driver = bot.driver
+
+            # 1. Switch to ChatGPT tab if it exists, or open it
+            if not bot.switch_to_tab_containing("chatgpt.com"):
+                log("ChatGPT tab not found, opening natively...")
+                driver.get("https://chatgpt.com/")
+                time.sleep(3.0)
             
+            # 2. Check if currently generating, and wait until complete
+            stop_xpath = (
+                "//button[@id='composer-submit-button' and (@aria-label='Stop answering' or @data-testid='stop-button')]"
+            )
+            check_interval = int(_get_config_value("check_interval_seconds", 60))
+            max_checks = int(_get_config_value("max_checks", 3))
+            first_time_waiting = int(_get_config_value("first_time_waiting", check_interval))
+            
+            is_generating = False
+            try:
+                stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                is_generating = any(b.is_displayed() for b in stop_btns)
+                if not is_generating:
+                    dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                    if any(d.is_displayed() for d in dots):
+                        log("ตรวจพบสถานะกำลังสร้างรูปภาพ (image-gen-loading-state-dots)")
+                        is_generating = True
+            except Exception:
+                pass
+                
+            if is_generating:
+                elapsed = time.time() - last_submit_time if last_submit_time > 0 else 0.0
+                remaining_wait = first_time_waiting - elapsed
+                log(f"ตรวจพบว่า ChatGPT กำลังทำงานอยู่จากรอบก่อนหน้า (รันมาแล้ว {elapsed:.1f} วินาที)... รอให้เจเนอเรตเสร็จสิ้นก่อนเริ่มทำรายการใหม่...")
+                
+                if remaining_wait > 0:
+                    log(f"เริ่มนับถอยหลัง First Time Waiting ทุกๆ 1 วินาที (เหลืออีก {int(remaining_wait)} วินาที จาก {first_time_waiting} วินาที)...")
+                    for s in range(int(remaining_wait), 0, -1):
+                        if not is_driver_alive(driver):
+                            raise RuntimeError("Browser connection lost (Force Stopped).")
+                        log(f"First Time Waiting: เหลืออีก {s} วินาที จะเริ่มตรวจสอบปุ่ม Send")
+                        time.sleep(1)
+                
+                generation_completed = False
+                try:
+                    stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                    visible = any(b.is_displayed() for b in stop_btns)
+                    dots_visible = False
+                    dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                    if any(d.is_displayed() for d in dots):
+                        dots_visible = True
+                    if not visible and not dots_visible:
+                        log("ตรวจพบว่าปุ่ม Send ว่างและไม่มี Loading dots แล้ว กำลังรอตรวจซ้ำอีก 3 วินาทีเพื่อความแน่ใจ...")
+                        time.sleep(3.0)
+                        stop_btns_re = driver.find_elements(By.XPATH, stop_xpath)
+                        visible_re = any(b.is_displayed() for b in stop_btns_re)
+                        dots_re = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                        dots_visible_re = any(d.is_displayed() for d in dots_re)
+                        if not visible_re and not dots_visible_re:
+                            log("ตรวจพบปุ่ม Send พร้อมใช้งานและรูปสร้างเสร็จแล้ว (หลังครบ First Time Waiting)")
+                            generation_completed = True
+                        else:
+                            log(f"ตรวจพบการสลับสถานะชั่วคราว ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible_re}, กำลังสร้างรูปภาพ: {dots_visible_re})")
+                    else:
+                        log(f"ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible}, กำลังสร้างรูปภาพ: {dots_visible})")
+                except Exception:
+                    generation_completed = True
+                    
+                if not generation_completed:
+                    check_count = 1
+                    for check_idx in range(1, max_checks + 1):
+                        log(f"เริ่มตรวจรอบที่ {check_count} (Interval {check_interval} วินาที)...")
+                        for s in range(check_interval, 0, -1):
+                            if not is_driver_alive(driver):
+                                raise RuntimeError("Browser connection lost (Force Stopped).")
+                            log(f"Interval Check ครั้งที่ {check_count}: เหลืออีก {s} วินาที")
+                            time.sleep(1)
+                        check_count += 1
+                        try:
+                            stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                            visible = any(b.is_displayed() for b in stop_btns)
+                            dots_visible = False
+                            dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                            if any(d.is_displayed() for d in dots):
+                                dots_visible = True
+                            if not visible and not dots_visible:
+                                log("ตรวจพบว่าปุ่ม Send ว่างและไม่มี Loading dots แล้ว กำลังรอตรวจซ้ำอีก 3 วินาทีเพื่อความแน่ใจ...")
+                                time.sleep(3.0)
+                                stop_btns_re = driver.find_elements(By.XPATH, stop_xpath)
+                                visible_re = any(b.is_displayed() for b in stop_btns_re)
+                                dots_re = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                                dots_visible_re = any(d.is_displayed() for d in dots_re)
+                                if not visible_re and not dots_visible_re:
+                                    log(f"ตรวจพบปุ่ม Send พร้อมใช้งานและรูปสร้างเสร็จแล้ว (ในการตรวจสอบครั้งที่ {check_count-1})")
+                                    generation_completed = True
+                                    break
+                                else:
+                                    log(f"ตรวจพบการสลับสถานะชั่วคราว ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible_re}, กำลังสร้างรูปภาพ: {dots_visible_re})")
+                            else:
+                                log(f"ChatGPT ยังคงเจเนอเรตอยู่ (ปุ่ม Stop: {visible}, กำลังสร้างรูปภาพ: {dots_visible}) ผ่านการตรวจสอบแล้ว {check_count-1} ครั้ง")
+                        except Exception:
+                            log("ไม่พบปุ่ม Stop แล้ว ChatGPT เจเนอเรตเสร็จสิ้น")
+                            generation_completed = True
+                            break
+                    if not generation_completed:
+                        log("ข้อผิดพลาด: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ ChatGPT ยังทำงานไม่เสร็จสิ้น")
+                        raise RuntimeError("หยุดการทำงาน: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ปุ่มยังไม่พร้อมใช้งาน")
+            else:
+                log("ChatGPT ว่างอยู่ (ไม่มีการเจเนอเรตค้างไว้) ดำเนินการขั้นตอนถัดไปได้ทันที...")
+
             chatgpt_chat_mode = payload.get("chatgpt_chat_mode", "new")
             chatgpt_url = payload.get("chatgpt_url")
             
@@ -2389,126 +2495,6 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             # Click at '#composer-submit-button' to submit
             bypass_submit = False
             if not bypass_submit:
-                stop_xpath = (
-                    "//button[@id='composer-submit-button' and (@aria-label='Stop answering' or @data-testid='stop-button')]"
-                )
-                
-                check_interval = int(_get_config_value("check_interval_seconds", 60))
-                max_checks = int(_get_config_value("max_checks", 3))
-                first_time_waiting = int(_get_config_value("first_time_waiting", check_interval))
-                
-                # Check if ChatGPT is currently generating (Stop button visible or DALL-E loading dots active)
-                is_generating = False
-                try:
-                    stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                    is_generating = any(b.is_displayed() for b in stop_btns)
-                    
-                    if not is_generating:
-                        dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                        if any(d.is_displayed() for d in dots):
-                            log("ตรวจพบสถานะกำลังสร้างรูปภาพ (image-gen-loading-state-dots)")
-                            is_generating = True
-                except Exception:
-                    pass
-                
-                if is_generating:
-                    import time
-                    elapsed = time.time() - last_submit_time if last_submit_time > 0 else 0.0
-                    remaining_wait = first_time_waiting - elapsed
-                    
-                    log(f"ตรวจพบว่า ChatGPT กำลังทำงานอยู่จากรอบก่อนหน้า (รันมาแล้ว {elapsed:.1f} วินาที)...")
-                    
-                    if remaining_wait > 0:
-                        log(f"เริ่มนับถอยหลัง First Time Waiting ทุกๆ 1 วินาที (เหลืออีก {int(remaining_wait)} วินาที จาก {first_time_waiting} วินาที)...")
-                        for s in range(int(remaining_wait), 0, -1):
-                            if not is_driver_alive(driver):
-                                raise RuntimeError("Browser connection lost (Force Stopped).")
-                            log(f"First Time Waiting: เหลืออีก {s} วินาที จะเริ่มตรวจสอบปุ่ม Send")
-                            time.sleep(1)
-                    
-                    generation_completed = False
-                    # Check immediately after First Time Waiting completes
-                    try:
-                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                        visible = any(b.is_displayed() for b in stop_btns)
-                        
-                        dots_visible = False
-                        dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                        if any(d.is_displayed() for d in dots):
-                            dots_visible = True
-                            
-                        if not visible and not dots_visible:
-                            # Wait 3 seconds to double check transition state
-                            log("ตรวจพบว่าปุ่ม Send ว่างและไม่มี Loading dots แล้ว กำลังรอตรวจซ้ำอีก 3 วินาทีเพื่อความแน่ใจ...")
-                            time.sleep(3.0)
-                            
-                            # Check again
-                            stop_btns_re = driver.find_elements(By.XPATH, stop_xpath)
-                            visible_re = any(b.is_displayed() for b in stop_btns_re)
-                            
-                            dots_re = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                            dots_visible_re = any(d.is_displayed() for d in dots_re)
-                            
-                            if not visible_re and not dots_visible_re:
-                                log("ตรวจพบปุ่ม Send พร้อมใช้งานและรูปสร้างเสร็จแล้ว (หลังครบ First Time Waiting)")
-                                generation_completed = True
-                            else:
-                                log(f"ตรวจพบการสลับสถานะชั่วคราว ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible_re}, กำลังสร้างรูปภาพ: {dots_visible_re})")
-                        else:
-                            log(f"ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible}, กำลังสร้างรูปภาพ: {dots_visible})")
-                    except Exception:
-                        generation_completed = True
-
-                    if not generation_completed:
-                        check_count = 1
-                        for check_idx in range(1, max_checks + 1):
-                            log(f"เริ่มตรวจรอบที่ {check_count} (Interval {check_interval} วินาที)...")
-                            for s in range(check_interval, 0, -1):
-                                if not is_driver_alive(driver):
-                                    raise RuntimeError("Browser connection lost (Force Stopped).")
-                                log(f"Interval Check ครั้งที่ {check_count}: เหลืออีก {s} วินาที")
-                                time.sleep(1)
-                            
-                            check_count += 1
-                            try:
-                                stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                                visible = any(b.is_displayed() for b in stop_btns)
-                                
-                                dots_visible = False
-                                dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                                if any(d.is_displayed() for d in dots):
-                                    dots_visible = True
-                                    
-                                if not visible and not dots_visible:
-                                    # Wait 3 seconds to double check transition state
-                                    log("ตรวจพบว่าปุ่ม Send ว่างและไม่มี Loading dots แล้ว กำลังรอตรวจซ้ำอีก 3 วินาทีเพื่อความแน่ใจ...")
-                                    time.sleep(3.0)
-                                    
-                                    # Check again
-                                    stop_btns_re = driver.find_elements(By.XPATH, stop_xpath)
-                                    visible_re = any(b.is_displayed() for b in stop_btns_re)
-                                    
-                                    dots_re = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                                    dots_visible_re = any(d.is_displayed() for d in dots_re)
-                                    
-                                    if not visible_re and not dots_visible_re:
-                                        log(f"ตรวจพบปุ่ม Send พร้อมใช้งานและรูปสร้างเสร็จแล้ว (ในการตรวจสอบครั้งที่ {check_count-1})")
-                                        generation_completed = True
-                                        break
-                                    else:
-                                        log(f"ตรวจพบการสลับสถานะชั่วคราว ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible_re}, กำลังสร้างรูปภาพ: {dots_visible_re})")
-                                else:
-                                    log(f"ChatGPT ยังคงเจเนอเรตอยู่ (ปุ่ม Stop: {visible}, กำลังสร้างรูปภาพ: {dots_visible}) ผ่านการตรวจสอบแล้ว {check_count-1} ครั้ง")
-                            except Exception:
-                                log("ไม่พบปุ่ม Stop แล้ว ChatGPT เจเนอเรตเสร็จสิ้น")
-                                generation_completed = True
-                                break
-                                
-                        if not generation_completed:
-                            log("ข้อผิดพลาด: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ ChatGPT ยังทำงานไม่เสร็จสิ้น")
-                            raise RuntimeError("หยุดการทำงาน: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ปุ่มยังไม่พร้อมใช้งาน")
-                else:
-                    log("ChatGPT ว่างอยู่ (ไม่มีการเจเนอเรตค้างไว้) ดำเนินการส่งได้ทันที...")
 
                 # Now click submit button
                 log("กำลังคลิกปุ่มส่ง prompt (#composer-submit-button)...")
