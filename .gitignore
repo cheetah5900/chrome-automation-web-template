@@ -21,3 +21,4 @@ stdout.txt
 # Test and regression scripts
 test_*.py
 run_regression_test.py
+config_mac.json
