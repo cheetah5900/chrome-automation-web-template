@@ -1683,9 +1683,9 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                         ref_images.append(img)
             has_images = len(ref_images) > 0
             
-            # Switch to Chrome only if uploading images is required
-            if has_images:
-                _activate_chrome()
+            # Always activate debug browser and delay 1.5 seconds before starting the round
+            _activate_chrome()
+            time.sleep(1.5)
 
             bot = browser_manager.get()
             driver = bot.driver
@@ -1760,8 +1760,8 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                                 raise RuntimeError("Browser connection lost.")
                             pass
                         if attempt < 2:
-                            log(f"Failed to click {name}. Waiting 1.5 seconds before next attempt...")
-                            time.sleep(1.5)
+                            log(f"Failed to click {name}. Waiting 0.75 seconds before next attempt...")
+                            time.sleep(0.75)
                     log(f"CRITICAL ERROR: Failed to click {name} after 3 attempts.")
                     return False
 
@@ -1772,14 +1772,14 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     escaped_path = file_path.replace('"', '\\"')
                     script = f"""
                     set the clipboard to "{escaped_path}"
-                    delay 0.5
+                    delay 0.25
                     tell application "System Events"
                         key code 5 using {{command down, shift down}}
-                        delay 0.75
+                        delay 0.4
                         key code 9 using {{command down}}
-                        delay 1.0
+                        delay 0.5
                         keystroke return
-                        delay 1.5
+                        delay 0.75
                         keystroke return
                     end tell
                     """
@@ -1804,7 +1804,7 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     
                     # Step 1: Click upload menu button
                     _activate_chrome()
-                    time.sleep(2.0)
+                    time.sleep(1.0)
                     sel1_exact = "#app-root > main > side-navigation-v2 > bard-sidenav-container > bard-sidenav-content > div > div > div > chat-window > div > input-container > fieldset > input-area-v2 > div > div > div.leading-actions-wrapper.ng-tns-c5435433-4.has-model-picker.ng-star-inserted > simplified-input-menu > div > span > gem-icon-button > button"
                     sel1_fallbacks = [
                         sel1_exact,
@@ -1816,7 +1816,7 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     
                     if click_element_with_retry(sel1_fallbacks, "Gemini upload menu button"):
                         log("Opened Gemini upload menu. Proceeding to uploader...")
-                        time.sleep(1.2)
+                        time.sleep(0.6)
                         
                         # Step 2: Click the image/file uploader button to open system file modal
                         sel2_exact_0 = "#cdk-overlay-0 > mat-card > mat-action-list > div:nth-child(1) > uploader > div > mat-action-list > images-files-uploader > button"
@@ -1851,6 +1851,10 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     else:
                         log("Warning: Failed to open Gemini upload menu after 3 attempts.")
 
+                # Wait 0.5 seconds after image attachment before starting paste
+                if has_images:
+                    time.sleep(0.5)
+
                 # Paste prompt, but do not click send
                 try:
                     box.click()
@@ -1862,12 +1866,12 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     box
                 )
                 driver.execute_script("arguments[0].focus();", box)
-                time.sleep(0.75)
+                time.sleep(0.25)
 
                 input_success = False
                 try:
                     driver.execute_script("document.execCommand('insertText', false, arguments[0]);", custom_prompt)
-                    time.sleep(0.75)
+                    time.sleep(0.25)
                     entered_text = driver.execute_script("""
                         return arguments[0].innerText || arguments[0].textContent || '';
                     """, box)
@@ -2012,9 +2016,9 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
             
-            # Switch to Chrome window only if uploading images is required
-            if has_images:
-                _activate_chrome()
+            # Always activate debug browser and delay 1.5 seconds before starting the round
+            _activate_chrome()
+            time.sleep(1.5)
 
             bot = None
             try:
@@ -2201,14 +2205,14 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     escaped_path = file_path.replace('"', '\\"')
                     script = f"""
                     set the clipboard to "{escaped_path}"
-                    delay 0.5
+                    delay 0.25
                     tell application "System Events"
                         key code 5 using {{command down, shift down}}
-                        delay 0.75
+                        delay 0.4
                         key code 9 using {{command down}}
-                        delay 1.0
+                        delay 0.5
                         keystroke return
-                        delay 1.5
+                        delay 0.75
                         keystroke return
                     end tell
                     """
@@ -2243,14 +2247,14 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         app_name = _get_active_browser_app_name()
                         cmd_u_script = f"""
                         tell application "{app_name}" to activate
-                        delay 0.5
+                        delay 0.25
                         tell application "System Events"
                             key code 32 using command down
                         end tell
                         """
                         subprocess.run(["osascript", "-e", cmd_u_script], check=False)
-                        log("Waiting 1.5 seconds for file modal to fully open...")
-                        time.sleep(1.5)
+                        log("Waiting 0.75 seconds for file modal to fully open...")
+                        time.sleep(0.75)
                         
                         log("Triggering AppleScript folder path sheet to select file (Cmd + U method)...")
                         if upload_macos_file_dialog(reference_image):
@@ -2263,8 +2267,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         log("Fallback: Cmd + U method did not succeed. Attempting UI click attach button...")
                         try:
                             if click_chatgpt_attach_button():
-                                log("Waiting 1.5 seconds for file modal to fully open...")
-                                time.sleep(1.5)
+                                log("Waiting 0.75 seconds for file modal to fully open...")
+                                time.sleep(0.75)
                                 log("Triggering AppleScript folder path sheet to select file (UI Click method)...")
                                 if upload_macos_file_dialog(reference_image):
                                     upload_success = True
@@ -2273,8 +2277,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                             log(f"UI attach trigger fallback failed: {click_err}")
                             
                     if upload_success:
-                        log("Waiting 2.5 seconds for file upload to settle...")
-                        time.sleep(2.5)
+                        log("Waiting 1.25 seconds for file upload to settle...")
+                        time.sleep(1.25)
                     else:
                         log("Warning: AppleScript file-dialog automation encountered an issue and could not upload file.")
 
@@ -2291,6 +2295,10 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 if not box:
                     raise RuntimeError("Could not re-locate ChatGPT input box after file upload.")
 
+                # Wait 0.5 seconds after image attachment before starting paste
+                if has_images:
+                    time.sleep(0.5)
+
                 # Paste the prompt, but do not click send
                 try:
                     box.click()
@@ -2298,7 +2306,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     driver.execute_script("arguments[0].click();", box)
                     
                 driver.execute_script("arguments[0].focus();", box)
-                time.sleep(0.75)
+                time.sleep(0.25)
                 
                 # Clear the box to prevent double-pasting (simulating delete event to sync React/ProseMirror state)
                 driver.execute_script("""
@@ -2320,7 +2328,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         }
                     }
                 """, box)
-                time.sleep(0.75)
+                time.sleep(0.25)
 
                 if not is_driver_alive(driver):
                     raise RuntimeError("Browser connection lost (Force Stopped).")
