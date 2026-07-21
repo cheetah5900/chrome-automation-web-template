@@ -214,8 +214,18 @@ ${modeDescription}
     } else {
       const useBGM = document.getElementById('viewChannelUseBGM')?.checked !== false;
       const viewFolderVal = document.getElementById('viewChannelFolderText')?.value || 'ไม่ได้กำหนด';
-      const durationInputs = Array.from(document.getElementById('viewDurationsContainer')?.querySelectorAll('input') || []);
+      const durationInputs = Array.from(document.getElementById('viewDurationsContainer')?.querySelectorAll('input[id^="viewDur"]') || []);
       const durationVals = durationInputs.map(input => input.value || '-').join(', ');
+      
+      const container = document.getElementById('viewDurationsContainer');
+      let transitionNote = 'แบบไร้รอยต่อ (Cut)';
+      if (container) {
+        const transSelects = Array.from(container.querySelectorAll('select[id^="viewTrans"]'));
+        const hasFade = transSelects.some(sel => sel.value === 'fade');
+        if (hasFade) {
+          transitionNote = 'โดยมีคลิปที่ตั้งค่าเฟดรอยต่อ (Crossfade)';
+        }
+      }
       
       let step5 = '5. คงเสียงเดิมของวิดีโอทั้งหมดไว้';
       if (useBGM) {
@@ -231,7 +241,7 @@ ${modeDescription}
 2. ดึงรายชื่อโฟลเดอร์ย่อยที่จะประมวลผล (${subFoldersVal})
 3. สำหรับแต่ละโฟลเดอร์ย่อย:
    - นำวิดีโอแต่ละตัวภายในโฟลเดอร์ย่อยนั้นมาตัดตามความยาวที่ระบุ: [${durationVals}] วินาที${speedText}
-   - นำวิดีโอที่ตัดแล้วมารวมกันแบบไร้รอยต่อ
+   - นำวิดีโอที่ตัดแล้วมารวมกัน${transitionNote}
    - ${useBGM ? 'ผสมเสียงเข้ากับเพลงพื้นหลัง' : 'คงเสียงเดิมไว้'}
    - บันทึกไฟล์รวมวิดีโอผลลัพธ์เป็น '{โฟลเดอร์ย่อย}_combined.mp4' ไว้ในโฟลเดอร์ย่อยนั้น`;
       } else {
@@ -239,7 +249,7 @@ ${modeDescription}
 1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
 2. อ่านข้อมูลวิดีโอจากโฟลเดอร์นั้นตามลำดับ
 3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${durationVals}] วินาที${speedText}
-4. นำวิดีโอที่ตัดแล้วมาต่อกันแบบไร้รอยต่อ
+4. นำวิดีโอที่ตัดแล้วมาต่อกัน${transitionNote}
 ${step5}
 6. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
       }
@@ -1718,16 +1728,54 @@ function syncDurationFields(count) {
     for (let i = currentCount + 1; i <= count; i++) {
       const div = document.createElement('div');
       div.id = `viewDurDiv_${i}`;
+      div.style.cssText = "display: flex; flex-direction: column; gap: 6px; padding: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px;";
+      
+      let transitionHtml = '';
+      if (i > 1) {
+        transitionHtml = `
+          <div style="margin-top: 4px; display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 500;">รอยต่อ (Transition)</label>
+            <select id="viewTrans${i}" style="width: 100%; padding: 6px; font-size: 0.8rem; border-radius: 6px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.15); color: #fff; margin-bottom: 0;">
+              <option value="cut">ไม่มี (Cut)</option>
+              <option value="fade">เฟด (Fade)</option>
+            </select>
+          </div>
+          <div id="viewFadeDurDiv_${i}" style="display: none; flex-direction: column; gap: 4px;">
+            <label style="font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 500;">เวลาเฟด (วิ)</label>
+            <input id="viewFadeDur${i}" type="number" step="0.1" min="0.1" value="1.0" style="width: 100%; padding: 6px; font-size: 0.8rem; border-radius: 6px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.15); color: #fff; margin-bottom: 0;" />
+          </div>
+        `;
+      }
+      
       div.innerHTML = `
-        <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">วิดีโอที่ ${i}</label>
-        <input id="viewDur${i}" type="number" step="0.01" min="0" placeholder="วินาที" style="width: 100%; margin-bottom: 0;" />
+        <label style="font-size: 0.78rem; color: #8da6ff; font-weight: 600;">วิดีโอที่ ${i}</label>
+        <input id="viewDur${i}" type="number" step="0.01" min="0" placeholder="วินาที" style="width: 100%; padding: 8px; font-size: 0.85rem; border-radius: 6px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.15); color: #fff; margin-bottom: 0;" />
+        ${transitionHtml}
       `;
       container.appendChild(div);
       
-      const input = div.querySelector('input');
-      if (input) {
-        input.addEventListener('input', () => { updateTooltips(); updateDurationsSum(); });
-        input.addEventListener('change', () => { updateTooltips(); updateDurationsSum(); });
+      const durInput = div.querySelector(`#viewDur${i}`);
+      if (durInput) {
+        durInput.addEventListener('input', () => { updateTooltips(); updateDurationsSum(); });
+        durInput.addEventListener('change', () => { updateTooltips(); updateDurationsSum(); });
+      }
+      
+      if (i > 1) {
+        const transSelect = div.querySelector(`#viewTrans${i}`);
+        const fadeDiv = div.querySelector(`#viewFadeDurDiv_${i}`);
+        const fadeInput = div.querySelector(`#viewFadeDur${i}`);
+        if (transSelect && fadeDiv) {
+          transSelect.addEventListener('change', () => {
+            const isFade = transSelect.value === 'fade';
+            fadeDiv.style.display = isFade ? 'flex' : 'none';
+            updateTooltips();
+            updateDurationsSum();
+          });
+        }
+        if (fadeInput) {
+          fadeInput.addEventListener('input', () => { updateTooltips(); updateDurationsSum(); });
+          fadeInput.addEventListener('change', () => { updateTooltips(); updateDurationsSum(); });
+        }
       }
     }
   } else if (currentCount > count) {
@@ -1819,6 +1867,15 @@ function applyVideoPreset(presetName) {
     for (let i = 1; i <= 5; i++) {
       const d = document.getElementById(`viewDur${i}`);
       if (d) d.value = '';
+      if (i > 1) {
+        const transSelect = document.getElementById(`viewTrans${i}`);
+        if (transSelect) {
+          transSelect.value = 'cut';
+          transSelect.dispatchEvent(new Event('change'));
+        }
+        const fadeInput = document.getElementById(`viewFadeDur${i}`);
+        if (fadeInput) fadeInput.value = '1.0';
+      }
     }
     updateDurationsSum();
     updateTooltips();
@@ -1870,6 +1927,19 @@ function applyVideoPreset(presetName) {
     preset.durations.forEach((val, idx) => {
       const d = document.getElementById(`viewDur${idx + 1}`);
       if (d) d.value = (val !== null && val !== undefined) ? val : '';
+      
+      const i = idx + 1;
+      if (i > 1) {
+        const transSelect = document.getElementById(`viewTrans${i}`);
+        if (transSelect && preset.transitions && preset.transitions[idx] !== undefined) {
+          transSelect.value = preset.transitions[idx];
+          transSelect.dispatchEvent(new Event('change'));
+        }
+        const fadeInput = document.getElementById(`viewFadeDur${i}`);
+        if (fadeInput && preset.fade_durations && preset.fade_durations[idx] !== undefined) {
+          fadeInput.value = (preset.fade_durations[idx] !== null && preset.fade_durations[idx] !== undefined) ? preset.fade_durations[idx] : '1.0';
+        }
+      }
     });
   }
   
@@ -1896,12 +1966,25 @@ async function saveVideoPreset() {
   if (!cleanName) return;
   
   const durations = [];
+  const transitions = [];
+  const fadeDurations = [];
   const container = document.getElementById('viewDurationsContainer');
   if (container) {
-    const inputs = container.querySelectorAll('input');
-    inputs.forEach(input => {
-      durations.push(input.value !== '' ? parseFloat(input.value) : null);
-    });
+    const children = container.children;
+    for (let i = 1; i <= children.length; i++) {
+      const durInput = document.getElementById(`viewDur${i}`);
+      durations.push((durInput && durInput.value !== '') ? parseFloat(durInput.value) : null);
+      
+      if (i === 1) {
+        transitions.push('cut');
+        fadeDurations.push(0);
+      } else {
+        const transSelect = document.getElementById(`viewTrans${i}`);
+        transitions.push(transSelect ? transSelect.value : 'cut');
+        const fadeInput = document.getElementById(`viewFadeDur${i}`);
+        fadeDurations.push((fadeInput && fadeInput.value !== '') ? parseFloat(fadeInput.value) : null);
+      }
+    }
   }
   
   const preset = {
@@ -1918,7 +2001,9 @@ async function saveVideoPreset() {
     gamma: document.getElementById('viewChannelGamma')?.value || '',
     unsharp: document.getElementById('viewChannelUnsharp')?.value || '',
     video_speed: document.getElementById('videoSpeedText')?.value || '1.0',
-    durations: durations
+    durations: durations,
+    transitions: transitions,
+    fade_durations: fadeDurations
   };
   
   globalVideoPresets[cleanName] = preset;
@@ -2076,12 +2161,30 @@ async function runVideoHelper(btnElement) {
     
     if (subModeVal === 'view_channel') {
       const container = document.getElementById('viewDurationsContainer');
+      const transitions = [];
+      const fadeDurations = [];
       if (container) {
-        const inputs = container.querySelectorAll('input');
-        inputs.forEach(input => {
+        const durInputs = container.querySelectorAll('input[id^="viewDur"]');
+        durInputs.forEach(input => {
           const val = input.value.trim();
           if (val) durations.push(val);
         });
+        
+        const children = container.children;
+        for (let i = 1; i <= children.length; i++) {
+          if (i === 1) {
+            transitions.push('cut');
+            fadeDurations.push(0);
+          } else {
+            const transSelect = document.getElementById(`viewTrans${i}`);
+            const transVal = transSelect ? transSelect.value : 'cut';
+            transitions.push(transVal);
+            
+            const fadeInput = document.getElementById(`viewFadeDur${i}`);
+            const fadeVal = (transVal === 'fade' && fadeInput) ? parseFloat(fadeInput.value) || 0 : 0;
+            fadeDurations.push(fadeVal);
+          }
+        }
       }
       if (durations.length === 0) {
         alert('Please enter at least one duration.');
@@ -2117,6 +2220,8 @@ async function runVideoHelper(btnElement) {
         if (subModeVal === 'view_channel' && viewChannelData) {
           setObj.subMode = 'view_channel';
           setObj.durationsJson = JSON.stringify(durations);
+          setObj.transitionsJson = JSON.stringify(transitions);
+          setObj.fadeDurationsJson = JSON.stringify(fadeDurations);
           setObj.audioPath = viewChannelData.audioPath;
           setObj.audioBoost = viewChannelData.audioBoost;
           setObj.videoAudioBoost = viewChannelData.videoAudioBoost;
@@ -2200,6 +2305,12 @@ async function runVideoHelper(btnElement) {
       }
       if (set.durationsJson) {
         formData.append('durations_json', set.durationsJson);
+      }
+      if (set.transitionsJson) {
+        formData.append('transitions_json', set.transitionsJson);
+      }
+      if (set.fadeDurationsJson) {
+        formData.append('fade_durations_json', set.fadeDurationsJson);
       }
       if (set.audioPath) {
         formData.append('audio_path', set.audioPath);
@@ -2777,15 +2888,30 @@ function saveImageGenActiveState() {
     let total = 0;
     const container = document.getElementById('viewDurationsContainer');
     if (container) {
-      const inputs = container.querySelectorAll('input');
-      inputs.forEach(input => {
-        const val = parseFloat(input.value);
-        if (!isNaN(val) && val > 0) total += val;
-      });
+      const children = container.children;
+      for (let i = 1; i <= children.length; i++) {
+        const durInput = document.getElementById(`viewDur${i}`);
+        if (durInput) {
+          const val = parseFloat(durInput.value);
+          if (!isNaN(val) && val > 0) {
+            total += val;
+          }
+        }
+        if (i > 1) {
+          const transSelect = document.getElementById(`viewTrans${i}`);
+          const fadeInput = document.getElementById(`viewFadeDur${i}`);
+          if (transSelect && transSelect.value === 'fade' && fadeInput) {
+            const fadeVal = parseFloat(fadeInput.value);
+            if (!isNaN(fadeVal) && fadeVal > 0) {
+              total -= fadeVal;
+            }
+          }
+        }
+      }
     }
     const totalEl = document.getElementById('viewTotalDuration');
     if (totalEl) {
-      totalEl.textContent = total.toFixed(2) + ' วินาที';
+      totalEl.textContent = Math.max(0, total).toFixed(2) + ' วินาที';
     }
   }
 

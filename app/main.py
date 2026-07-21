@@ -2800,6 +2800,8 @@ def make_video_cover(
     sub_mode: str | None = Form(None),
     audio_path: str | None = Form(None),
     durations_json: str | None = Form(None),
+    transitions_json: str | None = Form(None),
+    fade_durations_json: str | None = Form(None),
     audio_boost: str | None = Form(None),
     video_audio_boost: str | None = Form(None),
     contrast: str | None = Form(None),
@@ -2837,6 +2839,8 @@ def make_video_cover(
     sub_mode = clean_form_val(sub_mode)
     audio_path = clean_form_val(audio_path)
     durations_json = clean_form_val(durations_json)
+    transitions_json = clean_form_val(transitions_json)
+    fade_durations_json = clean_form_val(fade_durations_json)
     audio_boost = clean_form_val(audio_boost)
     video_audio_boost = clean_form_val(video_audio_boost)
     contrast = clean_form_val(contrast)
@@ -3239,31 +3243,76 @@ def make_video_cover(
                         else:
                             video_filter_str = f"unsharp={unsharp.strip()}"
 
-                    if sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path):
-                        concat_out = os.path.join(tmpdir, "concat_temp.mp4")
-                        concat_cmd = [
-                            ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                            "-c", "copy", concat_out
-                        ]
-                        res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                        if res.returncode != 0:
-                            raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
-
-                        log(f"View Channel Mode Chunk {chunk_idx}: Mixing original audio with background music... ({clean_audio_path})")
-                        update_chunk_progress(90, "Mixing background music...")
-
-                        bgm_dur = None
+                    # Parse transitions and fade durations if provided
+                    transitions = []
+                    if transitions_json:
                         try:
-                            probe_cmd = [
-                                "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe",
-                                "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path
-                            ]
-                            dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
-                            if dur_str:
-                                bgm_dur = float(dur_str)
+                            transitions = json.loads(transitions_json)
                         except Exception as e:
-                            log(f"Warning: Could not probe background music duration: {e}")
+                            log(f"Warning: Failed to parse transitions_json: {e}")
+                    
+                    fade_durations = []
+                    if fade_durations_json:
+                        try:
+                            fade_durations = [float(fd) for fd in json.loads(fade_durations_json)]
+                        except Exception as e:
+                            log(f"Warning: Failed to parse fade_durations_json: {e}")
 
+                    has_fade_transitions = any(t == "fade" for t in transitions)
+                    clean_audio_path = audio_path.strip().strip('"').strip("'") if audio_path else ""
+
+                    if has_fade_transitions and len(aligned_paths) >= 2:
+                        log(f"View Channel Mode Chunk {chunk_idx}: Crossfade transitions detected. Concatenating {amount_val} clips using filter_complex...")
+                        update_chunk_progress(75, "Applying transitions and mixing...")
+                        
+                        final_cmd = [ffmpeg_bin, "-y"]
+                        for ap in aligned_paths:
+                            final_cmd.extend(["-i", ap])
+                        
+                        has_bgm = sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path)
+                        if has_bgm:
+                            final_cmd.extend(["-i", clean_audio_path])
+                            
+                        filter_parts = []
+                        v_cur = "[0:v]"
+                        a_cur = "[0:a]"
+                        t_cur = durations[0] if (sub_mode == "view_channel" and len(durations) >= 1) else 5.0
+                        
+                        P = len(aligned_paths)
+                        for idx in range(1, P):
+                            next_v = f"[{idx}:v]"
+                            next_a = f"[{idx}:a]"
+                            next_dur = durations[idx] if (sub_mode == "view_channel" and len(durations) >= idx + 1) else 5.0
+                            
+                            trans = transitions[idx] if idx < len(transitions) else "cut"
+                            fade_dur = fade_durations[idx] if idx < len(fade_durations) else 0.0
+                            
+                            if trans == "fade" and fade_dur > 0.0:
+                                prev_dur = durations[idx - 1] if (sub_mode == "view_channel" and len(durations) >= idx) else 5.0
+                                fade_dur = min(fade_dur, next_dur, prev_dur)
+                                offset = t_cur - fade_dur
+                                v_next = f"[v_trans_{idx}]"
+                                a_next = f"[a_trans_{idx}]"
+                                filter_parts.append(f"{v_cur}{next_v}xfade=transition=fade:duration={fade_dur}:offset={offset}{v_next}")
+                                filter_parts.append(f"{a_cur}{next_a}acrossfade=d={fade_dur}{a_next}")
+                                v_cur = v_next
+                                a_cur = a_next
+                                t_cur = t_cur + next_dur - fade_dur
+                            else:
+                                v_next = f"[v_concat_{idx}]"
+                                a_next = f"[a_concat_{idx}]"
+                                filter_parts.append(f"{v_cur}{next_v}concat=n=2:v=1:a=0{v_next}")
+                                filter_parts.append(f"{a_cur}{next_a}concat=n=2:v=0:a=1{a_next}")
+                                v_cur = v_next
+                                a_cur = a_next
+                                t_cur = t_cur + next_dur
+                                
+                        if video_filter_str:
+                            filter_parts.append(f"{v_cur}{video_filter_str}[vout]")
+                            v_map = "[vout]"
+                        else:
+                            v_map = v_cur
+                            
                         volume_filter = ""
                         if audio_boost and audio_boost.strip():
                             try:
@@ -3279,54 +3328,144 @@ def make_video_cover(
                                 video_volume_filter = f"volume={v_boost_val}dB"
                             except ValueError:
                                 pass
-
-                        if video_volume_filter:
-                            filter_complex_str = f"[0:a:0]{video_volume_filter}[fg];[1:a:0]{volume_filter}apad[bgm];[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
-                        else:
-                            filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
-                        
-                        v_map = "0:v:0"
-                        v_codec = "copy"
-                        v_enc_args = []
-                        
-                        if video_filter_str:
-                            filter_complex_str += f";[0:v:0]{video_filter_str}[vout]"
-                            v_map = "[vout]"
-                            v_codec = "libx264"
-                            v_enc_args = ["-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
                                 
-                        final_cmd = [
-                            ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
-                            "-filter_complex", filter_complex_str,
-                            "-map", v_map, "-map", "[aout]", "-c:v", v_codec
-                        ] + v_enc_args + [
-                            "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
-                        ]
-
-                        if bgm_dur is not None:
-                            final_cmd.extend(["-t", str(bgm_dur)])
+                        if has_bgm:
+                            BGM_idx = P
+                            if video_volume_filter:
+                                filter_parts.append(f"{a_cur}{video_volume_filter}[fg]")
+                            else:
+                                filter_parts.append(f"{a_cur}anull[fg]")
+                            filter_parts.append(f"[{BGM_idx}:a]{volume_filter}apad[bgm]")
+                            filter_parts.append(f"[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]")
+                            a_map = "[aout]"
+                        else:
+                            if video_volume_filter:
+                                filter_parts.append(f"{a_cur}{video_volume_filter}[aout]")
+                                a_map = "[aout]"
+                            else:
+                                a_map = a_cur
+                                
+                        filter_complex_str = ";".join(filter_parts)
+                        final_cmd.extend(["-filter_complex", filter_complex_str])
+                        final_cmd.extend(["-map", v_map, "-map", a_map])
                         
+                        final_cmd.extend([
+                            "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60",
+                            "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
+                        ])
+                        
+                        if has_bgm:
+                            bgm_dur = None
+                            try:
+                                probe_cmd = [
+                                    "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe",
+                                    "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path
+                                ]
+                                dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
+                                if dur_str:
+                                    bgm_dur = float(dur_str)
+                            except Exception as e:
+                                log(f"Warning: Could not probe background music duration: {e}")
+                            if bgm_dur is not None:
+                                final_cmd.extend(["-t", str(bgm_dur)])
+                                
                         final_cmd.extend([
                             "-disposition:a:0", "default", final_output_path
                         ])
+                        
+                        log(f"Executing Crossfade FFmpeg complex: {' '.join(final_cmd)}")
                         res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                         if res.returncode != 0:
-                            raise RuntimeError(f"FFmpeg failed audio replacement: {res.stderr}")
+                            raise RuntimeError(f"FFmpeg crossfade concatenation failed: {res.stderr}")
                     else:
-                        if video_filter_str:
+                        if sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path):
+                            concat_out = os.path.join(tmpdir, "concat_temp.mp4")
                             concat_cmd = [
                                 ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                                "-vf", video_filter_str, "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
-                                "-c:a", "copy", final_output_path
+                                "-c", "copy", concat_out
                             ]
+                            res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                            if res.returncode != 0:
+                                raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
+
+                            log(f"View Channel Mode Chunk {chunk_idx}: Mixing original audio with background music... ({clean_audio_path})")
+                            update_chunk_progress(90, "Mixing background music...")
+
+                            bgm_dur = None
+                            try:
+                                probe_cmd = [
+                                    "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe",
+                                    "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path
+                                ]
+                                dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
+                                if dur_str:
+                                    bgm_dur = float(dur_str)
+                            except Exception as e:
+                                log(f"Warning: Could not probe background music duration: {e}")
+
+                            volume_filter = ""
+                            if audio_boost and audio_boost.strip():
+                                try:
+                                    boost_val = float(audio_boost.strip())
+                                    volume_filter = f"volume={boost_val}dB,"
+                                except ValueError:
+                                    pass
+                                    
+                            video_volume_filter = ""
+                            if video_audio_boost and video_audio_boost.strip():
+                                try:
+                                    v_boost_val = float(video_audio_boost.strip())
+                                    video_volume_filter = f"volume={v_boost_val}dB"
+                                except ValueError:
+                                    pass
+
+                            if video_volume_filter:
+                                filter_complex_str = f"[0:a:0]{video_volume_filter}[fg];[1:a:0]{volume_filter}apad[bgm];[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                            else:
+                                filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                            
+                            v_map = "0:v:0"
+                            v_codec = "copy"
+                            v_enc_args = []
+                            
+                            if video_filter_str:
+                                filter_complex_str += f";[0:v:0]{video_filter_str}[vout]"
+                                v_map = "[vout]"
+                                v_codec = "libx264"
+                                v_enc_args = ["-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
+                                    
+                            final_cmd = [
+                                ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
+                                "-filter_complex", filter_complex_str,
+                                "-map", v_map, "-map", "[aout]", "-c:v", v_codec
+                            ] + v_enc_args + [
+                                "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
+                            ]
+
+                            if bgm_dur is not None:
+                                final_cmd.extend(["-t", str(bgm_dur)])
+                            
+                            final_cmd.extend([
+                                "-disposition:a:0", "default", final_output_path
+                            ])
+                            res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                            if res.returncode != 0:
+                                raise RuntimeError(f"FFmpeg failed audio replacement: {res.stderr}")
                         else:
-                            concat_cmd = [
-                                ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                                "-c", "copy", final_output_path
-                            ]
-                        res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                        if res.returncode != 0:
-                            raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
+                            if video_filter_str:
+                                concat_cmd = [
+                                    ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                                    "-vf", video_filter_str, "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
+                                    "-c:a", "copy", final_output_path
+                                ]
+                            else:
+                                concat_cmd = [
+                                    ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                                    "-c", "copy", final_output_path
+                                ]
+                            res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                            if res.returncode != 0:
+                                raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
 
                 processed_outputs.append(final_output_path)
                 update_chunk_progress(100, "Completed!")
