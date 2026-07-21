@@ -1303,7 +1303,7 @@ def step15_etsy_listing_bot(bot: Any, primary_color: str, secondary_color: str, 
     step15_etsy_listing(bot.driver, primary_color, secondary_color, log)
 
 
-def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
+def step4_chatgpt_download_images(driver, log: Callable[[str], None], start_num: int = 1) -> None:
     import shutil
     # Assumes we are already on ChatGPT tab.
     
@@ -1491,7 +1491,7 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     for idx, f in enumerate(downloaded_images):
         src_path = os.path.join(downloads_dir, f)
         ext = os.path.splitext(f)[1] or ".png"
-        new_name = f"{idx + 1:02d}{ext}"
+        new_name = f"{idx + start_num:02d}{ext}"
         dst_path = os.path.join(dest_dir, new_name)
         
         if os.path.exists(dst_path):
@@ -1512,8 +1512,8 @@ def step4_chatgpt_download_images(driver, log: Callable[[str], None]) -> None:
     log(f"Step 4 ChatGPT: Completed! Folder '{folder_basename}' is preserved in Downloads folder.")
 
 
-def step4_chatgpt_download_images_bot(bot: Any, log: Callable[[str], None]) -> None:
+def step4_chatgpt_download_images_bot(bot: Any, log: Callable[[str], None], start_num: int = 1) -> None:
     if not bot.switch_to_tab_containing("chatgpt.com"):
         raise RuntimeError("ChatGPT tab not found")
-    step4_chatgpt_download_images(bot.driver, log)
+    step4_chatgpt_download_images(bot.driver, log, start_num=start_num)
 

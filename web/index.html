@@ -256,22 +256,28 @@
               </div>
             </div>
 
-            <div style="display: flex; gap: 12px; margin-top: 12px;">
-              <button class="step-action-btn gemini-btn has-tooltip" id="btn_step3_gemini" style="width: 50%; padding: 14px; font-size: 1rem;">
+            <div style="display: flex; gap: 12px; margin-top: 12px; align-items: stretch;">
+              <button class="step-action-btn gemini-btn has-tooltip" id="btn_step3_gemini" style="width: 50%; padding: 14px; font-size: 1rem; margin-top: 0; margin-bottom: 0; display: flex; align-items: center; justify-content: center;">
                 Gemini
                 <div class="custom-tooltip" id="tooltip_btn_step3_gemini"></div>
               </button>
-              <button class="step-action-btn secondary has-tooltip" id="btn_step3_chatgpt" style="width: 50%; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366);">
-                ChatGPT
-                <div class="custom-tooltip" id="tooltip_btn_step3_chatgpt"></div>
-              </button>
+              <div style="width: 50%; display: flex; flex-direction: column; gap: 12px;">
+                <button class="step-action-btn secondary has-tooltip" id="btn_step3_chatgpt" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); margin-top: 0; margin-bottom: 0; display: flex; align-items: center; justify-content: center;">
+                  ChatGPT
+                  <div class="custom-tooltip" id="tooltip_btn_step3_chatgpt"></div>
+                </button>
+                <div style="display: flex; gap: 6px; align-items: center; width: 100%;">
+                  <button class="step-action-btn secondary has-tooltip" id="btn_chatgpt_download" style="flex: 1; padding: 14px; font-size: 0.95rem; font-weight: bold; background: linear-gradient(135deg, #3182ce, #2b6cb0); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s; margin-top: 0; margin-bottom: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap;">
+                    <span class="btn-text">📥 ดาวน์โหลด</span>
+                    <div class="custom-tooltip" id="tooltip_btn_chatgpt_download"></div>
+                  </button>
+                  <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
+                    <span style="font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 500;">เริ่มเลข:</span>
+                    <input type="number" id="chatgpt_download_start_num" value="1" min="1" style="width: 55px; padding: 8px 6px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin-bottom: 0;" />
+                  </div>
+                </div>
+              </div>
             </div>
-
-            <!-- ChatGPT Download Images Button -->
-            <button class="step-action-btn secondary has-tooltip" id="btn_chatgpt_download" style="width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #3182ce, #2b6cb0); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">
-              <span class="btn-text">📥 ดาวน์โหลด (Download ChatGPT Images)</span>
-              <div class="custom-tooltip" id="tooltip_btn_chatgpt_download"></div>
-            </button>
 
             <!-- Force Stop Button -->
             <button class="step-action-btn has-tooltip" id="btn_stop_generation" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">

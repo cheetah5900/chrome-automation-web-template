@@ -56,6 +56,15 @@ def run_e2e_test():
         print(f"Navigating to {url}...")
         driver.get(url)
 
+        # Verify ChatGPT download button and starting index input are present
+        download_btn = driver.find_element(By.ID, "btn_chatgpt_download")
+        start_num_input = driver.find_element(By.ID, "chatgpt_download_start_num")
+        assert download_btn is not None, "ChatGPT download button not found"
+        assert start_num_input is not None, "ChatGPT starting number input not found"
+        default_start_num = start_num_input.get_attribute("value")
+        print(f"Verified ChatGPT download starting number default value is: {default_start_num}")
+        assert default_start_num == "1", f"Expected default starting number 1, got {default_start_num}"
+
         # Switch to Video Helper tab
         print("Switching to Video Helper tab...")
         tab_btn = WebDriverWait(driver, 5).until(

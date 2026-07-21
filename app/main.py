@@ -2594,8 +2594,9 @@ def step4(payload: dict[str, Any]) -> dict[str, Any]:
 @app.post("/api/step/4-chatgpt")
 def step4_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
     try:
+        start_num = payload.get("start_num", 1)
         bot = browser_manager.get()
-        step4_chatgpt_download_images_bot(bot, log)
+        step4_chatgpt_download_images_bot(bot, log, start_num=start_num)
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -146,7 +146,7 @@ ${modeDescription}
    - กดแป้นพิมพ์ลูกศรลง (Arrow Down) เพื่อสลับไปภาพถัดไป -> ดีเลย์ 2.5 วินาที
 5. กดปุ่ม Esc เพื่อปิดหน้าขยายรูปภาพ
 6. ตรวจสอบการดาวน์โหลดไฟล์จนเสร็จสมบูรณ์ (สูงสุด 30 วินาที)
-7. จัดเรียงไฟล์ภาพตามเวลาการแก้ไขและเปลี่ยนชื่อเรียงลำดับเป็นตัวเลข 1 ถึง n
+7. จัดเรียงไฟล์ภาพตามเวลาการแก้ไขและเปลี่ยนชื่อเรียงลำดับเป็นตัวเลขเริ่มจากเลขที่ระบุ
 8. สร้างและย้ายไฟล์ไปยังโฟลเดอร์ชื่อ "images" (หรือใส่ (n) ต่อท้ายหากโฟลเดอร์มีอยู่เดิม) ในโฟลเดอร์ Downloads`;
   }
 
@@ -3693,14 +3693,17 @@ function initWorkflowActionListeners() {
     const btn = e.currentTarget;
     const btnText = btn.querySelector('.btn-text');
     btn.disabled = true;
-    const oldText = btnText ? btnText.textContent : '📥 ดาวน์โหลด (Download ChatGPT Images)';
+    const oldText = btnText ? btnText.textContent : '📥 ดาวน์โหลด';
     if (btnText) btnText.textContent = 'กำลังทำงาน...';
     try {
       writeConsoleLine('ChatGPT Download: Starting image download and rename workflow...', 'system', 'imageConsole');
+      const startNumInput = document.getElementById('chatgpt_download_start_num');
+      const startNum = startNumInput ? parseInt(startNumInput.value, 10) || 1 : 1;
+      
       const res = await jsonFetch('/api/step/4-chatgpt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ start_num: startNum })
       });
       if (res && res.ok) {
         showToast('ดาวน์โหลดและจัดเก็บรูปภาพ ChatGPT เรียบร้อยแล้ว!', 'success');
