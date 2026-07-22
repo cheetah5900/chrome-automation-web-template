@@ -375,6 +375,15 @@ async function handleTrpcRequest(msg) {
   const logType = url.includes('createProject') ? 'CREATE_PROJECT' : 'TRPC';
   // TRPC calls are silent — don't show in request log
 
+  if (!flowKey) {
+    console.log('[FlowAgent] flowKey missing for tRPC request, attempting token capture...');
+    await captureTokenFromFlowTab();
+    for (let i = 0; i < 15; i++) {
+      if (flowKey) break;
+      await sleep(200);
+    }
+  }
+
   const fetchHeaders = { 'Content-Type': 'application/json', ...headers };
   if (flowKey) {
     fetchHeaders['authorization'] = `Bearer ${flowKey}`;
@@ -462,6 +471,14 @@ async function handleApiRequest(msg) {
     }
 
     // Step 3: Use flowKey for auth
+    if (!flowKey) {
+      console.log('[FlowAgent] flowKey missing for API request, attempting token capture...');
+      await captureTokenFromFlowTab();
+      for (let i = 0; i < 15; i++) {
+        if (flowKey) break;
+        await sleep(200);
+      }
+    }
     const activeFlowKey = flowKey;
     if (!activeFlowKey) {
       sendToAgent({ id, status: 503, error: 'NO_FLOW_KEY' });
