@@ -60,11 +60,40 @@ async def ws_handler(websocket):
         logger.info("Extension disconnected")
 
 
+def _force_free_port(port: int):
+    """Force release port if held by a zombie process (excluding current process)."""
+    import os, subprocess, signal
+    current_pid = os.getpid()
+    try:
+        proc = subprocess.run(["lsof", "-t", "-i", f"tcp:{port}"], capture_output=True, text=True)
+        if proc.returncode == 0 and proc.stdout.strip():
+            pids = [int(p.strip()) for p in proc.stdout.strip().split() if p.strip()]
+            for pid in pids:
+                if pid != current_pid:
+                    try:
+                        logger.warning("Port %d held by zombie PID %d. Force killing...", port, pid)
+                        os.kill(pid, signal.SIGKILL)
+                    except OSError:
+                        pass
+    except Exception as e:
+        logger.warning("Failed to force release port %d: %e", port, e)
+
+
 async def run_ws_server():
-    """Run WebSocket server for extension connections."""
-    async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
-        logger.info("WebSocket server listening on ws://%s:%d", WS_HOST, WS_PORT)
-        await asyncio.Future()  # run forever
+    """Run WebSocket server for extension connections with automatic port cleanup."""
+    _force_free_port(WS_PORT)
+    await asyncio.sleep(0.3)
+    try:
+        async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
+            logger.info("WebSocket server listening on ws://%s:%d", WS_HOST, WS_PORT)
+            await asyncio.Future()  # run forever
+    except OSError as e:
+        logger.warning("Port %d bind error (%s). Retrying force cleanup...", WS_PORT, e)
+        _force_free_port(WS_PORT)
+        await asyncio.sleep(0.5)
+        async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
+            logger.info("WebSocket server listening on ws://%s:%d (after retry)", WS_HOST, WS_PORT)
+            await asyncio.Future()
 
 
 # ─── FastAPI App ─────────────────────────────────────────────
