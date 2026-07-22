@@ -4459,6 +4459,7 @@ document.getElementById('cfg_video_gen_mode')?.addEventListener('change', (e) =>
   const seleniumSection = document.getElementById('selenium_mode_section');
   const flowKitSection = document.getElementById('flow_kit_mode_section');
   const flowKitPromptOnlySection = document.getElementById('flow_kit_prompt_only_section');
+  const flowKitDownloaderSection = document.getElementById('flow_kit_downloader_section');
   const scannedPairsSection = document.getElementById('scannedPairsSection');
   if (scannedPairsSection) scannedPairsSection.style.display = 'none';
 
@@ -4466,6 +4467,7 @@ document.getElementById('cfg_video_gen_mode')?.addEventListener('change', (e) =>
     if (seleniumSection) seleniumSection.style.display = 'none';
     if (flowKitSection) flowKitSection.style.display = 'block';
     if (flowKitPromptOnlySection) flowKitPromptOnlySection.style.display = 'none';
+    if (flowKitDownloaderSection) flowKitDownloaderSection.style.display = 'block';
     startFlowKitPolling();
     loadFlowKitProjects();
     calculateFlowKitPaths();
@@ -4473,12 +4475,14 @@ document.getElementById('cfg_video_gen_mode')?.addEventListener('change', (e) =>
     if (seleniumSection) seleniumSection.style.display = 'none';
     if (flowKitSection) flowKitSection.style.display = 'none';
     if (flowKitPromptOnlySection) flowKitPromptOnlySection.style.display = 'block';
+    if (flowKitDownloaderSection) flowKitDownloaderSection.style.display = 'block';
     startFlowKitPolling();
     loadFlowKitProjects();
   } else {
     if (seleniumSection) seleniumSection.style.display = 'block';
     if (flowKitSection) flowKitSection.style.display = 'none';
     if (flowKitPromptOnlySection) flowKitPromptOnlySection.style.display = 'none';
+    if (flowKitDownloaderSection) flowKitDownloaderSection.style.display = 'none';
     stopFlowKitPolling();
   }
   saveVideoPrompts(true);
@@ -6221,7 +6225,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
   const orientation = document.getElementById('cfg_flow_po_orientation')?.value;
   const outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
   const durationSeconds = 10;
-  const upscaleResolution = document.getElementById('cfg_flow_po_upscale')?.value || 'NONE';
+  const upscaleResolution = document.getElementById('cfg_download_upscale')?.value || 'NONE';
   
   const msg = document.getElementById('flowKitPOMsg');
   
