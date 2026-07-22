@@ -4358,6 +4358,10 @@ async function loadVideoPrompts() {
     const flowLakornEp = document.getElementById('cfg_flow_lakorn_ep');
     if (flowLakornEp) flowLakornEp.value = config.video_lakorn_ep || '';
 
+    // Prompt Only parallel inputs loading
+    const flowPOPromptsPath = document.getElementById('cfg_flow_po_prompts_path');
+    if (flowPOPromptsPath) flowPOPromptsPath.value = localStorage.getItem('flowkit_po_default_prompts_path') || '';
+
     calculateFlowKitPaths();
 
     const videoGenMode = document.getElementById('cfg_video_gen_mode');
@@ -4454,15 +4458,27 @@ document.getElementById('cfg_video_gen_mode')?.addEventListener('change', (e) =>
   const mode = e.target.value;
   const seleniumSection = document.getElementById('selenium_mode_section');
   const flowKitSection = document.getElementById('flow_kit_mode_section');
+  const flowKitPromptOnlySection = document.getElementById('flow_kit_prompt_only_section');
+  const scannedPairsSection = document.getElementById('scannedPairsSection');
+  if (scannedPairsSection) scannedPairsSection.style.display = 'none';
+
   if (mode === 'flow_kit') {
     if (seleniumSection) seleniumSection.style.display = 'none';
     if (flowKitSection) flowKitSection.style.display = 'block';
+    if (flowKitPromptOnlySection) flowKitPromptOnlySection.style.display = 'none';
     startFlowKitPolling();
     loadFlowKitProjects();
     calculateFlowKitPaths();
+  } else if (mode === 'flow_kit_prompt_only') {
+    if (seleniumSection) seleniumSection.style.display = 'none';
+    if (flowKitSection) flowKitSection.style.display = 'none';
+    if (flowKitPromptOnlySection) flowKitPromptOnlySection.style.display = 'block';
+    startFlowKitPolling();
+    loadFlowKitProjects();
   } else {
     if (seleniumSection) seleniumSection.style.display = 'block';
     if (flowKitSection) flowKitSection.style.display = 'none';
+    if (flowKitPromptOnlySection) flowKitPromptOnlySection.style.display = 'none';
     stopFlowKitPolling();
   }
   saveVideoPrompts(true);
@@ -5631,7 +5647,6 @@ function initFlowKitUploaderListeners() {
 
   // 4. Scan & Sync Button
   document.getElementById('btnScanFlowKit')?.addEventListener('click', async () => {
-    const promptOnly = document.getElementById('cfg_flow_prompt_only')?.checked || false;
     const sbPath = document.getElementById('lbl_resolved_storyboard_path')?.textContent;
     const prPath = document.getElementById('lbl_resolved_prompt_path')?.textContent;
     
@@ -5643,16 +5658,11 @@ function initFlowKitUploaderListeners() {
       msg.textContent = 'Scanning directories...';
     }
     
-    const isSbInvalid = !promptOnly && (!sbPath || sbPath === '--');
-    const isPrInvalid = !prPath || prPath === '--';
-    
-    if (isSbInvalid || isPrInvalid) {
+    if (!sbPath || sbPath === '--' || !prPath || prPath === '--') {
       if (msg) {
         msg.className = 'msg error';
         msg.style.color = '#f56565';
-        msg.textContent = promptOnly
-          ? 'กรุณากรอกละคร Path, ตอน และ EP ให้ครบถ้วนเพื่อคำนวณพาธโฟลเดอร์พรอพต์'
-          : 'กรุณากรอกละคร Path, ตอน และ EP ให้ครบถ้วนเพื่อคำนวณพาธโฟลเดอร์';
+        msg.textContent = 'กรุณากรอกละคร Path, ตอน และ EP ให้ครบถ้วนเพื่อคำนวณพาธโฟลเดอร์';
       }
       return;
     }
@@ -5661,7 +5671,7 @@ function initFlowKitUploaderListeners() {
       const res = await jsonFetch('/api/batch-uploader/scan', {
         method: 'POST',
         body: JSON.stringify({
-          images_dir: promptOnly ? "" : sbPath,
+          images_dir: sbPath,
           prompts_dir: prPath
         })
       });
@@ -5749,14 +5759,13 @@ function initFlowKitUploaderListeners() {
     
     const mode = document.getElementById('cfg_flow_mode')?.value || 'DRAMA';
     const durationSeconds = mode === 'ASMR_10S' ? 10 : 5;
-    const promptOnly = document.getElementById('cfg_flow_prompt_only')?.checked || false;
 
     try {
       const payload = {
         project_id: project,
         orientation: orientation,
         pairs: validPairs.map(p => ({
-          image_path: promptOnly ? null : p.image_path,
+          image_path: p.image_path,
           prompt_content: p.prompt_content
         })),
         video_model: null,
@@ -5815,22 +5824,29 @@ async function loadFlowKitProjects() {
   try {
     const res = await jsonFetch('/api/batch-uploader/flow-projects');
     const dropdown = document.getElementById('cfg_flow_project_dropdown');
-    if (dropdown && res && res.projects) {
+    const poDropdown = document.getElementById('cfg_flow_po_project_dropdown');
+    if (res && res.projects) {
       flowProjectsList = res.projects;
-      dropdown.innerHTML = '';
-      res.projects.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = `${p.name} (${p.id.slice(0, 8)})`;
-        dropdown.appendChild(opt);
-      });
       
-      const savedDefault = localStorage.getItem('flowkit_default_project_id');
-      if (savedDefault && res.projects.some(p => p.id === savedDefault)) {
-        dropdown.value = savedDefault;
-      } else if (res.projects.length > 0) {
-        dropdown.value = res.projects[0].id;
-      }
+      const populate = (dd) => {
+        if (!dd) return;
+        dd.innerHTML = '';
+        res.projects.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = `${p.name} (${p.id.slice(0, 8)})`;
+          dd.appendChild(opt);
+        });
+        const savedDefault = localStorage.getItem('flowkit_default_project_id');
+        if (savedDefault && res.projects.some(p => p.id === savedDefault)) {
+          dd.value = savedDefault;
+        } else if (res.projects.length > 0) {
+          dd.value = res.projects[0].id;
+        }
+      };
+      
+      populate(dropdown);
+      populate(poDropdown);
     }
   } catch (err) {
     console.error('Failed to load Flow Kit projects:', err);
@@ -6115,5 +6131,186 @@ document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', asyn
     }
   } finally {
     if (btn) btn.disabled = false;
+  }
+});
+
+// ─── Flow Kit Prompt-Only Mode Listeners ───────────────────────────
+document.getElementById('browseFlowPOPromptsPathBtn')?.addEventListener('click', async () => {
+  try {
+    const res = await jsonFetch('/api/batch-uploader/browse-folder', { method: 'POST' });
+    if (res && res.path) {
+      const input = document.getElementById('cfg_flow_po_prompts_path');
+      if (input) input.value = res.path;
+      localStorage.setItem('flowkit_po_default_prompts_path', res.path);
+      saveVideoPrompts(true);
+    }
+  } catch (err) {
+    console.error('Failed to browse PO prompts folder:', err);
+  }
+});
+
+document.getElementById('setFlowPOProjectDefaultBtn')?.addEventListener('click', () => {
+  const val = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  if (val) {
+    localStorage.setItem('flowkit_default_project_id', val);
+    const mainDd = document.getElementById('cfg_flow_project_dropdown');
+    if (mainDd) mainDd.value = val;
+    showToast('บันทึกโปรเจกต์เริ่มต้นเรียบร้อยแล้ว', 'success');
+  }
+});
+
+document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () => {
+  const prPath = document.getElementById('cfg_flow_po_prompts_path')?.value.trim();
+  
+  const msg = document.getElementById('flowKitPOMsg');
+  if (msg) {
+    msg.style.display = 'block';
+    msg.className = 'msg';
+    msg.style.color = '#8da6ff';
+    msg.textContent = 'Scanning directories...';
+  }
+  
+  if (!prPath) {
+    if (msg) {
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกโฟลเดอร์เก็บพรอพต์ก่อนทำการสแกน';
+    }
+    return;
+  }
+  
+  try {
+    const res = await jsonFetch('/api/batch-uploader/scan', {
+      method: 'POST',
+      body: JSON.stringify({
+        images_dir: "",
+        prompts_dir: prPath
+      })
+    });
+    
+    if (res && res.pairs) {
+      flowScannedPairs = res.pairs;
+      renderScannedPairs();
+      
+      const sect = document.getElementById('scannedPairsSection');
+      if (sect) sect.style.display = 'block';
+      
+      if (msg) {
+        msg.className = 'msg';
+        msg.style.color = '#10b981';
+        msg.textContent = `สแกนสำเร็จ พบทั้งหมด ${res.pairs.length} พรอพต์ (ข้ามการแนบรูปภาพ)`;
+      }
+    } else {
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = 'ไม่พบข้อมูลจากการสแกน';
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    if (msg) {
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = `สแกนล้มเหลว: ${err.message || err}`;
+    }
+  }
+});
+
+document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', async () => {
+  const project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  const orientation = document.getElementById('cfg_flow_po_orientation')?.value;
+  const outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
+  const mode = document.getElementById('cfg_flow_po_mode')?.value || 'DRAMA';
+  const durationSeconds = mode === 'ASMR_10S' ? 10 : 5;
+  const upscaleResolution = document.getElementById('cfg_flow_po_upscale')?.value || 'NONE';
+  
+  const msg = document.getElementById('flowKitPOMsg');
+  
+  if (!project) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกโปรเจกต์ Google Flow ก่อนเริ่มสร้าง';
+    }
+    return;
+  }
+  
+  const validPairs = flowScannedPairs.filter(p => p.checked !== false && p.prompt_content.trim());
+  if (validPairs.length === 0) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'ไม่มีฉากที่เลือกและมีข้อความพรอพต์ในการส่งเจเนอเรท';
+    }
+    return;
+  }
+  
+  if (msg) {
+    msg.style.display = 'block';
+    msg.style.color = '#8da6ff';
+    msg.textContent = 'กำลังส่งคำขอไปยังคิว Flow Kit...';
+  }
+  
+  const videoConsole = document.getElementById('videoConsole');
+  if (videoConsole) {
+    videoConsole.innerHTML = '<div class="console-line system">Starting Flow Kit Batch Generation...</div>';
+  }
+  
+  const logToConsole = (text, type = 'info') => {
+    if (!videoConsole) return;
+    const div = document.createElement('div');
+    div.className = `console-line ${type}`;
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    videoConsole.appendChild(div);
+    videoConsole.scrollTop = videoConsole.scrollHeight;
+  };
+  
+  try {
+    const payload = {
+      project_id: project,
+      orientation: orientation,
+      pairs: validPairs.map(p => ({
+        image_path: null,
+        prompt_content: p.prompt_content
+      })),
+      video_model: null,
+      output_count: outputCount,
+      duration_seconds: durationSeconds,
+      upscale_resolution: upscaleResolution
+    };
+    
+    logToConsole(`Submitting prompt-only batch of ${validPairs.length} scenes to Project ID: ${project}...`);
+    
+    const res = await jsonFetch('/api/batch-uploader/process', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    
+    if (res && res.video_id) {
+      logToConsole(`Batch submitted successfully! Video Container ID: ${res.video_id}`, 'success');
+      if (msg) {
+        msg.className = 'msg';
+        msg.style.color = '#10b981';
+        msg.textContent = `เริ่มเจเนอเรทวิดีโอแบบกลุ่มสำเร็จ (Video ID: ${res.video_id})`;
+      }
+    } else {
+      logToConsole(`Batch submission failed: ${res?.error || 'Unknown error'}`, 'error');
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = `เกิดข้อผิดพลาด: ${res?.error || 'ส่งเจเนอเรทล้มเหลว'}`;
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    logToConsole(`Error submitting batch: ${err.message || err}`, 'error');
+    if (msg) {
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = `เกิดข้อผิดพลาด: ${err.message || err}`;
+    }
   }
 });
