@@ -423,8 +423,6 @@ class FlowClient:
                 req_item["startImage"] = {"mediaId": start_image_media_id}
             if end_image_media_id:
                 req_item["endImage"] = {"mediaId": end_image_media_id}
-            if duration_seconds:
-                req_item["durationSeconds"] = duration_seconds
 
             endpoint_key = "generate_video_start_end" if end_image_media_id else ("generate_video" if start_image_media_id else "generate_video_text")
             body = {
