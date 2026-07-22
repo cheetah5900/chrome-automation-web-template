@@ -177,25 +177,14 @@ async def _prerequisites_met(req: dict, orientation: str) -> bool:
     req_type = req.get("type", "")
     prefix = "vertical" if orientation == "VERTICAL" else "horizontal"
 
-    # Video gen needs scene image to be ready (if image generation is pending); upscale needs video to be ready
+    # Video gen needs scene image to be ready; upscale needs video to be ready
     if req_type in ("GENERATE_VIDEO", "REGENERATE_VIDEO", "GENERATE_VIDEO_REFS", "UPSCALE_VIDEO"):
         scene = await crud.get_scene(req.get("scene_id"))
         if not scene:
             return True  # let _dispatch handle "scene not found"
-        if req_type in ("GENERATE_VIDEO", "REGENERATE_VIDEO"):
+        if req_type in ("GENERATE_VIDEO", "REGENERATE_VIDEO", "GENERATE_VIDEO_REFS"):
             if not scene.get(f"{prefix}_image_media_id"):
-                image_reqs = await crud.list_requests(scene_id=scene["id"])
-                has_pending_image = any(
-                    r.get("req_type") in ("GENERATE_IMAGE", "EDIT_IMAGE", "REGENERATE_IMAGE")
-                    and r.get("status") in ("PENDING", "IN_PROGRESS", "CLAIMED")
-                    for r in image_reqs
-                )
-                if has_pending_image:
-                    logger.info("VIDEO prereq deferred: scene=%s waiting for image generation", req.get("scene_id","")[:12])
-                    return False
-        elif req_type == "GENERATE_VIDEO_REFS":
-            if not scene.get(f"{prefix}_image_media_id"):
-                logger.info("VIDEO_REFS prereq deferred: scene=%s no %s_image_media_id", req.get("scene_id","")[:12], prefix)
+                logger.info("VIDEO prereq deferred: scene=%s no %s_image_media_id", req.get("scene_id","")[:12], prefix)
                 return False
         elif req_type == "UPSCALE_VIDEO":
             if not scene.get(f"{prefix}_video_media_id"):
