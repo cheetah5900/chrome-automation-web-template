@@ -7,31 +7,36 @@ This project is a web-based automation controller for managing Google Chrome pro
 2. **Lakorn Import Automation**: Functional scripts to automate lakorn import workflows.
 3. **AI Image/Video Generation Automation**:
    - Automates prompt submission in Gemini/ChatGPT/Google Flow.
-   - Refined typing sequence for Google Flow video generation: types `@round.png`, selects the mention autocomplete option, enters a `Space`, and uses macOS AppleScript clipboard pasting to enter prompt text without losing editor focus or triggering highlight-all conflicts.
-   - Generous typing and mention autocomplete delays (doubled sleeps) to guarantee stable UI loading.
-4. **Dynamic Tooltips**:
-   - Pure CSS absolute-positioned glassmorphism tooltips added to all 9 functional buttons.
-   - Explanations are written in Thai, providing a step-by-step breakdown of delays, key presses, and actions.
-   - Tooltip text updates in real-time via JS event listeners whenever UI parameters (active combine sets, intervals, URLs, ports) are changed.
+   - Flow Kit Extension Bridge (WebSocket `ws://127.0.0.1:9225` + HTTP callback `http://127.0.0.1:6969`) for direct API interaction with Google Flow.
+   - Supports both **Standard Image-to-Video Mode** and **Prompt-Only (Text-to-Video) Mode** with unified 3-card UI layout.
+   - Direct Google Flow project creation via `+ New Project` button and `/api/batch-uploader/create-project` tRPC bridge.
+4. **Dynamic Tooltips & Status Polling**:
+   - Pure CSS absolute-positioned glassmorphism tooltips added to all functional buttons.
+   - Real-time Extension connection status polling (`Connected` / `Disconnected`).
 
 ## Project Architecture
-- **`app/main.py`**: FastAPI backend exposing endpoints for configuration (`/api/config`), profile launcher (`/api/profiles/launch`), and selenium automation tasks (`/api/step/video-gen`).
+- **`app/main.py`**: FastAPI backend exposing endpoints for configuration (`/api/config`), profile launcher (`/api/profiles/launch`), and selenium automation tasks.
 - **`app/browser.py`**: Handles Chrome profile processes and subprocess management.
-- **`web/index.html`**: Main UI dashboard layout.
-- **`web/styles.css`**: Styling dashboard with a modern dark glassmorphism theme and tooltip hover states.
-- **`web/app.js`**: Dynamic frontend script that manages API updates, UI events, and builds dynamic tooltip explanations.
-- **`config_mac.json`**: Persistence file for active configurations, prompts, and run-statuses.
+- **`agent/main.py`**: FastAPI + WebSocket agent server entry point managing Flow Kit extension connections on `ws://127.0.0.1:9225`.
+- **`agent/services/flow_client.py`**: High-level client communicating with Google Flow API via Chrome Extension bridge.
+- **`agent/api/batch_uploader.py`**: Batch uploader endpoints for scanning prompts, creating projects, and submitting generation tasks.
+- **`extension/background.js`**: Chrome Extension background service worker intercepting Bearer tokens (`flowKey`) and proxying API calls through browser context.
+- **`web/index.html`**: Main UI dashboard layout with modern dark glassmorphism theme.
+- **`web/app.js`**: Dynamic frontend script managing API updates, project dropdowns, and batch operations.
 
 ## Current Runtime Status
 - **Backend Server**: Running locally on `http://127.0.0.1:6969`.
+- **WebSocket Extension Port**: Running on `ws://127.0.0.1:9225`.
 - **Chrome Automation Port**: Configured to `9222` (Chrome) and `9223` (Brave).
-- **Active Git Branch**: `feat/chatgpt-wait-and-google-flow-delays`.
+- **Active Git Branch**: `feat/google-flow-agent-integration`.
 - **Latest Fixes & Features**:
-  - **Dynamic Milestone ChromeDriver Resolution**: Replaced the hardcoded Canary downloader with a dynamic milestone detector. It queries active browser binaries (Chrome, Canary, Brave, Edge), checks their milestone version, fetches the exact CFT (Chrome for Testing) release version, downloads, unzips, permission-sets (`chmod +x`), and signs it (`codesign`) dynamically.
-  - **Port-based Clean Close**: Upgraded the close browser logic to run `lsof -t -i tcp:{port}` and `kill -9` to cleanly terminate any background browser process holding the active profile's debug port on macOS.
-  - **Dynamic AppleScript Target Resolution**: Modified macOS activation scripts to target `_get_active_browser_app_name()` dynamically (e.g. "Brave Browser" or "Google Chrome Canary") instead of hardcoding "Google Chrome", preventing focus hangs and Gatekeeper blockages.
-  - **ChatGPT Stale Element Prevention**: Optimized prompt insertion inside ProseMirror/ChatGPT to target the stable container `#prompt-textarea` instead of transient `<p>` child tags, refreshes element references before typing, and avoids passing stale elements as arguments to `execute_script`.
-  - **Google Flow Autocomplete Mismatch Fix**: Resolved an issue in video generation where the input box selector matched both the outer `div[contenteditable='true']` and inner `p` tags, causing duplicate matches per card and directing actions to the wrong (previously submitted) cards. Changed the default selector to `div[contenteditable='true']` to ensure a 1-to-1 match per card, and updated wait checks to scale dynamically with the `round_idx`.
+  - **Unified 3-Card Flow Kit Layout**: Unified standard image-to-video mode and prompt-only mode to share an identical 3-card structure and the exact same Downloader/Exporter card.
+  - **Prompt-Only Mode Default Prompts Path**: Added a `Default` button to set and persist the default prompts folder path in `localStorage` (`flowkit_po_default_prompts_path`).
+  - **Google Flow Project Creation Bridge**: Added a `+ New Project` button in both Flow Kit card headers and created `POST /api/batch-uploader/create-project` to allow creating new Google Flow projects directly on Google Flow via tRPC bridge.
+  - **Real-Time Badge Sync**: Bound Prompt-Only mode card header badges (`fk_po_header_status`) to real-time WebSocket status polling.
+  - **Automatic WebSocket Port 9225 Cleanup**: Added `_force_free_port(9225)` in `agent/main.py` to force-kill zombie processes holding port 9225 when uvicorn starts up, ensuring clean WebSocket binding every time.
+  - **Extension Reset on Debug Launch**: Modified `/api/profiles/launch` in `app/main.py` to close any existing WebSocket connection and reset `flowKey` when launching a debug browser, forcing a fresh handshake.
+  - **Google Flow REST API Schema Fix**: Removed unsupported `durationSeconds` field from `requests[0]` in `agent/services/flow_client.py` to resolve HTTP 400 Bad Request (`Unknown name "durationSeconds" at 'requests[0]'`).
 
 ---
 
@@ -59,34 +64,26 @@ Before outputting any final code, you MUST think step-by-step internally and str
 
 # Session Learnings
 
+## Google Flow REST API Payload Rules
+- Do NOT include `durationSeconds` inside `requests[0]` when submitting video generation calls (`batchAsyncGenerateVideo*`) to `aisandbox-pa.googleapis.com`. Sending `durationSeconds` causes Google Flow API to reject requests with HTTP 400 `INVALID_ARGUMENT: Unknown name "durationSeconds" at 'requests[0]'`.
+- For text-to-video (prompt-only mode), omit `startImage` from `req_item` and use model keys with `_t2v_` (e.g., `veo_3_1_t2v_lite_low_priority`).
+
+## WebSocket Server & Port Binding Safety
+- When restarting FastAPI / Uvicorn servers running WebSocket listeners on port 9225, zombie background processes can retain socket bindings. Always execute `_force_free_port(9225)` using `lsof -t -i tcp:9225` and `os.kill(pid, SIGKILL)` before calling `websockets.serve()`.
+
+## Extension Authentication & On-Demand Token Capture
+- The Chrome Extension captures the Bearer token (`flowKey`) via `chrome.webRequest.onBeforeSendHeaders` whenever Google Flow (`https://labs.google/fx/tools/flow`) sends an HTTP request.
+- When an API request arrives at the Extension and `flowKey` is empty, call `captureTokenFromFlowTab()` and wait up to 3 seconds before throwing `NO_FLOW_KEY`.
+- When launching a new Chrome profile via `/api/profiles/launch`, close existing WebSocket connections (`client._extension_ws.close()`) and clear `client._flow_key = None` so the newly opened browser performs a clean handshake.
+
 ## Automation Debugging Rules
 - When debugging browser automation, prefer reproducing the exact visible UI flow over using inferred browser shortcuts.
 - For ChatGPT file upload flows, use the keyboard shortcut `Cmd + U` via AppleScript first (Primary). If that fails, click the composer plus button in the UI and click `Add photos & files` (Fallback).
 - When a native file picker is involved, keep the browser focused on a single upload attempt until the picker behavior is understood.
-- When downloading images in ChatGPT's lightbox mode, verify if the currently displayed image `src` changes after navigating to the next image (using the Arrow Right key). If the `src` does not change, the end of the actual slides list is reached; break the loop early to prevent downloading duplicates of the last image (caused by the main page containing extra thumbnail/preview matches).
-
-## Code Path Verification Rules
-- When a fix is reported as applied, re-read the exact target code path to confirm the change landed in the intended flow.
-- If similar logic exists in multiple places (for example Gemini and ChatGPT flows), verify which branch is actually running before claiming a fix.
-- If a temporary debug limiter is needed, place it in the exact active flow being tested, not in a parallel implementation.
+- When downloading images in ChatGPT's lightbox mode, verify if the currently displayed image `src` changes after navigating to the next image (using the Arrow Right key). If the `src` does not change, the end of the actual slides list is reached; break the loop early to prevent downloading duplicates of the last image.
 
 ## macOS File Dialog & AppleScript Rules
-- When writing AppleScript for macOS File Dialog (`upload_macos_file_dialog`), DO NOT use `tell process "Google Chrome" to set frontmost to true` or `tell application "Google Chrome" to activate` inside the dialog keystroke script. This causes Chrome to steal/reset window focus, closing or defocusing the active sheet and causing `Cmd + Shift + G` to fail.
-- DO NOT add complex window existence checks (like `exists windows of process "Google Chrome"`) inside the AppleScript dialog workflow. These queries require Accessibility (Assistive device) permissions in macOS, which standard Terminal/Python processes do not have, causing the script to bypass the keystrokes or crash. Use a simple, reliable `delay 1.0` before sending keystrokes instead.
-- Use clipboard pasting (`keystroke "v" using {command down}`) for putting the filepath into the path sheet, as it is 10x faster and layout-independent compared to character-by-character typing.
+- When writing AppleScript for macOS File Dialog (`upload_macos_file_dialog`), DO NOT use `tell process "Google Chrome" to set frontmost to true` or `tell application "Google Chrome" to activate` inside the dialog keystroke script.
+- DO NOT add complex window existence checks inside AppleScript dialog workflows. Use a simple, reliable `delay 1.0` before sending keystrokes.
+- Use clipboard pasting (`keystroke "v" using {command down}`) for putting the filepath into the path sheet.
 - Always perform the file upload sequence *before* typing/submitting the prompt, and wait at least 3 seconds after pasting the prompt before clicking send.
-- When activating the browser to bring it forward before keystroke triggers, always resolve the active application name dynamically using `_get_active_browser_app_name()` (e.g. "Brave Browser" or "Google Chrome Canary") instead of hardcoding "Google Chrome".
-
-## Force Stop Handling & Session Validation
-- Webdriver commands and AppleScript dialog automation must always verify driver session validity (`is_driver_alive`) before starting or retrying, to prevent sending system key-events to the wrong application if Chrome is closed.
-- If the browser session is closed, raise a runtime error immediately to break backend automation loops, letting the frontend know it should stop processing further rounds.
-
-## React & ProseMirror Editor State Rules (Google Flow, ChatGPT, etc.)
-- DO NOT use direct JavaScript DOM modifications (such as setting `textContent = ''`, `innerHTML = ''`, or `value = ''` without events) to input or clear text in editors built with React, ProseMirror, or Draft.js. This bypasses the Virtual DOM state sync and leaves the editor's internal model out of sync, leading to merged, duplicated, or empty submissions.
-- To input text: Always use native Selenium `send_keys` commands or `document.execCommand('insertText')` as they simulate native OS-level keyboard events and properly update React state models.
-- To clear text: Simulating delete actions is required. Use selection APIs to select all text (`range.selectNodeContents`) and trigger native deletion (`document.execCommand('delete', false, null)`). This forces React/ProseMirror listeners to receive the deletion events and sync the state to empty.
-- When entering multiline prompts via Selenium `send_keys` in Google Flow, DO NOT send raw newlines (`\n`) in one go, as this triggers the browser's default `Enter` event and submits the form prematurely. Instead, split the text by `\n` and use Selenium's `ActionChains` to perform a `Shift + Enter` sequence between lines before typing the next line.
-- When typing or verifying text in React/ProseMirror editors, be aware that editor re-renders can instantly make elements stale. Prioritize targeting stable container elements (like `#prompt-textarea`) directly rather than transient child elements (like inner `<p>` tags), dynamically refresh Selenium references, and avoid passing potentially stale element references as arguments inside `driver.execute_script()` (use raw document queries inside JS instead).
-- For batch card generation in Google Flow, **DO NOT** use selectors that match both the outer container and inner child nodes (such as `div[contenteditable='true'] p, div[contenteditable='true']`). This returns duplicate element handles per card, causing index-based selectors (`boxes[round_idx - 1]`) to target a previous locked card. Use the unique outer container `div[contenteditable='true']` directly, and wait dynamically for cards using `len(boxes) >= round_idx`.
-- If an autocomplete or mention chip triggers a DOM re-render during typing, standard element interactions might fail. Ensure keyboard focus is established using a selection-collapsing script, and send keys to the active focus caret via ActionChains rather than targeting the element directly.
-
