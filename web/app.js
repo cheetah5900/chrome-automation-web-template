@@ -736,6 +736,16 @@ function initTabNavigation() {
       if (tab.view) tab.view.classList.remove('hidden');
       if (tab.onLoad) tab.onLoad();
       
+      // Control Flow Kit polling based on active tab
+      if (tab.btn === btnVideoGen) {
+        const mode = document.getElementById('cfg_video_gen_mode')?.value || 'selenium';
+        if (mode === 'flow_kit') {
+          startFlowKitPolling();
+        }
+      } else {
+        stopFlowKitPolling();
+      }
+
       // Save active tab ID to localStorage
       localStorage.setItem('activeNavigationTab', tab.btn.id);
     });
@@ -4338,6 +4348,12 @@ async function loadVideoPrompts() {
     const lakornEp = document.getElementById('cfg_video_lakorn_ep');
     if (lakornEp) lakornEp.value = config.video_lakorn_ep || '';
 
+    const videoGenMode = document.getElementById('cfg_video_gen_mode');
+    if (videoGenMode) {
+      videoGenMode.value = config.video_gen_mode || 'selenium';
+      videoGenMode.dispatchEvent(new Event('change'));
+    }
+
     currentVideoPromptRound = 1;
     renderVideoGenTabs();
     renderVideoActiveRoundsDropdown();
@@ -4346,6 +4362,73 @@ async function loadVideoPrompts() {
         writeConsoleLine(`Failed to load video prompts: ${e.message}`, 'error', 'videoConsole');
   }
 }
+
+let flowKitPollingInterval = null;
+
+function startFlowKitPolling() {
+  if (flowKitPollingInterval) return;
+  
+  const updateStatus = async () => {
+    try {
+      const res = await jsonFetch('/api/flow/status');
+      const badge = document.getElementById('flow_kit_status_badge');
+      if (badge) {
+        if (res && res.connected) {
+          badge.textContent = 'Connected';
+          badge.style.background = 'rgba(16, 185, 129, 0.15)';
+          badge.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+          badge.style.color = '#10b981';
+          
+          try {
+            const creditsRes = await jsonFetch('/api/flow/credits');
+            const creditsBadge = document.getElementById('flow_kit_credits_badge');
+            if (creditsBadge && creditsRes && creditsRes.remainingCredits !== undefined) {
+              creditsBadge.textContent = `Credits: ${creditsRes.remainingCredits}`;
+              creditsBadge.style.display = 'inline-block';
+            }
+          } catch (creditsErr) {
+            console.error('Failed to fetch credits:', creditsErr);
+          }
+        } else {
+          badge.textContent = 'Disconnected';
+          badge.style.background = 'rgba(245, 101, 101, 0.15)';
+          badge.style.borderColor = 'rgba(245, 101, 101, 0.25)';
+          badge.style.color = '#f56565';
+          const creditsBadge = document.getElementById('flow_kit_credits_badge');
+          if (creditsBadge) creditsBadge.style.display = 'none';
+        }
+      }
+    } catch (err) {
+      console.error('Failed to poll Flow Kit status:', err);
+    }
+  };
+  
+  updateStatus();
+  flowKitPollingInterval = setInterval(updateStatus, 5000);
+}
+
+function stopFlowKitPolling() {
+  if (flowKitPollingInterval) {
+    clearInterval(flowKitPollingInterval);
+    flowKitPollingInterval = null;
+  }
+}
+
+// Add event listener for cfg_video_gen_mode change
+document.getElementById('cfg_video_gen_mode')?.addEventListener('change', (e) => {
+  const mode = e.target.value;
+  const statusContainer = document.getElementById('flow_kit_status_container');
+  if (statusContainer) {
+    if (mode === 'flow_kit') {
+      statusContainer.style.display = 'flex';
+      startFlowKitPolling();
+    } else {
+      statusContainer.style.display = 'none';
+      stopFlowKitPolling();
+    }
+  }
+  saveVideoPrompts(true);
+});
 
 function renderVideoPromptsForRound(roundNum) {
   const container = document.getElementById('videoPromptList');
@@ -4466,6 +4549,7 @@ async function saveVideoPrompts(silent = false) {
       video_input_selector: document.getElementById('cfg_video_input_selector')?.value.trim() || '',
       video_settings_selector: document.getElementById('cfg_video_settings_selector')?.value.trim() || '',
       video_submit_selector: document.getElementById('cfg_video_submit_selector')?.value.trim() || '',
+      video_gen_mode: document.getElementById('cfg_video_gen_mode')?.value || 'selenium',
     };
     
     for (const k in payload) {

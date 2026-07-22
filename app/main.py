@@ -102,6 +102,82 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Flow Kit (GFA) Integration ──────────────────────────────
+try:
+    from agent.api.characters import router as characters_router
+    from agent.api.projects import router as projects_router
+    from agent.api.videos import router as videos_router
+    from agent.api.scenes import router as scenes_router
+    from agent.api.requests import router as requests_router
+    from agent.api.flow import router as flow_router
+    from agent.api.reviews import router as reviews_router
+    from agent.api.tts import router as tts_router
+    from agent.api.materials import router as materials_router
+    from agent.api.music import router as music_router
+    from agent.api.models import router as models_router
+    from agent.api.active_project import router as active_project_router
+    from agent.api.batch_uploader import router as batch_uploader_router
+    from agent.main import ext_callback, dashboard_ws, health as flow_health
+
+    app.include_router(projects_router, prefix="/api")
+    app.include_router(scenes_router, prefix="/api")
+    app.include_router(videos_router, prefix="/api")
+    app.include_router(characters_router, prefix="/api")
+    app.include_router(requests_router, prefix="/api")
+    app.include_router(flow_router, prefix="/api")
+    app.include_router(reviews_router, prefix="/api")
+    app.include_router(tts_router, prefix="/api")
+    app.include_router(materials_router, prefix="/api")
+    app.include_router(music_router, prefix="/api")
+    app.include_router(models_router)
+    app.include_router(active_project_router)
+    app.include_router(batch_uploader_router, prefix="/api")
+
+    # Native callback and WS handlers for extension/dashboard
+    app.post("/api/ext/callback")(ext_callback)
+    app.websocket("/ws/dashboard")(dashboard_ws)
+    app.get("/health")(flow_health)
+    
+    print("Flow Kit routers registered successfully.")
+except ImportError as e:
+    print(f"Skipping Flow Kit routers/callbacks import: {e}")
+
+# Flow Kit startup background tasks
+@app.on_event("startup")
+async def startup_flow_kit():
+    try:
+        from agent.db.schema import init_db
+        from agent.materials import register_material, _BUILTIN_IDS
+        from agent.db.crud import list_materials as db_list_materials
+        from agent.sdk import init_sdk
+        from agent.services.flow_client import get_flow_client
+        from agent.worker.processor import get_worker_controller
+        from agent.main import run_ws_server
+        
+        # 1. Init Flow Kit database
+        await init_db()
+        
+        # 2. Load custom materials
+        try:
+            custom_materials = await db_list_materials()
+            for m in custom_materials:
+                if m["id"] not in _BUILTIN_IDS:
+                    register_material(m)
+        except Exception as e:
+            print(f"Failed to load custom materials: {e}")
+            
+        # 3. Init SDK
+        init_sdk(get_flow_client())
+        
+        # 4. Start WebSocket Server and worker processor
+        controller = get_worker_controller()
+        asyncio.create_task(run_ws_server())
+        asyncio.create_task(controller.start())
+        print("Flow Kit background services (WebSocket + Worker) started successfully!")
+    except Exception as e:
+        print(f"Failed to start Flow Kit background services: {e}")
+
+
 
 class ProviderPayload(BaseModel):
     provider: str
@@ -176,6 +252,7 @@ class VideoGenStepPayload(BaseModel):
     google_flow_email: str = "dogdadcatmom@gmail.com"
     google_flow_project_name: str = "7-1"
     auto_retry_mode: bool = False
+    video_gen_mode: str = "selenium"
 
 
 
@@ -4184,10 +4261,111 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
 
 
 @app.post("/api/step/video-gen")
-def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
+async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # _activate_chrome()
     prompt = payload.prompt.strip()
     round_idx = payload.round_idx
+    
+    # ─── Flow Kit Mode Handler ──────────────────────────────────
+    if payload.video_gen_mode == "flow_kit":
+        try:
+            from agent.db import crud
+            from agent.services.flow_client import get_flow_client
+            
+            # 1. Verify extension is connected
+            client = get_flow_client()
+            if not client.connected:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Flow Kit Extension is not connected! Please open Chrome and make sure the extension connects to the WebSocket server on port 9222."
+                )
+                
+            # 2. Get or create project in Flow Kit DB
+            project_name = payload.google_flow_project_name or "default_project"
+            projects = await crud.list_projects()
+            target_project = None
+            for p in projects:
+                if p.get("name") == project_name:
+                    target_project = p
+                    break
+            
+            if not target_project:
+                target_project = await crud.create_project(
+                    name=project_name,
+                    description="Auto-created via Cockpit integration",
+                    material="realistic"
+                )
+            project_id = target_project["id"]
+            
+            # 3. Get or create video in project
+            videos = await crud.list_videos(project_id)
+            target_video = None
+            for v in videos:
+                if v.get("title") == "Default Video":
+                    target_video = v
+                    break
+            if not target_video:
+                target_video = await crud.create_video(
+                    project_id=project_id,
+                    title="Default Video",
+                    description="Auto-created video container",
+                    orientation="VERTICAL"
+                )
+            video_id = target_video["id"]
+            
+            # 4. Get or create scene for this round
+            scenes = await crud.list_scenes(video_id)
+            target_scene = None
+            display_order = round_idx
+            for s in scenes:
+                if s.get("display_order") == display_order:
+                    target_scene = s
+                    break
+            
+            if not target_scene:
+                target_scene = await crud.create_scene(
+                    video_id=video_id,
+                    display_order=display_order,
+                    prompt=prompt
+                )
+            else:
+                # Update prompt if changed
+                if target_scene.get("prompt") != prompt:
+                    await crud.update_scene(target_scene["id"], prompt=prompt)
+                    target_scene = await crud.get_scene(target_scene["id"])
+            
+            scene_id = target_scene["id"]
+            
+            # 5. Submit request to queue
+            orientation = target_video.get("orientation") or "VERTICAL"
+            image_media_id = target_scene.get("vertical_image_media_id") if orientation == "VERTICAL" else target_scene.get("horizontal_image_media_id")
+            
+            if not image_media_id:
+                req_type = "GENERATE_IMAGE"
+                log(f"[Flow Kit Queue] Scene {round_idx} doesn't have image media ID. Submitting GENERATE_IMAGE request...")
+            else:
+                req_type = "GENERATE_VIDEO"
+                log(f"[Flow Kit Queue] Scene {round_idx} has image media ID ({image_media_id}). Submitting GENERATE_VIDEO request...")
+                
+            existing_reqs = await crud.list_requests(scene_id=scene_id)
+            active_req = [r for r in existing_reqs if r.get("type") == req_type and r.get("status") in ("PENDING", "PROCESSING")]
+            
+            if not active_req:
+                new_req = await crud.create_request(
+                    project_id=project_id,
+                    video_id=video_id,
+                    scene_id=scene_id,
+                    req_type=req_type,
+                    orientation=orientation
+                )
+                log(f"[Flow Kit Queue] Submitted request: {new_req['id']}")
+                return {"ok": True, "message": f"ส่งคำขอไปยังคิว Flow Kit สำเร็จ (ประเภท: {req_type})", "status": "PENDING"}
+            else:
+                log(f"[Flow Kit Queue] Request already active: {active_req[0]['id']}")
+                return {"ok": True, "message": f"คำขอนี้กำลังทำงานอยู่แล้วในคิว Flow Kit (ประเภท: {req_type})", "status": active_req[0]['status']}
+        except Exception as flow_err:
+            log(f"[Flow Kit Error] {flow_err}")
+            raise HTTPException(status_code=500, detail=f"Flow Kit Error: {flow_err}")
     google_flow_path = payload.google_flow_path.strip()
     video_input_selector = payload.video_input_selector.strip()
     video_settings_selector = payload.video_settings_selector.strip()
