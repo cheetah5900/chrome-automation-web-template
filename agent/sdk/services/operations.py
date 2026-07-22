@@ -465,6 +465,15 @@ class OperationService:
                         pass
         custom_model_key = None
         if custom_tier:
+            if custom_tier == "standard":
+                custom_tier = "fast"
+            elif custom_tier == "veo3":
+                custom_tier = "quality"
+
+            if tier == "PAYGATE_TIER_TWO" and custom_tier in ("fast", "quality", "omni_flash", "lite"):
+                logger.info("Downgrading model selection '%s' to 'lite_low_priority' due to PAYGATE_TIER_TWO account limits", custom_tier)
+                custom_tier = "lite_low_priority"
+
             if custom_tier in ("lite_low_priority", "lite", "fast", "quality", "omni_flash"):
                 is_vertical = (orientation == "VERTICAL")
                 if custom_tier == "lite_low_priority":
@@ -477,10 +486,10 @@ class OperationService:
                     custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
                     tier = "PAYGATE_TIER_ONE"
                 elif custom_tier == "quality":
-                    custom_model_key = "veo_3_1_i2v_s_quality_portrait" if is_vertical else "veo_3_1_i2v_s_quality"
+                    custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
                     tier = "PAYGATE_TIER_ONE"
                 elif custom_tier == "omni_flash":
-                    custom_model_key = "veo_3_1_i2v_omni_flash_portrait" if is_vertical else "veo_3_1_i2v_omni_flash"
+                    custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
                     tier = "PAYGATE_TIER_ONE"
             elif "veo" in custom_tier:
                 custom_model_key = custom_tier
@@ -662,9 +671,19 @@ class OperationService:
 
         # Check if already submitted (op_name saved from previous attempt)
         existing_op = None
+        resolution = "VIDEO_RESOLUTION_4K"
         if request_id:
             req_row = await crud.get_request(request_id)
-            existing_op = req_row.get("request_id") if req_row else None
+            if req_row:
+                existing_op = req_row.get("request_id")
+                if req_row.get("edit_prompt"):
+                    try:
+                        import json as _json
+                        params = _json.loads(req_row["edit_prompt"])
+                        if params.get("resolution"):
+                            resolution = params["resolution"]
+                    except Exception:
+                        pass
 
         if existing_op:
             # Already submitted — just re-poll
@@ -676,6 +695,7 @@ class OperationService:
             media_id=video_media_id,
             scene_id=scene.get("id", ""),
             aspect_ratio=aspect,
+            resolution=resolution,
         )
 
         if _is_error(submit_result):

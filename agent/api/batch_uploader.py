@@ -116,6 +116,7 @@ class ProcessRequest(BaseModel):
     video_model: Optional[str] = None
     duration_seconds: Optional[int] = None
     output_count: Optional[int] = 1
+    upscale_resolution: Optional[str] = "NONE"
 
 
 @router.post("/scan")
@@ -398,8 +399,24 @@ async def process_batch(body: ProcessRequest):
                 "edit_prompt": _json.dumps(params_dict)
             }
             await crud.create_request(**db_req_data)
-            
             logger.info("Queued video request for scene %s", sdk_scene.id)
+
+            # 4.5. Optionally queue UPSCALE_VIDEO request
+            if body.upscale_resolution and body.upscale_resolution != "NONE":
+                upscale_params = {
+                    "resolution": body.upscale_resolution
+                }
+                upscale_req_data = {
+                    "project_id": body.project_id,
+                    "video_id": video_id,
+                    "scene_id": sdk_scene.id,
+                    "req_type": "UPSCALE_VIDEO",
+                    "orientation": orientation,
+                    "status": "PENDING",
+                    "edit_prompt": _json.dumps(upscale_params)
+                }
+                await crud.create_request(**upscale_req_data)
+                logger.info("Queued upscale request (%s) for scene %s", body.upscale_resolution, sdk_scene.id)
 
             results.append({
                 "image_path": pair.image_path,
@@ -416,3 +433,159 @@ async def process_batch(body: ProcessRequest):
             })
 
     return {"results": results, "video_id": video_id}
+
+
+from fastapi import BackgroundTasks
+from fastapi.responses import FileResponse
+import zipfile
+import tempfile
+from pathlib import Path
+import aiohttp
+
+class DownloadProjectVideosRequest(BaseModel):
+    project_id: str
+    upscale_resolution: str  # NONE, VIDEO_RESOLUTION_1080P, VIDEO_RESOLUTION_4K
+
+def resolve_local_file(url: str, media_id: str, project_slug: str, display_order: int, scene_id: str, is_upscale: bool) -> Path | None:
+    # 1. If url starts with file://, check if that path exists
+    if url and url.startswith("file://"):
+        p = Path(url[7:])
+        if p.exists():
+            return p
+    # 2. Check canonical paths
+    from agent.utils.paths import scene_video_path, scene_4k_path
+    if is_upscale:
+        p4k = scene_4k_path(project_slug, display_order, scene_id)
+        if p4k.exists():
+            return p4k
+    else:
+        pscene = scene_video_path(project_slug, display_order, scene_id)
+        if pscene.exists():
+            return pscene
+    
+    # 3. Check workflow videos folder
+    if media_id:
+        pworkflow = Path("output/_workflow_videos") / f"{media_id}.mp4"
+        if pworkflow.exists():
+            return pworkflow
+            
+    return None
+
+async def download_file_to_temp(url: str) -> Path:
+    connector = aiohttp.TCPConnector(ssl=False)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                temp_path = Path(temp_file.name)
+                temp_path.write_bytes(await resp.read())
+                return temp_path
+            else:
+                raise Exception(f"Failed to download URL {url}: HTTP {resp.status}")
+
+def cleanup_temp_dir(path: Path):
+    import shutil
+    try:
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.is_file():
+            path.unlink()
+    except Exception as e:
+        logger.warning("Failed to cleanup temp path %s: %s", path, e)
+
+@router.post("/download-all")
+async def download_all_project_videos(body: DownloadProjectVideosRequest, background_tasks: BackgroundTasks):
+    from agent.utils.slugify import slugify
+    from agent.db.schema import get_db, _db_lock
+    
+    # Get project details
+    project = await crud.get_project(body.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found in local database")
+        
+    project_slug = slugify(getattr(project, "name", "project")) or "project"
+    
+    # Fetch all scenes belonging to this project
+    db = await get_db()
+    async with _db_lock:
+        cursor = await db.execute(
+            """
+            SELECT s.* 
+            FROM scene s
+            JOIN video v ON s.video_id = v.id
+            WHERE v.project_id = ?
+            ORDER BY s.display_order ASC
+            """,
+            (body.project_id,)
+        )
+        rows = await cursor.fetchall()
+        columns = [col[0] for col in cursor.description]
+        scenes = [dict(zip(columns, row)) for row in rows]
+        
+    if not scenes:
+        raise HTTPException(status_code=404, detail="No scenes found for this project.")
+        
+    temp_dir = Path(tempfile.mkdtemp())
+    zip_path = temp_dir / f"{project_slug}_videos.zip"
+    
+    video_added = False
+    
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for scene in scenes:
+            display_order = scene.get("display_order", 0)
+            scene_id = scene.get("id", "")
+            
+            for p in ("vertical", "horizontal"):
+                url = None
+                media_id = None
+                is_upscale = False
+                
+                if body.upscale_resolution in ("VIDEO_RESOLUTION_1080P", "VIDEO_RESOLUTION_4K"):
+                    url = scene.get(f"{p}_upscale_url")
+                    media_id = scene.get(f"{p}_upscale_media_id")
+                    is_upscale = True
+                    
+                # Fallback to standard
+                if not url:
+                    url = scene.get(f"{p}_video_url")
+                    media_id = scene.get(f"{p}_video_media_id")
+                    is_upscale = False
+                    
+                if not url:
+                    continue
+                    
+                local_path = resolve_local_file(url, media_id, project_slug, display_order, scene_id, is_upscale)
+                temp_downloaded_path = None
+                
+                if not local_path and url.startswith("http"):
+                    try:
+                        temp_downloaded_path = await download_file_to_temp(url)
+                        local_path = temp_downloaded_path
+                    except Exception as e:
+                        logger.warning("Failed to download remote file for scene %s: %s", scene_id, e)
+                        continue
+                        
+                if local_path and local_path.exists():
+                    orient_suffix = "vertical" if p == "vertical" else "horizontal"
+                    upscale_suffix = "_upscaled" if is_upscale else ""
+                    arcname = f"scene_{display_order:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                    zip_file.write(local_path, arcname=arcname)
+                    video_added = True
+                    
+                    if temp_downloaded_path and temp_downloaded_path.exists():
+                        try:
+                            temp_downloaded_path.unlink()
+                        except Exception:
+                            pass
+                            
+    if not video_added or not zip_path.exists() or zip_path.stat().st_size == 0:
+        cleanup_temp_dir(temp_dir)
+        raise HTTPException(status_code=400, detail="No completed videos found in this project to download.")
+        
+    background_tasks.add_task(cleanup_temp_dir, temp_dir)
+    
+    return FileResponse(
+        path=str(zip_path),
+        media_type="application/zip",
+        filename=f"{project_slug}_videos.zip"
+    )

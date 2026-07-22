@@ -12,6 +12,7 @@ const API_KEY = 'AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY';
 let ws = null;
 let flowKey = null;
 let callbackSecret = null;  // Auth secret for HTTP callback, received from server on WS connect
+let apiPort = null;         // Dynamically updated uvicorn port from Python agent
 let state = 'off'; // off | idle | running
 let manualDisconnect = false;
 let metrics = {
@@ -73,10 +74,11 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 });
 
 async function init() {
-  const data = await chrome.storage.local.get(['flowKey', 'metrics', 'callbackSecret']);
+  const data = await chrome.storage.local.get(['flowKey', 'metrics', 'callbackSecret', 'apiPort']);
   if (data.flowKey) flowKey = data.flowKey;
   if (data.metrics) Object.assign(metrics, data.metrics);
   if (data.callbackSecret) callbackSecret = data.callbackSecret;
+  if (data.apiPort) apiPort = data.apiPort;
   connectToAgent();
   chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 });
 }
@@ -214,7 +216,11 @@ function connectToAgent() {
       } else if (msg.type === 'callback_secret') {
         callbackSecret = msg.secret;
         chrome.storage.local.set({ callbackSecret: msg.secret });
-        console.log('[FlowAgent] Received callback secret');
+        if (msg.api_port) {
+          apiPort = msg.api_port;
+          chrome.storage.local.set({ apiPort: msg.api_port });
+        }
+        console.log('[FlowAgent] Received callback secret and API port:', msg.api_port);
       } else if (msg.type === 'pong') {
         // keepalive response
       }
@@ -251,7 +257,8 @@ function keepAlive() {
 function sendToAgent(msg) {
   // API responses (with msg.id) go via HTTP — immune to WS disconnect
   if (msg.id) {
-    fetch('http://127.0.0.1:8100/api/ext/callback', {
+    const port = apiPort || 8100;
+    fetch(`http://127.0.0.1:${port}/api/ext/callback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(msg),

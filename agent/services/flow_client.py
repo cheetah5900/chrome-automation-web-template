@@ -32,6 +32,7 @@ class FlowClient:
         self._ws_disconnect_count = 0
         self._ws_connected_at: Optional[float] = None
         self._ws_last_disconnect_at: Optional[float] = None
+        self._last_tier_sync_time = 0.0
 
     def set_extension(self, ws):
         """Called when extension connects via WS."""
@@ -110,7 +111,11 @@ class FlowClient:
         """Detect current tier from credits API and update all active projects."""
         if getattr(self, '_sync_in_progress', False):
             return
+        now = time.time()
+        if now - self._last_tier_sync_time < 60.0:
+            return
         self._sync_in_progress = True
+        self._last_tier_sync_time = now
         try:
             result = await self.get_credits()
             data = result.get("data", result)
@@ -405,6 +410,8 @@ class FlowClient:
             }
             if end_image_media_id:
                 req_item["endImage"] = {"mediaId": end_image_media_id}
+            if duration_seconds:
+                req_item["durationSeconds"] = duration_seconds
 
             endpoint_key = "generate_video_start_end" if end_image_media_id else "generate_video"
             body = {

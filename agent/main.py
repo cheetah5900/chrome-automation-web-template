@@ -42,7 +42,7 @@ async def ws_handler(websocket):
     logger.info("Extension connected from %s", websocket.remote_address)
 
     # Send callback secret so extension can authenticate HTTP callbacks
-    await websocket.send(json.dumps({"type": "callback_secret", "secret": _CALLBACK_SECRET}))
+    await websocket.send(json.dumps({"type": "callback_secret", "secret": _CALLBACK_SECRET, "api_port": API_PORT}))
 
     try:
         async for raw in websocket:

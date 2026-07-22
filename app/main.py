@@ -1659,6 +1659,15 @@ def get_config() -> dict[str, Any]:
             return {**defaults, **data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed reading config: {e}")
+@app.get("/api/utils/serve-image")
+def serve_image(path: str):
+    import os
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+    path = path.strip()
+    if not os.path.exists(path) or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path)
 
 
 @app.post("/api/config")
@@ -4161,7 +4170,6 @@ def import_lakorn_video_auto(payload: ImportLakornVideoPayload):
         "message": f"นำเข้าข้อมูลพรอพต์วิดีโอสำหรับตอนที่ {ep_num} เรียบร้อยแล้ว (จำนวน {len(prompt_files)} ฉาก)"
     }
 
-
 _upload_images_stop_flag = False
 
 @app.post("/api/step/stop-upload-google-flow")
@@ -4361,7 +4369,7 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                         if ep_dir:
                             # Search for storyboard directory
                             storyboard_dir = None
-                            for candidate in ["3 - Storyboard", "3-Storyboard", "Storyboard", "storyboard", "3 - Animation Image", "Animation Image", "animation image", "3 - Story Board", "Story Board", "story board"]:
+                            for candidate in ["6 - Storyboards", "6-Storyboards", "Storyboards", "storyboards", "3 - Storyboard", "3-Storyboard", "Storyboard", "storyboard", "3 - Animation Image", "Animation Image", "animation image", "3 - Story Board", "Story Board", "story board"]:
                                 cand_path = ep_dir / candidate
                                 if cand_path.exists() and cand_path.is_dir():
                                     storyboard_dir = cand_path

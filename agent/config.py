@@ -9,7 +9,21 @@ DB_PATH = BASE_DIR / "flow_agent.db"
 
 # ─── API Server ──────────────────────────────────────────────
 API_HOST = os.environ.get("API_HOST", "127.0.0.1")
-API_PORT = int(os.environ.get("API_PORT", "8100"))
+import sys
+def _detect_api_port() -> int:
+    if "API_PORT" in os.environ:
+        return int(os.environ["API_PORT"])
+    try:
+        for idx, arg in enumerate(sys.argv):
+            if arg == "--port" and idx + 1 < len(sys.argv):
+                return int(sys.argv[idx + 1])
+            if arg.startswith("--port="):
+                return int(arg.split("=")[1])
+    except Exception:
+        pass
+    return 8100
+
+API_PORT = _detect_api_port()
 
 # ─── WebSocket Server (extension connects here) ─────────────
 WS_HOST = os.environ.get("WS_HOST", "127.0.0.1")

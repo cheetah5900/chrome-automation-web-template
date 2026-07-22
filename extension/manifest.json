@@ -7,7 +7,10 @@
   "host_permissions": [
     "https://labs.google/*",
     "https://aisandbox-pa.googleapis.com/*",
-    "http://127.0.0.1:8100/*"
+    "http://127.0.0.1:8100/*",
+    "http://127.0.0.1:6969/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
   ],
   "background": {
     "service_worker": "background.js"

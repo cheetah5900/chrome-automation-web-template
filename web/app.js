@@ -4348,6 +4348,18 @@ async function loadVideoPrompts() {
     const lakornEp = document.getElementById('cfg_video_lakorn_ep');
     if (lakornEp) lakornEp.value = config.video_lakorn_ep || '';
 
+    // Flow Kit parallel inputs loading
+    const flowLakornPath = document.getElementById('cfg_flow_lakorn_path');
+    if (flowLakornPath) flowLakornPath.value = config.video_lakorn_path || localStorage.getItem('flowkit_default_lakorn_path') || '';
+
+    const flowLakornTon = document.getElementById('cfg_flow_lakorn_ton');
+    if (flowLakornTon) flowLakornTon.value = config.video_lakorn_ton || '';
+
+    const flowLakornEp = document.getElementById('cfg_flow_lakorn_ep');
+    if (flowLakornEp) flowLakornEp.value = config.video_lakorn_ep || '';
+
+    calculateFlowKitPaths();
+
     const videoGenMode = document.getElementById('cfg_video_gen_mode');
     if (videoGenMode) {
       videoGenMode.value = config.video_gen_mode || 'selenium';
@@ -4372,31 +4384,54 @@ function startFlowKitPolling() {
     try {
       const res = await jsonFetch('/api/flow/status');
       const badge = document.getElementById('flow_kit_status_badge');
-      if (badge) {
-        if (res && res.connected) {
-          badge.textContent = 'Connected';
-          badge.style.background = 'rgba(16, 185, 129, 0.15)';
-          badge.style.borderColor = 'rgba(16, 185, 129, 0.25)';
-          badge.style.color = '#10b981';
+      const hdrBadge = document.getElementById('fk_header_status');
+      
+      const setConnected = (el) => {
+        if (!el) return;
+        el.textContent = 'Connected';
+        el.style.background = 'rgba(16, 185, 129, 0.15)';
+        el.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+        el.style.color = '#10b981';
+      };
+      
+      const setDisconnected = (el) => {
+        if (!el) return;
+        el.textContent = 'Disconnected';
+        el.style.background = 'rgba(245, 101, 101, 0.15)';
+        el.style.borderColor = 'rgba(245, 101, 101, 0.25)';
+        el.style.color = '#f56565';
+      };
+      
+      if (res && res.connected) {
+        setConnected(badge);
+        setConnected(hdrBadge);
+        
+        try {
+          const creditsRes = await jsonFetch('/api/flow/credits');
+          const creditsBadge = document.getElementById('flow_kit_credits_badge');
+          const hdrCreditsBadge = document.getElementById('fk_header_credits');
           
-          try {
-            const creditsRes = await jsonFetch('/api/flow/credits');
-            const creditsBadge = document.getElementById('flow_kit_credits_badge');
-            if (creditsBadge && creditsRes && creditsRes.remainingCredits !== undefined) {
-              creditsBadge.textContent = `Credits: ${creditsRes.remainingCredits}`;
+          if (creditsRes && creditsRes.remainingCredits !== undefined) {
+            const txt = `Credits: ${creditsRes.remainingCredits}`;
+            if (creditsBadge) {
+              creditsBadge.textContent = txt;
               creditsBadge.style.display = 'inline-block';
             }
-          } catch (creditsErr) {
-            console.error('Failed to fetch credits:', creditsErr);
+            if (hdrCreditsBadge) {
+              hdrCreditsBadge.textContent = txt;
+              hdrCreditsBadge.style.color = '#8da6ff';
+            }
           }
-        } else {
-          badge.textContent = 'Disconnected';
-          badge.style.background = 'rgba(245, 101, 101, 0.15)';
-          badge.style.borderColor = 'rgba(245, 101, 101, 0.25)';
-          badge.style.color = '#f56565';
-          const creditsBadge = document.getElementById('flow_kit_credits_badge');
-          if (creditsBadge) creditsBadge.style.display = 'none';
+        } catch (creditsErr) {
+          console.error('Failed to fetch credits:', creditsErr);
         }
+      } else {
+        setDisconnected(badge);
+        setDisconnected(hdrBadge);
+        const creditsBadge = document.getElementById('flow_kit_credits_badge');
+        if (creditsBadge) creditsBadge.style.display = 'none';
+        const hdrCreditsBadge = document.getElementById('fk_header_credits');
+        if (hdrCreditsBadge) hdrCreditsBadge.textContent = '--';
       }
     } catch (err) {
       console.error('Failed to poll Flow Kit status:', err);
@@ -4417,15 +4452,17 @@ function stopFlowKitPolling() {
 // Add event listener for cfg_video_gen_mode change
 document.getElementById('cfg_video_gen_mode')?.addEventListener('change', (e) => {
   const mode = e.target.value;
-  const statusContainer = document.getElementById('flow_kit_status_container');
-  const projectContainer = document.getElementById('flow_kit_project_container');
+  const seleniumSection = document.getElementById('selenium_mode_section');
+  const flowKitSection = document.getElementById('flow_kit_mode_section');
   if (mode === 'flow_kit') {
-    if (statusContainer) statusContainer.style.display = 'flex';
-    if (projectContainer) projectContainer.style.display = 'flex';
+    if (seleniumSection) seleniumSection.style.display = 'none';
+    if (flowKitSection) flowKitSection.style.display = 'block';
     startFlowKitPolling();
+    loadFlowKitProjects();
+    calculateFlowKitPaths();
   } else {
-    if (statusContainer) statusContainer.style.display = 'none';
-    if (projectContainer) projectContainer.style.display = 'none';
+    if (seleniumSection) seleniumSection.style.display = 'block';
+    if (flowKitSection) flowKitSection.style.display = 'none';
     stopFlowKitPolling();
   }
   saveVideoPrompts(true);
@@ -5185,6 +5222,8 @@ function initVideoGenListeners() {
       }
     });
   }
+  
+  initFlowKitUploaderListeners();
 }
 
 function seedancePromptRowTemplate(text = '') {
@@ -5535,3 +5574,561 @@ setupLogStream();
 
 // Start periodic real-time status check every 3 seconds
 setInterval(updatePortStatus, 3000);
+
+// ==========================================
+// FLOW KIT BATCH UPLOADER & SYNC CONTROLLER
+// ==========================================
+
+let flowScannedPairs = [];
+let flowProjectsList = [];
+
+function initFlowKitUploaderListeners() {
+  // 1. Sync Inputs between Selenium and Flow Kit
+  const syncInputs = (id1, id2) => {
+    const el1 = document.getElementById(id1);
+    const el2 = document.getElementById(id2);
+    if (el1 && el2) {
+      el1.addEventListener('input', (e) => {
+        el2.value = e.target.value;
+        calculateFlowKitPaths();
+      });
+      el2.addEventListener('input', (e) => {
+        el1.value = e.target.value;
+        calculateFlowKitPaths();
+      });
+    }
+  };
+  syncInputs('cfg_video_lakorn_path', 'cfg_flow_lakorn_path');
+  syncInputs('cfg_video_lakorn_ton', 'cfg_flow_lakorn_ton');
+  syncInputs('cfg_video_lakorn_ep', 'cfg_flow_lakorn_ep');
+
+  // 2. Set Default Project button
+  document.getElementById('setFlowProjectDefaultBtn')?.addEventListener('click', () => {
+    const val = document.getElementById('cfg_flow_project_dropdown')?.value;
+    if (val) {
+      localStorage.setItem('flowkit_default_project_id', val);
+      showToast('บันทึกโปรเจกต์เริ่มต้นเรียบร้อยแล้ว', 'success');
+    }
+  });
+
+  // 3. Folder Browse Button
+  document.getElementById('browseFlowLakornPathBtn')?.addEventListener('click', async () => {
+    try {
+      const res = await jsonFetch('/api/batch-uploader/browse-folder', { method: 'POST' });
+      if (res && res.path) {
+        const input = document.getElementById('cfg_flow_lakorn_path');
+        const selInput = document.getElementById('cfg_video_lakorn_path');
+        if (input) input.value = res.path;
+        if (selInput) selInput.value = res.path;
+        localStorage.setItem('flowkit_default_lakorn_path', res.path);
+        calculateFlowKitPaths();
+        saveVideoPrompts(true);
+      }
+    } catch (err) {
+      console.error('Failed to browse folder:', err);
+    }
+  });
+
+  // 4. Scan & Sync Button
+  document.getElementById('btnScanFlowKit')?.addEventListener('click', async () => {
+    const sbPath = document.getElementById('lbl_resolved_storyboard_path')?.textContent;
+    const prPath = document.getElementById('lbl_resolved_prompt_path')?.textContent;
+    
+    const msg = document.getElementById('flowKitMsg');
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg';
+      msg.style.color = '#8da6ff';
+      msg.textContent = 'Scanning directories...';
+    }
+    
+    if (!sbPath || sbPath === '--' || !prPath || prPath === '--') {
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = 'กรุณากรอกละคร Path, ตอน และ EP ให้ครบถ้วนเพื่อคำนวณพาธโฟลเดอร์';
+      }
+      return;
+    }
+    
+    try {
+      const res = await jsonFetch('/api/batch-uploader/scan', {
+        method: 'POST',
+        body: JSON.stringify({
+          images_dir: sbPath,
+          prompts_dir: prPath
+        })
+      });
+      
+      if (res && res.pairs) {
+        flowScannedPairs = res.pairs;
+        renderScannedPairs();
+        if (msg) {
+          msg.className = 'msg';
+          msg.style.color = '#10b981';
+          msg.textContent = `สแกนสำเร็จ พบทั้งหมด ${res.pairs.length} ฉาก`;
+        }
+      } else {
+        if (msg) {
+          msg.className = 'msg error';
+          msg.style.color = '#f56565';
+          msg.textContent = 'ไม่พบข้อมูลจากการสแกน';
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = `สแกนล้มเหลว: ${err.message || err}`;
+      }
+    }
+  });
+
+  // 5. Toggle All Scenes Selection
+  document.getElementById('toggleAllFlowKitScenesBtn')?.addEventListener('click', () => {
+    const allChecked = flowScannedPairs.every(p => p.checked !== false);
+    flowScannedPairs.forEach(p => p.checked = !allChecked);
+    renderScannedPairs();
+  });
+
+  // 6. Process Batch Button
+  document.getElementById('btnProcessFlowKitBatch')?.addEventListener('click', async () => {
+    const project = document.getElementById('cfg_flow_project_dropdown')?.value;
+    const orientation = document.getElementById('cfg_flow_orientation')?.value;
+    const outputCount = parseInt(document.getElementById('cfg_flow_output_count')?.value, 10) || 1;
+    const upscaleResolution = document.getElementById('cfg_flow_upscale')?.value || 'NONE';
+    
+    const msg = document.getElementById('flowKitMsg');
+    
+    if (!project) {
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = 'กรุณาเลือกโปรเจกต์ Google Flow ก่อนเริ่มสร้าง';
+      }
+      return;
+    }
+    
+    const validPairs = flowScannedPairs.filter(p => p.checked !== false && p.prompt_content.trim());
+    if (validPairs.length === 0) {
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = 'ไม่มีฉากที่เลือกและมีข้อความพรอพต์ในการส่งเจเนอเรท';
+      }
+      return;
+    }
+    
+    if (msg) {
+      msg.style.display = 'block';
+      msg.style.color = '#8da6ff';
+      msg.textContent = 'กำลังส่งคำขอไปยังคิว Flow Kit...';
+    }
+    
+    const videoConsole = document.getElementById('videoConsole');
+    if (videoConsole) {
+      videoConsole.innerHTML = '<div class="console-line system">Starting Flow Kit Batch Generation...</div>';
+    }
+    
+    const logToConsole = (text, type = 'info') => {
+      if (!videoConsole) return;
+      const div = document.createElement('div');
+      div.className = `console-line ${type}`;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      videoConsole.appendChild(div);
+      videoConsole.scrollTop = videoConsole.scrollHeight;
+    };
+    
+    try {
+      const payload = {
+        project_id: project,
+        orientation: orientation,
+        pairs: validPairs.map(p => ({
+          image_path: p.image_path,
+          prompt_content: p.prompt_content
+        })),
+        video_model: null,
+        output_count: outputCount,
+        duration_seconds: null,
+        upscale_resolution: upscaleResolution
+      };
+      
+      logToConsole(`Submitting batch of ${validPairs.length} scenes to Project ID: ${project}...`);
+      
+      const res = await jsonFetch('/api/batch-uploader/process', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      
+      if (res && res.results) {
+        const queued = res.results.filter(r => r.status === 'QUEUED');
+        const failed = res.results.filter(r => r.status === 'FAILED');
+        
+        logToConsole(`Batch submitted successfully! Video Container ID: ${res.video_id}`, 'success');
+        logToConsole(`Queued: ${queued.length} scenes, Failed: ${failed.length} scenes.`);
+        
+        res.results.forEach(r => {
+          if (r.status === 'QUEUED') {
+            logToConsole(`Scene queued: Image path: ${r.image_path || 'None'}, Media ID: ${r.media_id || 'None'}`, 'success');
+          } else {
+            logToConsole(`Scene failed: Image path: ${r.image_path || 'None'}, Error: ${r.error}`, 'error');
+          }
+        });
+        
+        if (msg) {
+          msg.className = 'msg';
+          msg.style.color = '#10b981';
+          msg.textContent = `ส่งคำขอเจเนอเรทสำเร็จทั้งหมด ${queued.length} ฉาก (ล้มเหลว ${failed.length} ฉาก)`;
+        }
+      } else {
+        if (msg) {
+          msg.className = 'msg error';
+          msg.style.color = '#f56565';
+          msg.textContent = 'ส่งคำขอล้มเหลว: ไม่พบผลลัพธ์จากเซิร์ฟเวอร์';
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      logToConsole(`Error submitting batch: ${err.message || err}`, 'error');
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = `ส่งคำขอล้มเหลว: ${err.message || err}`;
+      }
+    }
+  });
+}
+
+async function loadFlowKitProjects() {
+  try {
+    const res = await jsonFetch('/api/batch-uploader/flow-projects');
+    const dropdown = document.getElementById('cfg_flow_project_dropdown');
+    if (dropdown && res && res.projects) {
+      flowProjectsList = res.projects;
+      dropdown.innerHTML = '';
+      res.projects.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.name} (${p.id.slice(0, 8)})`;
+        dropdown.appendChild(opt);
+      });
+      
+      const savedDefault = localStorage.getItem('flowkit_default_project_id');
+      if (savedDefault && res.projects.some(p => p.id === savedDefault)) {
+        dropdown.value = savedDefault;
+      } else if (res.projects.length > 0) {
+        dropdown.value = res.projects[0].id;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load Flow Kit projects:', err);
+  }
+}
+
+function calculateFlowKitPaths() {
+  const lakornPath = document.getElementById('cfg_flow_lakorn_path')?.value.trim() || '';
+  const ton = document.getElementById('cfg_flow_lakorn_ton')?.value.trim() || '';
+  const ep = document.getElementById('cfg_flow_lakorn_ep')?.value.trim() || '';
+  
+  const lblStoryboard = document.getElementById('lbl_resolved_storyboard_path');
+  const lblPrompt = document.getElementById('lbl_resolved_prompt_path');
+  
+  if (!lakornPath || !ton || !ep) {
+    if (lblStoryboard) lblStoryboard.textContent = '--';
+    if (lblPrompt) lblPrompt.textContent = '--';
+    return;
+  }
+  
+  const cleanBase = lakornPath.endsWith('/') ? lakornPath : lakornPath + '/';
+  
+  let epFolder = ep;
+  const epNum = parseInt(ep, 10);
+  if (!isNaN(epNum)) {
+    epFolder = `EP${epNum.toString().padStart(2, '0')}`;
+  } else if (!ep.toLowerCase().startsWith('ep')) {
+    epFolder = `EP${ep}`;
+  } else {
+    epFolder = ep.toUpperCase();
+  }
+  
+  const sbPath = `${cleanBase}${ton}/6 - Storyboards/${epFolder}`;
+  const prPath = `${cleanBase}${ton}/4 - Animation Prompt/${epFolder}`;
+  
+  if (lblStoryboard) lblStoryboard.textContent = sbPath;
+  if (lblPrompt) lblPrompt.textContent = prPath;
+}
+
+function updateSelectAllButtonText() {
+  const btn = document.getElementById('toggleAllFlowKitScenesBtn');
+  if (!btn) return;
+  if (flowScannedPairs.length === 0) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = 'block';
+  const allChecked = flowScannedPairs.every(p => p.checked !== false);
+  btn.textContent = allChecked ? 'Deselect All' : 'Select All';
+}
+
+function renderScannedPairs() {
+  const section = document.getElementById('scannedPairsSection');
+  const container = document.getElementById('scannedPairsContainer');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  if (flowScannedPairs.length === 0) {
+    if (section) section.style.display = 'none';
+    updateSelectAllButtonText();
+    return;
+  }
+  
+  if (section) section.style.display = 'block';
+  updateSelectAllButtonText();
+  
+  flowScannedPairs.forEach((pair) => {
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '16px';
+    row.style.padding = '12px';
+    row.style.background = 'rgba(255,255,255,0.03)';
+    row.style.border = '1px solid rgba(255,255,255,0.06)';
+    row.style.borderRadius = '10px';
+    row.style.alignItems = 'center';
+    row.dataset.index = pair.index;
+    
+    // Checkbox column
+    const cbCol = document.createElement('div');
+    cbCol.style.display = 'flex';
+    cbCol.style.alignItems = 'center';
+    cbCol.style.justifyContent = 'center';
+    cbCol.style.paddingRight = '4px';
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = pair.checked !== false;
+    checkbox.style.width = '18px';
+    checkbox.style.height = '18px';
+    checkbox.style.cursor = 'pointer';
+    checkbox.style.accentColor = '#10b981';
+    checkbox.addEventListener('change', (e) => {
+      pair.checked = e.target.checked;
+      updateSelectAllButtonText();
+    });
+    cbCol.appendChild(checkbox);
+    
+    const thumbCol = document.createElement('div');
+    thumbCol.style.width = '80px';
+    thumbCol.style.height = '120px';
+    thumbCol.style.background = 'rgba(0,0,0,0.4)';
+    thumbCol.style.borderRadius = '6px';
+    thumbCol.style.display = 'flex';
+    thumbCol.style.alignItems = 'center';
+    thumbCol.style.justifyContent = 'center';
+    thumbCol.style.overflow = 'hidden';
+    thumbCol.style.border = '1px solid rgba(255,255,255,0.1)';
+    
+    if (pair.image_path) {
+      const img = document.createElement('img');
+      img.src = `/api/utils/serve-image?path=${encodeURIComponent(pair.image_path)}`;
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'cover';
+      thumbCol.appendChild(img);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.style.fontSize = '0.7rem';
+      placeholder.style.color = 'rgba(255,255,255,0.4)';
+      placeholder.style.textAlign = 'center';
+      placeholder.textContent = 'No Image';
+      thumbCol.appendChild(placeholder);
+    }
+    
+    const contentCol = document.createElement('div');
+    contentCol.style.flex = '1';
+    contentCol.style.display = 'flex';
+    contentCol.style.flexDirection = 'column';
+    contentCol.style.gap = '6px';
+    
+    const titleRow = document.createElement('div');
+    titleRow.style.display = 'flex';
+    titleRow.style.justifyContent = 'space-between';
+    titleRow.style.fontSize = '0.8rem';
+    
+    const sceneLbl = document.createElement('span');
+    sceneLbl.style.fontWeight = 'bold';
+    sceneLbl.style.color = '#8da6ff';
+    sceneLbl.textContent = `Scene ${pair.index}`;
+    
+    const fileLbl = document.createElement('span');
+    fileLbl.style.color = 'rgba(255,255,255,0.4)';
+    fileLbl.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
+    
+    titleRow.appendChild(sceneLbl);
+    titleRow.appendChild(fileLbl);
+    
+    const textarea = document.createElement('textarea');
+    textarea.value = pair.prompt_content;
+    textarea.style.width = '100%';
+    textarea.style.height = '70px';
+    textarea.style.padding = '8px';
+    textarea.style.borderRadius = '8px';
+    textarea.style.background = 'rgba(0,0,0,0.25)';
+    textarea.style.border = '1px solid rgba(255,255,255,0.1)';
+    textarea.style.color = '#fff';
+    textarea.style.fontSize = '0.85rem';
+    textarea.style.resize = 'vertical';
+    textarea.addEventListener('input', (e) => {
+      pair.prompt_content = e.target.value;
+    });
+    
+    contentCol.appendChild(titleRow);
+    contentCol.appendChild(textarea);
+    
+    const actionCol = document.createElement('div');
+    actionCol.style.display = 'flex';
+    actionCol.style.flexDirection = 'column';
+    actionCol.style.gap = '8px';
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'secondary';
+    deleteBtn.style.padding = '8px';
+    deleteBtn.style.fontSize = '0.8rem';
+    deleteBtn.style.margin = '0';
+    deleteBtn.style.color = '#f56565';
+    deleteBtn.style.background = 'rgba(245, 101, 101, 0.1)';
+    deleteBtn.style.borderColor = 'rgba(245, 101, 101, 0.2)';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => {
+      flowScannedPairs = flowScannedPairs.filter(p => p.index !== pair.index);
+      flowScannedPairs.forEach((p, i) => p.index = i + 1);
+      renderScannedPairs();
+    });
+    
+    actionCol.appendChild(deleteBtn);
+    
+    row.appendChild(cbCol);
+    row.appendChild(thumbCol);
+    row.appendChild(contentCol);
+    row.appendChild(actionCol);
+    
+    container.appendChild(row);
+  });
+}
+
+// ─── Download Project Videos Event Listeners ─────────────────
+document.getElementById('btnDownloadProjectVideos')?.addEventListener('click', () => {
+  const project = document.getElementById('cfg_flow_project_dropdown')?.value;
+  const msg = document.getElementById('flowKitMsg');
+  
+  if (!project) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกโปรเจกต์ Google Flow ก่อนเริ่มดาวน์โหลด';
+    }
+    return;
+  }
+  
+  const modalMsg = document.getElementById('downloadModalMsg');
+  if (modalMsg) modalMsg.style.display = 'none';
+  
+  document.getElementById('downloadModal')?.classList.remove('hidden');
+});
+
+document.getElementById('closeDownloadModal')?.addEventListener('click', () => {
+  document.getElementById('downloadModal')?.classList.add('hidden');
+});
+
+document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', async () => {
+  const project = document.getElementById('cfg_flow_project_dropdown')?.value;
+  const upscale = document.getElementById('cfg_download_upscale')?.value || 'NONE';
+  const msg = document.getElementById('downloadModalMsg');
+  const btn = document.getElementById('btnConfirmDownloadAll');
+  
+  if (!project) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกโปรเจกต์ก่อนดาวน์โหลด';
+    }
+    return;
+  }
+  
+  if (msg) {
+    msg.style.display = 'block';
+    msg.className = 'msg info';
+    msg.style.color = '#38bdf8';
+    msg.textContent = 'กำลังเตรียมรวบรวมวิดีโอเพื่อดาวน์โหลด กรุณารอสักครู่...';
+  }
+  if (btn) btn.disabled = true;
+  
+  try {
+    const response = await fetch('/api/batch-uploader/download-all', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        project_id: project,
+        upscale_resolution: upscale
+      })
+    });
+    
+    if (!response.ok) {
+      let errDetail = 'เกิดข้อผิดพลาดในการดาวน์โหลด';
+      try {
+        const errData = await response.json();
+        errDetail = errData.detail || errDetail;
+      } catch(e) {}
+      throw new Error(errDetail);
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    
+    const disposition = response.headers.get('content-disposition');
+    let filename = `${project}_videos.zip`;
+    if (disposition && disposition.indexOf('attachment') !== -1) {
+      const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+      const matches = filenameRegex.exec(disposition);
+      if (matches != null && matches[1]) {
+        filename = matches[1].replace(/['"]/g, '');
+      }
+    }
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg success';
+      msg.style.color = '#48bb78';
+      msg.textContent = 'ดาวน์โหลดสำเร็จแล้ว!';
+    }
+    
+    setTimeout(() => {
+      document.getElementById('downloadModal')?.classList.add('hidden');
+      if (msg) msg.style.display = 'none';
+    }, 1500);
+    
+  } catch (err) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = err.message || 'ดาวน์โหลดไม่สำเร็จ';
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
