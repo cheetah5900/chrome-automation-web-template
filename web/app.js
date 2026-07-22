@@ -5697,7 +5697,7 @@ function initFlowKitUploaderListeners() {
     const project = document.getElementById('cfg_flow_project_dropdown')?.value;
     const orientation = document.getElementById('cfg_flow_orientation')?.value;
     const outputCount = parseInt(document.getElementById('cfg_flow_output_count')?.value, 10) || 1;
-    const upscaleResolution = document.getElementById('cfg_flow_upscale')?.value || 'NONE';
+    const upscaleResolution = 'NONE';
     
     const msg = document.getElementById('flowKitMsg');
     
@@ -6020,29 +6020,6 @@ function renderScannedPairs() {
 }
 
 // ─── Download Project Videos Event Listeners ─────────────────
-document.getElementById('btnDownloadProjectVideos')?.addEventListener('click', () => {
-  const project = document.getElementById('cfg_flow_project_dropdown')?.value;
-  const msg = document.getElementById('flowKitMsg');
-  
-  if (!project) {
-    if (msg) {
-      msg.style.display = 'block';
-      msg.className = 'msg error';
-      msg.style.color = '#f56565';
-      msg.textContent = 'กรุณาเลือกโปรเจกต์ Google Flow ก่อนเริ่มดาวน์โหลด';
-    }
-    return;
-  }
-  
-  const modalMsg = document.getElementById('downloadModalMsg');
-  if (modalMsg) modalMsg.style.display = 'none';
-  
-  document.getElementById('downloadModal')?.classList.remove('hidden');
-});
-
-document.getElementById('closeDownloadModal')?.addEventListener('click', () => {
-  document.getElementById('downloadModal')?.classList.add('hidden');
-});
 
 document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', async () => {
   const project = document.getElementById('cfg_flow_project_dropdown')?.value;
@@ -6117,7 +6094,6 @@ document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', asyn
     }
     
     setTimeout(() => {
-      document.getElementById('downloadModal')?.classList.add('hidden');
       if (msg) msg.style.display = 'none';
     }, 1500);
     
