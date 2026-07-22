@@ -5757,8 +5757,7 @@ function initFlowKitUploaderListeners() {
       videoConsole.scrollTop = videoConsole.scrollHeight;
     };
     
-    const mode = document.getElementById('cfg_flow_mode')?.value || 'DRAMA';
-    const durationSeconds = mode === 'ASMR_10S' ? 10 : 5;
+    const durationSeconds = 5;
 
     try {
       const payload = {
@@ -6221,8 +6220,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
   const project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
   const orientation = document.getElementById('cfg_flow_po_orientation')?.value;
   const outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
-  const mode = document.getElementById('cfg_flow_po_mode')?.value || 'DRAMA';
-  const durationSeconds = mode === 'ASMR_10S' ? 10 : 5;
+  const durationSeconds = 10;
   const upscaleResolution = document.getElementById('cfg_flow_po_upscale')?.value || 'NONE';
   
   const msg = document.getElementById('flowKitPOMsg');
