@@ -4389,6 +4389,7 @@ function startFlowKitPolling() {
       const res = await jsonFetch('/api/flow/status');
       const badge = document.getElementById('flow_kit_status_badge');
       const hdrBadge = document.getElementById('fk_header_status');
+      const poHdrBadge = document.getElementById('fk_po_header_status');
       
       const setConnected = (el) => {
         if (!el) return;
@@ -4409,21 +4410,27 @@ function startFlowKitPolling() {
       if (res && res.connected) {
         setConnected(badge);
         setConnected(hdrBadge);
+        setConnected(poHdrBadge);
         
         try {
           const creditsRes = await jsonFetch('/api/flow/credits');
           const creditsBadge = document.getElementById('flow_kit_credits_badge');
           const hdrCreditsBadge = document.getElementById('fk_header_credits');
+          const poHdrCreditsBadge = document.getElementById('fk_po_header_credits');
           
           if (creditsRes && creditsRes.remainingCredits !== undefined) {
-            const txt = `Credits: ${creditsRes.remainingCredits}`;
+            const txt = `${creditsRes.remainingCredits}`;
             if (creditsBadge) {
-              creditsBadge.textContent = txt;
+              creditsBadge.textContent = `Credits: ${txt}`;
               creditsBadge.style.display = 'inline-block';
             }
             if (hdrCreditsBadge) {
-              hdrCreditsBadge.textContent = txt;
+              hdrCreditsBadge.textContent = `Credits: ${txt}`;
               hdrCreditsBadge.style.color = '#8da6ff';
+            }
+            if (poHdrCreditsBadge) {
+              poHdrCreditsBadge.textContent = txt;
+              poHdrCreditsBadge.style.color = '#8da6ff';
             }
           }
         } catch (creditsErr) {
@@ -4432,10 +4439,13 @@ function startFlowKitPolling() {
       } else {
         setDisconnected(badge);
         setDisconnected(hdrBadge);
+        setDisconnected(poHdrBadge);
         const creditsBadge = document.getElementById('flow_kit_credits_badge');
         if (creditsBadge) creditsBadge.style.display = 'none';
         const hdrCreditsBadge = document.getElementById('fk_header_credits');
         if (hdrCreditsBadge) hdrCreditsBadge.textContent = '--';
+        const poHdrCreditsBadge = document.getElementById('fk_po_header_credits');
+        if (poHdrCreditsBadge) poHdrCreditsBadge.textContent = '--';
       }
     } catch (err) {
       console.error('Failed to poll Flow Kit status:', err);
