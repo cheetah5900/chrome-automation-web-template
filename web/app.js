@@ -6151,6 +6151,42 @@ document.getElementById('setFlowPOProjectDefaultBtn')?.addEventListener('click',
   }
 });
 
+async function handleCreateFlowProject(targetSelectId) {
+  const name = prompt('กรอกชื่อโปรเจกต์ใหม่ที่ต้องการสร้างบน Google Flow:');
+  if (!name || !name.trim()) return;
+  
+  try {
+    showToast('กำลังสร้างโปรเจกต์ใหม่บน Google Flow...', 'info');
+    const res = await jsonFetch('/api/batch-uploader/create-project', {
+      method: 'POST',
+      body: JSON.stringify({ name: name.trim() })
+    });
+    
+    if (res && res.project_id) {
+      showToast(`สร้างโปรเจกต์ "${res.name}" สำเร็จ!`, 'success');
+      localStorage.setItem('flowkit_default_project_id', res.project_id);
+      await loadFlowKitProjects();
+      const sel = document.getElementById(targetSelectId);
+      if (sel) sel.value = res.project_id;
+      const otherId = targetSelectId === 'cfg_flow_project_dropdown' ? 'cfg_flow_po_project_dropdown' : 'cfg_flow_project_dropdown';
+      const otherSel = document.getElementById(otherId);
+      if (otherSel) otherSel.value = res.project_id;
+      saveVideoPrompts(true);
+    }
+  } catch (err) {
+    console.error('Failed to create flow project:', err);
+    showToast(`เกิดข้อผิดพลาด: ${err.message || err}`, 'error');
+  }
+}
+
+document.getElementById('createFlowProjectBtn')?.addEventListener('click', () => {
+  handleCreateFlowProject('cfg_flow_project_dropdown');
+});
+
+document.getElementById('createFlowPOProjectBtn')?.addEventListener('click', () => {
+  handleCreateFlowProject('cfg_flow_po_project_dropdown');
+});
+
 document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () => {
   const prPath = document.getElementById('cfg_flow_po_prompts_path')?.value.trim();
   

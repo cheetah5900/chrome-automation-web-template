@@ -116,6 +116,34 @@ async def test_get_project_endpoint(project_id: str):
     return res
 
 
+class CreateFlowProjectRequest(BaseModel):
+    name: str
+
+
+@router.post("/create-project")
+async def create_flow_project(body: CreateFlowProjectRequest):
+    """Create a new project directly on Google Flow via tRPC bridge."""
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    if not body.name or not body.name.strip():
+        raise HTTPException(400, "Project name is required")
+    
+    name = body.name.strip()
+    result = await client.create_project(name, "PINHOLE")
+    if result.get("error"):
+        raise HTTPException(502, f"Flow API error: {result['error']}")
+    
+    try:
+        data = result.get("data", {})
+        res_json = data["result"]["data"]["json"]["result"]
+        project_id = res_json["projectId"]
+        return {"project_id": project_id, "name": name}
+    except Exception as e:
+        logger.error("Failed to parse project response: %s", result)
+        raise HTTPException(502, f"Failed to parse project response: {e}")
+
+
 class ScanRequest(BaseModel):
     images_dir: Optional[str] = None
     prompts_dir: str
