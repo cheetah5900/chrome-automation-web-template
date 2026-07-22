@@ -6150,6 +6150,8 @@ document.getElementById('browseFlowPOPromptsPathBtn')?.addEventListener('click',
   } catch (err) {
     console.error('Failed to browse PO prompts folder:', err);
   }
+});
+
 document.getElementById('setFlowPOPromptsPathDefaultBtn')?.addEventListener('click', () => {
   const val = document.getElementById('cfg_flow_po_prompts_path')?.value.trim();
   if (val) {
