@@ -709,6 +709,20 @@ def select_profile(payload: SelectProfilePayload):
 
 @app.post("/api/profiles/launch")
 async def launch_profile(payload: LaunchProfilePayload):
+    # Reset extension connection state so newly launched Chrome profile gets a fresh WebSocket handshake
+    try:
+        from agent.services.flow_client import get_flow_client
+        client = get_flow_client()
+        if client._extension_ws:
+            try:
+                await client._extension_ws.close()
+            except Exception:
+                pass
+        client.clear_extension()
+        client._flow_key = None
+    except Exception as e:
+        logger.warning("Failed to reset extension state on launch: %s", e)
+
     profile = _find_profile(payload.name)
 
     profile_path = profile["path"]
