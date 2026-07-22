@@ -603,6 +603,13 @@ chrome.runtime.onMessage.addListener((msg, _, reply) => {
 
   if (msg.type === 'TRPC_MEDIA_URLS') {
     handleTrpcMediaUrls(msg.trpcUrl, msg.body);
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'trpc_intercept',
+        url: msg.trpcUrl,
+        body: msg.body
+      }));
+    }
     reply({ ok: true });
     return true;
   }

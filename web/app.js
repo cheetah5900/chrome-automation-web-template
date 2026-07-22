@@ -5631,6 +5631,7 @@ function initFlowKitUploaderListeners() {
 
   // 4. Scan & Sync Button
   document.getElementById('btnScanFlowKit')?.addEventListener('click', async () => {
+    const promptOnly = document.getElementById('cfg_flow_prompt_only')?.checked || false;
     const sbPath = document.getElementById('lbl_resolved_storyboard_path')?.textContent;
     const prPath = document.getElementById('lbl_resolved_prompt_path')?.textContent;
     
@@ -5642,11 +5643,16 @@ function initFlowKitUploaderListeners() {
       msg.textContent = 'Scanning directories...';
     }
     
-    if (!sbPath || sbPath === '--' || !prPath || prPath === '--') {
+    const isSbInvalid = !promptOnly && (!sbPath || sbPath === '--');
+    const isPrInvalid = !prPath || prPath === '--';
+    
+    if (isSbInvalid || isPrInvalid) {
       if (msg) {
         msg.className = 'msg error';
         msg.style.color = '#f56565';
-        msg.textContent = 'กรุณากรอกละคร Path, ตอน และ EP ให้ครบถ้วนเพื่อคำนวณพาธโฟลเดอร์';
+        msg.textContent = promptOnly
+          ? 'กรุณากรอกละคร Path, ตอน และ EP ให้ครบถ้วนเพื่อคำนวณพาธโฟลเดอร์พรอพต์'
+          : 'กรุณากรอกละคร Path, ตอน และ EP ให้ครบถ้วนเพื่อคำนวณพาธโฟลเดอร์';
       }
       return;
     }
@@ -5655,11 +5661,10 @@ function initFlowKitUploaderListeners() {
       const res = await jsonFetch('/api/batch-uploader/scan', {
         method: 'POST',
         body: JSON.stringify({
-          images_dir: sbPath,
+          images_dir: promptOnly ? "" : sbPath,
           prompts_dir: prPath
         })
       });
-      
       if (res && res.pairs) {
         flowScannedPairs = res.pairs;
         renderScannedPairs();
@@ -5742,17 +5747,21 @@ function initFlowKitUploaderListeners() {
       videoConsole.scrollTop = videoConsole.scrollHeight;
     };
     
+    const mode = document.getElementById('cfg_flow_mode')?.value || 'DRAMA';
+    const durationSeconds = mode === 'ASMR_10S' ? 10 : 5;
+    const promptOnly = document.getElementById('cfg_flow_prompt_only')?.checked || false;
+
     try {
       const payload = {
         project_id: project,
         orientation: orientation,
         pairs: validPairs.map(p => ({
-          image_path: p.image_path,
+          image_path: promptOnly ? null : p.image_path,
           prompt_content: p.prompt_content
         })),
         video_model: null,
         output_count: outputCount,
-        duration_seconds: null,
+        duration_seconds: durationSeconds,
         upscale_resolution: upscaleResolution
       };
       

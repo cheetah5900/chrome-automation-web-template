@@ -91,6 +91,10 @@ class FlowClient:
             asyncio.create_task(self._refresh_media_urls(data.get("urls", [])))
             return
 
+        if data.get("type") == "trpc_intercept":
+            asyncio.create_task(self._save_trpc_intercept(data.get("url"), data.get("body")))
+            return
+
         if data.get("type") == "pong":
             return
 
@@ -195,6 +199,16 @@ class FlowClient:
         if updated:
             logger.info("Refreshed %d media URLs from TRPC intercept", updated)
             await event_bus.emit("urls_refreshed", {"count": updated})
+
+    async def _save_trpc_intercept(self, url: str, body: str):
+        try:
+            import json as _json
+            data = _json.loads(body)
+            with open("/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/web/trpc_intercept.json", "w", encoding="utf-8") as f:
+                _json.dump({"url": url, "data": data}, f, indent=2)
+            logger.info("Saved raw TRPC response intercept to web/trpc_intercept.json")
+        except Exception as e:
+            logger.warning("Failed to save TRPC intercept: %s", e)
 
     async def refresh_project_urls(self, project_id: str) -> dict:
         """Refresh media URLs for a project.
@@ -373,7 +387,7 @@ class FlowClient:
             "captchaAction": "IMAGE_GENERATION",
         })
 
-    async def generate_video(self, start_image_media_id: str, prompt: str,
+    async def generate_video(self, start_image_media_id: Optional[str], prompt: str,
                               project_id: str, scene_id: str,
                               aspect_ratio: str = "VIDEO_ASPECT_RATIO_PORTRAIT",
                               end_image_media_id: str = None,
@@ -381,17 +395,15 @@ class FlowClient:
                               duration_seconds: int = None,
                               output_count: int = 1,
                               custom_model_key: str = None) -> dict:
-        """Generate video from start image (i2v).
-
-        Two sub-types:
-        - frame_2_video (i2v): startImage only
-        - start_end_frame_2_video (i2v_fl): startImage + endImage (for scene chaining)
-        """
+        """Generate video from start image (i2v) or text (t2v)."""
         if custom_model_key:
             model_key = custom_model_key
         else:
             gen_type = "start_end_frame_2_video" if end_image_media_id else "frame_2_video"
             model_key = VIDEO_MODELS.get(user_paygate_tier, {}).get(gen_type, {}).get(aspect_ratio)
+
+        if not start_image_media_id and model_key:
+            model_key = model_key.replace("_i2v_", "_t2v_")
 
         if not model_key:
             return {"error": f"No model resolved for custom_model_key={custom_model_key} tier={user_paygate_tier}"}
@@ -405,15 +417,16 @@ class FlowClient:
                 "seed": seed_val,
                 "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                 "videoModelKey": model_key,
-                "startImage": {"mediaId": start_image_media_id},
                 "metadata": {"sceneId": scene_id},
             }
+            if start_image_media_id:
+                req_item["startImage"] = {"mediaId": start_image_media_id}
             if end_image_media_id:
                 req_item["endImage"] = {"mediaId": end_image_media_id}
             if duration_seconds:
                 req_item["durationSeconds"] = duration_seconds
 
-            endpoint_key = "generate_video_start_end" if end_image_media_id else "generate_video"
+            endpoint_key = "generate_video_start_end" if end_image_media_id else ("generate_video" if start_image_media_id else "generate_video_text")
             body = {
                 "mediaGenerationContext": {"batchId": f"{uuid.uuid4()}"},
                 "clientContext": self._client_context(project_id, user_paygate_tier),

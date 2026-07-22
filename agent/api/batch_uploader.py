@@ -98,13 +98,31 @@ async def get_flow_projects():
     return {"projects": formatted, "source": "local"}
 
 
+@router.get("/test-get-project/{project_id}")
+async def test_get_project_endpoint(project_id: str):
+    client = get_flow_client()
+    if not client.connected:
+        return {"error": "Extension not connected"}
+    import urllib.parse
+    import json
+    input_params = {"json": {"projectId": project_id, "toolName": "PINHOLE"}}
+    encoded_input = urllib.parse.quote(json.dumps(input_params))
+    url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
+    res = await client._send("trpc_request", {
+        "url": url,
+        "method": "GET",
+        "headers": {"accept": "*/*"}
+    }, timeout=30)
+    return res
+
+
 class ScanRequest(BaseModel):
-    images_dir: str
+    images_dir: Optional[str] = None
     prompts_dir: str
 
 
 class ProcessPair(BaseModel):
-    image_path: str
+    image_path: Optional[str] = None
     prompt_content: str
 
 
@@ -126,7 +144,9 @@ async def scan_directories(body: ScanRequest):
 
     logger.info("Scanning request received: images_dir=%s, prompts_dir=%s", images_dir, prompts_dir)
 
-    if not os.path.isdir(images_dir):
+    has_images = bool(images_dir and os.path.isdir(images_dir))
+
+    if images_dir and not has_images:
         logger.error("Images directory does not exist: %s", images_dir)
         raise HTTPException(400, f"Images directory does not exist: {images_dir}")
     if not os.path.isdir(prompts_dir):
@@ -136,17 +156,18 @@ async def scan_directories(body: ScanRequest):
     # Scan image files
     img_exts = (".png", ".jpg", ".jpeg", ".webp")
     image_files = []
-    try:
-        raw_images = os.listdir(images_dir)
-        logger.info("Raw images directory listing (%d files): %s", len(raw_images), raw_images)
-        for f in raw_images:
-            if f.lower().endswith(img_exts):
-                image_files.append(f)
-    except Exception as e:
-        logger.exception("Failed to read images directory")
-        raise HTTPException(500, f"Failed to read images directory: {str(e)}")
-    image_files.sort()
-    logger.info("Filtered & sorted image files (%d files): %s", len(image_files), image_files)
+    if has_images:
+        try:
+            raw_images = os.listdir(images_dir)
+            logger.info("Raw images directory listing (%d files): %s", len(raw_images), raw_images)
+            for f in raw_images:
+                if f.lower().endswith(img_exts):
+                    image_files.append(f)
+        except Exception as e:
+            logger.exception("Failed to read images directory")
+            raise HTTPException(500, f"Failed to read images directory: {str(e)}")
+        image_files.sort()
+        logger.info("Filtered & sorted image files (%d files): %s", len(image_files), image_files)
 
     # Scan prompt files (supporting .txt and .md)
     prompt_exts = (".txt", ".md")
@@ -303,46 +324,42 @@ async def process_batch(body: ProcessRequest):
     next_order = len(existing_scenes)
 
     for i, pair in enumerate(body.pairs):
-        if not pair.image_path or not os.path.isfile(pair.image_path):
-            results.append({
-                "image_path": pair.image_path,
-                "status": "FAILED",
-                "error": f"Image file not found: {pair.image_path}"
-            })
-            continue
-
         try:
-            # 1. Read and upload image
-            with open(pair.image_path, "rb") as f:
-                img_bytes = f.read()
-            b64 = base64.b64encode(img_bytes).decode()
-            mime = mimetypes.guess_type(pair.image_path)[0] or "image/png"
-            file_name = os.path.basename(pair.image_path)
-            
-            logger.info("Uploading batch image: %s", file_name)
-            upload_res = await client.upload_image(
-                b64, mime_type=mime, project_id=body.project_id, file_name=file_name
-            )
-            
-            if upload_res.get("error") or (isinstance(upload_res.get("status"), int) and upload_res["status"] >= 400):
-                error_msg = upload_res.get("error", "Upload failed")
-                logger.error("Upload failed for %s: %s", file_name, error_msg)
-                results.append({
-                    "image_path": pair.image_path,
-                    "status": "FAILED",
-                    "error": error_msg
-                })
-                continue
+            has_image = bool(pair.image_path and os.path.isfile(pair.image_path))
+            media_id = None
+
+            if has_image:
+                # 1. Read and upload image
+                with open(pair.image_path, "rb") as f:
+                    img_bytes = f.read()
+                b64 = base64.b64encode(img_bytes).decode()
+                mime = mimetypes.guess_type(pair.image_path)[0] or "image/png"
+                file_name = os.path.basename(pair.image_path)
                 
-            media_id = upload_res.get("_mediaId")
-            if not media_id:
-                logger.error("No media_id returned for %s: %s", file_name, upload_res)
-                results.append({
-                    "image_path": pair.image_path,
-                    "status": "FAILED",
-                    "error": "No media_id returned from upload"
-                })
-                continue
+                logger.info("Uploading batch image: %s", file_name)
+                upload_res = await client.upload_image(
+                    b64, mime_type=mime, project_id=body.project_id, file_name=file_name
+                )
+                
+                if upload_res.get("error") or (isinstance(upload_res.get("status"), int) and upload_res["status"] >= 400):
+                    error_msg = upload_res.get("error", "Upload failed")
+                    logger.error("Upload failed for %s: %s", file_name, error_msg)
+                    results.append({
+                        "image_path": pair.image_path,
+                        "status": "FAILED",
+                        "error": error_msg
+                    })
+                    continue
+                    
+                media_id = upload_res.get("_mediaId")
+                if not media_id:
+                    logger.error("No media_id returned for %s: %s", file_name, upload_res)
+                    results.append({
+                        "image_path": pair.image_path,
+                        "status": "FAILED",
+                        "error": "No media_id returned from upload"
+                    })
+                    continue
 
             # 2. Create scene
             prompt_summary = pair.prompt_content[:100] if pair.prompt_content else f"Batch Scene {next_order}"
@@ -369,18 +386,19 @@ async def process_batch(body: ProcessRequest):
             next_order += 1
 
             # 3. Update scene with vertical/horizontal image ID and status
-            update_data = {}
-            if orientation == "HORIZONTAL":
-                update_data = {
-                    "horizontal_image_media_id": media_id,
-                    "horizontal_image_status": "COMPLETED"
-                }
-            else:
-                update_data = {
-                    "vertical_image_media_id": media_id,
-                    "vertical_image_status": "COMPLETED"
-                }
-            await _repo.update("scene", sdk_scene.id, **update_data)
+            if media_id:
+                update_data = {}
+                if orientation == "HORIZONTAL":
+                    update_data = {
+                        "horizontal_image_media_id": media_id,
+                        "horizontal_image_status": "COMPLETED"
+                    }
+                else:
+                    update_data = {
+                        "vertical_image_media_id": media_id,
+                        "vertical_image_status": "COMPLETED"
+                    }
+                await _repo.update("scene", sdk_scene.id, **update_data)
 
             # 4. Queue GENERATE_VIDEO request
             import json as _json

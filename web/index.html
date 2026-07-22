@@ -494,24 +494,39 @@
                 <div style="display: flex; flex-direction: column; gap: 4px;">
                   <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Google Flow Project:</label>
                   <div style="display: flex; gap: 8px;">
-                    <select id="cfg_flow_project_dropdown" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; flex: 1;"></select>
+                    <select id="cfg_flow_project_dropdown" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; flex: 1; margin: 0; box-sizing: border-box;"></select>
                     <button id="setFlowProjectDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px;">Default</button>
                   </div>
                 </div>
 
-                <!-- Orientation & Output Count -->
-                <div style="display: flex; gap: 12px; align-items: flex-end;">
-                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                <!-- Mode, Orientation & Output Count -->
+                <div style="display: flex; gap: 12px; align-items: flex-end; width: 100%;">
+                  <div style="flex: 1.2; display: flex; flex-direction: column; gap: 4px; width: 40%;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">โหมดวิดีโอ (Video Mode):</label>
+                    <select id="cfg_flow_mode" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                      <option value="DRAMA" selected>ละคร (5 วินาที)</option>
+                      <option value="ASMR_10S">ASMR (10 วินาที)</option>
+                    </select>
+                  </div>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 30%;">
                     <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Orientation:</label>
-                    <select id="cfg_flow_orientation" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%;">
+                    <select id="cfg_flow_orientation" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
                       <option value="VERTICAL">Vertical (9:16)</option>
                       <option value="HORIZONTAL">Horizontal (16:9)</option>
                     </select>
                   </div>
-                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                  <div style="flex: 0.8; display: flex; flex-direction: column; gap: 4px; width: 30%;">
                     <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">จำนวน (ต่อฉาก):</label>
                     <input type="number" id="cfg_flow_output_count" value="1" min="1" max="4" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin: 0; width: 100%; box-sizing: border-box;" />
                   </div>
+                </div>
+
+                <!-- Prompt-only Checkbox -->
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                  <input type="checkbox" id="cfg_flow_prompt_only" style="width: auto; margin: 0; cursor: pointer;" />
+                  <label for="cfg_flow_prompt_only" style="font-size: 0.82rem; color: rgba(255,255,255,0.85); font-weight: 500; cursor: pointer; user-select: none;">
+                    ส่งเฉพาะ Prompt (ไม่แนบรูปภาพสตอรี่บอร์ด)
+                  </label>
                 </div>
               </div>
 

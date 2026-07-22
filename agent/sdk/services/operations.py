@@ -421,11 +421,9 @@ class OperationService:
 
     async def generate_scene_video(self, scene: dict, orientation: str,
                                    request_id: str = "") -> dict:
-        """Generate video from a scene image (i2v). Submits + polls."""
+        """Generate video from a scene image (i2v) or text (t2v). Submits + polls."""
         prefix = "vertical" if orientation == "VERTICAL" else "horizontal"
         image_media_id = scene.get(f"{prefix}_image_media_id")
-        if not image_media_id:
-            return {"error": f"No {prefix} image media_id for scene"}
 
         project = await crud.get_project(scene.get("_project_id", "0"))
         aspect = "VIDEO_ASPECT_RATIO_PORTRAIT" if orientation == "VERTICAL" else "VIDEO_ASPECT_RATIO_LANDSCAPE"
