@@ -4418,14 +4418,15 @@ function stopFlowKitPolling() {
 document.getElementById('cfg_video_gen_mode')?.addEventListener('change', (e) => {
   const mode = e.target.value;
   const statusContainer = document.getElementById('flow_kit_status_container');
-  if (statusContainer) {
-    if (mode === 'flow_kit') {
-      statusContainer.style.display = 'flex';
-      startFlowKitPolling();
-    } else {
-      statusContainer.style.display = 'none';
-      stopFlowKitPolling();
-    }
+  const projectContainer = document.getElementById('flow_kit_project_container');
+  if (mode === 'flow_kit') {
+    if (statusContainer) statusContainer.style.display = 'flex';
+    if (projectContainer) projectContainer.style.display = 'flex';
+    startFlowKitPolling();
+  } else {
+    if (statusContainer) statusContainer.style.display = 'none';
+    if (projectContainer) projectContainer.style.display = 'none';
+    stopFlowKitPolling();
   }
   saveVideoPrompts(true);
 });

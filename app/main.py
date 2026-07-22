@@ -4336,6 +4336,124 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             
             scene_id = target_scene["id"]
             
+            # 4.5. Check for matching local storyboard image to upload if it exists
+            # We first need to check if there is an image already completed or uploaded.
+            # If not, let's look for local storyboard files under the episode folder.
+            orientation = target_video.get("orientation") or "VERTICAL"
+            image_media_id = target_scene.get("vertical_image_media_id") if orientation == "VERTICAL" else target_scene.get("horizontal_image_media_id")
+            
+            if not image_media_id:
+                try:
+                    import json
+                    from pathlib import Path
+                    
+                    config_data = {}
+                    if os.path.exists(CONFIG_FILE):
+                        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                            config_data = json.load(f) or {}
+                    
+                    lakorn_path = config_data.get("video_lakorn_path", "").strip()
+                    ton_num = config_data.get("video_lakorn_ton", "").strip()
+                    ep_num = config_data.get("video_lakorn_ep", "").strip()
+                    
+                    if lakorn_path and ton_num:
+                        ep_dir = find_episode_dir(lakorn_path, ton_num)
+                        if ep_dir:
+                            # Search for storyboard directory
+                            storyboard_dir = None
+                            for candidate in ["3 - Storyboard", "3-Storyboard", "Storyboard", "storyboard", "3 - Animation Image", "Animation Image", "animation image", "3 - Story Board", "Story Board", "story board"]:
+                                cand_path = ep_dir / candidate
+                                if cand_path.exists() and cand_path.is_dir():
+                                    storyboard_dir = cand_path
+                                    break
+                            
+                            # Fallback if no matching candidate
+                            if not storyboard_dir:
+                                for d in ep_dir.iterdir():
+                                    if d.is_dir() and ("storyboard" in d.name.lower() or "story board" in d.name.lower() or "image" in d.name.lower()):
+                                        storyboard_dir = d
+                                        break
+                            
+                            if storyboard_dir:
+                                # Find specific EP subfolder under storyboard_dir (e.g. ep_num subfolder)
+                                ep_storyboard_dir = find_sub_ep_dir(storyboard_dir, ep_num) if ep_num else storyboard_dir
+                                if not ep_storyboard_dir:
+                                    ep_storyboard_dir = storyboard_dir
+                                
+                                # Search for file starting with round_idx
+                                matched_img_path = None
+                                valid_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+                                for f in ep_storyboard_dir.iterdir():
+                                    if f.is_file() and f.suffix.lower() in valid_exts:
+                                        # Match names like: "01.png", "1.png", "01_pose.jpg", "1-pose.png", "round_01.png", "round_1.png"
+                                        name_no_ext = f.stem.lower()
+                                        candidates = [
+                                            f"{round_idx:02d}",
+                                            f"{round_idx}",
+                                            f"round_{round_idx:02d}",
+                                            f"round_{round_idx}",
+                                            f"round {round_idx:02d}",
+                                            f"round {round_idx}"
+                                        ]
+                                        
+                                        # Check exact prefix matches
+                                        is_match = False
+                                        for cand in candidates:
+                                            if name_no_ext == cand:
+                                                is_match = True
+                                                break
+                                            if name_no_ext.startswith(cand) and name_no_ext[len(cand)] in ('_', '-', ' ', '.'):
+                                                is_match = True
+                                                break
+                                        
+                                        if is_match:
+                                            matched_img_path = f
+                                            break
+                                
+                                if matched_img_path:
+                                    log(f"[Flow Kit Storyboard] Found matching local storyboard image: {matched_img_path.name}. Uploading to Google Flow...")
+                                    import base64
+                                    import mimetypes
+                                    
+                                    with open(matched_img_path, "rb") as img_f:
+                                        img_bytes = img_f.read()
+                                    
+                                    b64 = base64.b64encode(img_bytes).decode()
+                                    mime = mimetypes.guess_type(str(matched_img_path))[0] or "image/png"
+                                    file_name = matched_img_path.name
+                                    
+                                    upload_res = await client.upload_image(
+                                        b64, mime_type=mime, project_id=project_id, file_name=file_name
+                                    )
+                                    
+                                    if upload_res.get("error") or (isinstance(upload_res.get("status"), int) and upload_res["status"] >= 400):
+                                        log(f"[Flow Kit Storyboard] Failed to upload storyboard image: {upload_res.get('error')}")
+                                    else:
+                                        uploaded_media_id = upload_res.get("_mediaId")
+                                        if uploaded_media_id:
+                                            # Update database
+                                            if orientation == "VERTICAL":
+                                                await crud.update_scene(
+                                                    scene_id, 
+                                                    vertical_image_media_id=uploaded_media_id,
+                                                    vertical_image_status="COMPLETED",
+                                                    vertical_image_url=upload_res.get("url")
+                                                )
+                                            else:
+                                                await crud.update_scene(
+                                                    scene_id, 
+                                                    horizontal_image_media_id=uploaded_media_id,
+                                                    horizontal_image_status="COMPLETED",
+                                                    horizontal_image_url=upload_res.get("url")
+                                                )
+                                            # Re-fetch scene to update target_scene variable so step 5 uses it
+                                            target_scene = await crud.get_scene(scene_id)
+                                            log(f"[Flow Kit Storyboard] Uploaded and synced storyboard image Media ID: {uploaded_media_id}")
+                                        else:
+                                            log(f"[Flow Kit Storyboard] No media_id returned from upload: {upload_res}")
+                except Exception as sb_err:
+                    log(f"[Flow Kit Storyboard Warning] Failed to scan/upload storyboard: {sb_err}")
+            
             # 5. Submit request to queue
             orientation = target_video.get("orientation") or "VERTICAL"
             image_media_id = target_scene.get("vertical_image_media_id") if orientation == "VERTICAL" else target_scene.get("horizontal_image_media_id")
