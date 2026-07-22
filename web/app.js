@@ -6150,6 +6150,14 @@ document.getElementById('browseFlowPOPromptsPathBtn')?.addEventListener('click',
   } catch (err) {
     console.error('Failed to browse PO prompts folder:', err);
   }
+document.getElementById('setFlowPOPromptsPathDefaultBtn')?.addEventListener('click', () => {
+  const val = document.getElementById('cfg_flow_po_prompts_path')?.value.trim();
+  if (val) {
+    localStorage.setItem('flowkit_po_default_prompts_path', val);
+    showToast('บันทึกโฟลเดอร์พรอพต์เริ่มต้นเรียบร้อยแล้ว', 'success');
+  } else {
+    showToast('กรุณากรอกหรือเลือกโฟลเดอร์พรอพต์ก่อนบันทึกค่าเริ่มต้น', 'error');
+  }
 });
 
 document.getElementById('setFlowPOProjectDefaultBtn')?.addEventListener('click', () => {
