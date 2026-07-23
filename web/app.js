@@ -6238,19 +6238,17 @@ function renderScannedPairs() {
   headerRow.style.background = 'rgba(255, 255, 255, 0.05)';
   
   const headers = isPromptOnly ? [
-    { text: 'Select', width: '10%', align: 'center' },
-    { text: 'Source/File', width: '30%' },
-    { text: 'Prompt Content (Read-Only)', width: '60%' }
+    { text: 'Select', width: '20%', align: 'center' },
+    { text: 'Source/File', width: '80%' }
   ] : [
-    { text: 'Select', width: '10%', align: 'center' },
-    { text: 'Thumbnail', width: '15%' },
-    { text: 'Source/File', width: '25%' },
-    { text: 'Prompt Content (Read-Only)', width: '50%' }
+    { text: 'Select', width: '15%', align: 'center' },
+    { text: 'Thumbnail', width: '35%' },
+    { text: 'Source/File', width: '50%' }
   ];
   
   headers.forEach(h => {
     const th = document.createElement('th');
-    th.style.padding = '12px 16px';
+    th.style.padding = '4px 8px';
     th.style.borderBottom = '2px solid rgba(255,255,255,0.15)';
     th.style.fontWeight = 'bold';
     th.style.color = '#8da6ff';
@@ -6279,7 +6277,7 @@ function renderScannedPairs() {
     
     // 1. Checkbox
     const tdCheck = document.createElement('td');
-    tdCheck.style.padding = '12px 16px';
+    tdCheck.style.padding = '4px 8px';
     tdCheck.style.textAlign = 'center';
     
     const checkbox = document.createElement('input');
@@ -6299,7 +6297,7 @@ function renderScannedPairs() {
     if (!isPromptOnly) {
       // 2. Thumbnail
       const tdThumb = document.createElement('td');
-      tdThumb.style.padding = '12px 16px';
+      tdThumb.style.padding = '4px 8px';
       
       const thumbContainer = document.createElement('div');
       thumbContainer.style.width = '60px';
@@ -6333,32 +6331,12 @@ function renderScannedPairs() {
     
     // 3. Source/File name
     const tdSource = document.createElement('td');
-    tdSource.style.padding = '12px 16px';
+    tdSource.style.padding = '4px 8px';
     tdSource.style.color = 'rgba(255,255,255,0.5)';
     tdSource.style.fontSize = '0.8rem';
     tdSource.style.wordBreak = 'break-all';
     tdSource.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
     tr.appendChild(tdSource);
-    
-    // 4. Prompt Content (Read-Only)
-    const tdPrompt = document.createElement('td');
-    tdPrompt.style.padding = '12px 16px';
-    
-    const promptDiv = document.createElement('div');
-    promptDiv.style.whiteSpace = 'pre-wrap';
-    promptDiv.style.maxHeight = '90px';
-    promptDiv.style.overflowY = 'auto';
-    promptDiv.style.padding = '8px 12px';
-    promptDiv.style.borderRadius = '8px';
-    promptDiv.style.background = 'rgba(0,0,0,0.3)';
-    promptDiv.style.border = '1px solid rgba(255,255,255,0.08)';
-    promptDiv.style.color = 'rgba(255,255,255,0.95)';
-    promptDiv.style.fontSize = '0.82rem';
-    promptDiv.style.lineHeight = '1.45';
-    promptDiv.style.scrollbarWidth = 'thin';
-    promptDiv.textContent = pair.prompt_content;
-    tdPrompt.appendChild(promptDiv);
-    tr.appendChild(tdPrompt);
     
     tbody.appendChild(tr);
   });
