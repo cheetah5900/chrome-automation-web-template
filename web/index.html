@@ -479,6 +479,10 @@
                   <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Extension:</span>
                   <span id="fk_header_status" style="font-size: 0.8rem; font-weight: bold; color: #f56565;">Disconnected</span>
                 </div>
+                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+                  <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Tier:</span>
+                  <span id="fk_header_tier" style="font-size: 0.8rem; font-weight: bold; color: #38bdf8;">Checking...</span>
+                </div>
               </div>
             </div>
 
@@ -495,6 +499,14 @@
                     <button id="setFlowProjectDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px;">Default</button>
                     <button id="createFlowProjectBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.25); color: #10b981;">+ New Project</button>
                   </div>
+                </div>
+
+                <!-- AI Video Model Dropdown -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">AI Video Model:</label>
+                  <select id="cfg_flow_video_model" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                    <option value="">-- Loading models... --</option>
+                  </select>
                 </div>
 
                 <!-- Orientation & Output Count -->
@@ -576,6 +588,10 @@
                   <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Extension:</span>
                   <span id="fk_po_header_status" style="font-size: 0.8rem; font-weight: bold; color: #f56565;">Disconnected</span>
                 </div>
+                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+                  <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Tier:</span>
+                  <span id="fk_po_header_tier" style="font-size: 0.8rem; font-weight: bold; color: #38bdf8;">Checking...</span>
+                </div>
               </div>
             </div>
 
@@ -592,6 +608,14 @@
                     <button id="setFlowPOProjectDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px;">Default</button>
                     <button id="createFlowPOProjectBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px; background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.25); color: #c084fc;">+ New Project</button>
                   </div>
+                </div>
+
+                <!-- AI Video Model Dropdown -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">AI Video Model:</label>
+                  <select id="cfg_flow_po_video_model" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                    <option value="">-- Loading models... --</option>
+                  </select>
                 </div>
 
                 <!-- Orientation & Output Count -->

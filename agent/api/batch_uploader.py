@@ -98,6 +98,13 @@ async def get_flow_projects():
     return {"projects": formatted, "source": "local"}
 
 
+@router.get("/flow-tier")
+async def get_flow_tier():
+    client = get_flow_client()
+    tier = getattr(client, "user_paygate_tier", "PAYGATE_TIER_TWO")
+    return {"tier": tier}
+
+
 @router.get("/test-get-project/{project_id}")
 async def test_get_project_endpoint(project_id: str):
     client = get_flow_client()

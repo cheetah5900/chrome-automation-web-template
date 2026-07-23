@@ -4380,6 +4380,86 @@ async function loadVideoPrompts() {
 }
 
 let flowKitPollingInterval = null;
+let currentFlowTier = null;
+
+function updateFlowVideoModelDropdowns(tier) {
+  const modelDd = document.getElementById('cfg_flow_video_model');
+  const poModelDd = document.getElementById('cfg_flow_po_video_model');
+  
+  if (modelDd) {
+    const prevVal = modelDd.value;
+    modelDd.innerHTML = '';
+    const optDefault = document.createElement('option');
+    optDefault.value = '';
+    optDefault.textContent = 'Default (Auto-resolve by Aspect Ratio)';
+    modelDd.appendChild(optDefault);
+    
+    if (tier === 'PAYGATE_TIER_ONE') {
+      const options = [
+        { value: 'fast', text: 'veo3 (Quality / Fast)' },
+        { value: 'lite', text: 'lite (Lite)' },
+        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' },
+        { value: 'veo_3_1_r2v_fast', text: 'veo_3_1_r2v_fast (Reference Frame)' }
+      ];
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        modelDd.appendChild(opt);
+      });
+    } else {
+      const options = [
+        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' },
+        { value: 'veo_3_1_r2v_fast_landscape_ultra_relaxed', text: 'veo_3_1_r2v_fast_landscape_ultra_relaxed (Reference Frame Relaxed)' }
+      ];
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        modelDd.appendChild(opt);
+      });
+    }
+    if (prevVal && [...modelDd.options].some(o => o.value === prevVal)) {
+      modelDd.value = prevVal;
+    }
+  }
+  
+  if (poModelDd) {
+    const prevVal = poModelDd.value;
+    poModelDd.innerHTML = '';
+    const optDefault = document.createElement('option');
+    optDefault.value = '';
+    optDefault.textContent = 'Default (Auto-resolve by Aspect Ratio)';
+    poModelDd.appendChild(optDefault);
+    
+    if (tier === 'PAYGATE_TIER_ONE') {
+      const options = [
+        { value: 'fast', text: 'veo3 (Quality / Fast)' },
+        { value: 'lite', text: 'lite (Lite)' },
+        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' }
+      ];
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        poModelDd.appendChild(opt);
+      });
+    } else {
+      const options = [
+        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' }
+      ];
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        poModelDd.appendChild(opt);
+      });
+    }
+    if (prevVal && [...poModelDd.options].some(o => o.value === prevVal)) {
+      poModelDd.value = prevVal;
+    }
+  }
+}
 
 function startFlowKitPolling() {
   if (flowKitPollingInterval) return;
@@ -4411,10 +4491,48 @@ function startFlowKitPolling() {
         setConnected(badge);
         setConnected(hdrBadge);
         setConnected(poHdrBadge);
+        
+        // Fetch current tier if connected
+        try {
+          const tierRes = await jsonFetch('/api/batch-uploader/flow-tier');
+          if (tierRes && tierRes.tier) {
+            const tierName = tierRes.tier === 'PAYGATE_TIER_ONE' ? 'Tier One (Premium)' : 'Tier Two (Free/Labs)';
+            const tierColor = tierRes.tier === 'PAYGATE_TIER_ONE' ? '#10b981' : '#38bdf8';
+            
+            const tb1 = document.getElementById('fk_header_tier');
+            const tb2 = document.getElementById('fk_po_header_tier');
+            if (tb1) {
+              tb1.textContent = tierName;
+              tb1.style.color = tierColor;
+            }
+            if (tb2) {
+              tb2.textContent = tierName;
+              tb2.style.color = tierColor;
+            }
+            
+            if (currentFlowTier !== tierRes.tier) {
+              currentFlowTier = tierRes.tier;
+              updateFlowVideoModelDropdowns(currentFlowTier);
+            }
+          }
+        } catch (tierErr) {
+          console.warn('Failed to fetch flow tier:', tierErr);
+        }
       } else {
         setDisconnected(badge);
         setDisconnected(hdrBadge);
         setDisconnected(poHdrBadge);
+        
+        const tb1 = document.getElementById('fk_header_tier');
+        const tb2 = document.getElementById('fk_po_header_tier');
+        if (tb1) {
+          tb1.textContent = 'Offline';
+          tb1.style.color = 'rgba(255,255,255,0.4)';
+        }
+        if (tb2) {
+          tb2.textContent = 'Offline';
+          tb2.style.color = 'rgba(255,255,255,0.4)';
+        }
       }
     } catch (err) {
       console.error('Failed to poll Flow Kit status:', err);
@@ -5582,6 +5700,9 @@ let flowScannedPairs = [];
 let flowProjectsList = [];
 
 function initFlowKitUploaderListeners() {
+  // Initialize dropdowns with a default tier on startup
+  updateFlowVideoModelDropdowns('PAYGATE_TIER_TWO');
+
   // 1. Sync Inputs between Selenium and Flow Kit
   const syncInputs = (id1, id2) => {
     const el1 = document.getElementById(id1);
@@ -5753,6 +5874,7 @@ function initFlowKitUploaderListeners() {
   document.getElementById('btnProcessFlowKitBatch')?.addEventListener('click', async () => {
     const project = document.getElementById('cfg_flow_project_dropdown')?.value;
     const orientation = document.getElementById('cfg_flow_orientation')?.value;
+    const videoModel = document.getElementById('cfg_flow_video_model')?.value || null;
     const outputCount = parseInt(document.getElementById('cfg_flow_output_count')?.value, 10) || 1;
     const upscaleResolution = 'NONE';
     
@@ -5809,7 +5931,7 @@ function initFlowKitUploaderListeners() {
           image_path: p.image_path,
           prompt_content: p.prompt_content
         })),
-        video_model: null,
+        video_model: videoModel,
         output_count: outputCount,
         duration_seconds: durationSeconds,
         upscale_resolution: upscaleResolution
@@ -6333,6 +6455,7 @@ document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () 
 document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', async () => {
   const project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
   const orientation = document.getElementById('cfg_flow_po_orientation')?.value;
+  const videoModel = document.getElementById('cfg_flow_po_video_model')?.value || null;
   const outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
   const durationSeconds = 10;
   const upscaleResolution = document.getElementById('cfg_download_upscale')?.value || 'NONE';
@@ -6388,7 +6511,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
         image_path: null,
         prompt_content: p.prompt_content
       })),
-      video_model: null,
+      video_model: videoModel,
       output_count: outputCount,
       duration_seconds: durationSeconds,
       upscale_resolution: upscaleResolution

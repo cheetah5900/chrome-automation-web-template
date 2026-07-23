@@ -27,6 +27,7 @@ class FlowClient:
         self._extension_ws = None  # Set by WS server when extension connects
         self._pending: dict[str, asyncio.Future] = {}
         self._flow_key: Optional[str] = None
+        self.user_paygate_tier: str = "PAYGATE_TIER_TWO"
         # WS stats
         self._ws_connect_count = 0
         self._ws_disconnect_count = 0
@@ -124,6 +125,7 @@ class FlowClient:
             result = await self.get_credits()
             data = result.get("data", result)
             tier = data.get("userPaygateTier", "PAYGATE_TIER_ONE")
+            self.user_paygate_tier = tier
             logger.info("Syncing tier: %s", tier)
 
             from agent.db import crud
