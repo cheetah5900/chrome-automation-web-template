@@ -513,11 +513,7 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
                     return res
         return None
 
-    cards = find_cards(project_data)
-    if not cards:
-        logger.warning("No 'cards' list found in Google Flow project data JSON")
-        return []
-
+    cards = find_cards(project_data) or []
     scenes = []
     for idx, card in enumerate(cards):
         card_id = card.get("cardId") or card.get("id") or f"card_{idx+1}"
@@ -753,7 +749,14 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
     # 2. Get or create video_id in SQLite
     videos = await crud.list_videos(body.project_id)
     if videos:
-        video_id = videos[0]["id"]
+        # Find the video with the most scenes in local DB, or default to the latest one (videos[-1])
+        video_id = videos[-1]["id"]
+        max_scenes = -1
+        for v in videos:
+            s_list = await crud.list_scenes(v["id"])
+            if len(s_list) > max_scenes:
+                max_scenes = len(s_list)
+                video_id = v["id"]
     else:
         v = await crud.create_video(body.project_id, title="Project Video", orientation="HORIZONTAL")
         video_id = v["id"]
@@ -846,9 +849,9 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
             
             if standard_media_id and not upscale_url and not upscale_media_id:
                 active_req = any(
-                    r.get("req_type") == "UPSCALE_VIDEO"
+                    r.get("type") == "UPSCALE_VIDEO"
                     and r.get("orientation") == orient.upper()
-                    and r.get("status") in ("PENDING", "PROCESSING", "CLAIMED", "COMPLETED")
+                    and r.get("status") in ("PENDING", "PROCESSING", "CLAIMED")
                     for r in reqs
                 )
                 
