@@ -426,12 +426,14 @@ async def process_batch(body: ProcessRequest):
                 if orientation == "HORIZONTAL":
                     update_data = {
                         "horizontal_image_media_id": media_id,
-                        "horizontal_image_status": "COMPLETED"
+                        "horizontal_image_status": "COMPLETED",
+                        "horizontal_image_url": f"file://{pair.image_path}" if pair.image_path.startswith("/") else pair.image_path
                     }
                 else:
                     update_data = {
                         "vertical_image_media_id": media_id,
-                        "vertical_image_status": "COMPLETED"
+                        "vertical_image_status": "COMPLETED",
+                        "vertical_image_url": f"file://{pair.image_path}" if pair.image_path.startswith("/") else pair.image_path
                     }
                 await _repo.update("scene", sdk_scene.id, **update_data)
 
@@ -549,7 +551,26 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
             
             aspect = standard_video.get("video", {}).get("generatedVideo", {}).get("aspectRatio", "VIDEO_ASPECT_RATIO_PORTRAIT")
             is_vertical = "PORTRAIT" in aspect or "VERTICAL" in aspect or "vertical" in prompt.lower()
-            
+            # Try to extract storyboard image filename from standard_video request data
+            img_handle = None
+            img_media_id = None
+            try:
+                prompt_inputs = standard_video.get("mediaMetadata", {}).get("requestData", {}).get("promptInputs", [])
+                if prompt_inputs:
+                    parts = prompt_inputs[0].get("structuredPrompt", {}).get("parts", [])
+                    for part in parts:
+                        ref_media = part.get("reference", {}).get("media", {})
+                        if ref_media.get("handle"):
+                            img_handle = ref_media["handle"]
+                            break
+                img_inputs = standard_video.get("mediaMetadata", {}).get("requestData", {}).get("videoGenerationRequestData", {}).get("videoGenerationImageInputs", [])
+                for img_in in img_inputs:
+                    if img_in.get("imageUsageType") == "IMAGE_USAGE_TYPE_START_IMAGE":
+                        img_media_id = img_in.get("mediaId")
+                        break
+            except Exception:
+                pass
+
             video_url = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{media_id}.mp4"
             upscale_url = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{media_id}_upscaled.mp4" if upscale_media_id else None
             
@@ -558,8 +579,12 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
                 "id": w_id,
                 "vertical_video_url": video_url if is_vertical else None,
                 "vertical_video_media_id": media_id if is_vertical else None,
+                "vertical_image_url": f"file:///{img_handle}" if is_vertical and img_handle else None,
+                "vertical_image_media_id": img_media_id if is_vertical else None,
                 "horizontal_video_url": video_url if not is_vertical else None,
                 "horizontal_video_media_id": media_id if not is_vertical else None,
+                "horizontal_image_url": f"file:///{img_handle}" if not is_vertical and img_handle else None,
+                "horizontal_image_media_id": img_media_id if not is_vertical else None,
                 "vertical_upscale_url": upscale_url if is_vertical and upscale_media_id else None,
                 "vertical_upscale_media_id": upscale_media_id if is_vertical and upscale_media_id else None,
                 "horizontal_upscale_url": upscale_url if not is_vertical and upscale_media_id else None,
@@ -1126,7 +1151,9 @@ async def get_project_stats(project_id: str):
                         for field in ("vertical_video_url", "vertical_video_media_id",
                                       "horizontal_video_url", "horizontal_video_media_id",
                                       "vertical_upscale_url", "vertical_upscale_media_id",
-                                      "horizontal_upscale_url", "horizontal_upscale_media_id"):
+                                      "horizontal_upscale_url", "horizontal_upscale_media_id",
+                                      "vertical_image_url", "vertical_image_media_id",
+                                      "horizontal_image_url", "horizontal_image_media_id"):
                             if fs.get(field) is not None:
                                 scene_data[field] = fs[field]
                         
@@ -1140,6 +1167,10 @@ async def get_project_stats(project_id: str):
                                 scene_data["vertical_upscale_status"] = "COMPLETED"
                             if fs["horizontal_upscale_url"] and existing.get("horizontal_upscale_status") != "COMPLETED":
                                 scene_data["horizontal_upscale_status"] = "COMPLETED"
+                            if fs["vertical_image_url"] and existing.get("vertical_image_status") != "COMPLETED":
+                                scene_data["vertical_image_status"] = "COMPLETED"
+                            if fs["horizontal_image_url"] and existing.get("horizontal_image_status") != "COMPLETED":
+                                scene_data["horizontal_image_status"] = "COMPLETED"
                                 
                             await crud.update_scene(scene_id, **scene_data)
                         else:
@@ -1161,6 +1192,10 @@ async def get_project_stats(project_id: str):
                                 scene_data["vertical_upscale_status"] = "COMPLETED"
                             if fs["horizontal_upscale_url"]:
                                 scene_data["horizontal_upscale_status"] = "COMPLETED"
+                            if fs["vertical_image_url"]:
+                                scene_data["vertical_image_status"] = "COMPLETED"
+                            if fs["horizontal_image_url"]:
+                                scene_data["horizontal_image_status"] = "COMPLETED"
                             await crud.update_scene(scene_id, **scene_data)
                             
                     # Delete local scenes that were deleted/archived on Google Flow
@@ -1206,6 +1241,7 @@ async def get_project_stats(project_id: str):
     proj = await crud.get_project(project_id)
     project_slug = slugify(proj.get("name", "project")) if proj else "project"
     counters = {"vertical": 1, "horizontal": 1}
+    dup_counters = {}
 
     # Sort video runs chronologically to match run indexes
     videos_sorted = sorted(videos, key=lambda x: x.get("created_at", ""))
@@ -1233,9 +1269,28 @@ async def get_project_stats(project_id: str):
                 
                 tracking_name = "-"
                 if has_video:
-                    idx = counters[prefix]
-                    tracking_name = f"{project_slug}_{idx:03d}"
-                    counters[prefix] += 1
+                    has_start_image = bool(scene.get(f"{prefix}_image_media_id") or scene.get(f"{prefix}_image_url"))
+                    if has_start_image:
+                        img_name = None
+                        img_url = scene.get(f"{prefix}_image_url")
+                        if img_url:
+                            if img_url.startswith("file://"):
+                                img_name = Path(img_url[7:]).stem
+                            else:
+                                img_name = Path(img_url).stem
+                        if not img_name:
+                            img_name = resolve_storyboard_filename(scene.get("display_order", 0))
+                        if not img_name:
+                            img_name = f"Scene_{scene.get('display_order', 0):02d}"
+                        
+                        dup_key = f"{prefix}_{img_name}"
+                        dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
+                        dup_idx = dup_counters[dup_key]
+                        tracking_name = f"{project_slug}_{img_name}_{dup_idx}"
+                    else:
+                        idx = counters[prefix]
+                        tracking_name = f"{project_slug}_{idx:03d}"
+                        counters[prefix] += 1
 
                 short_prompt = scene.get("prompt", "") or ""
                 if len(short_prompt) > 60:
@@ -1489,6 +1544,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         scenes = [dict(zip(columns, row)) for row in rows]
         
     counters = {"vertical": 1, "horizontal": 1}
+    dup_counters = {}
         
     # 2. Try fetching project details directly from Google Flow via extension TRPC if not found locally
     if not scenes:
@@ -1582,12 +1638,31 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     orient_suffix = "vertical" if p == "vertical" else "horizontal"
                     upscale_suffix = "_upscaled" if is_upscale else ""
                     
-                    idx = counters[p]
-                    arcname = f"{project_slug}_{idx:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                    has_start_image = bool(scene.get(f"{p}_image_media_id") or scene.get(f"{p}_image_url"))
+                    if has_start_image:
+                        img_name = None
+                        img_url = scene.get(f"{p}_image_url")
+                        if img_url:
+                            if img_url.startswith("file://"):
+                                img_name = Path(img_url[7:]).stem
+                            else:
+                                img_name = Path(img_url).stem
+                        if not img_name:
+                            img_name = resolve_storyboard_filename(display_order)
+                        if not img_name:
+                            img_name = f"Scene_{display_order:02d}"
+                        
+                        dup_key = f"{p}_{img_name}"
+                        dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
+                        dup_idx = dup_counters[dup_key]
+                        arcname = f"{project_slug}_{img_name}_{dup_idx}_{orient_suffix}{upscale_suffix}.mp4"
+                    else:
+                        idx = counters[p]
+                        arcname = f"{project_slug}_{idx:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                        counters[p] += 1
                         
                     zip_file.write(local_path, arcname=arcname)
                     video_added = True
-                    counters[p] += 1
                     
                     if temp_downloaded_path and temp_downloaded_path.exists():
                         try:
