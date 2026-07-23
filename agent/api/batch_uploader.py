@@ -827,6 +827,11 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
             "method": "GET",
             "headers": {"accept": "*/*"}
         }, timeout=15)
+        try:
+            with open("project_11_8_raw.json", "w") as f:
+                _json.dump(res, f, indent=2)
+        except Exception as e:
+            logger.warning("Failed to write project_11_8_raw.json: %s", e)
         if res and isinstance(res, dict) and not res.get("error"):
             scenes = extract_scenes_from_flow_project(res)
             if scenes:
@@ -925,6 +930,10 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
     # 2. Get or create video_id in SQLite
     videos = await crud.list_videos(body.project_id)
     if not videos:
+        proj = await crud.get_project(body.project_id)
+        if not proj:
+            proj_name = f"Synced Project ({body.project_id[:8]})"
+            await crud.create_project(id=body.project_id, name=proj_name)
         v = await crud.create_video(body.project_id, title="Project Video", orientation="HORIZONTAL")
         videos = [v]
         
@@ -1086,11 +1095,13 @@ async def get_project_stats(project_id: str):
             if parsed_scenes:
                     if not videos:
                         proj = await crud.get_project(project_id)
+                        if not proj:
+                            proj_name = f"Synced Project ({project_id[:8]})"
+                            proj = await crud.create_project(id=project_id, name=proj_name)
                         proj_name = proj.get("name") if proj else "Synced Project"
                         v_run = await crud.create_video(
                             project_id=project_id,
-                            title=f"Imported from Google Flow ({proj_name})",
-                            status="COMPLETED"
+                            title=f"Imported from Google Flow ({proj_name})"
                         )
                         videos = [v_run]
                         

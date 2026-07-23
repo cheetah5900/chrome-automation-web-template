@@ -6780,9 +6780,20 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
   }
 });
 
-// Update project stats when select dropdown changes or mode changes
-document.getElementById('cfg_flow_project_dropdown')?.addEventListener('change', updateProjectStats);
-document.getElementById('cfg_flow_po_project_dropdown')?.addEventListener('change', updateProjectStats);
+document.getElementById('cfg_flow_project_dropdown')?.addEventListener('change', (e) => {
+  const val = e.target.value;
+  localStorage.setItem('flowkit_default_project_id', val);
+  const other = document.getElementById('cfg_flow_po_project_dropdown');
+  if (other) other.value = val;
+  updateProjectStats();
+});
+document.getElementById('cfg_flow_po_project_dropdown')?.addEventListener('change', (e) => {
+  const val = e.target.value;
+  localStorage.setItem('flowkit_default_project_id', val);
+  const other = document.getElementById('cfg_flow_project_dropdown');
+  if (other) other.value = val;
+  updateProjectStats();
+});
 document.getElementById('cfg_video_gen_mode')?.addEventListener('change', updateProjectStats);
 
 // Clear pending scenes button click handler
