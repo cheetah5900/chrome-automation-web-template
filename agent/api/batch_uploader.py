@@ -1004,7 +1004,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
             FROM scene s
             JOIN video v ON s.video_id = v.id
             WHERE v.project_id = ?
-            ORDER BY s.display_order ASC
+            ORDER BY v.created_at ASC, s.display_order ASC
             """,
             (body.project_id,)
         )
@@ -1012,11 +1012,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         columns = [col[0] for col in cursor.description]
         scenes = [dict(zip(columns, row)) for row in rows]
         
-    run_numbers = {}
-    if scenes:
-        videos = await crud.list_videos(body.project_id)
-        videos_sorted = sorted(videos, key=lambda x: x.get("created_at", ""))
-        run_numbers = {v["id"]: idx + 1 for idx, v in enumerate(videos_sorted)}
+    counters = {"vertical": 1, "horizontal": 1}
         
     # 2. Try fetching project details directly from Google Flow via extension TRPC if not found locally
     if not scenes:
@@ -1104,15 +1100,11 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     orient_suffix = "vertical" if p == "vertical" else "horizontal"
                     upscale_suffix = "_upscaled" if is_upscale else ""
                     
-                    vid = scene.get("video_id")
-                    run_num = run_numbers.get(vid) if vid else None
-                    if run_num:
-                        arcname = f"scene_{display_order:03d}_{orient_suffix}{upscale_suffix}_{run_num}.mp4"
-                    else:
-                        arcname = f"scene_{display_order:03d}_{orient_suffix}{upscale_suffix}.mp4"
-                        
+                    idx = counters[p]
+                    arcname = f"scene_{idx:03d}_{orient_suffix}{upscale_suffix}.mp4"
                     zip_file.write(local_path, arcname=arcname)
                     video_added = True
+                    counters[p] += 1
                     
                     if temp_downloaded_path and temp_downloaded_path.exists():
                         try:
