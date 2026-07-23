@@ -10,6 +10,7 @@ const AGENT_WS_URL = 'ws://127.0.0.1:9225';
 const API_KEY = 'AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY';
 
 let ws = null;
+let pingIntervalId = null;
 let flowKey = null;
 let callbackSecret = null;  // Auth secret for HTTP callback, received from server on WS connect
 let apiPort = null;         // Dynamically updated uvicorn port from Python agent
@@ -190,6 +191,14 @@ function connectToAgent() {
     if (flowKey) {
       ws.send(JSON.stringify({ type: 'token_captured', flowKey }));
     }
+
+    // Ping every 10 seconds to keep service worker alive
+    if (pingIntervalId) clearInterval(pingIntervalId);
+    pingIntervalId = setInterval(() => {
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 10000); // 10 seconds
   };
 
   ws.onmessage = async ({ data }) => {
@@ -232,6 +241,10 @@ function connectToAgent() {
   ws.onclose = () => {
     setState('off');
     chrome.alarms.clear('token-refresh');
+    if (pingIntervalId) {
+      clearInterval(pingIntervalId);
+      pingIntervalId = null;
+    }
     if (!manualDisconnect) scheduleReconnect();
   };
 
