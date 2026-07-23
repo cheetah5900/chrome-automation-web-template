@@ -1014,6 +1014,11 @@ async def get_project_stats(project_id: str):
     pending_list = []
     all_scenes_list = []
     
+    from agent.utils.slugify import slugify
+    proj = await crud.get_project(project_id)
+    project_slug = slugify(proj.get("name", "project")) if proj else "project"
+    counters = {"vertical": 1, "horizontal": 1}
+
     # Sort video runs chronologically to match run indexes
     videos_sorted = sorted(videos, key=lambda x: x.get("created_at", ""))
     run_numbers = {v["id"]: idx + 1 for idx, v in enumerate(videos_sorted)}
@@ -1038,6 +1043,20 @@ async def get_project_stats(project_id: str):
                 has_video = bool(scene.get(f"{prefix}_video_media_id") or scene.get(f"{prefix}_video_url"))
                 has_upscale = bool(scene.get(f"{prefix}_upscale_url") or scene.get(f"{prefix}_upscale_media_id"))
                 
+                tracking_name = "-"
+                if has_video:
+                    has_start_image = bool(scene.get(f"{prefix}_image_media_id") or scene.get(f"{prefix}_image_url"))
+                    resolved_name = None
+                    if has_start_image:
+                        resolved_name = resolve_storyboard_filename(scene.get("display_order", 0))
+                    
+                    if resolved_name:
+                        tracking_name = resolved_name
+                    else:
+                        idx = counters[prefix]
+                        tracking_name = f"{project_slug}_{idx:03d}"
+                    counters[prefix] += 1
+
                 short_prompt = scene.get("prompt", "") or ""
                 if len(short_prompt) > 60:
                     short_prompt = short_prompt[:57] + "..."
@@ -1052,7 +1071,8 @@ async def get_project_stats(project_id: str):
                     "run_title": run_title,
                     "run_num": run_num,
                     "has_video": has_video,
-                    "has_upscale": has_upscale
+                    "has_upscale": has_upscale,
+                    "tracking_name": tracking_name
                 }
                 
                 all_scenes_list.append(item)

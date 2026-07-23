@@ -6110,10 +6110,16 @@ async function updateProjectStats() {
             } else {
               upscaleStatus = '<span style="color: rgba(255,255,255,0.2);">-</span>';
             }
+            let trackingDisplay = '';
+            if (item.tracking_name && item.tracking_name !== '-') {
+              trackingDisplay = `<span style="color: #ffb86c; font-weight: 600; margin-right: 6px;">${item.tracking_name}</span> <span style="font-size: 0.75rem; color: rgba(255,255,255,0.4);">(รอบที่ ${item.run_num})</span>`;
+            } else {
+              trackingDisplay = `<span style="color: rgba(255,255,255,0.5);">รอบที่ ${item.run_num}</span>`;
+            }
             
             return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseenter="this.style.background='rgba(255,255,255,0.02)'" onmouseleave="this.style.background='transparent'">
               <td style="padding: 8px 12px; font-weight: 500;">${item.display_order}</td>
-              <td style="padding: 8px 12px; color: rgba(255,255,255,0.7);">รอบที่ ${item.run_num} (${item.run_title})</td>
+              <td style="padding: 8px 12px; color: rgba(255,255,255,0.7);">${trackingDisplay}</td>
               <td style="padding: 8px 12px;">${orientStr}</td>
               <td style="padding: 8px 12px; text-align: center;">${videoStatus}</td>
               <td style="padding: 8px 12px; text-align: center;">${upscaleStatus}</td>
