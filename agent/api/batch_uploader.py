@@ -738,6 +738,79 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
             
     return scenes
 
+async def sync_project_from_flow(project_id: str, client) -> list[dict]:
+    import urllib.parse
+    import json as _json
+    
+    cursor = None
+    all_raw_data = []
+    
+    for page_idx in range(10): # limit to max 10 pages (300+ scenes)
+        input_params = {"json": {"projectId": project_id, "toolName": "PINHOLE"}}
+        if cursor:
+            input_params["json"]["cursor"] = cursor
+        encoded_input = urllib.parse.quote(_json.dumps(input_params))
+        url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
+        logger.info("Fetching project %s from Google Flow (page %d, cursor: %s)", project_id[:12], page_idx + 1, cursor)
+        
+        try:
+            res = await client._send("trpc_request", {
+                "url": url,
+                "method": "GET",
+                "headers": {"accept": "*/*"}
+            }, timeout=15)
+        except Exception as e:
+            logger.warning("Failed to fetch project page %d: %s", page_idx + 1, e)
+            break
+            
+        if not res or not isinstance(res, dict) or res.get("error"):
+            logger.warning("Invalid response or error on page %d: %s", page_idx + 1, res)
+            break
+            
+        all_raw_data.append(res)
+        
+        # Extract nextPageToken recursively
+        next_token = None
+        def find_next_token(node):
+            nonlocal next_token
+            if isinstance(node, dict):
+                if "nextPageToken" in node and node["nextPageToken"]:
+                    next_token = node["nextPageToken"]
+                    return
+                for v in node.values():
+                    find_next_token(v)
+                    if next_token:
+                        return
+            elif isinstance(node, list):
+                for item in node:
+                    find_next_token(item)
+                    if next_token:
+                        return
+                        
+        find_next_token(res)
+        if not next_token or next_token == cursor:
+            break
+        cursor = next_token
+
+    # Extract all scenes from all pages
+    parsed_scenes = []
+    for page in all_raw_data:
+        parsed_scenes.extend(extract_scenes_from_flow_project(page))
+        
+    # Remove duplicates by ID to be safe
+    seen_ids = set()
+    unique_scenes = []
+    for s in parsed_scenes:
+        sid = s.get("id")
+        if sid:
+            if sid in seen_ids:
+                continue
+            seen_ids.add(sid)
+        unique_scenes.append(s)
+        
+    return unique_scenes
+
+
 class UpscaleProjectRequest(BaseModel):
     project_id: str
     upscale_resolution: str
@@ -765,84 +838,71 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
         
     # 3. Pull latest project info from Google Flow TRPC
     try:
-        import urllib.parse
-        input_params = {"json": {"projectId": body.project_id, "toolName": "PINHOLE"}}
-        encoded_input = urllib.parse.quote(_json.dumps(input_params))
-        url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
         logger.info("Syncing project %s from Google Flow for retroactive upscales...", body.project_id[:12])
-        res = await client._send("trpc_request", {
-            "url": url,
-            "method": "GET",
-            "headers": {"accept": "*/*"}
-        }, timeout=30)
-        
-        if res and isinstance(res, dict) and not res.get("error"):
-            parsed_scenes = extract_scenes_from_flow_project(res)
-            if parsed_scenes:
-                # 4. Sync scenes from Flow to local database across ALL video runs of this project
-                all_project_scenes = []
-                for v in videos:
-                    v_scenes = await crud.list_scenes(v["id"])
-                    all_project_scenes.extend(v_scenes)
+        parsed_scenes = await sync_project_from_flow(body.project_id, client)
+        if parsed_scenes:
+            # 4. Sync scenes from Flow to local database across ALL video runs of this project
+            all_project_scenes = []
+            for v in videos:
+                v_scenes = await crud.list_scenes(v["id"])
+                all_project_scenes.extend(v_scenes)
+            
+            for fs in parsed_scenes:
+                # Find a scene in any run that has matching standard media ID
+                existing = None
+                for ps in all_project_scenes:
+                    if (fs["vertical_video_media_id"] and ps.get("vertical_video_media_id") == fs["vertical_video_media_id"]) or \
+                       (fs["horizontal_video_media_id"] and ps.get("horizontal_video_media_id") == fs["horizontal_video_media_id"]):
+                        existing = ps
+                        break
                 
-                for fs in parsed_scenes:
-                    # Find a scene in any run that has matching standard media ID
-                    existing = None
-                    for ps in all_project_scenes:
-                        if (fs["vertical_video_media_id"] and ps.get("vertical_video_media_id") == fs["vertical_video_media_id"]) or \
-                           (fs["horizontal_video_media_id"] and ps.get("horizontal_video_media_id") == fs["horizontal_video_media_id"]):
-                            existing = ps
-                            break
-                    
-                    scene_data = {
-                        "vertical_video_url": fs["vertical_video_url"],
-                        "vertical_video_media_id": fs["vertical_video_media_id"],
-                        "horizontal_video_url": fs["horizontal_video_url"],
-                        "horizontal_video_media_id": fs["horizontal_video_media_id"],
-                        "vertical_upscale_url": fs["vertical_upscale_url"],
-                        "vertical_upscale_media_id": fs["vertical_upscale_media_id"],
-                        "horizontal_upscale_url": fs["horizontal_upscale_url"],
-                        "horizontal_upscale_media_id": fs["horizontal_upscale_media_id"],
-                    }
-                    
-                    if existing:
-                        scene_id = existing["id"]
-                        if fs["vertical_video_url"] and not existing.get("vertical_video_status"):
-                            scene_data["vertical_video_status"] = "COMPLETED"
-                        if fs["horizontal_video_url"] and not existing.get("horizontal_video_status"):
-                            scene_data["horizontal_video_status"] = "COMPLETED"
-                        if fs["vertical_upscale_url"] and not existing.get("vertical_upscale_status"):
-                            scene_data["vertical_upscale_status"] = "COMPLETED"
-                        if fs["horizontal_upscale_url"] and not existing.get("horizontal_upscale_status"):
-                            scene_data["horizontal_upscale_status"] = "COMPLETED"
-                            
-                        await crud.update_scene(scene_id, **scene_data)
-                    else:
-                        # Create virtual scene under the latest video run
-                        latest_scenes = await crud.list_scenes(latest_video_id)
-                        next_order = max([s["display_order"] for s in latest_scenes] + [0]) + 1
+                scene_data = {
+                    "vertical_video_url": fs["vertical_video_url"],
+                    "vertical_video_media_id": fs["vertical_video_media_id"],
+                    "horizontal_video_url": fs["horizontal_video_url"],
+                    "horizontal_video_media_id": fs["horizontal_video_media_id"],
+                    "vertical_upscale_url": fs["vertical_upscale_url"],
+                    "vertical_upscale_media_id": fs["vertical_upscale_media_id"],
+                    "horizontal_upscale_url": fs["horizontal_upscale_url"],
+                    "horizontal_upscale_media_id": fs["horizontal_upscale_media_id"],
+                }
+                
+                if existing:
+                    scene_id = existing["id"]
+                    if fs["vertical_video_url"] and not existing.get("vertical_video_status"):
+                        scene_data["vertical_video_status"] = "COMPLETED"
+                    if fs["horizontal_video_url"] and not existing.get("horizontal_video_status"):
+                        scene_data["horizontal_video_status"] = "COMPLETED"
+                    if fs["vertical_upscale_url"] and not existing.get("vertical_upscale_status"):
+                        scene_data["vertical_upscale_status"] = "COMPLETED"
+                    if fs["horizontal_upscale_url"] and not existing.get("horizontal_upscale_status"):
+                        scene_data["horizontal_upscale_status"] = "COMPLETED"
                         
-                        new_scene = await crud.create_scene(
-                            video_id=latest_video_id,
-                            display_order=next_order,
-                            prompt=fs.get("prompt_content") or f"Scene {next_order}",
-                            source="system"
-                        )
-                        scene_id = new_scene["id"]
-                        if fs["vertical_video_url"]:
-                            scene_data["vertical_video_status"] = "COMPLETED"
-                        if fs["horizontal_video_url"]:
-                            scene_data["horizontal_video_status"] = "COMPLETED"
-                        if fs["vertical_upscale_url"]:
-                            scene_data["vertical_upscale_status"] = "COMPLETED"
-                        if fs["horizontal_upscale_url"]:
-                            scene_data["horizontal_upscale_status"] = "COMPLETED"
-                        await crud.update_scene(scene_id, **scene_data)
-                logger.info("Successfully synced %d scenes from Google Flow to local DB", len(parsed_scenes))
-            else:
-                logger.warning("No scenes extracted from project data, skipping sync")
+                    await crud.update_scene(scene_id, **scene_data)
+                else:
+                    # Create virtual scene under the latest video run
+                    latest_scenes = await crud.list_scenes(latest_video_id)
+                    next_order = max([s["display_order"] for s in latest_scenes] + [0]) + 1
+                    
+                    new_scene = await crud.create_scene(
+                        video_id=latest_video_id,
+                        display_order=next_order,
+                        prompt=fs.get("prompt_content") or f"Scene {next_order}",
+                        source="system"
+                    )
+                    scene_id = new_scene["id"]
+                    if fs["vertical_video_url"]:
+                        scene_data["vertical_video_status"] = "COMPLETED"
+                    if fs["horizontal_video_url"]:
+                        scene_data["horizontal_video_status"] = "COMPLETED"
+                    if fs["vertical_upscale_url"]:
+                        scene_data["vertical_upscale_status"] = "COMPLETED"
+                    if fs["horizontal_upscale_url"]:
+                        scene_data["horizontal_upscale_status"] = "COMPLETED"
+                    await crud.update_scene(scene_id, **scene_data)
+            logger.info("Successfully synced %d scenes from Google Flow to local DB", len(parsed_scenes))
         else:
-            logger.warning("TRPC project fetch returned empty or error, skipping sync")
+            logger.warning("No scenes extracted from project data, skipping sync")
     except Exception as e:
         logger.warning("Upscale sync project failed, will rely on local DB scenes: %s", e)
         
@@ -906,21 +966,9 @@ async def get_project_stats(project_id: str):
     client = get_flow_client()
     if client.connected:
         try:
-            import urllib.parse
-            import json as _json
-            input_params = {"json": {"projectId": project_id, "toolName": "PINHOLE"}}
-            encoded_input = urllib.parse.quote(_json.dumps(input_params))
-            url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
             logger.info("Auto-syncing project %s from Google Flow for stats refresh...", project_id[:12])
-            res = await client._send("trpc_request", {
-                "url": url,
-                "method": "GET",
-                "headers": {"accept": "*/*"}
-            }, timeout=15)
-            
-            if res and isinstance(res, dict) and not res.get("error"):
-                parsed_scenes = extract_scenes_from_flow_project(res)
-                if parsed_scenes:
+            parsed_scenes = await sync_project_from_flow(project_id, client)
+            if parsed_scenes:
                     if not videos:
                         proj = await crud.get_project(project_id)
                         proj_name = proj.get("name") if proj else "Synced Project"
@@ -1315,23 +1363,11 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         client = get_flow_client()
         if client.connected:
             try:
-                import urllib.parse
-                import json as _json
-                input_params = {"json": {"projectId": body.project_id, "toolName": "PINHOLE"}}
-                encoded_input = urllib.parse.quote(_json.dumps(input_params))
-                url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
                 logger.info("Attempting to pull project %s directly from Google Flow...", body.project_id[:12])
-                res = await client._send("trpc_request", {
-                    "url": url,
-                    "method": "GET",
-                    "headers": {"accept": "*/*"}
-                }, timeout=30)
-                
-                if res and isinstance(res, dict) and not res.get("error"):
-                    scenes = extract_scenes_from_flow_project(res)
-                    if scenes:
-                        logger.info("Successfully extracted %d scenes directly from Google Flow TRPC response", len(scenes))
-                        is_google_flow = True
+                scenes = await sync_project_from_flow(body.project_id, client)
+                if scenes:
+                    logger.info("Successfully extracted %d scenes directly from Google Flow TRPC response", len(scenes))
+                    is_google_flow = True
             except Exception as e:
                 logger.warning("Failed to pull project directly from Google Flow: %s", e)
         
@@ -1429,3 +1465,80 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         filename=f"{project_slug}_videos.zip",
         headers={"X-Download-Source": "google-flow" if is_google_flow else "local-db"}
     )
+
+
+class GeneratePendingRequest(BaseModel):
+    project_id: str
+    orientation: str
+    video_model: str = "veo_3_1_lite_low_priority"
+    duration_seconds: int = 5
+    output_count: int = 1
+
+
+@router.post("/generate-pending")
+async def generate_pending_scenes(body: GeneratePendingRequest):
+    from agent.db.schema import get_db, _db_lock
+    import json as _json
+    
+    videos = await crud.list_videos(body.project_id)
+    if not videos:
+        raise HTTPException(404, "No video runs found for this project.")
+        
+    orientation = body.orientation.upper()
+    if orientation not in ("VERTICAL", "HORIZONTAL"):
+        raise HTTPException(400, f"Invalid orientation: {orientation}")
+        
+    latest_video_id = videos[-1]["id"]
+    scenes = await crud.list_scenes(latest_video_id)
+    if not scenes:
+        raise HTTPException(404, "No scenes found in the latest run of this project.")
+        
+    queued_count = 0
+    queued_scenes = []
+    
+    params_dict = {
+        "video_model": body.video_model,
+        "duration_seconds": body.duration_seconds,
+        "output_count": body.output_count
+    }
+    
+    for scene in scenes:
+        scene_id = scene["id"]
+        
+        # Check if the video status for the selected orientation is PENDING or FAILED
+        status_key = f"{orientation.lower()}_video_status"
+        status = scene.get(status_key, "PENDING")
+        
+        if status in ("PENDING", "FAILED"):
+            # Check if there is already an active (PENDING or PROCESSING) request for this scene and orientation
+            db = await get_db()
+            async with _db_lock:
+                cursor = await db.execute(
+                    """
+                    SELECT id FROM request 
+                    WHERE scene_id = ? AND orientation = ? AND req_type = 'GENERATE_VIDEO' AND status IN ('PENDING', 'PROCESSING')
+                    """,
+                    (scene_id, orientation)
+                )
+                existing_req = await cursor.fetchone()
+                
+            if not existing_req:
+                # Update status of scene to PENDING (if it was FAILED) to visually show it is queued
+                await crud.update_scene(scene_id, **{status_key: "PENDING"})
+                
+                db_req_data = {
+                    "project_id": body.project_id,
+                    "video_id": latest_video_id,
+                    "scene_id": scene_id,
+                    "req_type": "GENERATE_VIDEO",
+                    "orientation": orientation,
+                    "status": "PENDING",
+                    "edit_prompt": _json.dumps(params_dict)
+                }
+                await crud.create_request(**db_req_data)
+                queued_count += 1
+                queued_scenes.append(scene.get("display_order", 0))
+                
+    logger.info("Queued %d pending scenes for generation in project %s", queued_count, body.project_id)
+    return {"status": "SUCCESS", "queued_count": queued_count, "queued_scenes": queued_scenes}
+

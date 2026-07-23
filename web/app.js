@@ -6824,3 +6824,61 @@ document.getElementById('btnClearPendingScenes')?.addEventListener('click', asyn
     }
   }
 });
+
+// Generate pending scenes button click handler
+document.getElementById('btnGeneratePendingScenes')?.addEventListener('click', async () => {
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let projectId = '';
+  let orientation = 'VERTICAL';
+  let videoModel = '';
+  let outputCount = 1;
+  
+  if (genMode === 'flow_kit_prompt_only') {
+    projectId = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+    orientation = document.getElementById('cfg_flow_po_orientation')?.value || 'VERTICAL';
+    videoModel = document.getElementById('cfg_flow_po_video_model')?.value;
+    outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value || '1');
+  } else {
+    projectId = document.getElementById('cfg_flow_project_dropdown')?.value;
+    orientation = document.getElementById('cfg_flow_orientation')?.value || 'VERTICAL';
+    videoModel = document.getElementById('cfg_flow_video_model')?.value;
+    outputCount = parseInt(document.getElementById('cfg_flow_output_count')?.value || '1');
+  }
+  
+  if (!projectId) {
+    alert('กรุณาเลือกโปรเจกต์ก่อนทำการเจเนอเรท');
+    return;
+  }
+  
+  if (!confirm(`คุณแน่ใจหรือไม่ที่จะเริ่มสร้างใหม่เฉพาะฉากที่ยังสร้างไม่สำเร็จของทิศทาง ${orientation}?`)) {
+    return;
+  }
+  
+  const btn = document.getElementById('btnGeneratePendingScenes');
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังส่งงาน...';
+    }
+    const res = await jsonFetch('/api/batch-uploader/generate-pending', {
+      method: 'POST',
+      body: JSON.stringify({
+        project_id: projectId,
+        orientation: orientation,
+        video_model: videoModel,
+        output_count: outputCount
+      })
+    });
+    alert(`เริ่มคิวเจเนอเรทฉากที่ยังไม่ได้สร้างสำเร็จ: คิวเข้าทั้งหมด ${res.queued_count} ฉาก (ลำดับฉาก: ${res.queued_scenes.join(', ') || 'ไม่มี'})`);
+    await updateProjectStats();
+  } catch (err) {
+    console.error('Failed to generate pending scenes:', err);
+    alert('เกิดข้อผิดพลาดในการเจเนอเรทฉาก: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ เจเนอเรทรายการที่ยังไม่ได้สร้าง';
+    }
+  }
+});
+
