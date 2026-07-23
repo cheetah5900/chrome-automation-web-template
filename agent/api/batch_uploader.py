@@ -1012,10 +1012,11 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         columns = [col[0] for col in cursor.description]
         scenes = [dict(zip(columns, row)) for row in rows]
         
-    video_titles = {}
+    run_numbers = {}
     if scenes:
         videos = await crud.list_videos(body.project_id)
-        video_titles = {v["id"]: v["title"] for v in videos}
+        videos_sorted = sorted(videos, key=lambda x: x.get("created_at", ""))
+        run_numbers = {v["id"]: idx + 1 for idx, v in enumerate(videos_sorted)}
         
     # 2. Try fetching project details directly from Google Flow via extension TRPC if not found locally
     if not scenes:
@@ -1104,13 +1105,9 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     upscale_suffix = "_upscaled" if is_upscale else ""
                     
                     vid = scene.get("video_id")
-                    run_title = ""
-                    if vid:
-                        title_base = video_titles.get(vid, "run") or "run"
-                        short_id = vid[:8]
-                        run_title = slugify(f"{title_base}_{short_id}")
-                    if run_title:
-                        arcname = f"{run_title}/scene_{display_order:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                    run_num = run_numbers.get(vid) if vid else None
+                    if run_num:
+                        arcname = f"scene_{display_order:03d}_{orient_suffix}{upscale_suffix}_{run_num}.mp4"
                     else:
                         arcname = f"scene_{display_order:03d}_{orient_suffix}{upscale_suffix}.mp4"
                         
