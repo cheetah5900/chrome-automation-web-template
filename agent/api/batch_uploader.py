@@ -901,6 +901,100 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
 @router.get("/project-stats")
 async def get_project_stats(project_id: str):
     videos = await crud.list_videos(project_id)
+    
+    # Auto-sync project from Google Flow if extension is connected
+    from agent.main import client
+    if client.connected:
+        try:
+            import urllib.parse
+            import json as _json
+            input_params = {"json": {"projectId": project_id, "toolName": "PINHOLE"}}
+            encoded_input = urllib.parse.quote(_json.dumps(input_params))
+            url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
+            logger.info("Auto-syncing project %s from Google Flow for stats refresh...", project_id[:12])
+            res = await client._send("trpc_request", {
+                "url": url,
+                "method": "GET",
+                "headers": {"accept": "*/*"}
+            }, timeout=15)
+            
+            if res and isinstance(res, dict) and not res.get("error"):
+                parsed_scenes = extract_scenes_from_flow_project(res)
+                if parsed_scenes:
+                    if not videos:
+                        proj = await crud.get_project(project_id)
+                        proj_name = proj.get("name") if proj else "Synced Project"
+                        v_run = await crud.create_video(
+                            project_id=project_id,
+                            title=f"Imported from Google Flow ({proj_name})",
+                            status="COMPLETED"
+                        )
+                        videos = [v_run]
+                        
+                    all_project_scenes = []
+                    for v in videos:
+                        v_scenes = await crud.list_scenes(v["id"])
+                        all_project_scenes.extend(v_scenes)
+                        
+                    latest_video_id = videos[-1]["id"]
+                    
+                    for fs in parsed_scenes:
+                        existing = None
+                        for ps in all_project_scenes:
+                            if (fs["vertical_video_media_id"] and ps.get("vertical_video_media_id") == fs["vertical_video_media_id"]) or \
+                               (fs["horizontal_video_media_id"] and ps.get("horizontal_video_media_id") == fs["horizontal_video_media_id"]):
+                                existing = ps
+                                break
+                                
+                        scene_data = {
+                            "vertical_video_url": fs["vertical_video_url"],
+                            "vertical_video_media_id": fs["vertical_video_media_id"],
+                            "horizontal_video_url": fs["horizontal_video_url"],
+                            "horizontal_video_media_id": fs["horizontal_video_media_id"],
+                            "vertical_upscale_url": fs["vertical_upscale_url"],
+                            "vertical_upscale_media_id": fs["vertical_upscale_media_id"],
+                            "horizontal_upscale_url": fs["horizontal_upscale_url"],
+                            "horizontal_upscale_media_id": fs["horizontal_upscale_media_id"],
+                        }
+                        
+                        if existing:
+                            scene_id = existing["id"]
+                            if fs["vertical_video_url"] and not existing.get("vertical_video_status"):
+                                scene_data["vertical_video_status"] = "COMPLETED"
+                            if fs["horizontal_video_url"] and not existing.get("horizontal_video_status"):
+                                scene_data["horizontal_video_status"] = "COMPLETED"
+                            if fs["vertical_upscale_url"] and not existing.get("vertical_upscale_status"):
+                                scene_data["vertical_upscale_status"] = "COMPLETED"
+                            if fs["horizontal_upscale_url"] and not existing.get("horizontal_upscale_status"):
+                                scene_data["horizontal_upscale_status"] = "COMPLETED"
+                                
+                            await crud.update_scene(scene_id, **scene_data)
+                        else:
+                            latest_scenes = await crud.list_scenes(latest_video_id)
+                            next_order = max([s["display_order"] for s in latest_scenes] + [0]) + 1
+                            
+                            new_scene = await crud.create_scene(
+                                video_id=latest_video_id,
+                                display_order=next_order,
+                                prompt=fs.get("prompt_content") or f"Scene {next_order}",
+                                source="system"
+                            )
+                            scene_id = new_scene["id"]
+                            if fs["vertical_video_url"]:
+                                scene_data["vertical_video_status"] = "COMPLETED"
+                            if fs["horizontal_video_url"]:
+                                scene_data["horizontal_video_status"] = "COMPLETED"
+                            if fs["vertical_upscale_url"]:
+                                scene_data["vertical_upscale_status"] = "COMPLETED"
+                            if fs["horizontal_upscale_url"]:
+                                scene_data["horizontal_upscale_status"] = "COMPLETED"
+                            await crud.update_scene(scene_id, **scene_data)
+                            
+                    logger.info("Successfully auto-synced scenes from Google Flow to local DB")
+                    videos = await crud.list_videos(project_id)
+        except Exception as e:
+            logger.warning("Failed to auto-sync project from Google Flow: %s", e)
+            
     if not videos:
         return {
             "total_scenes": 0,
