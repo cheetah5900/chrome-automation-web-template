@@ -1548,45 +1548,29 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         
     project_slug = slugify(project.get("name", "project")) or "project"
     
-    is_google_flow = False
-    
-    # 1. Try querying local SQLite DB first
-    scenes = []
-    logger.info("Checking local database for scenes of project %s", body.project_id[:12])
-    db = await get_db()
-    async with _db_lock:
-        cursor = await db.execute(
-            """
-            SELECT s.* 
-            FROM scene s
-            JOIN video v ON s.video_id = v.id
-            WHERE v.project_id = ?
-            ORDER BY v.created_at ASC, s.display_order ASC
-            """,
-            (body.project_id,)
+    is_google_flow = True
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(
+            status_code=400,
+            detail="Extension is not connected. Please connect the extension first."
         )
-        rows = await cursor.fetchall()
-        columns = [col[0] for col in cursor.description]
-        scenes = [dict(zip(columns, row)) for row in rows]
+        
+    try:
+        logger.info("Attempting to pull project %s directly from Google Flow...", body.project_id[:12])
+        scenes = await sync_project_from_flow(body.project_id, client)
+    except Exception as e:
+        logger.error("Failed to pull project directly from Google Flow: %s", e)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to pull project from Google Flow: {e}"
+        )
+        
+    if not scenes:
+        raise HTTPException(status_code=404, detail="No scenes found for this project on Google Flow.")
         
     counters = {"vertical": 1, "horizontal": 1}
     dup_counters = {}
-        
-    # 2. Try fetching project details directly from Google Flow via extension TRPC if not found locally
-    if not scenes:
-        client = get_flow_client()
-        if client.connected:
-            try:
-                logger.info("Attempting to pull project %s directly from Google Flow...", body.project_id[:12])
-                scenes = await sync_project_from_flow(body.project_id, client)
-                if scenes:
-                    logger.info("Successfully extracted %d scenes directly from Google Flow TRPC response", len(scenes))
-                    is_google_flow = True
-            except Exception as e:
-                logger.warning("Failed to pull project directly from Google Flow: %s", e)
-        
-    if not scenes:
-        raise HTTPException(status_code=404, detail="No scenes found for this project.")
         
     temp_dir = Path(tempfile.mkdtemp())
     zip_path = temp_dir / f"{project_slug}_videos.zip"
