@@ -517,6 +517,8 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
         for idx, w in enumerate(workflows):
             w_id = w.get("name")
             meta = w.get("metadata", {})
+            if meta.get("archived", False):
+                continue
             prompt = meta.get("displayName") or ""
             
             w_media_list = media_by_workflow.get(w_id, [])
@@ -998,6 +1000,22 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
                     if fs["horizontal_upscale_url"]:
                         scene_data["horizontal_upscale_status"] = "COMPLETED"
                     await crud.update_scene(scene_id, **scene_data)
+            
+            # Delete local scenes that were deleted/archived on Google Flow
+            active_media_ids = set()
+            for fs in parsed_scenes:
+                if fs.get("vertical_video_media_id"):
+                    active_media_ids.add(fs["vertical_video_media_id"])
+                if fs.get("horizontal_video_media_id"):
+                    active_media_ids.add(fs["horizontal_video_media_id"])
+                    
+            for ps in all_project_scenes:
+                ps_vid = ps.get("vertical_video_media_id")
+                ps_hid = ps.get("horizontal_video_media_id")
+                if (ps_vid and ps_vid not in active_media_ids) or (ps_hid and ps_hid not in active_media_ids):
+                    logger.info("Deleting local scene %s because it was archived/deleted on Google Flow", ps["id"])
+                    await crud.delete_scene(ps["id"])
+                    
             logger.info("Successfully synced %d scenes from Google Flow to local DB", len(parsed_scenes))
         else:
             logger.warning("No scenes extracted from project data, skipping sync")
@@ -1143,6 +1161,21 @@ async def get_project_stats(project_id: str):
                             if fs["horizontal_upscale_url"]:
                                 scene_data["horizontal_upscale_status"] = "COMPLETED"
                             await crud.update_scene(scene_id, **scene_data)
+                            
+                    # Delete local scenes that were deleted/archived on Google Flow
+                    active_media_ids = set()
+                    for fs in parsed_scenes:
+                        if fs.get("vertical_video_media_id"):
+                            active_media_ids.add(fs["vertical_video_media_id"])
+                        if fs.get("horizontal_video_media_id"):
+                            active_media_ids.add(fs["horizontal_video_media_id"])
+                            
+                    for ps in all_project_scenes:
+                        ps_vid = ps.get("vertical_video_media_id")
+                        ps_hid = ps.get("horizontal_video_media_id")
+                        if (ps_vid and ps_vid not in active_media_ids) or (ps_hid and ps_hid not in active_media_ids):
+                            logger.info("Deleting local scene %s because it was archived/deleted on Google Flow", ps["id"])
+                            await crud.delete_scene(ps["id"])
                             
                     logger.info("Successfully auto-synced scenes from Google Flow to local DB")
                     videos = await crud.list_videos(project_id)
