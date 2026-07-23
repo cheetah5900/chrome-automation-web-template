@@ -6134,13 +6134,6 @@ async function updateProjectStats() {
           el.dataset.handlerAttached = 'true';
           el.addEventListener('click', () => {
             renderFilteredTable(mode);
-            // Ensure table is shown when a filter is clicked
-            const tableContainer = document.getElementById('flow_stats_table_container');
-            const toggleBtn = document.getElementById('btn_toggle_stats_table');
-            if (tableContainer && tableContainer.style.display === 'none') {
-              tableContainer.style.display = 'block';
-              if (toggleBtn) toggleBtn.textContent = '❌ ซ่อนตาราง';
-            }
           });
         }
       };
@@ -6150,24 +6143,8 @@ async function updateProjectStats() {
       bindFilterBadge('badge_filter_upscaled', 'upscaled');
       bindFilterBadge('badge_filter_remaining', 'remaining');
       bindFilterBadge('badge_filter_pending', 'pending');
-
-      // Wire up toggle button
-      const toggleBtn = document.getElementById('btn_toggle_stats_table');
-      const tableContainer = document.getElementById('flow_stats_table_container');
-      if (toggleBtn && tableContainer && !toggleBtn.dataset.handlerAttached) {
-        toggleBtn.dataset.handlerAttached = 'true';
-        toggleBtn.addEventListener('click', () => {
-          if (tableContainer.style.display === 'none' || !tableContainer.style.display) {
-            tableContainer.style.display = 'block';
-            toggleBtn.textContent = '❌ ซ่อนตาราง';
-          } else {
-            tableContainer.style.display = 'none';
-            toggleBtn.textContent = '🔍 แสดงตาราง';
-          }
-        });
-      }
       
-      statsDiv.style.display = 'flex';
+      statsDiv.style.display = 'block';
     }
   } catch (err) {
     console.error('Failed to fetch project stats:', err);
