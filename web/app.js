@@ -6492,7 +6492,7 @@ document.getElementById('btnTriggerProjectUpscale')?.addEventListener('click', a
     msg.style.display = 'block';
     msg.className = 'msg info';
     msg.style.color = '#38bdf8';
-    msg.textContent = 'กำลังดึงข้อมูลและเตรียมคิวส่งทำ Upscale ทั้งโปรเจกต์ กรุณารอสักครู่...';
+    msg.textContent = 'กำลังดึงข้อมูลและเตรียมคิวส่งทำ Upscale ฉากที่เหลือ กรุณารอสักครู่...';
   }
   if (btn) btn.disabled = true;
   
