@@ -1233,16 +1233,8 @@ async def get_project_stats(project_id: str):
                 
                 tracking_name = "-"
                 if has_video:
-                    has_start_image = bool(scene.get(f"{prefix}_image_media_id") or scene.get(f"{prefix}_image_url"))
-                    resolved_name = None
-                    if has_start_image:
-                        resolved_name = resolve_storyboard_filename(scene.get("display_order", 0))
-                    
-                    if resolved_name:
-                        tracking_name = resolved_name
-                    else:
-                        idx = counters[prefix]
-                        tracking_name = f"{project_slug}_{idx:03d}"
+                    idx = counters[prefix]
+                    tracking_name = f"{project_slug}_{idx:03d}"
                     counters[prefix] += 1
 
                 short_prompt = scene.get("prompt", "") or ""
@@ -1591,15 +1583,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     upscale_suffix = "_upscaled" if is_upscale else ""
                     
                     idx = counters[p]
-                    has_start_image = bool(scene.get(f"{p}_image_media_id") or scene.get(f"{p}_image_url"))
-                    resolved_name = None
-                    if has_start_image:
-                        resolved_name = resolve_storyboard_filename(display_order)
-                    
-                    if resolved_name:
-                        arcname = f"{resolved_name}_{orient_suffix}{upscale_suffix}.mp4"
-                    else:
-                        arcname = f"{project_slug}_{idx:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                    arcname = f"{project_slug}_{idx:03d}_{orient_suffix}{upscale_suffix}.mp4"
                         
                     zip_file.write(local_path, arcname=arcname)
                     video_added = True
