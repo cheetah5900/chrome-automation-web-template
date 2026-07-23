@@ -516,11 +516,24 @@ async function handleApiRequest(msg) {
     });
 
     let responseData;
-    const responseText = await response.text();
-    try {
-      responseData = JSON.parse(responseText);
-    } catch {
-      responseData = responseText;
+    let responseSummary = null;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const responseText = await response.text();
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = responseText;
+      }
+      responseSummary = responseText ? responseText.slice(0, 300) : null;
+    } else {
+      const buffer = await response.arrayBuffer();
+      const base64 = arrayBufferToBase64(buffer);
+      responseData = {
+        encodedVideo: base64,
+        contentType: contentType
+      };
+      responseSummary = `Binary response: ${contentType} (${buffer.byteLength} bytes)`;
     }
 
     sendToAgent({
@@ -528,8 +541,6 @@ async function handleApiRequest(msg) {
       status: response.status,
       data: responseData,
     });
-
-    const responseSummary = responseText ? responseText.slice(0, 300) : null;
     if (response.ok) {
       if (hasCaptcha) { metrics.successCount++; metrics.lastError = null; }
       updateRequestLog(logId, { status: 'success', httpStatus: response.status, responseSummary });
@@ -803,3 +814,14 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 console.log('[FlowAgent] Extension loaded');
+
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  const chunk_size = 0x8000;
+  for (let i = 0; i < len; i += chunk_size) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk_size));
+  }
+  return btoa(binary);
+}

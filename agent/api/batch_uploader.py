@@ -1769,3 +1769,4 @@ async def generate_pending_scenes(body: GeneratePendingRequest):
     logger.info("Queued %d pending scenes for generation in project %s", queued_count, body.project_id)
     return {"status": "SUCCESS", "queued_count": queued_count, "queued_scenes": queued_scenes}
 
+
