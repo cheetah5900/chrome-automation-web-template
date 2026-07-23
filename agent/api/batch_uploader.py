@@ -1119,9 +1119,17 @@ async def get_project_stats(project_id: str):
                             proj_name = f"Synced Project ({project_id[:8]})"
                             proj = await crud.create_project(id=project_id, name=proj_name)
                         proj_name = proj.get("name") if proj else "Synced Project"
+                        
+                        # Detect orientation of the synced project
+                        detected_orientation = "VERTICAL"
+                        if parsed_scenes:
+                            if any(bool(s.get("horizontal_video_url") or s.get("horizontal_video_media_id")) for s in parsed_scenes):
+                                detected_orientation = "HORIZONTAL"
+                                
                         v_run = await crud.create_video(
                             project_id=project_id,
-                            title=f"Imported from Google Flow ({proj_name})"
+                            title=f"Imported from Google Flow ({proj_name})",
+                            orientation=detected_orientation
                         )
                         videos = [v_run]
                         
@@ -1260,7 +1268,25 @@ async def get_project_stats(project_id: str):
         elif v_orientation == "HORIZONTAL":
             prefixes = ("horizontal",)
         else:
-            prefixes = ("vertical", "horizontal")
+            # If orientation is not set, dynamically check which orientation has any files/data in this video run
+            has_vert = any(
+                bool(s.get("vertical_video_media_id") or s.get("vertical_video_url") or 
+                     s.get("vertical_image_media_id") or s.get("vertical_image_url") or
+                     s.get("vertical_upscale_media_id") or s.get("vertical_upscale_url"))
+                for s in v_scenes
+            )
+            has_horiz = any(
+                bool(s.get("horizontal_video_media_id") or s.get("horizontal_video_url") or 
+                     s.get("horizontal_image_media_id") or s.get("horizontal_image_url") or
+                     s.get("horizontal_upscale_media_id") or s.get("horizontal_upscale_url"))
+                for s in v_scenes
+            )
+            if has_vert and has_horiz:
+                prefixes = ("vertical", "horizontal")
+            elif has_horiz:
+                prefixes = ("horizontal",)
+            else:
+                prefixes = ("vertical",)
             
         for scene in v_scenes_sorted:
             for prefix in prefixes:
