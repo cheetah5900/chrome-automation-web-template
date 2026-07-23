@@ -149,13 +149,10 @@ async function captureTokenFromFlowTab() {
     return;
   }
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tabs[0].id },
-      files: ['content.js'],
-    });
-    console.log('[FlowAgent] Token refresh triggered on Flow tab');
+    console.log('[FlowAgent] Reloading existing Flow tab to capture fresh token');
+    await chrome.tabs.reload(tabs[0].id);
   } catch (e) {
-    console.error('[FlowAgent] Token refresh failed:', e);
+    console.error('[FlowAgent] Failed to reload Flow tab:', e);
   }
 }
 
@@ -391,7 +388,7 @@ async function handleTrpcRequest(msg) {
   if (!flowKey) {
     console.log('[FlowAgent] flowKey missing for tRPC request, attempting token capture...');
     await captureTokenFromFlowTab();
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 35; i++) {
       if (flowKey) break;
       await sleep(200);
     }
@@ -487,7 +484,7 @@ async function handleApiRequest(msg) {
     if (!flowKey) {
       console.log('[FlowAgent] flowKey missing for API request, attempting token capture...');
       await captureTokenFromFlowTab();
-      for (let i = 0; i < 15; i++) {
+      for (let i = 0; i < 35; i++) {
         if (flowKey) break;
         await sleep(200);
       }
