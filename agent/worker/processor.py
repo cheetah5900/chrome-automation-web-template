@@ -186,8 +186,8 @@ async def _prerequisites_met(req: dict, orientation: str) -> bool:
             if not scene.get(f"{prefix}_image_media_id"):
                 image_reqs = await crud.list_requests(scene_id=scene["id"])
                 has_pending_image = any(
-                    r.get("req_type") in ("GENERATE_IMAGE", "EDIT_IMAGE", "REGENERATE_IMAGE")
-                    and r.get("status") in ("PENDING", "IN_PROGRESS", "CLAIMED")
+                    r.get("type") in ("GENERATE_IMAGE", "EDIT_IMAGE", "REGENERATE_IMAGE")
+                    and r.get("status") in ("PENDING", "PROCESSING", "CLAIMED")
                     for r in image_reqs
                 )
                 if has_pending_image:
@@ -522,11 +522,11 @@ async def _is_already_completed(req: dict, orientation: str) -> bool:
     if req_type in ("EDIT_IMAGE", "REGENERATE_IMAGE", "REGENERATE_VIDEO", "REGENERATE_CHARACTER_IMAGE", "EDIT_CHARACTER_IMAGE"):
         return False  # Always run — explicitly requesting new generation
     if req_type == "GENERATE_IMAGE":
-        return scene.get(f"{prefix}_image_status") == "COMPLETED"
+        return scene.get(f"{prefix}_image_status") == "COMPLETED" and bool(scene.get(f"{prefix}_image_url"))
     if req_type in ("GENERATE_VIDEO", "GENERATE_VIDEO_REFS"):
-        return scene.get(f"{prefix}_video_status") == "COMPLETED"
+        return scene.get(f"{prefix}_video_status") == "COMPLETED" and bool(scene.get(f"{prefix}_video_url"))
     if req_type == "UPSCALE_VIDEO":
-        return scene.get(f"{prefix}_upscale_status") == "COMPLETED"
+        return scene.get(f"{prefix}_upscale_status") == "COMPLETED" and bool(scene.get(f"{prefix}_upscale_url"))
     return False
 
 
