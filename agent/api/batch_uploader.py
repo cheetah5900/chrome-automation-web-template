@@ -622,6 +622,115 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
         if scene_dict["vertical_video_url"] or scene_dict["horizontal_video_url"]:
             scenes.append(scene_dict)
             
+    if not scenes:
+        logger.info("Structured cards list empty or not found. Performing fallback global scan for video nodes in project...")
+        all_video_nodes = []
+        def scan_all_dict(node, parent_dict=None):
+            if isinstance(node, dict):
+                has_vid = False
+                for k, v in node.items():
+                    if isinstance(v, str) and "storage.googleapis.com" in v and "/video/" in v:
+                        has_vid = True
+                        break
+                if has_vid:
+                    all_video_nodes.append((node, parent_dict or node))
+                for v in node.values():
+                    scan_all_dict(v, node)
+            elif isinstance(node, list):
+                for item in node:
+                    scan_all_dict(item, parent_dict)
+
+        scan_all_dict(project_data)
+        
+        unique_videos = {}
+        for node, parent in all_video_nodes:
+            url = None
+            for k, v in node.items():
+                if isinstance(v, str) and "storage.googleapis.com" in v and "/video/" in v:
+                    url = v.replace("\\u0026", "&").replace("\\", "")
+                    break
+            if not url:
+                continue
+            
+            media_id = None
+            media_match = re.search(r'/video/([0-9a-f-]{36})', url)
+            if media_match:
+                media_id = media_match.group(1)
+            if not media_id:
+                media_id = node.get("mediaId") or node.get("mediaKey") or node.get("id")
+                
+            if not media_id:
+                continue
+                
+            aspect = ""
+            for lookup in (node, parent):
+                for k, v in lookup.items():
+                    if isinstance(v, str) and "ASPECT" in v.upper():
+                        aspect = v.upper()
+                        break
+                if aspect:
+                    break
+            
+            if not aspect:
+                text_to_search = str(node) + str(parent)
+                if "PORTRAIT" in text_to_search.upper() or "VERTICAL" in text_to_search.upper():
+                    aspect = "PORTRAIT"
+                elif "LANDSCAPE" in text_to_search.upper() or "HORIZONTAL" in text_to_search.upper():
+                    aspect = "LANDSCAPE"
+                    
+            is_upscale = False
+            text_to_search = (url + str(node) + str(parent)).lower()
+            if "upscale" in text_to_search or "upsample" in text_to_search or "high_res" in text_to_search:
+                is_upscale = True
+                
+            if media_id not in unique_videos:
+                unique_videos[media_id] = {
+                    "url": url,
+                    "media_id": media_id,
+                    "aspect": aspect,
+                    "is_upscale": is_upscale
+                }
+        
+        idx = 1
+        for mid, vinfo in unique_videos.items():
+            if vinfo["is_upscale"]:
+                continue
+                
+            aspect = vinfo["aspect"]
+            scene_dict = {
+                "display_order": idx,
+                "id": f"virtual_scene_{mid[:8]}",
+                "vertical_video_url": None,
+                "vertical_video_media_id": None,
+                "horizontal_video_url": None,
+                "horizontal_video_media_id": None,
+                "vertical_upscale_url": None,
+                "vertical_upscale_media_id": None,
+                "horizontal_upscale_url": None,
+                "horizontal_upscale_media_id": None,
+            }
+            
+            if "PORTRAIT" in aspect or "VERTICAL" in aspect:
+                scene_dict["vertical_video_url"] = vinfo["url"]
+                scene_dict["vertical_video_media_id"] = mid
+            else:
+                scene_dict["horizontal_video_url"] = vinfo["url"]
+                scene_dict["horizontal_video_media_id"] = mid
+                
+            v_url = scene_dict["vertical_video_url"]
+            h_url = scene_dict["horizontal_video_url"]
+            if not v_url and h_url:
+                scene_dict["vertical_video_url"] = scene_dict["horizontal_video_url"]
+                scene_dict["vertical_video_media_id"] = scene_dict["horizontal_video_media_id"]
+            elif not h_url and v_url:
+                scene_dict["horizontal_video_url"] = scene_dict["vertical_video_url"]
+                scene_dict["horizontal_video_media_id"] = scene_dict["vertical_video_media_id"]
+                
+            scenes.append(scene_dict)
+            idx += 1
+            
+        logger.info("Fallback global scan extracted %d virtual scenes from project data", len(scenes))
+            
     return scenes
 
 class UpscaleProjectRequest(BaseModel):
