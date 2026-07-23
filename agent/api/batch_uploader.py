@@ -905,26 +905,52 @@ async def get_project_stats(project_id: str):
         return {
             "total_scenes": 0,
             "upscaled_scenes": 0,
-            "remaining_scenes": 0
+            "remaining_scenes": 0,
+            "remaining_details": []
         }
         
     total_scenes = 0
     upscaled_scenes = 0
+    remaining_details = []
     
-    for v in videos:
+    # Sort video runs chronologically to match run indexes
+    videos_sorted = sorted(videos, key=lambda x: x.get("created_at", ""))
+    run_numbers = {v["id"]: idx + 1 for idx, v in enumerate(videos_sorted)}
+    video_titles = {v["id"]: v["title"] for v in videos}
+    
+    for v in videos_sorted:
         v_scenes = await crud.list_scenes(v["id"])
-        for scene in v_scenes:
+        # Sort scenes by display_order
+        v_scenes_sorted = sorted(v_scenes, key=lambda x: x.get("display_order", 0))
+        for scene in v_scenes_sorted:
             for prefix in ("vertical", "horizontal"):
                 if scene.get(f"{prefix}_video_media_id"):
                     total_scenes += 1
-                    if scene.get(f"{prefix}_upscale_url") or scene.get(f"{prefix}_upscale_media_id"):
+                    is_upscaled = bool(scene.get(f"{prefix}_upscale_url") or scene.get(f"{prefix}_upscale_media_id"))
+                    if is_upscaled:
                         upscaled_scenes += 1
+                    else:
+                        short_prompt = scene.get("prompt", "") or ""
+                        if len(short_prompt) > 60:
+                            short_prompt = short_prompt[:57] + "..."
+                        run_num = run_numbers.get(v["id"], 1)
+                        run_title = video_titles.get(v["id"], "run")
+                        
+                        remaining_details.append({
+                            "scene_id": scene["id"],
+                            "display_order": scene.get("display_order", 0),
+                            "orientation": prefix.upper(),
+                            "prompt": short_prompt,
+                            "run_title": run_title,
+                            "run_num": run_num
+                        })
                         
     remaining_scenes = total_scenes - upscaled_scenes
     return {
         "total_scenes": total_scenes,
         "upscaled_scenes": upscaled_scenes,
-        "remaining_scenes": remaining_scenes
+        "remaining_scenes": remaining_scenes,
+        "remaining_details": remaining_details
     }
 
 class DownloadProjectVideosRequest(BaseModel):

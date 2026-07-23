@@ -6036,10 +6036,51 @@ async function updateProjectStats() {
   
   try {
     const res = await jsonFetch(`/api/batch-uploader/project-stats?project_id=${projectId}`);
+    const statsDiv = document.getElementById('flow_downloader_stats');
+    const toggleBtn = document.getElementById('btn_toggle_remaining_details');
+    const detailsList = document.getElementById('flow_remaining_details_list');
+    
     if (res && statsDiv) {
       document.getElementById('flow_stats_total').textContent = res.total_scenes;
       document.getElementById('flow_stats_upscaled').textContent = res.upscaled_scenes;
       document.getElementById('flow_stats_remaining').textContent = res.remaining_scenes;
+      
+      if (res.remaining_details && res.remaining_details.length > 0) {
+        if (toggleBtn) {
+          toggleBtn.style.display = 'inline-block';
+          if (!toggleBtn.dataset.handlerAttached) {
+            toggleBtn.dataset.handlerAttached = 'true';
+            toggleBtn.addEventListener('click', () => {
+              if (detailsList.style.display === 'none' || !detailsList.style.display) {
+                detailsList.style.display = 'block';
+                toggleBtn.textContent = '❌ ปิดรายละเอียด';
+              } else {
+                detailsList.style.display = 'none';
+                toggleBtn.textContent = '🔍 ดูรายละเอียด';
+              }
+            });
+          }
+        }
+        
+        if (detailsList) {
+          detailsList.innerHTML = res.remaining_details.map(item => {
+            const orientStr = item.orientation === 'VERTICAL' ? 'แนวตั้ง' : 'แนวนอน';
+            return `<div style="margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.03);">
+              <span style="color: #ffb86c;">[รอบที่ ${item.run_num}]</span> 
+              <span style="color: #fff; font-weight: 500;">ฉากที่ ${item.display_order} (${orientStr})</span>: 
+              <span style="color: rgba(255,255,255,0.5); font-style: italic;">"${item.prompt}"</span>
+            </div>`;
+          }).join('');
+        }
+      } else {
+        if (toggleBtn) toggleBtn.style.display = 'none';
+        if (detailsList) {
+          detailsList.style.display = 'none';
+          detailsList.innerHTML = '';
+        }
+        if (toggleBtn) toggleBtn.textContent = '🔍 ดูรายละเอียด';
+      }
+      
       statsDiv.style.display = 'flex';
     }
   } catch (err) {

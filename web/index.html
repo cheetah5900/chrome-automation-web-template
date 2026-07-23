@@ -695,13 +695,19 @@
             </p>
             
             <!-- Project Upscale Stats -->
-            <div id="flow_downloader_stats" style="display: none; margin-bottom: 16px; padding: 12px 16px; background: rgba(255,255,255,0.03); border-radius: 10px; font-size: 0.85rem; border: 1px solid rgba(255,255,255,0.08); display: flex; gap: 20px; justify-content: flex-start; align-items: center; width: 100%;">
-              <span style="color: rgba(255,255,255,0.6); font-weight: 500;">📊 สถิติวิดีโอในโปรเจกต์:</span>
-              <span style="display: inline-flex; align-items: center; gap: 6px;">🎬 ทั้งหมด: <strong id="flow_stats_total" style="color: #fff; font-size: 0.95rem;">0</strong> ฉาก</span>
-              <span style="height: 12px; width: 1px; background: rgba(255,255,255,0.15);"></span>
-              <span style="display: inline-flex; align-items: center; gap: 6px;">⚡ Upscale แล้ว: <strong id="flow_stats_upscaled" style="color: #5eff5e; font-size: 0.95rem;">0</strong> ฉาก</span>
-              <span style="height: 12px; width: 1px; background: rgba(255,255,255,0.15);"></span>
-              <span style="display: inline-flex; align-items: center; gap: 6px;">⏳ ยังไม่ได้ทำ: <strong id="flow_stats_remaining" style="color: #ffb86c; font-size: 0.95rem;">0</strong> ฉาก</span>
+            <div id="flow_downloader_stats" style="display: none; margin-bottom: 16px; padding: 12px 16px; background: rgba(255,255,255,0.03); border-radius: 10px; font-size: 0.85rem; border: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 10px; width: 100%;">
+              <div style="display: flex; gap: 16px; justify-content: flex-start; align-items: center; width: 100%; flex-wrap: wrap;">
+                <span style="color: rgba(255,255,255,0.6); font-weight: 500;">📊 สถิติวิดีโอในโปรเจกต์:</span>
+                <span style="display: inline-flex; align-items: center; gap: 6px;">🎬 ทั้งหมด: <strong id="flow_stats_total" style="color: #fff; font-size: 0.95rem;">0</strong> ฉาก</span>
+                <span style="height: 12px; width: 1px; background: rgba(255,255,255,0.15);"></span>
+                <span style="display: inline-flex; align-items: center; gap: 6px;">⚡ Upscale แล้ว: <strong id="flow_stats_upscaled" style="color: #5eff5e; font-size: 0.95rem;">0</strong> ฉาก</span>
+                <span style="height: 12px; width: 1px; background: rgba(255,255,255,0.15);"></span>
+                <span style="display: inline-flex; align-items: center; gap: 6px;">⏳ ยังไม่ได้ทำ: <strong id="flow_stats_remaining" style="color: #ffb86c; font-size: 0.95rem;">0</strong> ฉาก</span>
+                <button id="btn_toggle_remaining_details" type="button" style="margin-left: auto; padding: 4px 8px; font-size: 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #ffb86c; cursor: pointer; transition: all 0.2s;">🔍 ดูรายละเอียด</button>
+              </div>
+              <div id="flow_remaining_details_list" style="display: none; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); max-height: 160px; overflow-y: auto; font-family: monospace; font-size: 0.75rem; color: rgba(255,255,255,0.7); line-height: 1.5; width: 100%;">
+                <!-- Dynamic remaining list -->
+              </div>
             </div>
             
             <div style="display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
