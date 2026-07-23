@@ -956,26 +956,23 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
                             break
 
                 
-                scene_data = {
-                    "vertical_video_url": fs["vertical_video_url"],
-                    "vertical_video_media_id": fs["vertical_video_media_id"],
-                    "horizontal_video_url": fs["horizontal_video_url"],
-                    "horizontal_video_media_id": fs["horizontal_video_media_id"],
-                    "vertical_upscale_url": fs["vertical_upscale_url"],
-                    "vertical_upscale_media_id": fs["vertical_upscale_media_id"],
-                    "horizontal_upscale_url": fs["horizontal_upscale_url"],
-                    "horizontal_upscale_media_id": fs["horizontal_upscale_media_id"],
-                }
+                scene_data = {}
+                for field in ("vertical_video_url", "vertical_video_media_id",
+                              "horizontal_video_url", "horizontal_video_media_id",
+                              "vertical_upscale_url", "vertical_upscale_media_id",
+                              "horizontal_upscale_url", "horizontal_upscale_media_id"):
+                    if fs.get(field) is not None:
+                        scene_data[field] = fs[field]
                 
                 if existing:
                     scene_id = existing["id"]
-                    if fs["vertical_video_url"] and not existing.get("vertical_video_status"):
+                    if fs["vertical_video_url"] and existing.get("vertical_video_status") != "COMPLETED":
                         scene_data["vertical_video_status"] = "COMPLETED"
-                    if fs["horizontal_video_url"] and not existing.get("horizontal_video_status"):
+                    if fs["horizontal_video_url"] and existing.get("horizontal_video_status") != "COMPLETED":
                         scene_data["horizontal_video_status"] = "COMPLETED"
-                    if fs["vertical_upscale_url"] and not existing.get("vertical_upscale_status"):
+                    if fs["vertical_upscale_url"] and existing.get("vertical_upscale_status") != "COMPLETED":
                         scene_data["vertical_upscale_status"] = "COMPLETED"
-                    if fs["horizontal_upscale_url"] and not existing.get("horizontal_upscale_status"):
+                    if fs["horizontal_upscale_url"] and existing.get("horizontal_upscale_status") != "COMPLETED":
                         scene_data["horizontal_upscale_status"] = "COMPLETED"
                         
                     await crud.update_scene(scene_id, **scene_data)
@@ -1118,26 +1115,23 @@ async def get_project_stats(project_id: str):
                                     break
 
                                 
-                        scene_data = {
-                            "vertical_video_url": fs["vertical_video_url"],
-                            "vertical_video_media_id": fs["vertical_video_media_id"],
-                            "horizontal_video_url": fs["horizontal_video_url"],
-                            "horizontal_video_media_id": fs["horizontal_video_media_id"],
-                            "vertical_upscale_url": fs["vertical_upscale_url"],
-                            "vertical_upscale_media_id": fs["vertical_upscale_media_id"],
-                            "horizontal_upscale_url": fs["horizontal_upscale_url"],
-                            "horizontal_upscale_media_id": fs["horizontal_upscale_media_id"],
-                        }
+                        scene_data = {}
+                        for field in ("vertical_video_url", "vertical_video_media_id",
+                                      "horizontal_video_url", "horizontal_video_media_id",
+                                      "vertical_upscale_url", "vertical_upscale_media_id",
+                                      "horizontal_upscale_url", "horizontal_upscale_media_id"):
+                            if fs.get(field) is not None:
+                                scene_data[field] = fs[field]
                         
                         if existing:
                             scene_id = existing["id"]
-                            if fs["vertical_video_url"] and not existing.get("vertical_video_status"):
+                            if fs["vertical_video_url"] and existing.get("vertical_video_status") != "COMPLETED":
                                 scene_data["vertical_video_status"] = "COMPLETED"
-                            if fs["horizontal_video_url"] and not existing.get("horizontal_video_status"):
+                            if fs["horizontal_video_url"] and existing.get("horizontal_video_status") != "COMPLETED":
                                 scene_data["horizontal_video_status"] = "COMPLETED"
-                            if fs["vertical_upscale_url"] and not existing.get("vertical_upscale_status"):
+                            if fs["vertical_upscale_url"] and existing.get("vertical_upscale_status") != "COMPLETED":
                                 scene_data["vertical_upscale_status"] = "COMPLETED"
-                            if fs["horizontal_upscale_url"] and not existing.get("horizontal_upscale_status"):
+                            if fs["horizontal_upscale_url"] and existing.get("horizontal_upscale_status") != "COMPLETED":
                                 scene_data["horizontal_upscale_status"] = "COMPLETED"
                                 
                             await crud.update_scene(scene_id, **scene_data)
