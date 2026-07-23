@@ -44,6 +44,17 @@ async def ws_handler(websocket):
     # Send callback secret so extension can authenticate HTTP callbacks
     await websocket.send(json.dumps({"type": "callback_secret", "secret": _CALLBACK_SECRET, "api_port": API_PORT}))
 
+    # Background task to send periodic keepalives to prevent Chrome extension SW suspension
+    async def keepalive_loop():
+        try:
+            while True:
+                await asyncio.sleep(15)
+                await websocket.send(json.dumps({"type": "ping"}))
+        except Exception:
+            pass
+
+    keepalive_task = asyncio.create_task(keepalive_loop())
+
     try:
         async for raw in websocket:
             try:
@@ -56,6 +67,7 @@ async def ws_handler(websocket):
     except websockets.ConnectionClosed:
         pass
     finally:
+        keepalive_task.cancel()
         client.clear_extension()
         logger.info("Extension disconnected")
 

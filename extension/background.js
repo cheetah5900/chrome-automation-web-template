@@ -66,6 +66,7 @@ function broadcastRequestLog() {
 
 chrome.runtime.onInstalled.addListener(init);
 chrome.runtime.onStartup.addListener(init);
+init(); // Call immediately on script evaluation to guarantee immediate agent connection
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'reconnect') connectToAgent();
   if (alarm.name === 'keepAlive') keepAlive();
@@ -227,6 +228,10 @@ function connectToAgent() {
           chrome.storage.local.set({ apiPort: msg.api_port });
         }
         console.log('[FlowAgent] Received callback secret and API port:', msg.api_port);
+      } else if (msg.type === 'ping') {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'pong' }));
+        }
       } else if (msg.type === 'pong') {
         // keepalive response
       }
@@ -786,5 +791,15 @@ function scheduleTelemetry() {
 setInterval(() => { _telemetrySessionId = `;${Date.now()}`; }, _rand(25, 35) * 60 * 1000);
 
 scheduleTelemetry();
+
+// ─── Background Service Worker Keep-Alive Port ───────────────
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'keepalive') {
+    port.onMessage.addListener((msg) => {
+      // Just receiving the message keeps the service worker alive
+      console.log('[FlowAgent] Keepalive heartbeat received over port');
+    });
+  }
+});
 
 console.log('[FlowAgent] Extension loaded');

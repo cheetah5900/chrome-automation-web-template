@@ -47,3 +47,33 @@ window.addEventListener('TRPC_MEDIA_URLS', (e) => {
     body,
   }).catch(() => {});
 });
+
+// ─── Background Service Worker Keep-Alive Port ───────────────
+let port = null;
+function connectPort() {
+  try {
+    port = chrome.runtime.connect({ name: 'keepalive' });
+    port.onDisconnect.addListener(() => {
+      port = null;
+      setTimeout(connectPort, 1000);
+    });
+  } catch (e) {
+    port = null;
+    setTimeout(connectPort, 1000);
+  }
+}
+connectPort();
+
+// Send keep-alive heartbeat message every 15 seconds
+setInterval(() => {
+  if (port) {
+    try {
+      port.postMessage({ type: 'HEARTBEAT' });
+    } catch (e) {
+      port = null;
+      connectPort();
+    }
+  } else {
+    connectPort();
+  }
+}, 15000);

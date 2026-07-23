@@ -754,10 +754,12 @@ async def launch_profile(payload: LaunchProfilePayload):
     # Launch without --user-data-dir if it is the Everyday Chrome profile, to load untouched daily sessions directly
     from pathlib import Path
     everyday_profile = str(Path.home() / "Library/Application Support/Google/Chrome")
+    ext_dir = str(Path(__file__).resolve().parent.parent / "extension")
     if profile_path == "/Users/litar/Library/Application Support/Google/Chrome" or profile_path == everyday_profile:
         cmd = [
             chrome_binary,
             f"--remote-debugging-port={debug_port}",
+            f"--load-extension={ext_dir}",
             *startup_urls,
         ]
     else:
@@ -765,6 +767,7 @@ async def launch_profile(payload: LaunchProfilePayload):
             chrome_binary,
             f"--remote-debugging-port={debug_port}",
             f"--user-data-dir={profile_path}",
+            f"--load-extension={ext_dir}",
             *startup_urls,
         ]
 
