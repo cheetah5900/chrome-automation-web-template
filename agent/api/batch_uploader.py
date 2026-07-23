@@ -908,7 +908,8 @@ async def get_project_stats(project_id: str):
             "remaining_scenes": 0,
             "created_list": [],
             "not_upscaled_list": [],
-            "pending_list": []
+            "pending_list": [],
+            "all_scenes": []
         }
         
     total_scenes = 0
@@ -917,6 +918,7 @@ async def get_project_stats(project_id: str):
     created_list = []
     not_upscaled_list = []
     pending_list = []
+    all_scenes_list = []
     
     # Sort video runs chronologically to match run indexes
     videos_sorted = sorted(videos, key=lambda x: x.get("created_at", ""))
@@ -944,8 +946,12 @@ async def get_project_stats(project_id: str):
                     "orientation": prefix.upper(),
                     "prompt": short_prompt,
                     "run_title": run_title,
-                    "run_num": run_num
+                    "run_num": run_num,
+                    "has_video": has_video,
+                    "has_upscale": has_upscale
                 }
+                
+                all_scenes_list.append(item)
                 
                 if has_video:
                     total_scenes += 1
@@ -964,7 +970,8 @@ async def get_project_stats(project_id: str):
         "remaining_scenes": remaining_scenes,
         "created_list": created_list,
         "not_upscaled_list": not_upscaled_list,
-        "pending_list": pending_list
+        "pending_list": pending_list,
+        "all_scenes": all_scenes_list
     }
 
 def resolve_storyboard_filename(display_order: int) -> str | None:

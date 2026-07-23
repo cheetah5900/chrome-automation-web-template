@@ -6047,55 +6047,54 @@ async function updateProjectStats() {
       document.getElementById('flow_stats_remaining').textContent = res.remaining_scenes;
       document.getElementById('flow_stats_pending_count').textContent = pendingCount;
       
-      // Helper function to bind toggle buttons
-      const bindToggle = (btnId, listId, dataList, title) => {
-        const btn = document.getElementById(btnId);
-        const list = document.getElementById(listId);
-        if (!btn || !list) return;
-        
-        if (dataList && dataList.length > 0) {
-          btn.style.display = 'inline-block';
-          btn.textContent = `${title} (${dataList.length})`;
+      // Populate the table
+      const tbody = document.getElementById('flow_stats_table_body');
+      if (tbody && res.all_scenes) {
+        tbody.innerHTML = res.all_scenes.map(item => {
+          const orientStr = item.orientation === 'VERTICAL' ? 'แนวตั้ง 📱' : 'แนวนอน 🖥️';
           
-          list.innerHTML = dataList.map(item => {
-            const orientStr = item.orientation === 'VERTICAL' ? 'แนวตั้ง' : 'แนวนอน';
-            return `<div style="margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.03);">
-              <span style="color: #ffb86c;">[รอบที่ ${item.run_num}]</span> 
-              <span style="color: #fff; font-weight: 500;">ฉากที่ ${item.display_order} (${orientStr})</span>: 
-              <span style="color: rgba(255,255,255,0.5); font-style: italic;">"${item.prompt}"</span>
-            </div>`;
-          }).join('');
-          
-          if (!btn.dataset.handlerAttached) {
-            btn.dataset.handlerAttached = 'true';
-            btn.addEventListener('click', () => {
-              // Hide other lists first to keep it neat
-              ['flow_created_list_details', 'flow_not_upscaled_list_details', 'flow_pending_list_details'].forEach(id => {
-                if (id !== listId) {
-                  const otherList = document.getElementById(id);
-                  if (otherList) otherList.style.display = 'none';
-                }
-              });
-              
-              if (list.style.display === 'none' || !list.style.display) {
-                list.style.display = 'block';
-                btn.style.background = 'rgba(255, 255, 255, 0.15)';
-              } else {
-                list.style.display = 'none';
-                btn.style.background = 'rgba(255, 255, 255, 0.06)';
-              }
-            });
+          let videoStatus = '';
+          if (item.has_video) {
+            videoStatus = '<span style="color: #8da6ff; font-weight: bold;">สร้างแล้ว 🎬</span>';
+          } else {
+            videoStatus = '<span style="color: rgba(255,255,255,0.35);">ยังไม่ได้สร้าง ⏳</span>';
           }
-        } else {
-          btn.style.display = 'none';
-          list.style.display = 'none';
-          list.innerHTML = '';
-        }
-      };
+          
+          let upscaleStatus = '';
+          if (item.has_upscale) {
+            upscaleStatus = '<span style="color: #5eff5e; font-weight: bold;">ขยายแล้ว ⚡</span>';
+          } else if (item.has_video) {
+            upscaleStatus = '<span style="color: #ffb86c;">ยังไม่ได้ขยาย ⏳</span>';
+          } else {
+            upscaleStatus = '<span style="color: rgba(255,255,255,0.2);">-</span>';
+          }
+          
+          return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseenter="this.style.background='rgba(255,255,255,0.02)'" onmouseleave="this.style.background='transparent'">
+            <td style="padding: 8px 12px; font-weight: 500;">${item.display_order}</td>
+            <td style="padding: 8px 12px; color: rgba(255,255,255,0.7);">รอบที่ ${item.run_num} (${item.run_title})</td>
+            <td style="padding: 8px 12px;">${orientStr}</td>
+            <td style="padding: 8px 12px; text-align: center;">${videoStatus}</td>
+            <td style="padding: 8px 12px; text-align: center;">${upscaleStatus}</td>
+            <td style="padding: 8px 12px; color: rgba(255,255,255,0.5); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="${item.prompt}">${item.prompt}</td>
+          </tr>`;
+        }).join('');
+      }
 
-      bindToggle('btn_toggle_created_list', 'flow_created_list_details', res.created_list, '🎬 ดูฉากที่สร้างแล้ว');
-      bindToggle('btn_toggle_not_upscaled_list', 'flow_not_upscaled_list_details', res.not_upscaled_list, '⚡ ดูฉากที่ยังไม่ได้ upscale');
-      bindToggle('btn_toggle_pending_list', 'flow_pending_list_details', res.pending_list, '💤 ดูฉากที่ยังไม่ได้สร้าง');
+      // Wire up toggle button
+      const toggleBtn = document.getElementById('btn_toggle_stats_table');
+      const tableContainer = document.getElementById('flow_stats_table_container');
+      if (toggleBtn && tableContainer && !toggleBtn.dataset.handlerAttached) {
+        toggleBtn.dataset.handlerAttached = 'true';
+        toggleBtn.addEventListener('click', () => {
+          if (tableContainer.style.display === 'none' || !tableContainer.style.display) {
+            tableContainer.style.display = 'block';
+            toggleBtn.textContent = '❌ ซ่อนตาราง';
+          } else {
+            tableContainer.style.display = 'none';
+            toggleBtn.textContent = '🔍 แสดงตาราง';
+          }
+        });
+      }
       
       statsDiv.style.display = 'flex';
     }
