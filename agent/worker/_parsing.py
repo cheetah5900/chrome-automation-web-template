@@ -65,7 +65,8 @@ def _extract_media_id(result: dict, req_type: str) -> str:
     if req_type in ("GENERATE_VIDEO", "REGENERATE_VIDEO", "GENERATE_VIDEO_REFS", "UPSCALE_VIDEO"):
         ops = data.get("operations", [])
         if ops:
-            video_meta = ops[0].get("operation", {}).get("metadata", {}).get("video", {})
+            video_op = ops[0].get("operation", {})
+            video_meta = video_op.get("metadata", {}).get("video", {}) or video_op.get("response", {}).get("video", {})
             for field in ("mediaId",):
                 val = video_meta.get(field, "")
                 if val and _is_uuid(val):
@@ -100,7 +101,8 @@ def _extract_output_url(result: dict, req_type: str) -> str:
     if req_type in ("GENERATE_VIDEO", "REGENERATE_VIDEO", "GENERATE_VIDEO_REFS", "UPSCALE_VIDEO"):
         ops = data.get("operations", [])
         if ops:
-            video_meta = ops[0].get("operation", {}).get("metadata", {}).get("video", {})
+            video_op = ops[0].get("operation", {})
+            video_meta = video_op.get("metadata", {}).get("video", {}) or video_op.get("response", {}).get("video", {})
             url = video_meta.get("fifeUrl", "")
             if url:
                 return url

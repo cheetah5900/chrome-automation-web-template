@@ -584,7 +584,7 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
                     
             is_upscale = False
             text_to_search = (url + str(node) + str(parent)).lower()
-            if "upscale" in text_to_search or "upsample" in text_to_search or "high_res" in text_to_search:
+            if "upscal" in text_to_search or "upsampl" in text_to_search or "high_res" in text_to_search:
                 is_upscale = True
                 
             if "PORTRAIT" in aspect or "VERTICAL" in aspect:
@@ -676,7 +676,7 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
                     
             is_upscale = False
             text_to_search = (url + str(node) + str(parent)).lower()
-            if "upscale" in text_to_search or "upsample" in text_to_search or "high_res" in text_to_search:
+            if "upscal" in text_to_search or "upsampl" in text_to_search or "high_res" in text_to_search:
                 is_upscale = True
                 
             if media_id not in unique_videos:
