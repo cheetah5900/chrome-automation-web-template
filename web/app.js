@@ -6037,33 +6037,27 @@ async function updateProjectStats() {
   try {
     const res = await jsonFetch(`/api/batch-uploader/project-stats?project_id=${projectId}`);
     const statsDiv = document.getElementById('flow_downloader_stats');
-    const toggleBtn = document.getElementById('btn_toggle_remaining_details');
-    const detailsList = document.getElementById('flow_remaining_details_list');
     
     if (res && statsDiv) {
-      document.getElementById('flow_stats_total').textContent = res.total_scenes;
+      const createdCount = res.created_list ? res.created_list.length : 0;
+      const pendingCount = res.pending_list ? res.pending_list.length : 0;
+      
+      document.getElementById('flow_stats_created_count').textContent = createdCount;
       document.getElementById('flow_stats_upscaled').textContent = res.upscaled_scenes;
       document.getElementById('flow_stats_remaining').textContent = res.remaining_scenes;
+      document.getElementById('flow_stats_pending_count').textContent = pendingCount;
       
-      if (res.remaining_details && res.remaining_details.length > 0) {
-        if (toggleBtn) {
-          toggleBtn.style.display = 'inline-block';
-          if (!toggleBtn.dataset.handlerAttached) {
-            toggleBtn.dataset.handlerAttached = 'true';
-            toggleBtn.addEventListener('click', () => {
-              if (detailsList.style.display === 'none' || !detailsList.style.display) {
-                detailsList.style.display = 'block';
-                toggleBtn.textContent = '❌ ปิดรายละเอียด';
-              } else {
-                detailsList.style.display = 'none';
-                toggleBtn.textContent = '🔍 ดูรายละเอียด';
-              }
-            });
-          }
-        }
+      // Helper function to bind toggle buttons
+      const bindToggle = (btnId, listId, dataList, title) => {
+        const btn = document.getElementById(btnId);
+        const list = document.getElementById(listId);
+        if (!btn || !list) return;
         
-        if (detailsList) {
-          detailsList.innerHTML = res.remaining_details.map(item => {
+        if (dataList && dataList.length > 0) {
+          btn.style.display = 'inline-block';
+          btn.textContent = `${title} (${dataList.length})`;
+          
+          list.innerHTML = dataList.map(item => {
             const orientStr = item.orientation === 'VERTICAL' ? 'แนวตั้ง' : 'แนวนอน';
             return `<div style="margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.03);">
               <span style="color: #ffb86c;">[รอบที่ ${item.run_num}]</span> 
@@ -6071,15 +6065,37 @@ async function updateProjectStats() {
               <span style="color: rgba(255,255,255,0.5); font-style: italic;">"${item.prompt}"</span>
             </div>`;
           }).join('');
+          
+          if (!btn.dataset.handlerAttached) {
+            btn.dataset.handlerAttached = 'true';
+            btn.addEventListener('click', () => {
+              // Hide other lists first to keep it neat
+              ['flow_created_list_details', 'flow_not_upscaled_list_details', 'flow_pending_list_details'].forEach(id => {
+                if (id !== listId) {
+                  const otherList = document.getElementById(id);
+                  if (otherList) otherList.style.display = 'none';
+                }
+              });
+              
+              if (list.style.display === 'none' || !list.style.display) {
+                list.style.display = 'block';
+                btn.style.background = 'rgba(255, 255, 255, 0.15)';
+              } else {
+                list.style.display = 'none';
+                btn.style.background = 'rgba(255, 255, 255, 0.06)';
+              }
+            });
+          }
+        } else {
+          btn.style.display = 'none';
+          list.style.display = 'none';
+          list.innerHTML = '';
         }
-      } else {
-        if (toggleBtn) toggleBtn.style.display = 'none';
-        if (detailsList) {
-          detailsList.style.display = 'none';
-          detailsList.innerHTML = '';
-        }
-        if (toggleBtn) toggleBtn.textContent = '🔍 ดูรายละเอียด';
-      }
+      };
+
+      bindToggle('btn_toggle_created_list', 'flow_created_list_details', res.created_list, '🎬 ดูฉากที่สร้างแล้ว');
+      bindToggle('btn_toggle_not_upscaled_list', 'flow_not_upscaled_list_details', res.not_upscaled_list, '⚡ ดูฉากที่ยังไม่ได้ upscale');
+      bindToggle('btn_toggle_pending_list', 'flow_pending_list_details', res.pending_list, '💤 ดูฉากที่ยังไม่ได้สร้าง');
       
       statsDiv.style.display = 'flex';
     }

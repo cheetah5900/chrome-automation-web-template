@@ -906,12 +906,17 @@ async def get_project_stats(project_id: str):
             "total_scenes": 0,
             "upscaled_scenes": 0,
             "remaining_scenes": 0,
-            "remaining_details": []
+            "created_list": [],
+            "not_upscaled_list": [],
+            "pending_list": []
         }
         
     total_scenes = 0
     upscaled_scenes = 0
-    remaining_details = []
+    
+    created_list = []
+    not_upscaled_list = []
+    pending_list = []
     
     # Sort video runs chronologically to match run indexes
     videos_sorted = sorted(videos, key=lambda x: x.get("created_at", ""))
@@ -924,34 +929,139 @@ async def get_project_stats(project_id: str):
         v_scenes_sorted = sorted(v_scenes, key=lambda x: x.get("display_order", 0))
         for scene in v_scenes_sorted:
             for prefix in ("vertical", "horizontal"):
-                if scene.get(f"{prefix}_video_media_id"):
+                has_video = bool(scene.get(f"{prefix}_video_media_id") or scene.get(f"{prefix}_video_url"))
+                has_upscale = bool(scene.get(f"{prefix}_upscale_url") or scene.get(f"{prefix}_upscale_media_id"))
+                
+                short_prompt = scene.get("prompt", "") or ""
+                if len(short_prompt) > 60:
+                    short_prompt = short_prompt[:57] + "..."
+                run_num = run_numbers.get(v["id"], 1)
+                run_title = video_titles.get(v["id"], "run")
+                
+                item = {
+                    "scene_id": scene["id"],
+                    "display_order": scene.get("display_order", 0),
+                    "orientation": prefix.upper(),
+                    "prompt": short_prompt,
+                    "run_title": run_title,
+                    "run_num": run_num
+                }
+                
+                if has_video:
                     total_scenes += 1
-                    is_upscaled = bool(scene.get(f"{prefix}_upscale_url") or scene.get(f"{prefix}_upscale_media_id"))
-                    if is_upscaled:
+                    created_list.append(item)
+                    if has_upscale:
                         upscaled_scenes += 1
                     else:
-                        short_prompt = scene.get("prompt", "") or ""
-                        if len(short_prompt) > 60:
-                            short_prompt = short_prompt[:57] + "..."
-                        run_num = run_numbers.get(v["id"], 1)
-                        run_title = video_titles.get(v["id"], "run")
-                        
-                        remaining_details.append({
-                            "scene_id": scene["id"],
-                            "display_order": scene.get("display_order", 0),
-                            "orientation": prefix.upper(),
-                            "prompt": short_prompt,
-                            "run_title": run_title,
-                            "run_num": run_num
-                        })
+                        not_upscaled_list.append(item)
+                else:
+                    pending_list.append(item)
                         
     remaining_scenes = total_scenes - upscaled_scenes
     return {
         "total_scenes": total_scenes,
         "upscaled_scenes": upscaled_scenes,
         "remaining_scenes": remaining_scenes,
-        "remaining_details": remaining_details
+        "created_list": created_list,
+        "not_upscaled_list": not_upscaled_list,
+        "pending_list": pending_list
     }
+
+def resolve_storyboard_filename(display_order: int) -> str | None:
+    import json
+    import re
+    from pathlib import Path
+    
+    cfg_path = Path("config_mac.json")
+    if not cfg_path.exists():
+        return None
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        return None
+        
+    lakorn_path = cfg.get("lakorn_path") or cfg.get("video_lakorn_path")
+    ep = cfg.get("lakorn_ep") or cfg.get("video_lakorn_ep")
+    if not lakorn_path or not ep:
+        return None
+        
+    parent_dir = Path(lakorn_path)
+    if not parent_dir.exists():
+        return None
+        
+    # Find EP subfolder under parent_dir
+    ep_dir = None
+    subdirs = [d for d in parent_dir.iterdir() if d.is_dir()]
+    ep_val_clean = str(ep).strip().lower()
+    
+    # 1. Try exact match
+    for d in subdirs:
+        if d.name.lower() == ep_val_clean:
+            ep_dir = d
+            break
+            
+    # 2. Try numeric candidates
+    if not ep_dir:
+        match = re.search(r"\d+", ep_val_clean)
+        if match:
+            val_int = int(match.group())
+            candidates = [
+                f"ep{val_int:02d}", f"ep{val_int}", f"ep{val_int:03d}",
+                f"{val_int:02d}", f"{val_int:03d}", str(val_int)
+            ]
+            for d in subdirs:
+                if d.name.lower() in candidates:
+                    ep_dir = d
+                    break
+                    
+    if not ep_dir:
+        ep_dir = parent_dir
+        
+    # Search for storyboard directory under ep_dir
+    storyboard_dir = None
+    for candidate in ["6 - Storyboards", "6-Storyboards", "Storyboards", "storyboards", "3 - Storyboard", "3-Storyboard", "Storyboard", "storyboard", "3 - Animation Image", "Animation Image", "animation image", "3 - Story Board", "Story Board", "story board"]:
+        cand_path = ep_dir / candidate
+        if cand_path.exists() and cand_path.is_dir():
+            storyboard_dir = cand_path
+            break
+            
+    if not storyboard_dir:
+        for d in ep_dir.iterdir():
+            if d.is_dir() and ("storyboard" in d.name.lower() or "story board" in d.name.lower() or "image" in d.name.lower()):
+                storyboard_dir = d
+                break
+                
+    if not storyboard_dir:
+        return None
+        
+    # Search for file matching display_order (which is 1-indexed)
+    valid_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+    for f in storyboard_dir.iterdir():
+        if f.is_file() and f.suffix.lower() in valid_exts:
+            name_no_ext = f.stem.lower()
+            candidates = [
+                f"{display_order:02d}",
+                f"{display_order}",
+                f"round_{display_order:02d}",
+                f"round_{display_order}",
+                f"round {display_order:02d}",
+                f"round {display_order}"
+            ]
+            
+            is_match = False
+            for cand in candidates:
+                if name_no_ext == cand:
+                    is_match = True
+                    break
+                if name_no_ext.startswith(cand) and name_no_ext[len(cand)] in ('_', '-', ' ', '.'):
+                    is_match = True
+                    break
+                    
+            if is_match:
+                return f.stem  # Return filename stem (without extension)
+                
+    return None
 
 class DownloadProjectVideosRequest(BaseModel):
     project_id: str
@@ -1127,7 +1237,16 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     upscale_suffix = "_upscaled" if is_upscale else ""
                     
                     idx = counters[p]
-                    arcname = f"scene_{idx:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                    has_start_image = bool(scene.get(f"{p}_image_media_id") or scene.get(f"{p}_image_url"))
+                    resolved_name = None
+                    if has_start_image:
+                        resolved_name = resolve_storyboard_filename(display_order)
+                    
+                    if resolved_name:
+                        arcname = f"{resolved_name}_{orient_suffix}{upscale_suffix}.mp4"
+                    else:
+                        arcname = f"{project_slug}_{idx:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                        
                     zip_file.write(local_path, arcname=arcname)
                     video_added = True
                     counters[p] += 1
