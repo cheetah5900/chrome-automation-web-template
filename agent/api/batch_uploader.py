@@ -902,7 +902,8 @@ def resolve_local_file(url: str, media_id: str, project_slug: str, display_order
     
     # 3. Check workflow videos folder
     if media_id:
-        pworkflow = Path("output/_workflow_videos") / f"{media_id}.mp4"
+        suffix = "_upscaled" if is_upscale else ""
+        pworkflow = Path("output/_workflow_videos") / f"{media_id}{suffix}.mp4"
         if pworkflow.exists():
             return pworkflow
             
@@ -1027,6 +1028,20 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     try:
                         temp_downloaded_path = await download_file_to_temp(url)
                         local_path = temp_downloaded_path
+                        # Cache the file locally to avoid re-downloading next time
+                        if media_id:
+                            cache_dir = Path("output/_workflow_videos")
+                            cache_dir.mkdir(parents=True, exist_ok=True)
+                            suffix = "_upscaled" if is_upscale else ""
+                            cache_path = cache_dir / f"{media_id}{suffix}.mp4"
+                            import shutil
+                            try:
+                                shutil.copy2(temp_downloaded_path, cache_path)
+                                logger.info("Cached downloaded video to %s", cache_path)
+                            except Exception as ce:
+                                logger.warning("Failed to cache downloaded file to %s: %s", cache_path, ce)
+                            # Update local_path to point to the cached file so we delete the temp file properly
+                            # but keep the cached file
                     except Exception as e:
                         logger.warning("Failed to download remote file for scene %s: %s", scene_id, e)
                         continue
