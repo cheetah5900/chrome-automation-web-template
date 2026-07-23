@@ -143,8 +143,12 @@ except ImportError as e:
     print(f"Skipping Flow Kit routers/callbacks import: {e}")
 
 # Flow Kit startup background tasks
+_flow_kit_ws_task = None
+_flow_kit_worker_task = None
+
 @app.on_event("startup")
 async def startup_flow_kit():
+    global _flow_kit_ws_task, _flow_kit_worker_task
     try:
         from agent.db.schema import init_db
         from agent.materials import register_material, _BUILTIN_IDS
@@ -171,8 +175,8 @@ async def startup_flow_kit():
         
         # 4. Start WebSocket Server and worker processor
         controller = get_worker_controller()
-        asyncio.create_task(run_ws_server())
-        asyncio.create_task(controller.start())
+        _flow_kit_ws_task = asyncio.create_task(run_ws_server())
+        _flow_kit_worker_task = asyncio.create_task(controller.start())
         print("Flow Kit background services (WebSocket + Worker) started successfully!")
     except Exception as e:
         print(f"Failed to start Flow Kit background services: {e}")

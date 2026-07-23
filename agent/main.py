@@ -108,10 +108,13 @@ async def run_ws_server():
             retry_delay = min(retry_delay * 2, 30.0)  # exponential backoff up to 30s
 
 
-# ─── FastAPI App ─────────────────────────────────────────────
+# Global references to prevent garbage collection of background tasks
+_ws_task_ref = None
+_worker_task_ref = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _ws_task_ref, _worker_task_ref
     await init_db()
 
     # Load custom materials from DB into in-memory registry
@@ -140,6 +143,8 @@ async def lifespan(app: FastAPI):
     ws_task = asyncio.create_task(run_ws_server())
     worker_task = asyncio.create_task(controller.start())
     # Keep strong references to prevent garbage collection
+    _ws_task_ref = ws_task
+    _worker_task_ref = worker_task
     app.state.ws_task = ws_task
     app.state.worker_task = worker_task
     logger.info("WS server + worker started")

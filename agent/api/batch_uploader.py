@@ -519,15 +519,20 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
         for idx, w in enumerate(workflows):
             w_id = w.get("name")
             meta = w.get("metadata", {})
-            if meta.get("archived", False):
-                continue
-            prompt = meta.get("displayName") or ""
             
             w_media_list = media_by_workflow.get(w_id, [])
+            w_video_media_list = [m for m in w_media_list if m.get("video")]
+            
+            if meta.get("archived", False):
+                # If archived, only include if it has at least one completed video!
+                if not w_video_media_list:
+                    continue
+                    
+            prompt = meta.get("displayName") or ""
             
             standard_video = None
             upscaled_video = None
-            for m in w_media_list:
+            for m in w_video_media_list:
                 m_name = m.get("name") or ""
                 is_upscale = False
                 
@@ -540,8 +545,8 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
                 else:
                     standard_video = m
                     
-            if not standard_video and w_media_list:
-                standard_video = w_media_list[0]
+            if not standard_video and w_video_media_list:
+                standard_video = w_video_media_list[0]
                 
             if not standard_video:
                 continue
@@ -1768,5 +1773,4 @@ async def generate_pending_scenes(body: GeneratePendingRequest):
                 
     logger.info("Queued %d pending scenes for generation in project %s", queued_count, body.project_id)
     return {"status": "SUCCESS", "queued_count": queued_count, "queued_scenes": queued_scenes}
-
 
