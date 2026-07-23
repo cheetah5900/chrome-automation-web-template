@@ -5955,6 +5955,9 @@ function renderScannedPairs() {
   if (section) section.style.display = 'block';
   updateSelectAllButtonText();
   
+  // Determine if we are in prompt-only (no image) mode
+  const isPromptOnly = flowScannedPairs.every(p => !p.image_path);
+  
   // Create table element wrapper
   const tableWrapper = document.createElement('div');
   tableWrapper.style.overflowX = 'auto';
@@ -5975,7 +5978,11 @@ function renderScannedPairs() {
   const headerRow = document.createElement('tr');
   headerRow.style.background = 'rgba(255, 255, 255, 0.05)';
   
-  const headers = [
+  const headers = isPromptOnly ? [
+    { text: 'Select', width: '10%', align: 'center' },
+    { text: 'Source/File', width: '30%' },
+    { text: 'Prompt Content (Read-Only)', width: '60%' }
+  ] : [
     { text: 'Select', width: '5%', align: 'center' },
     { text: 'Scene', width: '10%' },
     { text: 'Thumbnail', width: '12%' },
@@ -6030,45 +6037,50 @@ function renderScannedPairs() {
       updateSelectAllButtonText();
     });
     tdCheck.appendChild(checkbox);
+    tr.appendChild(tdCheck);
     
-    // 2. Index
-    const tdIndex = document.createElement('td');
-    tdIndex.style.padding = '12px 16px';
-    tdIndex.style.fontWeight = 'bold';
-    tdIndex.style.color = '#8da6ff';
-    tdIndex.textContent = `Scene ${pair.index}`;
-    
-    // 3. Thumbnail
-    const tdThumb = document.createElement('td');
-    tdThumb.style.padding = '12px 16px';
-    
-    const thumbContainer = document.createElement('div');
-    thumbContainer.style.width = '60px';
-    thumbContainer.style.height = '90px';
-    thumbContainer.style.background = 'rgba(0,0,0,0.4)';
-    thumbContainer.style.borderRadius = '6px';
-    thumbContainer.style.display = 'flex';
-    thumbContainer.style.alignItems = 'center';
-    thumbContainer.style.justifyContent = 'center';
-    thumbContainer.style.overflow = 'hidden';
-    thumbContainer.style.border = '1px solid rgba(255,255,255,0.1)';
-    
-    if (pair.image_path) {
-      const img = document.createElement('img');
-      img.src = `/api/utils/serve-image?path=${encodeURIComponent(pair.image_path)}`;
-      img.style.width = '100%';
-      img.style.height = '100%';
-      img.style.objectFit = 'cover';
-      thumbContainer.appendChild(img);
-    } else {
-      const placeholder = document.createElement('div');
-      placeholder.style.fontSize = '0.7rem';
-      placeholder.style.color = 'rgba(255,255,255,0.4)';
-      placeholder.style.textAlign = 'center';
-      placeholder.textContent = 'No Image';
-      thumbContainer.appendChild(placeholder);
+    if (!isPromptOnly) {
+      // 2. Index
+      const tdIndex = document.createElement('td');
+      tdIndex.style.padding = '12px 16px';
+      tdIndex.style.fontWeight = 'bold';
+      tdIndex.style.color = '#8da6ff';
+      tdIndex.textContent = `Scene ${pair.index}`;
+      tr.appendChild(tdIndex);
+      
+      // 3. Thumbnail
+      const tdThumb = document.createElement('td');
+      tdThumb.style.padding = '12px 16px';
+      
+      const thumbContainer = document.createElement('div');
+      thumbContainer.style.width = '60px';
+      thumbContainer.style.height = '90px';
+      thumbContainer.style.background = 'rgba(0,0,0,0.4)';
+      thumbContainer.style.borderRadius = '6px';
+      thumbContainer.style.display = 'flex';
+      thumbContainer.style.alignItems = 'center';
+      thumbContainer.style.justifyContent = 'center';
+      thumbContainer.style.overflow = 'hidden';
+      thumbContainer.style.border = '1px solid rgba(255,255,255,0.1)';
+      
+      if (pair.image_path) {
+        const img = document.createElement('img');
+        img.src = `/api/utils/serve-image?path=${encodeURIComponent(pair.image_path)}`;
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        thumbContainer.appendChild(img);
+      } else {
+        const placeholder = document.createElement('div');
+        placeholder.style.fontSize = '0.7rem';
+        placeholder.style.color = 'rgba(255,255,255,0.4)';
+        placeholder.style.textAlign = 'center';
+        placeholder.textContent = 'No Image';
+        thumbContainer.appendChild(placeholder);
+      }
+      tdThumb.appendChild(thumbContainer);
+      tr.appendChild(tdThumb);
     }
-    tdThumb.appendChild(thumbContainer);
     
     // 4. Source/File name
     const tdSource = document.createElement('td');
@@ -6077,6 +6089,7 @@ function renderScannedPairs() {
     tdSource.style.fontSize = '0.8rem';
     tdSource.style.wordBreak = 'break-all';
     tdSource.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
+    tr.appendChild(tdSource);
     
     // 5. Prompt Content (Read-Only)
     const tdPrompt = document.createElement('td');
@@ -6096,34 +6109,31 @@ function renderScannedPairs() {
     promptDiv.style.scrollbarWidth = 'thin';
     promptDiv.textContent = pair.prompt_content;
     tdPrompt.appendChild(promptDiv);
-    
-    // 6. Action (Delete)
-    const tdAction = document.createElement('td');
-    tdAction.style.padding = '12px 16px';
-    tdAction.style.textAlign = 'center';
-    
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'secondary';
-    deleteBtn.style.padding = '6px 12px';
-    deleteBtn.style.fontSize = '0.78rem';
-    deleteBtn.style.margin = '0';
-    deleteBtn.style.color = '#f56565';
-    deleteBtn.style.background = 'rgba(245, 101, 101, 0.1)';
-    deleteBtn.style.borderColor = 'rgba(245, 101, 101, 0.2)';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', () => {
-      flowScannedPairs = flowScannedPairs.filter(p => p.index !== pair.index);
-      flowScannedPairs.forEach((p, i) => p.index = i + 1);
-      renderScannedPairs();
-    });
-    tdAction.appendChild(deleteBtn);
-    
-    tr.appendChild(tdCheck);
-    tr.appendChild(tdIndex);
-    tr.appendChild(tdThumb);
-    tr.appendChild(tdSource);
     tr.appendChild(tdPrompt);
-    tr.appendChild(tdAction);
+    
+    if (!isPromptOnly) {
+      // 6. Action (Delete)
+      const tdAction = document.createElement('td');
+      tdAction.style.padding = '12px 16px';
+      tdAction.style.textAlign = 'center';
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'secondary';
+      deleteBtn.style.padding = '6px 12px';
+      deleteBtn.style.fontSize = '0.78rem';
+      deleteBtn.style.margin = '0';
+      deleteBtn.style.color = '#f56565';
+      deleteBtn.style.background = 'rgba(245, 101, 101, 0.1)';
+      deleteBtn.style.borderColor = 'rgba(245, 101, 101, 0.2)';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => {
+        flowScannedPairs = flowScannedPairs.filter(p => p.index !== pair.index);
+        flowScannedPairs.forEach((p, i) => p.index = i + 1);
+        renderScannedPairs();
+      });
+      tdAction.appendChild(deleteBtn);
+      tr.appendChild(tdAction);
+    }
     
     tbody.appendChild(tr);
   });
