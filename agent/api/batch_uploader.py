@@ -497,23 +497,32 @@ import aiohttp
 import re
 
 def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
-    # Helper to recursively find cards list
-    def find_cards(node):
+    # Helper to recursively find all card lists
+    def find_all_cards(node, collected):
         if isinstance(node, dict):
             if "cards" in node and isinstance(node["cards"], list):
-                return node["cards"]
+                collected.extend(node["cards"])
             for v in node.values():
-                res = find_cards(v)
-                if res is not None:
-                    return res
+                find_all_cards(v, collected)
         elif isinstance(node, list):
             for item in node:
-                res = find_cards(item)
-                if res is not None:
-                    return res
-        return None
+                find_all_cards(item, collected)
 
-    cards = find_cards(project_data) or []
+    all_cards = []
+    find_all_cards(project_data, all_cards)
+    
+    # Remove duplicates preserving order
+    seen_ids = set()
+    cards = []
+    for c in all_cards:
+        if not isinstance(c, dict):
+            continue
+        cid = c.get("cardId") or c.get("id")
+        if cid:
+            if cid in seen_ids:
+                continue
+            seen_ids.add(cid)
+        cards.append(c)
     scenes = []
     for idx, card in enumerate(cards):
         card_id = card.get("cardId") or card.get("id") or f"card_{idx+1}"
@@ -877,7 +886,46 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
                         logger.info("Queued retroactive upscale request (%s) for scene %s orient %s", body.upscale_resolution, scene_id, orient.upper())
                         queued_count += 1
                         
-    return {"status": "SUCCESS", "queued_count": queued_count}
+                        short_prompt = scene.get("prompt", "") or ""
+                        if len(short_prompt) > 60:
+                            short_prompt = short_prompt[:57] + "..."
+                        queued_scenes.append({
+                            "scene_id": scene_id,
+                            "display_order": scene.get("display_order", 0),
+                            "orientation": orient.upper(),
+                            "prompt": short_prompt
+                        })
+                        
+    return {"status": "SUCCESS", "queued_count": queued_count, "queued_scenes": queued_scenes}
+
+@router.get("/project-stats")
+async def get_project_stats(project_id: str):
+    videos = await crud.list_videos(project_id)
+    if not videos:
+        return {
+            "total_scenes": 0,
+            "upscaled_scenes": 0,
+            "remaining_scenes": 0
+        }
+        
+    total_scenes = 0
+    upscaled_scenes = 0
+    
+    for v in videos:
+        v_scenes = await crud.list_scenes(v["id"])
+        for scene in v_scenes:
+            for prefix in ("vertical", "horizontal"):
+                if scene.get(f"{prefix}_video_media_id"):
+                    total_scenes += 1
+                    if scene.get(f"{prefix}_upscale_url") or scene.get(f"{prefix}_upscale_media_id"):
+                        upscaled_scenes += 1
+                        
+    remaining_scenes = total_scenes - upscaled_scenes
+    return {
+        "total_scenes": total_scenes,
+        "upscaled_scenes": upscaled_scenes,
+        "remaining_scenes": remaining_scenes
+    }
 
 class DownloadProjectVideosRequest(BaseModel):
     project_id: str
@@ -943,51 +991,49 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         
     project_slug = slugify(getattr(project, "name", "project")) or "project"
     
-    is_google_flow = False
-    
-    # 1. Try fetching project details directly from Google Flow via extension TRPC
+    # 1. Try querying local SQLite DB first
     scenes = []
-    client = get_flow_client()
-    if client.connected:
-        try:
-            import urllib.parse
-            import json as _json
-            input_params = {"json": {"projectId": body.project_id, "toolName": "PINHOLE"}}
-            encoded_input = urllib.parse.quote(_json.dumps(input_params))
-            url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
-            logger.info("Attempting to pull project %s directly from Google Flow...", body.project_id[:12])
-            res = await client._send("trpc_request", {
-                "url": url,
-                "method": "GET",
-                "headers": {"accept": "*/*"}
-            }, timeout=30)
-            
-            if res and isinstance(res, dict) and not res.get("error"):
-                scenes = extract_scenes_from_flow_project(res)
-                if scenes:
-                    logger.info("Successfully extracted %d scenes directly from Google Flow TRPC response", len(scenes))
-                    is_google_flow = True
-        except Exception as e:
-            logger.warning("Failed to pull project directly from Google Flow, falling back to local DB: %s", e)
-
-    # 2. Fall back to local SQLite DB if we got no scenes from Google Flow TRPC
+    logger.info("Checking local database for scenes of project %s", body.project_id[:12])
+    db = await get_db()
+    async with _db_lock:
+        cursor = await db.execute(
+            """
+            SELECT s.* 
+            FROM scene s
+            JOIN video v ON s.video_id = v.id
+            WHERE v.project_id = ?
+            ORDER BY s.display_order ASC
+            """,
+            (body.project_id,)
+        )
+        rows = await cursor.fetchall()
+        columns = [col[0] for col in cursor.description]
+        scenes = [dict(zip(columns, row)) for row in rows]
+        
+    # 2. Try fetching project details directly from Google Flow via extension TRPC if not found locally
     if not scenes:
-        logger.info("Using local database scenes as fallback for project %s", body.project_id[:12])
-        db = await get_db()
-        async with _db_lock:
-            cursor = await db.execute(
-                """
-                SELECT s.* 
-                FROM scene s
-                JOIN video v ON s.video_id = v.id
-                WHERE v.project_id = ?
-                ORDER BY s.display_order ASC
-                """,
-                (body.project_id,)
-            )
-            rows = await cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            scenes = [dict(zip(columns, row)) for row in rows]
+        client = get_flow_client()
+        if client.connected:
+            try:
+                import urllib.parse
+                import json as _json
+                input_params = {"json": {"projectId": body.project_id, "toolName": "PINHOLE"}}
+                encoded_input = urllib.parse.quote(_json.dumps(input_params))
+                url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
+                logger.info("Attempting to pull project %s directly from Google Flow...", body.project_id[:12])
+                res = await client._send("trpc_request", {
+                    "url": url,
+                    "method": "GET",
+                    "headers": {"accept": "*/*"}
+                }, timeout=30)
+                
+                if res and isinstance(res, dict) and not res.get("error"):
+                    scenes = extract_scenes_from_flow_project(res)
+                    if scenes:
+                        logger.info("Successfully extracted %d scenes directly from Google Flow TRPC response", len(scenes))
+                        is_google_flow = True
+            except Exception as e:
+                logger.warning("Failed to pull project directly from Google Flow: %s", e)
         
     if not scenes:
         raise HTTPException(status_code=404, detail="No scenes found for this project.")
