@@ -6047,38 +6047,109 @@ async function updateProjectStats() {
       document.getElementById('flow_stats_remaining').textContent = res.remaining_scenes;
       document.getElementById('flow_stats_pending_count').textContent = pendingCount;
       
-      // Populate the table
-      const tbody = document.getElementById('flow_stats_table_body');
-      if (tbody && res.all_scenes) {
-        tbody.innerHTML = res.all_scenes.map(item => {
-          const orientStr = item.orientation === 'VERTICAL' ? 'แนวตั้ง 📱' : 'แนวนอน 🖥️';
-          
-          let videoStatus = '';
-          if (item.has_video) {
-            videoStatus = '<span style="color: #8da6ff; font-weight: bold;">สร้างแล้ว 🎬</span>';
-          } else {
-            videoStatus = '<span style="color: rgba(255,255,255,0.35);">ยังไม่ได้สร้าง ⏳</span>';
+      let currentFilter = 'all';
+      
+      const renderFilteredTable = (filterMode) => {
+        currentFilter = filterMode;
+        
+        // Highlight active filter chip
+        const filters = {
+          'all': 'badge_filter_all',
+          'created': 'badge_filter_created',
+          'upscaled': 'badge_filter_upscaled',
+          'remaining': 'badge_filter_remaining',
+          'pending': 'badge_filter_pending'
+        };
+        
+        Object.keys(filters).forEach(k => {
+          const el = document.getElementById(filters[k]);
+          if (el) {
+            if (k === filterMode) {
+              el.style.background = 'rgba(255, 255, 255, 0.15)';
+              el.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+            } else {
+              el.style.background = 'rgba(255, 255, 255, 0.05)';
+              el.style.borderColor = 'transparent';
+            }
+          }
+        });
+        
+        let filtered = res.all_scenes || [];
+        if (filterMode === 'created') {
+          filtered = filtered.filter(item => item.has_video);
+        } else if (filterMode === 'upscaled') {
+          filtered = filtered.filter(item => item.has_upscale);
+        } else if (filterMode === 'remaining') {
+          filtered = filtered.filter(item => item.has_video && !item.has_upscale);
+        } else if (filterMode === 'pending') {
+          filtered = filtered.filter(item => !item.has_video);
+        }
+        
+        const tbody = document.getElementById('flow_stats_table_body');
+        if (tbody) {
+          if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="padding: 16px; text-align: center; color: rgba(255,255,255,0.4);">ไม่พบรายการที่ตรงกับเงื่อนไขการกรอง</td></tr>`;
+            return;
           }
           
-          let upscaleStatus = '';
-          if (item.has_upscale) {
-            upscaleStatus = '<span style="color: #5eff5e; font-weight: bold;">ขยายแล้ว ⚡</span>';
-          } else if (item.has_video) {
-            upscaleStatus = '<span style="color: #ffb86c;">ยังไม่ได้ขยาย ⏳</span>';
-          } else {
-            upscaleStatus = '<span style="color: rgba(255,255,255,0.2);">-</span>';
-          }
-          
-          return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseenter="this.style.background='rgba(255,255,255,0.02)'" onmouseleave="this.style.background='transparent'">
-            <td style="padding: 8px 12px; font-weight: 500;">${item.display_order}</td>
-            <td style="padding: 8px 12px; color: rgba(255,255,255,0.7);">รอบที่ ${item.run_num} (${item.run_title})</td>
-            <td style="padding: 8px 12px;">${orientStr}</td>
-            <td style="padding: 8px 12px; text-align: center;">${videoStatus}</td>
-            <td style="padding: 8px 12px; text-align: center;">${upscaleStatus}</td>
-            <td style="padding: 8px 12px; color: rgba(255,255,255,0.5); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="${item.prompt}">${item.prompt}</td>
-          </tr>`;
-        }).join('');
-      }
+          tbody.innerHTML = filtered.map(item => {
+            const orientStr = item.orientation === 'VERTICAL' ? 'แนวตั้ง 📱' : 'แนวนอน 🖥️';
+            
+            let videoStatus = '';
+            if (item.has_video) {
+              videoStatus = '<span style="color: #8da6ff; font-weight: bold;">สร้างแล้ว 🎬</span>';
+            } else {
+              videoStatus = '<span style="color: rgba(255,255,255,0.35);">ยังไม่ได้สร้าง ⏳</span>';
+            }
+            
+            let upscaleStatus = '';
+            if (item.has_upscale) {
+              upscaleStatus = '<span style="color: #5eff5e; font-weight: bold;">ขยายแล้ว ⚡</span>';
+            } else if (item.has_video) {
+              upscaleStatus = '<span style="color: #ffb86c;">ยังไม่ได้ขยาย ⏳</span>';
+            } else {
+              upscaleStatus = '<span style="color: rgba(255,255,255,0.2);">-</span>';
+            }
+            
+            return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseenter="this.style.background='rgba(255,255,255,0.02)'" onmouseleave="this.style.background='transparent'">
+              <td style="padding: 8px 12px; font-weight: 500;">${item.display_order}</td>
+              <td style="padding: 8px 12px; color: rgba(255,255,255,0.7);">รอบที่ ${item.run_num} (${item.run_title})</td>
+              <td style="padding: 8px 12px;">${orientStr}</td>
+              <td style="padding: 8px 12px; text-align: center;">${videoStatus}</td>
+              <td style="padding: 8px 12px; text-align: center;">${upscaleStatus}</td>
+              <td style="padding: 8px 12px; color: rgba(255,255,255,0.5); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="${item.prompt}">${item.prompt}</td>
+            </tr>`;
+          }).join('');
+        }
+      };
+
+      // Set initial count and render
+      document.getElementById('flow_stats_total').textContent = res.all_scenes ? res.all_scenes.length : 0;
+      renderFilteredTable('all');
+      
+      // Wire up filter click events
+      const bindFilterBadge = (badgeId, mode) => {
+        const el = document.getElementById(badgeId);
+        if (el && !el.dataset.handlerAttached) {
+          el.dataset.handlerAttached = 'true';
+          el.addEventListener('click', () => {
+            renderFilteredTable(mode);
+            // Ensure table is shown when a filter is clicked
+            const tableContainer = document.getElementById('flow_stats_table_container');
+            const toggleBtn = document.getElementById('btn_toggle_stats_table');
+            if (tableContainer && tableContainer.style.display === 'none') {
+              tableContainer.style.display = 'block';
+              if (toggleBtn) toggleBtn.textContent = '❌ ซ่อนตาราง';
+            }
+          });
+        }
+      };
+      
+      bindFilterBadge('badge_filter_all', 'all');
+      bindFilterBadge('badge_filter_created', 'created');
+      bindFilterBadge('badge_filter_upscaled', 'upscaled');
+      bindFilterBadge('badge_filter_remaining', 'remaining');
+      bindFilterBadge('badge_filter_pending', 'pending');
 
       // Wire up toggle button
       const toggleBtn = document.getElementById('btn_toggle_stats_table');
