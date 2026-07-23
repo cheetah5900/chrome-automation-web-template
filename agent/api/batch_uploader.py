@@ -989,7 +989,9 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     if not project:
         raise HTTPException(status_code=404, detail="Project not found in local database")
         
-    project_slug = slugify(getattr(project, "name", "project")) or "project"
+    project_slug = slugify(project.get("name", "project")) or "project"
+    
+    is_google_flow = False
     
     # 1. Try querying local SQLite DB first
     scenes = []
@@ -1102,7 +1104,11 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     upscale_suffix = "_upscaled" if is_upscale else ""
                     
                     vid = scene.get("video_id")
-                    run_title = slugify(video_titles.get(vid, "run")) if vid else ""
+                    run_title = ""
+                    if vid:
+                        title_base = video_titles.get(vid, "run") or "run"
+                        short_id = vid[:8]
+                        run_title = slugify(f"{title_base}_{short_id}")
                     if run_title:
                         arcname = f"{run_title}/scene_{display_order:03d}_{orient_suffix}{upscale_suffix}.mp4"
                     else:
