@@ -913,6 +913,7 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
     import json as _json
     from agent.db.schema import get_db, _db_lock
     
+    queued_scenes = []
     # 1. Verify extension is connected
     client = get_flow_client()
     if not client.connected:
