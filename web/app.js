@@ -5981,6 +5981,8 @@ function initFlowKitUploaderListeners() {
       }
     }
   });
+  
+  updateProjectStats();
 }
 
 async function loadFlowKitProjects() {
@@ -6010,9 +6012,38 @@ async function loadFlowKitProjects() {
       
       populate(dropdown);
       populate(poDropdown);
+      await updateProjectStats();
     }
   } catch (err) {
     console.error('Failed to load Flow Kit projects:', err);
+  }
+}
+
+async function updateProjectStats() {
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let projectId = '';
+  if (genMode === 'Flowkit แบบไม่แนบรูป') {
+    projectId = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  } else {
+    projectId = document.getElementById('cfg_flow_project_dropdown')?.value;
+  }
+  
+  const statsDiv = document.getElementById('flow_downloader_stats');
+  if (!projectId) {
+    if (statsDiv) statsDiv.style.display = 'none';
+    return;
+  }
+  
+  try {
+    const res = await jsonFetch(`/api/batch-uploader/project-stats?project_id=${projectId}`);
+    if (res && statsDiv) {
+      document.getElementById('flow_stats_total').textContent = res.total_scenes;
+      document.getElementById('flow_stats_upscaled').textContent = res.upscaled_scenes;
+      document.getElementById('flow_stats_remaining').textContent = res.remaining_scenes;
+      statsDiv.style.display = 'flex';
+    }
+  } catch (err) {
+    console.error('Failed to fetch project stats:', err);
   }
 }
 
@@ -6407,13 +6438,24 @@ document.getElementById('btnTriggerProjectUpscale')?.addEventListener('click', a
       msg.style.display = 'block';
       msg.className = 'msg success';
       msg.style.color = '#48bb78';
-      msg.textContent = `ส่งคำขอทำ Upscale สำเร็จ! เพิ่มเข้าคิวงานใหม่ทั้งหมด ${data.queued_count} งาน`;
+      
+      let detailText = `ส่งคำขอทำ Upscale สำเร็จ! เพิ่มเข้าคิวงานใหม่ทั้งหมด ${data.queued_count} งาน`;
+      if (data.queued_scenes && data.queued_scenes.length > 0) {
+        detailText += '\n\nฉากที่ส่งเข้าคิว:';
+        data.queued_scenes.forEach(sc => {
+          detailText += `\n- ฉากที่ ${sc.display_order} (${sc.orientation}): ${sc.prompt}`;
+        });
+      }
+      
+      msg.textContent = detailText;
+      msg.style.whiteSpace = 'pre-wrap';
+      msg.style.textAlign = 'left';
+      msg.style.fontFamily = 'monospace';
+      msg.style.fontSize = '0.8rem';
+      
       showToast(`ส่งทำ Upscale สำเร็จ ${data.queued_count} ฉาก`, 'success');
+      await updateProjectStats();
     }
-    
-    setTimeout(() => {
-      if (msg) msg.style.display = 'none';
-    }, 4000);
     
   } catch (err) {
     if (msg) {
@@ -6653,3 +6695,8 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
     }
   }
 });
+
+// Update project stats when select dropdown changes or mode changes
+document.getElementById('cfg_flow_project_dropdown')?.addEventListener('change', updateProjectStats);
+document.getElementById('cfg_flow_po_project_dropdown')?.addEventListener('change', updateProjectStats);
+document.getElementById('cfg_video_gen_mode')?.addEventListener('change', updateProjectStats);
