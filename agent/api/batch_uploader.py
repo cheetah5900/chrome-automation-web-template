@@ -497,6 +497,78 @@ import aiohttp
 import re
 
 def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
+    # Check for new projectContents format first (workflows + media)
+    project_contents = project_data.get("data", {}).get("result", {}).get("data", {}).get("json", {}).get("projectContents", {})
+    if not project_contents:
+        project_contents = project_data.get("projectContents") or project_data
+        
+    workflows = project_contents.get("workflows")
+    if isinstance(workflows, list) and workflows:
+        media = project_contents.get("media", [])
+        
+        # Group media by workflowId
+        media_by_workflow = {}
+        for m in media:
+            w_id = m.get("workflowId")
+            if w_id:
+                media_by_workflow.setdefault(w_id, []).append(m)
+                
+        scenes = []
+        for idx, w in enumerate(workflows):
+            w_id = w.get("name")
+            meta = w.get("metadata", {})
+            prompt = meta.get("displayName") or ""
+            
+            w_media_list = media_by_workflow.get(w_id, [])
+            
+            standard_video = None
+            upscaled_video = None
+            for m in w_media_list:
+                m_name = m.get("name") or ""
+                is_upscale = False
+                
+                v_model = m.get("video", {}).get("generatedVideo", {}).get("model", "")
+                if "upsampl" in v_model.lower() or "upscal" in v_model.lower() or "upsampled" in m_name.lower():
+                    is_upscale = True
+                    
+                if is_upscale:
+                    upscaled_video = m
+                else:
+                    standard_video = m
+                    
+            if not standard_video and w_media_list:
+                standard_video = w_media_list[0]
+                
+            if not standard_video:
+                continue
+                
+            media_id = standard_video.get("name")
+            upscale_media_id = upscaled_video.get("name") if upscaled_video else None
+            
+            aspect = standard_video.get("video", {}).get("generatedVideo", {}).get("aspectRatio", "VIDEO_ASPECT_RATIO_PORTRAIT")
+            is_vertical = "PORTRAIT" in aspect or "VERTICAL" in aspect or "vertical" in prompt.lower()
+            
+            video_url = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{media_id}.mp4"
+            upscale_url = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{media_id}_upscaled.mp4" if upscale_media_id else None
+            
+            scene_dict = {
+                "display_order": idx + 1,
+                "id": w_id,
+                "vertical_video_url": video_url if is_vertical else None,
+                "vertical_video_media_id": media_id if is_vertical else None,
+                "horizontal_video_url": video_url if not is_vertical else None,
+                "horizontal_video_media_id": media_id if not is_vertical else None,
+                "vertical_upscale_url": upscale_url if is_vertical and upscale_media_id else None,
+                "vertical_upscale_media_id": upscale_media_id if is_vertical and upscale_media_id else None,
+                "horizontal_upscale_url": upscale_url if not is_vertical and upscale_media_id else None,
+                "horizontal_upscale_media_id": upscale_media_id if not is_vertical and upscale_media_id else None,
+                "prompt_content": prompt
+            }
+            scenes.append(scene_dict)
+            
+        logger.info("Extracted %d scenes from projectContents structure", len(scenes))
+        return scenes
+
     # Helper to recursively find all card lists
     def find_all_cards(node, collected):
         if isinstance(node, dict):
@@ -742,6 +814,25 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
     import urllib.parse
     import json as _json
     
+    # Try fetching via flow.projectInitialData first
+    try:
+        input_params = {"json": {"projectId": project_id}}
+        encoded_input = urllib.parse.quote(_json.dumps(input_params))
+        url = f"https://labs.google/fx/api/trpc/flow.projectInitialData?input={encoded_input}"
+        logger.info("Fetching project %s from flow.projectInitialData", project_id[:12])
+        res = await client._send("trpc_request", {
+            "url": url,
+            "method": "GET",
+            "headers": {"accept": "*/*"}
+        }, timeout=15)
+        if res and isinstance(res, dict) and not res.get("error"):
+            scenes = extract_scenes_from_flow_project(res)
+            if scenes:
+                logger.info("Successfully synced %d scenes via flow.projectInitialData", len(scenes))
+                return scenes
+    except Exception as e:
+        logger.warning("Failed to fetch flow.projectInitialData: %s. Falling back to paginated search.", e)
+        
     cursor = None
     all_raw_data = []
     
@@ -855,6 +946,13 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
                        (fs["horizontal_video_media_id"] and ps.get("horizontal_video_media_id") == fs["horizontal_video_media_id"]):
                         existing = ps
                         break
+                if not existing:
+                    # Fallback to matching by exact prompt text
+                    for ps in all_project_scenes:
+                        if ps.get("prompt") == fs.get("prompt_content") or ps.get("prompt_content") == fs.get("prompt_content"):
+                            existing = ps
+                            break
+
                 
                 scene_data = {
                     "vertical_video_url": fs["vertical_video_url"],
@@ -958,6 +1056,7 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
                         
     return {"status": "SUCCESS", "queued_count": queued_count, "queued_scenes": queued_scenes}
 
+
 @router.get("/project-stats")
 async def get_project_stats(project_id: str):
     videos = await crud.list_videos(project_id)
@@ -993,6 +1092,13 @@ async def get_project_stats(project_id: str):
                                (fs["horizontal_video_media_id"] and ps.get("horizontal_video_media_id") == fs["horizontal_video_media_id"]):
                                 existing = ps
                                 break
+                        if not existing:
+                            # Fallback to matching by exact prompt text
+                            for ps in all_project_scenes:
+                                if ps.get("prompt") == fs.get("prompt_content") or ps.get("prompt_content") == fs.get("prompt_content"):
+                                    existing = ps
+                                    break
+
                                 
                         scene_data = {
                             "vertical_video_url": fs["vertical_video_url"],
@@ -1516,7 +1622,7 @@ async def generate_pending_scenes(body: GeneratePendingRequest):
                 cursor = await db.execute(
                     """
                     SELECT id FROM request 
-                    WHERE scene_id = ? AND orientation = ? AND req_type = 'GENERATE_VIDEO' AND status IN ('PENDING', 'PROCESSING')
+                    WHERE scene_id = ? AND orientation = ? AND type = 'GENERATE_VIDEO' AND status IN ('PENDING', 'PROCESSING')
                     """,
                     (scene_id, orientation)
                 )
