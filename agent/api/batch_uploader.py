@@ -624,6 +624,148 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
             
     return scenes
 
+class UpscaleProjectRequest(BaseModel):
+    project_id: str
+    upscale_resolution: str
+
+@router.post("/upscale-project")
+async def upscale_project_videos(body: UpscaleProjectRequest):
+    import json as _json
+    from agent.db.schema import get_db, _db_lock
+    
+    # 1. Verify extension is connected
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(
+            status_code=400,
+            detail="ไม่สามารถติดต่อ Chrome Extension ได้ กรุณาเปิดเบราว์เซอร์ Remote Debugging และล็อกอินเข้า Google Flow ก่อน"
+        )
+        
+    # 2. Get or create video_id in SQLite
+    videos = await crud.list_videos(body.project_id)
+    if videos:
+        video_id = videos[0]["id"]
+    else:
+        v = await crud.create_video(body.project_id, title="Project Video", orientation="HORIZONTAL")
+        video_id = v["id"]
+        
+    # 3. Pull latest project info from Google Flow TRPC
+    try:
+        import urllib.parse
+        input_params = {"json": {"projectId": body.project_id, "toolName": "PINHOLE"}}
+        encoded_input = urllib.parse.quote(_json.dumps(input_params))
+        url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
+        logger.info("Syncing project %s from Google Flow for retroactive upscales...", body.project_id[:12])
+        res = await client._send("trpc_request", {
+            "url": url,
+            "method": "GET",
+            "headers": {"accept": "*/*"}
+        }, timeout=30)
+        
+        if not res or not isinstance(res, dict) or res.get("error"):
+            raise Exception("TRPC project fetch returned empty or error")
+            
+        parsed_scenes = extract_scenes_from_flow_project(res)
+        if not parsed_scenes:
+            raise Exception("No scenes extracted from project data")
+            
+        # 4. Sync scenes from Flow to local database
+        db_scenes = await crud.list_scenes(video_id)
+        db_scenes_by_order = {s["display_order"]: s for s in db_scenes}
+        
+        for fs in parsed_scenes:
+            order = fs["display_order"]
+            existing = db_scenes_by_order.get(order)
+            
+            scene_data = {
+                "vertical_video_url": fs["vertical_video_url"],
+                "vertical_video_media_id": fs["vertical_video_media_id"],
+                "horizontal_video_url": fs["horizontal_video_url"],
+                "horizontal_video_media_id": fs["horizontal_video_media_id"],
+                "vertical_upscale_url": fs["vertical_upscale_url"],
+                "vertical_upscale_media_id": fs["vertical_upscale_media_id"],
+                "horizontal_upscale_url": fs["horizontal_upscale_url"],
+                "horizontal_upscale_media_id": fs["horizontal_upscale_media_id"],
+            }
+            
+            if existing:
+                scene_id = existing["id"]
+                if fs["vertical_video_url"] and not existing.get("vertical_video_status"):
+                    scene_data["vertical_video_status"] = "COMPLETED"
+                if fs["horizontal_video_url"] and not existing.get("horizontal_video_status"):
+                    scene_data["horizontal_video_status"] = "COMPLETED"
+                if fs["vertical_upscale_url"] and not existing.get("vertical_upscale_status"):
+                    scene_data["vertical_upscale_status"] = "COMPLETED"
+                if fs["horizontal_upscale_url"] and not existing.get("horizontal_upscale_status"):
+                    scene_data["horizontal_upscale_status"] = "COMPLETED"
+                    
+                await crud.update_scene(scene_id, **scene_data)
+            else:
+                new_scene = await crud.create_scene(
+                    video_id=video_id,
+                    display_order=order,
+                    prompt=fs.get("prompt_content") or f"Scene {order}",
+                    source="system"
+                )
+                scene_id = new_scene["id"]
+                if fs["vertical_video_url"]:
+                    scene_data["vertical_video_status"] = "COMPLETED"
+                if fs["horizontal_video_url"]:
+                    scene_data["horizontal_video_status"] = "COMPLETED"
+                if fs["vertical_upscale_url"]:
+                    scene_data["vertical_upscale_status"] = "COMPLETED"
+                if fs["horizontal_upscale_url"]:
+                    scene_data["horizontal_upscale_status"] = "COMPLETED"
+                await crud.update_scene(scene_id, **scene_data)
+                
+    except Exception as e:
+        logger.warning("Upscale sync project failed: %s", e)
+        raise HTTPException(
+            status_code=400,
+            detail=f"ไม่สามารถซิงก์ข้อมูลล่าสุดจาก Google Flow ได้: {str(e)}"
+        )
+        
+    # 5. Fetch all scenes again from SQLite (synced)
+    synced_scenes = await crud.list_scenes(video_id)
+    queued_count = 0
+    
+    for scene in synced_scenes:
+        scene_id = scene["id"]
+        reqs = await crud.list_requests(scene_id=scene_id)
+        
+        for orient in ("vertical", "horizontal"):
+            prefix = "vertical" if orient == "vertical" else "horizontal"
+            standard_media_id = scene.get(f"{prefix}_video_media_id")
+            upscale_url = scene.get(f"{prefix}_upscale_url")
+            upscale_media_id = scene.get(f"{prefix}_upscale_media_id")
+            
+            if standard_media_id and not upscale_url and not upscale_media_id:
+                active_req = any(
+                    r.get("req_type") == "UPSCALE_VIDEO"
+                    and r.get("orientation") == orient.upper()
+                    and r.get("status") in ("PENDING", "PROCESSING", "CLAIMED", "COMPLETED")
+                    for r in reqs
+                )
+                
+                if not active_req:
+                    upscale_params = {
+                        "resolution": body.upscale_resolution
+                    }
+                    upscale_req_data = {
+                        "project_id": body.project_id,
+                        "video_id": video_id,
+                        "scene_id": scene_id,
+                        "req_type": "UPSCALE_VIDEO",
+                        "orientation": orient.upper(),
+                        "status": "PENDING",
+                        "edit_prompt": _json.dumps(upscale_params)
+                    }
+                    await crud.create_request(**upscale_req_data)
+                    logger.info("Queued retroactive upscale request (%s) for scene %s orient %s", body.upscale_resolution, scene_id, orient.upper())
+                    queued_count += 1
+                    
+    return {"status": "SUCCESS", "queued_count": queued_count}
+
 class DownloadProjectVideosRequest(BaseModel):
     project_id: str
     upscale_resolution: str  # NONE, VIDEO_RESOLUTION_1080P, VIDEO_RESOLUTION_4K

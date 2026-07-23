@@ -524,6 +524,16 @@
                   </div>
                 </div>
 
+                <!-- Auto Upscale -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">upscale อัตโนมัติหลังทำ:</label>
+                  <select id="cfg_flow_upscale_auto" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                    <option value="NONE" selected>ไม่ขยาย (ปกติ)</option>
+                    <option value="VIDEO_RESOLUTION_1080P">ขยายเป็น 1080P</option>
+                    <option value="VIDEO_RESOLUTION_4K">ขยายเป็น 4K</option>
+                  </select>
+                </div>
+
                 <!-- Spacer -->
                 <div style="height: 4px;"></div>
               </div>
@@ -632,6 +642,16 @@
                     <input type="number" id="cfg_flow_po_output_count" value="1" min="1" max="4" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin: 0; width: 100%; box-sizing: border-box;" />
                   </div>
                 </div>
+
+                <!-- Auto Upscale -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">upscale อัตโนมัติหลังทำ:</label>
+                  <select id="cfg_flow_po_upscale_auto" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                    <option value="NONE" selected>ไม่ขยาย (ปกติ)</option>
+                    <option value="VIDEO_RESOLUTION_1080P">ขยายเป็น 1080P</option>
+                    <option value="VIDEO_RESOLUTION_4K">ขยายเป็น 4K</option>
+                  </select>
+                </div>
               </div>
 
               <!-- Right Column: Folders -->
@@ -684,7 +704,11 @@
                 </select>
               </div>
               
-              <button id="btnConfirmDownloadAll" class="primary" style="flex: 1; min-width: 200px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; background: linear-gradient(135deg, #eab308, #ca8a04); border: none; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(234, 179, 8, 0.25); height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <button id="btnTriggerProjectUpscale" class="secondary" style="flex: 1; min-width: 200px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); color: #38bdf8; cursor: pointer; transition: all 0.2s; height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0;">
+                <span>⚡ ส่งทำ Upscale ทั้งโปรเจกต์</span>
+              </button>
+
+              <button id="btnConfirmDownloadAll" class="primary" style="flex: 1; min-width: 200px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; background: linear-gradient(135deg, #eab308, #ca8a04); border: none; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(234, 179, 8, 0.25); height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0;">
                 <span>📥 ดาวน์โหลดวิดีโอทั้งหมด (ZIP)</span>
               </button>
             </div>

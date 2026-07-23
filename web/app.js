@@ -5876,7 +5876,7 @@ function initFlowKitUploaderListeners() {
     const orientation = document.getElementById('cfg_flow_orientation')?.value;
     const videoModel = document.getElementById('cfg_flow_video_model')?.value || null;
     const outputCount = parseInt(document.getElementById('cfg_flow_output_count')?.value, 10) || 1;
-    const upscaleResolution = 'NONE';
+    const upscaleResolution = document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE';
     
     const msg = document.getElementById('flowKitMsg');
     
@@ -6236,7 +6236,14 @@ function renderScannedPairs() {
 // ─── Download Project Videos Event Listeners ─────────────────
 
 document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', async () => {
-  const project = document.getElementById('cfg_flow_project_dropdown')?.value;
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let project = '';
+  if (genMode === 'Flowkit แบบไม่แนบรูป') {
+    project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  } else {
+    project = document.getElementById('cfg_flow_project_dropdown')?.value;
+  }
+  
   const upscale = document.getElementById('cfg_download_upscale')?.value || 'NONE';
   const msg = document.getElementById('downloadModalMsg');
   const btn = document.getElementById('btnConfirmDownloadAll');
@@ -6327,6 +6334,93 @@ document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', asyn
       msg.className = 'msg error';
       msg.style.color = '#f56565';
       msg.textContent = err.message || 'ดาวน์โหลดไม่สำเร็จ';
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+document.getElementById('btnTriggerProjectUpscale')?.addEventListener('click', async () => {
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let project = '';
+  if (genMode === 'Flowkit แบบไม่แนบรูป') {
+    project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  } else {
+    project = document.getElementById('cfg_flow_project_dropdown')?.value;
+  }
+  
+  const upscale = document.getElementById('cfg_download_upscale')?.value || 'NONE';
+  const msg = document.getElementById('downloadModalMsg');
+  const btn = document.getElementById('btnTriggerProjectUpscale');
+  
+  if (!project) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกโปรเจกต์ก่อนส่งทำ Upscale';
+    }
+    return;
+  }
+  
+  if (upscale === 'NONE') {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกความละเอียดในการ Upscale (1080P หรือ 4K) ก่อนดำเนินการ';
+    }
+    return;
+  }
+  
+  if (msg) {
+    msg.style.display = 'block';
+    msg.className = 'msg info';
+    msg.style.color = '#38bdf8';
+    msg.textContent = 'กำลังดึงข้อมูลและเตรียมคิวส่งทำ Upscale ทั้งโปรเจกต์ กรุณารอสักครู่...';
+  }
+  if (btn) btn.disabled = true;
+  
+  try {
+    const response = await fetch('/api/batch-uploader/upscale-project', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        project_id: project,
+        upscale_resolution: upscale
+      })
+    });
+    
+    if (!response.ok) {
+      let errDetail = 'เกิดข้อผิดพลาดในการส่งทำ Upscale';
+      try {
+        const errData = await response.json();
+        errDetail = errData.detail || errDetail;
+      } catch(e) {}
+      throw new Error(errDetail);
+    }
+    
+    const data = await response.json();
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg success';
+      msg.style.color = '#48bb78';
+      msg.textContent = `ส่งคำขอทำ Upscale สำเร็จ! เพิ่มเข้าคิวงานใหม่ทั้งหมด ${data.queued_count} งาน`;
+      showToast(`ส่งทำ Upscale สำเร็จ ${data.queued_count} ฉาก`, 'success');
+    }
+    
+    setTimeout(() => {
+      if (msg) msg.style.display = 'none';
+    }, 4000);
+    
+  } catch (err) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = err.message || 'ส่งทำ Upscale ไม่สำเร็จ';
     }
   } finally {
     if (btn) btn.disabled = false;
@@ -6468,7 +6562,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
   const videoModel = document.getElementById('cfg_flow_po_video_model')?.value || null;
   const outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
   const durationSeconds = 10;
-  const upscaleResolution = document.getElementById('cfg_download_upscale')?.value || 'NONE';
+  const upscaleResolution = document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE';
   
   const msg = document.getElementById('flowKitPOMsg');
   
