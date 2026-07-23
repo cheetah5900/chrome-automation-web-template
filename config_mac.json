@@ -552,7 +552,7 @@
     "reference_images_dir_round_18": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - \u0e1c\u0e31\u0e01\u0e01\u0e32\u0e14\u0e01\u0e32\u0e23\u0e25\u0e30\u0e04\u0e23 - \u0e25\u0e30\u0e04\u0e23\u0e44\u0e17\u0e22/Character Sheet",
     "reference_images_dir_round_19": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - \u0e1c\u0e31\u0e01\u0e01\u0e32\u0e14\u0e01\u0e32\u0e23\u0e25\u0e30\u0e04\u0e23 - \u0e25\u0e30\u0e04\u0e23\u0e44\u0e17\u0e22/Character Sheet",
     "reference_images_dir_round_20": "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - \u0e1c\u0e31\u0e01\u0e01\u0e32\u0e14\u0e01\u0e32\u0e23\u0e25\u0e30\u0e04\u0e23 - \u0e25\u0e30\u0e04\u0e23\u0e44\u0e17\u0e22/Character Sheet",
-    "video_gen_mode": "flow_kit_prompt_only",
+    "video_gen_mode": "flow_kit",
     "video_prompts": [
         ""
     ],
