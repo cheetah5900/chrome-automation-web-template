@@ -494,6 +494,135 @@ import zipfile
 import tempfile
 from pathlib import Path
 import aiohttp
+import re
+
+def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
+    # Helper to recursively find cards list
+    def find_cards(node):
+        if isinstance(node, dict):
+            if "cards" in node and isinstance(node["cards"], list):
+                return node["cards"]
+            for v in node.values():
+                res = find_cards(v)
+                if res is not None:
+                    return res
+        elif isinstance(node, list):
+            for item in node:
+                res = find_cards(item)
+                if res is not None:
+                    return res
+        return None
+
+    cards = find_cards(project_data)
+    if not cards:
+        logger.warning("No 'cards' list found in Google Flow project data JSON")
+        return []
+
+    scenes = []
+    for idx, card in enumerate(cards):
+        card_id = card.get("cardId") or card.get("id") or f"card_{idx+1}"
+        
+        # Recursively find all video nodes inside this card
+        video_nodes = []
+        def scan_videos(node, parent_dict=None):
+            if isinstance(node, dict):
+                has_vid = False
+                for k, v in node.items():
+                    if isinstance(v, str) and "storage.googleapis.com" in v and "/video/" in v:
+                        has_vid = True
+                        break
+                if has_vid:
+                    video_nodes.append((node, parent_dict or node))
+                for v in node.values():
+                    scan_videos(v, node)
+            elif isinstance(node, list):
+                for item in node:
+                    scan_videos(item, parent_dict)
+
+        scan_videos(card)
+        
+        scene_dict = {
+            "display_order": idx + 1,
+            "id": card_id,
+            "vertical_video_url": None,
+            "vertical_video_media_id": None,
+            "horizontal_video_url": None,
+            "horizontal_video_media_id": None,
+            "vertical_upscale_url": None,
+            "vertical_upscale_media_id": None,
+            "horizontal_upscale_url": None,
+            "horizontal_upscale_media_id": None,
+        }
+        
+        for node, parent in video_nodes:
+            url = None
+            for k, v in node.items():
+                if isinstance(v, str) and "storage.googleapis.com" in v and "/video/" in v:
+                    url = v.replace("\\u0026", "&").replace("\\", "")
+                    break
+            if not url:
+                continue
+                
+            media_id = None
+            media_match = re.search(r'/video/([0-9a-f-]{36})', url)
+            if media_match:
+                media_id = media_match.group(1)
+            if not media_id:
+                media_id = node.get("mediaId") or node.get("mediaKey") or node.get("id")
+                
+            aspect = ""
+            for lookup in (node, parent, card):
+                for k, v in lookup.items():
+                    if isinstance(v, str) and "ASPECT" in v.upper():
+                        aspect = v.upper()
+                        break
+                if aspect:
+                    break
+            
+            if not aspect:
+                text_to_search = str(node) + str(parent)
+                if "PORTRAIT" in text_to_search.upper() or "VERTICAL" in text_to_search.upper():
+                    aspect = "PORTRAIT"
+                elif "LANDSCAPE" in text_to_search.upper() or "HORIZONTAL" in text_to_search.upper():
+                    aspect = "LANDSCAPE"
+                    
+            is_upscale = False
+            text_to_search = (url + str(node) + str(parent)).lower()
+            if "upscale" in text_to_search or "upsample" in text_to_search or "high_res" in text_to_search:
+                is_upscale = True
+                
+            if "PORTRAIT" in aspect or "VERTICAL" in aspect:
+                if is_upscale:
+                    scene_dict["vertical_upscale_url"] = url
+                    scene_dict["vertical_upscale_media_id"] = media_id
+                else:
+                    scene_dict["vertical_video_url"] = url
+                    scene_dict["vertical_video_media_id"] = media_id
+            else:
+                if is_upscale:
+                    scene_dict["horizontal_upscale_url"] = url
+                    scene_dict["horizontal_upscale_media_id"] = media_id
+                else:
+                    scene_dict["horizontal_video_url"] = url
+                    scene_dict["horizontal_video_media_id"] = media_id
+                    
+        v_url = scene_dict["vertical_video_url"] or scene_dict["vertical_upscale_url"]
+        h_url = scene_dict["horizontal_video_url"] or scene_dict["horizontal_upscale_url"]
+        if not v_url and h_url:
+            scene_dict["vertical_video_url"] = scene_dict["horizontal_video_url"]
+            scene_dict["vertical_video_media_id"] = scene_dict["horizontal_video_media_id"]
+            scene_dict["vertical_upscale_url"] = scene_dict["horizontal_upscale_url"]
+            scene_dict["vertical_upscale_media_id"] = scene_dict["horizontal_upscale_media_id"]
+        elif not h_url and v_url:
+            scene_dict["horizontal_video_url"] = scene_dict["vertical_video_url"]
+            scene_dict["horizontal_video_media_id"] = scene_dict["vertical_video_media_id"]
+            scene_dict["horizontal_upscale_url"] = scene_dict["vertical_upscale_url"]
+            scene_dict["horizontal_upscale_media_id"] = scene_dict["vertical_upscale_media_id"]
+            
+        if scene_dict["vertical_video_url"] or scene_dict["horizontal_video_url"]:
+            scenes.append(scene_dict)
+            
+    return scenes
 
 class DownloadProjectVideosRequest(BaseModel):
     project_id: str
@@ -558,22 +687,48 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         
     project_slug = slugify(getattr(project, "name", "project")) or "project"
     
-    # Fetch all scenes belonging to this project
-    db = await get_db()
-    async with _db_lock:
-        cursor = await db.execute(
-            """
-            SELECT s.* 
-            FROM scene s
-            JOIN video v ON s.video_id = v.id
-            WHERE v.project_id = ?
-            ORDER BY s.display_order ASC
-            """,
-            (body.project_id,)
-        )
-        rows = await cursor.fetchall()
-        columns = [col[0] for col in cursor.description]
-        scenes = [dict(zip(columns, row)) for row in rows]
+    # 1. Try fetching project details directly from Google Flow via extension TRPC
+    scenes = []
+    client = get_flow_client()
+    if client.connected:
+        try:
+            import urllib.parse
+            import json as _json
+            input_params = {"json": {"projectId": body.project_id, "toolName": "PINHOLE"}}
+            encoded_input = urllib.parse.quote(_json.dumps(input_params))
+            url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
+            logger.info("Attempting to pull project %s directly from Google Flow...", body.project_id[:12])
+            res = await client._send("trpc_request", {
+                "url": url,
+                "method": "GET",
+                "headers": {"accept": "*/*"}
+            }, timeout=30)
+            
+            if res and isinstance(res, dict) and not res.get("error"):
+                scenes = extract_scenes_from_flow_project(res)
+                if scenes:
+                    logger.info("Successfully extracted %d scenes directly from Google Flow TRPC response", len(scenes))
+        except Exception as e:
+            logger.warning("Failed to pull project directly from Google Flow, falling back to local DB: %s", e)
+
+    # 2. Fall back to local SQLite DB if we got no scenes from Google Flow TRPC
+    if not scenes:
+        logger.info("Using local database scenes as fallback for project %s", body.project_id[:12])
+        db = await get_db()
+        async with _db_lock:
+            cursor = await db.execute(
+                """
+                SELECT s.* 
+                FROM scene s
+                JOIN video v ON s.video_id = v.id
+                WHERE v.project_id = ?
+                ORDER BY s.display_order ASC
+                """,
+                (body.project_id,)
+            )
+            rows = await cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            scenes = [dict(zip(columns, row)) for row in rows]
         
     if not scenes:
         raise HTTPException(status_code=404, detail="No scenes found for this project.")
