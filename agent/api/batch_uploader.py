@@ -687,6 +687,8 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         
     project_slug = slugify(getattr(project, "name", "project")) or "project"
     
+    is_google_flow = False
+    
     # 1. Try fetching project details directly from Google Flow via extension TRPC
     scenes = []
     client = get_flow_client()
@@ -708,6 +710,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                 scenes = extract_scenes_from_flow_project(res)
                 if scenes:
                     logger.info("Successfully extracted %d scenes directly from Google Flow TRPC response", len(scenes))
+                    is_google_flow = True
         except Exception as e:
             logger.warning("Failed to pull project directly from Google Flow, falling back to local DB: %s", e)
 
@@ -795,5 +798,6 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     return FileResponse(
         path=str(zip_path),
         media_type="application/zip",
-        filename=f"{project_slug}_videos.zip"
+        filename=f"{project_slug}_videos.zip",
+        headers={"X-Download-Source": "google-flow" if is_google_flow else "local-db"}
     )

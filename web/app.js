@@ -6300,16 +6300,26 @@ document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', asyn
     a.remove();
     window.URL.revokeObjectURL(url);
     
+    const downloadSource = response.headers.get('X-Download-Source');
+    let sourceDetail = '';
+    if (downloadSource === 'google-flow') {
+      sourceDetail = ' (ดึงข้อมูลล่าสุดจาก Google Flow ผ่าน Extension)';
+      showToast('ดาวน์โหลดวิดีโอสำเร็จ (ดึงข้อมูลล่าสุดจาก Google Flow)', 'success');
+    } else if (downloadSource === 'local-db') {
+      sourceDetail = ' (ใช้ประวัติเก่าในเครื่องสำรอง - Fallback)';
+      showToast('ดาวน์โหลดวิดีโอสำเร็จ (ใช้ประวัติเครื่องสำรอง - Fallback)', 'warning');
+    }
+    
     if (msg) {
       msg.style.display = 'block';
       msg.className = 'msg success';
       msg.style.color = '#48bb78';
-      msg.textContent = 'ดาวน์โหลดสำเร็จแล้ว!';
+      msg.textContent = 'ดาวน์โหลดสำเร็จแล้ว!' + sourceDetail;
     }
     
     setTimeout(() => {
       if (msg) msg.style.display = 'none';
-    }, 1500);
+    }, 4000);
     
   } catch (err) {
     if (msg) {
