@@ -5983,12 +5983,10 @@ function renderScannedPairs() {
     { text: 'Source/File', width: '30%' },
     { text: 'Prompt Content (Read-Only)', width: '60%' }
   ] : [
-    { text: 'Select', width: '5%', align: 'center' },
-    { text: 'Scene', width: '10%' },
-    { text: 'Thumbnail', width: '12%' },
-    { text: 'Source/File', width: '23%' },
-    { text: 'Prompt Content (Read-Only)', width: '45%' },
-    { text: 'Action', width: '5%', align: 'center' }
+    { text: 'Select', width: '10%', align: 'center' },
+    { text: 'Thumbnail', width: '15%' },
+    { text: 'Source/File', width: '25%' },
+    { text: 'Prompt Content (Read-Only)', width: '50%' }
   ];
   
   headers.forEach(h => {
@@ -6040,15 +6038,7 @@ function renderScannedPairs() {
     tr.appendChild(tdCheck);
     
     if (!isPromptOnly) {
-      // 2. Index
-      const tdIndex = document.createElement('td');
-      tdIndex.style.padding = '12px 16px';
-      tdIndex.style.fontWeight = 'bold';
-      tdIndex.style.color = '#8da6ff';
-      tdIndex.textContent = `Scene ${pair.index}`;
-      tr.appendChild(tdIndex);
-      
-      // 3. Thumbnail
+      // 2. Thumbnail
       const tdThumb = document.createElement('td');
       tdThumb.style.padding = '12px 16px';
       
@@ -6082,7 +6072,7 @@ function renderScannedPairs() {
       tr.appendChild(tdThumb);
     }
     
-    // 4. Source/File name
+    // 3. Source/File name
     const tdSource = document.createElement('td');
     tdSource.style.padding = '12px 16px';
     tdSource.style.color = 'rgba(255,255,255,0.5)';
@@ -6091,7 +6081,7 @@ function renderScannedPairs() {
     tdSource.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
     tr.appendChild(tdSource);
     
-    // 5. Prompt Content (Read-Only)
+    // 4. Prompt Content (Read-Only)
     const tdPrompt = document.createElement('td');
     tdPrompt.style.padding = '12px 16px';
     
@@ -6111,32 +6101,9 @@ function renderScannedPairs() {
     tdPrompt.appendChild(promptDiv);
     tr.appendChild(tdPrompt);
     
-    if (!isPromptOnly) {
-      // 6. Action (Delete)
-      const tdAction = document.createElement('td');
-      tdAction.style.padding = '12px 16px';
-      tdAction.style.textAlign = 'center';
-      
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'secondary';
-      deleteBtn.style.padding = '6px 12px';
-      deleteBtn.style.fontSize = '0.78rem';
-      deleteBtn.style.margin = '0';
-      deleteBtn.style.color = '#f56565';
-      deleteBtn.style.background = 'rgba(245, 101, 101, 0.1)';
-      deleteBtn.style.borderColor = 'rgba(245, 101, 101, 0.2)';
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.addEventListener('click', () => {
-        flowScannedPairs = flowScannedPairs.filter(p => p.index !== pair.index);
-        flowScannedPairs.forEach((p, i) => p.index = i + 1);
-        renderScannedPairs();
-      });
-      tdAction.appendChild(deleteBtn);
-      tr.appendChild(tdAction);
-    }
-    
     tbody.appendChild(tr);
   });
+
   
   table.appendChild(tbody);
   tableWrapper.appendChild(table);
