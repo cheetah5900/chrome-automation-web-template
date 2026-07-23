@@ -6022,7 +6022,7 @@ async function loadFlowKitProjects() {
 async function updateProjectStats() {
   const genMode = document.getElementById('cfg_video_gen_mode')?.value;
   let projectId = '';
-  if (genMode === 'Flowkit แบบไม่แนบรูป') {
+  if (genMode === 'flow_kit_prompt_only') {
     projectId = document.getElementById('cfg_flow_po_project_dropdown')?.value;
   } else {
     projectId = document.getElementById('cfg_flow_project_dropdown')?.value;
@@ -6373,7 +6373,7 @@ function renderScannedPairs() {
 document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', async () => {
   const genMode = document.getElementById('cfg_video_gen_mode')?.value;
   let project = '';
-  if (genMode === 'Flowkit แบบไม่แนบรูป') {
+  if (genMode === 'flow_kit_prompt_only') {
     project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
   } else {
     project = document.getElementById('cfg_flow_project_dropdown')?.value;
@@ -6478,7 +6478,7 @@ document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', asyn
 document.getElementById('btnTriggerProjectUpscale')?.addEventListener('click', async () => {
   const genMode = document.getElementById('cfg_video_gen_mode')?.value;
   let project = '';
-  if (genMode === 'Flowkit แบบไม่แนบรูป') {
+  if (genMode === 'flow_kit_prompt_only') {
     project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
   } else {
     project = document.getElementById('cfg_flow_project_dropdown')?.value;
