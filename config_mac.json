@@ -527,7 +527,7 @@
     "view_channel_gamma": "1.02",
     "view_channel_unsharp": "5:5:0.7:3:3:0.3",
     "view_channel_video_audio_boost": "-10",
-    "auto_retry_mode": true,
+    "auto_retry_mode": false,
     "first_time_waiting": 120,
     "view_channel_combine_batch_mode": true,
     "view_channel_combine_sub_folders": "9,19,25,32,44,46,58,68,84,96,107,144",
@@ -557,100 +557,5 @@
         ""
     ],
     "video_prompt_statuses": [],
-    "video_round_active_1": true,
-    "video_prompts_2": [
-        "Episode: 7\nScene: 02 \u2014 \u0e19\u0e17\u0e35\u0e08\u0e49\u0e2d\u0e07\u0e40\u0e01\u0e49\u0e32\u0e2d\u0e35\u0e49\u0e27\u0e48\u0e32\u0e07\nAction: Natee looks down at the empty stool beside him, looking lost and sorrowful.\nDialogue audio in Thai:\n- The colorless guy says to himself sadly: \u201c\u0e40\u0e2b\u0e21\u0e37\u0e2d\u0e19\u0e27\u0e48\u0e32\u0e21\u0e31\u0e19\u0e40\u0e04\u0e22\u0e21\u0e35\u0e43\u0e04\u0e23\u0e2d\u0e22\u0e39\u0e48\u0e15\u0e23\u0e07\u0e19\u0e35\u0e49... \u0e41\u0e15\u0e48\u0e19\u0e36\u0e01\u0e44\u0e21\u0e48\u0e2d\u0e2d\u0e01... \u0e2b\u0e23\u0e37\u0e2d\u0e40\u0e23\u0e32\u0e2b\u0e25\u0e2d\u0e19...\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_2": [],
-    "video_round_active_2": true,
-    "video_prompts_3": [
-        "Episode: 7\nScene: 03 \u2014 \u0e27\u0e34\u0e19\u0e40\u0e17\u0e2d\u0e23\u0e4c\u0e40\u0e14\u0e34\u0e19\u0e40\u0e02\u0e49\u0e32\u0e21\u0e32\u0e2b\u0e32\nAction: Winter enters holding some books, walking closer to Natee with a concerned facial expression.\nDialogue audio in Thai:\n- The blue-dyed diamond boy says: \u201c\u0e19\u0e17\u0e35... \u0e19\u0e32\u0e22\u0e08\u0e49\u0e2d\u0e07\u0e2a\u0e40\u0e01\u0e47\u0e15\u0e0a\u0e4c\u0e20\u0e32\u0e1e\u0e27\u0e48\u0e32\u0e07\u0e46 \u0e19\u0e32\u0e19\u0e41\u0e25\u0e49\u0e27\u0e19\u0e30 \u0e40\u0e1b\u0e47\u0e19\u0e2d\u0e30\u0e44\u0e23 \u0e23\u0e31\u0e48\u0e27\u0e2b\u0e23\u0e2d\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_3": [],
-    "video_round_active_3": true,
-    "video_prompts_4": [
-        "Episode: 7\nScene: 04 \u2014 \u0e19\u0e17\u0e35\u0e23\u0e30\u0e1a\u0e32\u0e22\u0e04\u0e27\u0e32\u0e21\u0e43\u0e19\u0e43\u0e08\nAction: Natee looks at Winter, placing his hand over his heart with a trembling expression.\nDialogue audio in Thai:\n- The colorless guy says to Winter quietly: \u201c\u0e27\u0e34\u0e19\u0e40\u0e17\u0e2d\u0e23\u0e4c... \u0e09\u0e31\u0e19\u0e08\u0e33\u0e0a\u0e37\u0e48\u0e2d\u0e04\u0e19\u0e46 \u0e19\u0e36\u0e07\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49 \u0e41\u0e15\u0e48\u0e43\u0e19\u0e43\u0e08\u0e09\u0e31\u0e19\u0e21\u0e31\u0e19\u0e17\u0e23\u0e21\u0e32\u0e19\u0e21\u0e32\u0e01\u0e40\u0e2b\u0e21\u0e37\u0e2d\u0e19\u0e25\u0e37\u0e21\u0e40\u0e23\u0e37\u0e48\u0e2d\u0e07\u0e2a\u0e33\u0e04\u0e31\u0e0d\u0e17\u0e35\u0e48\u0e2a\u0e38\u0e14\u0e44\u0e1b\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_4": [],
-    "video_round_active_4": true,
-    "video_prompts_5": [
-        "Episode: 7\nScene: 05 \u2014 \u0e27\u0e34\u0e19\u0e40\u0e17\u0e2d\u0e23\u0e4c\u0e08\u0e31\u0e1a\u0e44\u0e2b\u0e25\u0e48\u0e1b\u0e25\u0e2d\u0e1a\nAction: Close-up of Winter's hand touching Natee's shoulder to comfort him.\nDialogue audio in Thai:\n- The blue-dyed diamond boy says gently: \u201c\u0e44\u0e21\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e01\u0e25\u0e31\u0e27\u0e19\u0e30... \u0e09\u0e31\u0e19\u0e2d\u0e22\u0e39\u0e48\u0e15\u0e23\u0e07\u0e19\u0e35\u0e49\u0e02\u0e49\u0e32\u0e07\u0e19\u0e32\u0e22\u0e40\u0e2a\u0e21\u0e2d\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_5": [],
-    "video_round_active_5": true,
-    "video_prompts_6": [
-        "Episode: 7\nScene: 06 \u2014 \u0e27\u0e34\u0e19\u0e40\u0e17\u0e2d\u0e23\u0e4c\u0e0a\u0e27\u0e19\u0e25\u0e2d\u0e1a\u0e40\u0e02\u0e49\u0e32\u0e15\u0e36\u0e01\nAction: Winter looks determinedly at Natee, speaking with absolute confidence.\nDialogue audio in Thai:\n- The blue-dyed diamond boy says whispering: \u201c\u0e40\u0e14\u0e35\u0e4b\u0e22\u0e27\u0e09\u0e31\u0e19\u0e08\u0e30\u0e0a\u0e48\u0e27\u0e22\u0e19\u0e32\u0e22\u0e2b\u0e32\u0e04\u0e33\u0e15\u0e2d\u0e1a\u0e40\u0e2d\u0e07... \u0e04\u0e37\u0e19\u0e19\u0e35\u0e49\u0e40\u0e23\u0e32\u0e41\u0e2d\u0e1a\u0e40\u0e02\u0e49\u0e32\u0e44\u0e1b\u0e17\u0e35\u0e48\u0e2b\u0e2d\u0e17\u0e30\u0e40\u0e1a\u0e35\u0e22\u0e19\u0e01\u0e25\u0e32\u0e07\u0e01\u0e31\u0e19\u0e40\u0e16\u0e2d\u0e30\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_6": [],
-    "video_round_active_6": true,
-    "video_prompts_7": [
-        "Episode: 7\nScene: 07 \u2014 \u0e2b\u0e2d\u0e17\u0e30\u0e40\u0e1a\u0e35\u0e22\u0e19\u0e01\u0e25\u0e32\u0e07\u0e15\u0e2d\u0e19\u0e01\u0e25\u0e32\u0e07\u0e04\u0e37\u0e19\nAction: Wide establishing shot of the gothic-style Registry Tower at night, foggy atmosphere under dim moonlight.\nDialogue audio in Thai:\n- No clear spoken dialogue; keep the moment quiet.\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_7": [],
-    "video_round_active_7": true,
-    "video_prompts_8": [
-        "Episode: 7\nScene: 08 \u2014 \u0e41\u0e2d\u0e1a\u0e40\u0e02\u0e49\u0e32\u0e21\u0e32\u0e17\u0e32\u0e07\u0e2b\u0e19\u0e49\u0e32\u0e15\u0e48\u0e32\u0e07\nAction: Winter holds the window open while Natee climbs inside the dusty, dark filing room.\nDialogue audio in Thai:\n- The blue-dyed diamond boy says whispering: \u201c\u0e17\u0e35\u0e48\u0e19\u0e35\u0e48\u0e41\u0e21\u0e48\u0e07\u0e21\u0e37\u0e14\u0e08\u0e31\u0e14\u0e40\u0e25\u0e22... \u0e41\u0e1f\u0e49\u0e21\u0e2a\u0e35\u0e1e\u0e27\u0e01\u0e19\u0e35\u0e49\u0e04\u0e37\u0e2d\u0e2d\u0e30\u0e44\u0e23\u0e1b\u0e23\u0e30\u0e27\u0e31\u0e15\u0e34\u0e19\u0e31\u0e01\u0e40\u0e23\u0e35\u0e22\u0e19\u0e43\u0e0a\u0e48\u0e44\u0e2b\u0e21\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_8": [],
-    "video_round_active_8": true,
-    "video_prompts_9": [
-        "Episode: 7\nScene: 09 \u2014 \u0e21\u0e37\u0e2d\u0e25\u0e36\u0e01\u0e25\u0e31\u0e1a\u0e43\u0e19\u0e40\u0e07\u0e32\u0e21\u0e37\u0e14\nAction: A translucent orange glass hand reaches out from the shadow of the filing cabinet, touching Natee's arm.\nDialogue audio in Thai:\n- The orange boy says whispering: \u201c\u0e01\u0e23\u0e38\u0e13\u0e32\u0e2d\u0e22\u0e48\u0e32\u0e2a\u0e48\u0e07\u0e40\u0e2a\u0e35\u0e22\u0e07\u0e14\u0e31\u0e07\u0e19\u0e30\u0e04\u0e23\u0e31\u0e1a... \u0e41\u0e21\u0e48\u0e17\u0e2d\u0e07\u0e2d\u0e48\u0e2d\u0e19\u0e01\u0e33\u0e25\u0e31\u0e07\u0e40\u0e14\u0e34\u0e19\u0e15\u0e23\u0e27\u0e08\u0e2d\u0e22\u0e39\u0e48\u0e14\u0e49\u0e32\u0e19\u0e1a\u0e19\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_9": [],
-    "video_round_active_9": true,
-    "video_prompts_10": [
-        "Episode: 7\nScene: 10 \u2014 \u0e27\u0e34\u0e19\u0e40\u0e17\u0e2d\u0e23\u0e4c\u0e15\u0e01\u0e43\u0e08\u0e40\u0e08\u0e2d\u0e04\u0e23\u0e32\u0e21\nAction: Winter stares in shock at Khram, a translucent orange glass boy whose body is half-fading away.\nDialogue audio in Thai:\n- The blue-dyed diamond boy says in shock: \u201c\u0e04\u0e23\u0e32\u0e21! \u0e19\u0e32\u0e22\u0e16\u0e39\u0e01\u0e25\u0e1a\u0e0a\u0e37\u0e48\u0e2d\u0e41\u0e25\u0e49\u0e27\u0e17\u0e33\u0e44\u0e21\u0e22\u0e31\u0e07\u0e2d\u0e22\u0e39\u0e48\u0e17\u0e35\u0e48\u0e19\u0e35\u0e48... \u0e2a\u0e35\u0e02\u0e2d\u0e07\u0e23\u0e48\u0e32\u0e07\u0e01\u0e32\u0e22\u0e02\u0e2d\u0e07\u0e19\u0e32\u0e22\u0e08\u0e32\u0e07\u0e0b\u0e30\u0e40\u0e2b\u0e25\u0e37\u0e2d\u0e40\u0e01\u0e34\u0e19\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_10": [],
-    "video_round_active_10": true,
-    "video_prompts_11": [
-        "Episode: 7\nScene: 11 \u2014 \u0e04\u0e23\u0e32\u0e21\u0e40\u0e25\u0e48\u0e32\u0e40\u0e23\u0e37\u0e48\u0e2d\u0e07\u0e23\u0e30\u0e1a\u0e1a\u0e40\u0e07\u0e32\nAction: Khram looks at Natee with a sad, fading face, gesturing with his half-transparent hands.\nDialogue audio in Thai:\n- The orange boy says: \u201c\u0e23\u0e30\u0e1a\u0e1a\u0e25\u0e1a\u0e0a\u0e37\u0e48\u0e2d\u0e22\u0e31\u0e07\u0e44\u0e21\u0e48\u0e2a\u0e21\u0e1a\u0e39\u0e23\u0e13\u0e4c... \u0e04\u0e19\u0e17\u0e35\u0e48\u0e16\u0e39\u0e01\u0e25\u0e1a\u0e27\u0e34\u0e0d\u0e0d\u0e32\u0e13\u0e08\u0e30\u0e08\u0e32\u0e07\u0e2b\u0e32\u0e22\u0e44\u0e1b\u0e0a\u0e49\u0e32\u0e46 \u0e09\u0e31\u0e19\u0e0b\u0e48\u0e2d\u0e19\u0e15\u0e31\u0e27\u0e2d\u0e22\u0e39\u0e48\u0e17\u0e35\u0e48\u0e19\u0e35\u0e48\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e15\u0e37\u0e2d\u0e19\u0e19\u0e32\u0e22\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_11": [],
-    "video_round_active_11": true,
-    "video_prompts_12": [
-        "Episode: 7\nScene: 12 \u2014 \u0e04\u0e33\u0e40\u0e15\u0e37\u0e2d\u0e19\u0e16\u0e36\u0e07\u0e1c\u0e39\u0e49\u0e19\u0e33\u0e40\u0e07\u0e32\nAction: Khram points a fading finger at Winter, speaking with urgent warning.\nDialogue audio in Thai:\n- The orange boy says: \u201c\u0e23\u0e30\u0e27\u0e31\u0e07\u0e15\u0e31\u0e27\u0e44\u0e27\u0e49\u0e19\u0e30... \u0e04\u0e19\u0e17\u0e35\u0e48\u0e25\u0e1a\u0e0a\u0e37\u0e48\u0e2d\u0e1e\u0e27\u0e01\u0e40\u0e23\u0e32\u0e44\u0e21\u0e48\u0e43\u0e0a\u0e48\u0e1b\u0e23\u0e30\u0e18\u0e32\u0e19\u0e2a\u0e35\u0e17\u0e2d\u0e07 \u0e41\u0e15\u0e48\u0e21\u0e31\u0e19\u0e04\u0e37\u0e2d.. \u0e1c\u0e39\u0e49\u0e19\u0e33\u0e40\u0e07\u0e32\u0e2a\u0e35\u0e2a\u0e49\u0e21\u0e17\u0e35\u0e48\u0e2d\u0e22\u0e39\u0e48\u0e40\u0e1a\u0e37\u0e49\u0e2d\u0e07\u0e2b\u0e25\u0e31\u0e07\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_12": [],
-    "video_round_active_12": true,
-    "video_prompts_13": [
-        "Episode: 7\nScene: 13 \u2014 \u0e2a\u0e31\u0e0d\u0e0d\u0e32\u0e13\u0e40\u0e15\u0e37\u0e2d\u0e19\u0e20\u0e31\u0e22\u0e40\u0e23\u0e34\u0e48\u0e21\u0e2b\u0e21\u0e38\u0e19\nAction: Close-up of a red alarm light spinning, red light reflecting on Natee's shocked face.\nDialogue audio in Thai:\n- The blue-dyed diamond boy says in shock: \u201c\u0e07\u0e32\u0e19\u0e40\u0e02\u0e49\u0e32... \u0e2a\u0e31\u0e0d\u0e0d\u0e32\u0e13\u0e40\u0e15\u0e37\u0e2d\u0e19\u0e20\u0e31\u0e22\u0e23\u0e49\u0e2d\u0e07\u0e40\u0e09\u0e22!\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_13": [],
-    "video_round_active_13": true,
-    "video_prompts_14": [
-        "Episode: 7\nScene: 14 \u2014 \u0e40\u0e2a\u0e35\u0e22\u0e07\u0e1b\u0e23\u0e30\u0e01\u0e32\u0e28\u0e25\u0e47\u0e2d\u0e01\u0e1b\u0e23\u0e30\u0e15\u0e39\u0e15\u0e36\u0e01\nAction: The red emergency light flashes on, Natee and Winter look panicked as alarm sounds.\nDialogue audio in Thai:\n- The announcement voice says: \u201c\u0e15\u0e23\u0e27\u0e08\u0e1e\u0e1a\u0e1c\u0e39\u0e49\u0e1a\u0e38\u0e01\u0e23\u0e38\u0e01... \u0e17\u0e33\u0e01\u0e32\u0e23\u0e1b\u0e34\u0e14\u0e25\u0e47\u0e2d\u0e01\u0e15\u0e36\u0e01\u0e17\u0e30\u0e40\u0e1a\u0e35\u0e22\u0e19\u0e40\u0e07\u0e32\u0e17\u0e38\u0e01\u0e1b\u0e23\u0e30\u0e15\u0e39\u0e40\u0e25\u0e22\u0e19\u0e30\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_14": [],
-    "video_round_active_14": true,
-    "video_prompts_15": [
-        "Episode: 7\nScene: 15 \u2014 \u0e41\u0e21\u0e48\u0e17\u0e2d\u0e07\u0e2d\u0e48\u0e2d\u0e19\u0e2a\u0e31\u0e48\u0e07\u0e25\u0e49\u0e2d\u0e21\u0e15\u0e36\u0e01\nAction: Mae Thong-on descends the spiral stairs of the tower with security, pointing down commandingly.\nDialogue audio in Thai:\n- Khun Khiao says: \u201c\u0e04\u0e49\u0e19\u0e2b\u0e32\u0e43\u0e2b\u0e49\u0e17\u0e31\u0e48\u0e27! \u0e21\u0e31\u0e48\u0e27\u0e17\u0e38\u0e01\u0e08\u0e38\u0e14! \u0e2d\u0e22\u0e48\u0e32\u0e43\u0e2b\u0e49\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e02\u0e2d\u0e07\u0e2b\u0e49\u0e2d\u0e07\u0e17\u0e30\u0e40\u0e1a\u0e35\u0e22\u0e19\u0e23\u0e31\u0e48\u0e27\u0e44\u0e2b\u0e25\u0e2d\u0e2d\u0e01\u0e44\u0e1b\u0e40\u0e14\u0e47\u0e14\u0e02\u0e32\u0e14!\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_15": [],
-    "video_round_active_15": true,
-    "video_prompts_16": [
-        "Episode: 7\nScene: 16 \u2014 \u0e41\u0e21\u0e48\u0e17\u0e2d\u0e07\u0e2d\u0e48\u0e2d\u0e19\u0e1e\u0e36\u0e21\u0e1e\u0e33\u0e01\u0e31\u0e07\u0e27\u0e25\nAction: Close-up of Mae Thong-on looking anxious, looking around suspiciously.\nDialogue audio in Thai:\n- Khun Khiao says anxiously: \u201c\u0e16\u0e49\u0e32\u0e1e\u0e27\u0e01\u0e21\u0e31\u0e19\u0e44\u0e14\u0e49\u0e0a\u0e34\u0e1b\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e19\u0e31\u0e48\u0e19\u0e44\u0e1b... \u0e40\u0e1a\u0e37\u0e49\u0e2d\u0e07\u0e1a\u0e19\u0e15\u0e49\u0e2d\u0e07\u0e40\u0e25\u0e48\u0e19\u0e40\u0e23\u0e32\u0e15\u0e38\u0e22\u0e41\u0e19\u0e48\u0e46\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_16": [],
-    "video_round_active_16": true,
-    "video_prompts_17": [
-        "Episode: 7\nScene: 17 \u2014 \u0e04\u0e23\u0e32\u0e21\u0e1c\u0e25\u0e31\u0e01\u0e14\u0e31\u0e19\u0e43\u0e2b\u0e49\u0e2b\u0e19\u0e35\nAction: Khram pushes Natee toward a low metal exhaust vent, urging him to climb.\nDialogue audio in Thai:\n- The orange boy says hurriedly: \u201c\u0e43\u0e2b\u0e49\u0e44\u0e27\u0e40\u0e25\u0e22!\u0e23\u0e35\u0e1a\u0e1b\u0e35\u0e19\u0e2d\u0e2d\u0e01\u0e44\u0e1b\u0e17\u0e32\u0e07\u0e19\u0e35\u0e49 \u0e40\u0e14\u0e35\u0e4b\u0e22\u0e27\u0e09\u0e31\u0e19\u0e08\u0e30\u0e25\u0e48\u0e2d\u0e01\u0e31\u0e1a\u0e1e\u0e27\u0e01\u0e21\u0e31\u0e19\u0e40\u0e2d\u0e07!\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_17": [],
-    "video_round_active_17": true,
-    "video_prompts_18": [
-        "Episode: 7\nScene: 18 \u2014 \u0e2a\u0e48\u0e07\u0e15\u0e48\u0e2d\u0e40\u0e28\u0e29\u0e2b\u0e25\u0e31\u0e01\u0e10\u0e32\u0e19\nAction: Khram hands a glowing orange glass shard to Natee's hand.\nDialogue audio in Thai:\n- The orange boy says gently: \u201c\u0e40\u0e01\u0e47\u0e1a\u0e40\u0e28\u0e29\u0e2b\u0e25\u0e31\u0e01\u0e10\u0e32\u0e19\u0e0a\u0e34\u0e49\u0e19\u0e19\u0e35\u0e49\u0e44\u0e27\u0e49... \u0e21\u0e31\u0e19\u0e04\u0e37\u0e2d\u0e01\u0e38\u0e0d\u0e41\u0e08\u0e04\u0e27\u0e32\u0e21\u0e08\u0e33\u0e02\u0e2d\u0e07\u0e2d\u0e31\u0e04\u0e23\u0e32\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_18": [],
-    "video_round_active_18": true,
-    "video_prompts_19": [
-        "Episode: 7\nScene: 19 \u2014 \u0e19\u0e17\u0e35\u0e02\u0e2d\u0e43\u0e2b\u0e49\u0e04\u0e23\u0e32\u0e21\u0e2b\u0e19\u0e35\u0e14\u0e49\u0e27\u0e22\nAction: Natee looks back at Khram, feeling a deep sadness as Khram's face becomes even more transparent.\nDialogue audio in Thai:\n- The colorless guy says with a trembling voice: \u201c\u0e04\u0e23\u0e32\u0e21... \u0e19\u0e32\u0e22\u0e15\u0e49\u0e2d\u0e07\u0e23\u0e2d\u0e14\u0e44\u0e1b\u0e14\u0e49\u0e27\u0e22\u0e01\u0e31\u0e19\u0e43\u0e2b\u0e49\u0e44\u0e14\u0e49\u0e19\u0e30 \u0e2d\u0e22\u0e48\u0e32\u0e17\u0e34\u0e49\u0e07\u0e40\u0e23\u0e32\u0e44\u0e27\u0e49\u0e41\u0e1a\u0e1a\u0e19\u0e35\u0e49\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_19": [],
-    "video_round_active_19": true,
-    "video_prompts_20": [
-        "Episode: 7\nScene: 20 \u2014 \u0e17\u0e32\u0e07\u0e23\u0e2d\u0e14\u0e41\u0e25\u0e30\u0e1a\u0e17\u0e23\u0e1a\u0e40\u0e23\u0e49\u0e32\nAction: Khram stands calmly facing the incoming security agents as Natee crawls out of sight.\nDialogue audio in Thai:\n- The orange boy says: \u201c\u0e09\u0e31\u0e19\u0e1d\u0e32\u0e01\u0e1e\u0e27\u0e01\u0e19\u0e32\u0e22\u0e14\u0e49\u0e27\u0e22\u0e19\u0e30 \u0e1d\u0e32\u0e01\u0e17\u0e27\u0e07\u0e04\u0e37\u0e19\u0e0a\u0e37\u0e48\u0e2d\u0e1e\u0e27\u0e01\u0e40\u0e23\u0e32\u0e14\u0e49\u0e27\u0e22\u0e19\u0e30...\u201d\nNegative: no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin"
-    ],
-    "video_prompt_statuses_20": [],
-    "video_round_active_20": true
+    "video_round_active_1": true
 }

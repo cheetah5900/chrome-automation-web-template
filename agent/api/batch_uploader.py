@@ -903,7 +903,7 @@ async def get_project_stats(project_id: str):
     videos = await crud.list_videos(project_id)
     
     # Auto-sync project from Google Flow if extension is connected
-    from agent.main import client
+    client = get_flow_client()
     if client.connected:
         try:
             import urllib.parse
@@ -1023,8 +1023,18 @@ async def get_project_stats(project_id: str):
         v_scenes = await crud.list_scenes(v["id"])
         # Sort scenes by display_order
         v_scenes_sorted = sorted(v_scenes, key=lambda x: x.get("display_order", 0))
+        
+        # Detect active orientation prefixes for this video run
+        v_orientation = v.get("orientation")
+        if v_orientation == "VERTICAL":
+            prefixes = ("vertical",)
+        elif v_orientation == "HORIZONTAL":
+            prefixes = ("horizontal",)
+        else:
+            prefixes = ("vertical", "horizontal")
+            
         for scene in v_scenes_sorted:
-            for prefix in ("vertical", "horizontal"):
+            for prefix in prefixes:
                 has_video = bool(scene.get(f"{prefix}_video_media_id") or scene.get(f"{prefix}_video_url"))
                 has_upscale = bool(scene.get(f"{prefix}_upscale_url") or scene.get(f"{prefix}_upscale_media_id"))
                 
@@ -1067,6 +1077,35 @@ async def get_project_stats(project_id: str):
         "pending_list": pending_list,
         "all_scenes": all_scenes_list
     }
+
+
+class ClearPendingRequest(BaseModel):
+    project_id: str
+
+
+@router.post("/clear-pending")
+async def clear_pending(body: ClearPendingRequest):
+    project_id = body.project_id
+    videos = await crud.list_videos(project_id)
+    if not videos:
+        return {"status": "success", "deleted_count": 0}
+        
+    deleted_count = 0
+    for v in videos:
+        scenes = await crud.list_scenes(v["id"])
+        for scene in scenes:
+            # Check if vertical orientation has video url/media ID
+            has_vertical = bool(scene.get("vertical_video_media_id") or scene.get("vertical_video_url"))
+            # Check if horizontal orientation has video url/media ID
+            has_horizontal = bool(scene.get("horizontal_video_media_id") or scene.get("horizontal_video_url"))
+            
+            # If both are uncreated, delete the scene record
+            if not has_vertical and not has_horizontal:
+                await crud.delete_scene(scene["id"])
+                deleted_count += 1
+                
+    return {"status": "success", "deleted_count": deleted_count}
+
 
 def resolve_storyboard_filename(display_order: int) -> str | None:
     import json

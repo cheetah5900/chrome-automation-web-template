@@ -6804,3 +6804,43 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
 document.getElementById('cfg_flow_project_dropdown')?.addEventListener('change', updateProjectStats);
 document.getElementById('cfg_flow_po_project_dropdown')?.addEventListener('change', updateProjectStats);
 document.getElementById('cfg_video_gen_mode')?.addEventListener('change', updateProjectStats);
+
+// Clear pending scenes button click handler
+document.getElementById('btnClearPendingScenes')?.addEventListener('click', async () => {
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let projectId = '';
+  if (genMode === 'flow_kit_prompt_only') {
+    projectId = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  } else {
+    projectId = document.getElementById('cfg_flow_project_dropdown')?.value;
+  }
+  if (!projectId) {
+    alert('กรุณาเลือกโปรเจกต์ก่อนทำการล้างรายการ');
+    return;
+  }
+  if (!confirm('คุณแน่ใจหรือไม่ที่จะล้างรายการฉากที่ยังไม่ได้สร้างทั้งหมดออกจากโปรเจกต์นี้?')) {
+    return;
+  }
+  
+  const btn = document.getElementById('btnClearPendingScenes');
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังล้าง...';
+    }
+    const res = await jsonFetch('/api/batch-uploader/clear-pending', {
+      method: 'POST',
+      body: JSON.stringify({ project_id: projectId })
+    });
+    alert(`ล้างรายการฉากที่ยังไม่ได้สร้างสำเร็จ: ลบไปทั้งหมด ${res.deleted_count} ฉาก`);
+    await updateProjectStats();
+  } catch (err) {
+    console.error('Failed to clear pending scenes:', err);
+    alert('เกิดข้อผิดพลาดในการล้างรายการ: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🗑️ ล้างรายการที่ยังไม่ได้สร้าง';
+    }
+  }
+});
