@@ -5690,6 +5690,66 @@ function initFlowKitUploaderListeners() {
     renderScannedPairs();
   });
 
+  // 5.5 Range Selection Handling
+  function applyFlowRangeSelection() {
+    const rangeInput = document.getElementById('cfg_flow_select_range');
+    if (!rangeInput) return;
+    const val = rangeInput.value.trim();
+    if (!val) return;
+    
+    const maxVal = flowScannedPairs.length;
+    const selectedIndices = parseRangeString(val, maxVal);
+    
+    flowScannedPairs.forEach(p => {
+      p.checked = selectedIndices.has(p.index);
+    });
+    
+    renderScannedPairs();
+  }
+
+  function parseRangeString(rangeStr, maxVal) {
+    const selected = new Set();
+    if (!rangeStr) return selected;
+    
+    const parts = rangeStr.split(',');
+    for (let part of parts) {
+      part = part.trim();
+      if (!part) continue;
+      
+      if (part.includes('-')) {
+        const bounds = part.split('-');
+        if (bounds.length === 2) {
+          const start = parseInt(bounds[0].trim(), 10);
+          const end = parseInt(bounds[1].trim(), 10);
+          if (!isNaN(start) && !isNaN(end)) {
+            const min = Math.min(start, end);
+            const max = Math.max(start, end);
+            for (let i = min; i <= max; i++) {
+              if (i > 0 && i <= maxVal) {
+                selected.add(i);
+              }
+            }
+          }
+        }
+      } else {
+        const val = parseInt(part, 10);
+        if (!isNaN(val) && val > 0 && val <= maxVal) {
+          selected.add(val);
+        }
+      }
+    }
+    return selected;
+  }
+
+  document.getElementById('cfg_flow_select_range')?.addEventListener('input', applyFlowRangeSelection);
+  document.getElementById('cfg_flow_select_range')?.addEventListener('change', applyFlowRangeSelection);
+  document.getElementById('cfg_flow_select_range')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      applyFlowRangeSelection();
+    }
+  });
+  document.getElementById('btnApplyFlowRange')?.addEventListener('click', applyFlowRangeSelection);
+
   // 6. Process Batch Button
   document.getElementById('btnProcessFlowKitBatch')?.addEventListener('click', async () => {
     const project = document.getElementById('cfg_flow_project_dropdown')?.value;
@@ -5896,23 +5956,68 @@ function renderScannedPairs() {
   if (section) section.style.display = 'block';
   updateSelectAllButtonText();
   
+  // Create table element wrapper
+  const tableWrapper = document.createElement('div');
+  tableWrapper.style.overflowX = 'auto';
+  tableWrapper.style.width = '100%';
+  tableWrapper.style.background = 'rgba(0, 0, 0, 0.2)';
+  tableWrapper.style.borderRadius = '10px';
+  tableWrapper.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+  
+  const table = document.createElement('table');
+  table.style.width = '100%';
+  table.style.borderCollapse = 'collapse';
+  table.style.color = '#fff';
+  table.style.fontSize = '0.85rem';
+  table.style.textAlign = 'left';
+  
+  // Table Header
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  headerRow.style.background = 'rgba(255, 255, 255, 0.05)';
+  
+  const headers = [
+    { text: 'Select', width: '5%', align: 'center' },
+    { text: 'Scene', width: '10%' },
+    { text: 'Thumbnail', width: '12%' },
+    { text: 'Source/File', width: '23%' },
+    { text: 'Prompt Content (Read-Only)', width: '45%' },
+    { text: 'Action', width: '5%', align: 'center' }
+  ];
+  
+  headers.forEach(h => {
+    const th = document.createElement('th');
+    th.style.padding = '12px 16px';
+    th.style.borderBottom = '2px solid rgba(255,255,255,0.15)';
+    th.style.fontWeight = 'bold';
+    th.style.color = '#8da6ff';
+    if (h.width) th.style.width = h.width;
+    if (h.align) th.style.textAlign = h.align;
+    th.textContent = h.text;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+  
+  // Table Body
+  const tbody = document.createElement('tbody');
+  
   flowScannedPairs.forEach((pair) => {
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.gap = '16px';
-    row.style.padding = '12px';
-    row.style.background = 'rgba(255,255,255,0.03)';
-    row.style.border = '1px solid rgba(255,255,255,0.06)';
-    row.style.borderRadius = '10px';
-    row.style.alignItems = 'center';
-    row.dataset.index = pair.index;
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
+    tr.style.background = 'rgba(255,255,255,0.01)';
+    tr.style.transition = 'background 0.2s';
+    tr.addEventListener('mouseenter', () => {
+      tr.style.background = 'rgba(255,255,255,0.04)';
+    });
+    tr.addEventListener('mouseleave', () => {
+      tr.style.background = 'rgba(255,255,255,0.01)';
+    });
     
-    // Checkbox column
-    const cbCol = document.createElement('div');
-    cbCol.style.display = 'flex';
-    cbCol.style.alignItems = 'center';
-    cbCol.style.justifyContent = 'center';
-    cbCol.style.paddingRight = '4px';
+    // 1. Checkbox
+    const tdCheck = document.createElement('td');
+    tdCheck.style.padding = '12px 16px';
+    tdCheck.style.textAlign = 'center';
     
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -5925,18 +6030,29 @@ function renderScannedPairs() {
       pair.checked = e.target.checked;
       updateSelectAllButtonText();
     });
-    cbCol.appendChild(checkbox);
+    tdCheck.appendChild(checkbox);
     
-    const thumbCol = document.createElement('div');
-    thumbCol.style.width = '80px';
-    thumbCol.style.height = '120px';
-    thumbCol.style.background = 'rgba(0,0,0,0.4)';
-    thumbCol.style.borderRadius = '6px';
-    thumbCol.style.display = 'flex';
-    thumbCol.style.alignItems = 'center';
-    thumbCol.style.justifyContent = 'center';
-    thumbCol.style.overflow = 'hidden';
-    thumbCol.style.border = '1px solid rgba(255,255,255,0.1)';
+    // 2. Index
+    const tdIndex = document.createElement('td');
+    tdIndex.style.padding = '12px 16px';
+    tdIndex.style.fontWeight = 'bold';
+    tdIndex.style.color = '#8da6ff';
+    tdIndex.textContent = `Scene ${pair.index}`;
+    
+    // 3. Thumbnail
+    const tdThumb = document.createElement('td');
+    tdThumb.style.padding = '12px 16px';
+    
+    const thumbContainer = document.createElement('div');
+    thumbContainer.style.width = '60px';
+    thumbContainer.style.height = '90px';
+    thumbContainer.style.background = 'rgba(0,0,0,0.4)';
+    thumbContainer.style.borderRadius = '6px';
+    thumbContainer.style.display = 'flex';
+    thumbContainer.style.alignItems = 'center';
+    thumbContainer.style.justifyContent = 'center';
+    thumbContainer.style.overflow = 'hidden';
+    thumbContainer.style.border = '1px solid rgba(255,255,255,0.1)';
     
     if (pair.image_path) {
       const img = document.createElement('img');
@@ -5944,66 +6060,53 @@ function renderScannedPairs() {
       img.style.width = '100%';
       img.style.height = '100%';
       img.style.objectFit = 'cover';
-      thumbCol.appendChild(img);
+      thumbContainer.appendChild(img);
     } else {
       const placeholder = document.createElement('div');
       placeholder.style.fontSize = '0.7rem';
       placeholder.style.color = 'rgba(255,255,255,0.4)';
       placeholder.style.textAlign = 'center';
       placeholder.textContent = 'No Image';
-      thumbCol.appendChild(placeholder);
+      thumbContainer.appendChild(placeholder);
     }
+    tdThumb.appendChild(thumbContainer);
     
-    const contentCol = document.createElement('div');
-    contentCol.style.flex = '1';
-    contentCol.style.display = 'flex';
-    contentCol.style.flexDirection = 'column';
-    contentCol.style.gap = '6px';
+    // 4. Source/File name
+    const tdSource = document.createElement('td');
+    tdSource.style.padding = '12px 16px';
+    tdSource.style.color = 'rgba(255,255,255,0.5)';
+    tdSource.style.fontSize = '0.8rem';
+    tdSource.style.wordBreak = 'break-all';
+    tdSource.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
     
-    const titleRow = document.createElement('div');
-    titleRow.style.display = 'flex';
-    titleRow.style.justifyContent = 'space-between';
-    titleRow.style.fontSize = '0.8rem';
+    // 5. Prompt Content (Read-Only)
+    const tdPrompt = document.createElement('td');
+    tdPrompt.style.padding = '12px 16px';
     
-    const sceneLbl = document.createElement('span');
-    sceneLbl.style.fontWeight = 'bold';
-    sceneLbl.style.color = '#8da6ff';
-    sceneLbl.textContent = `Scene ${pair.index}`;
+    const promptDiv = document.createElement('div');
+    promptDiv.style.whiteSpace = 'pre-wrap';
+    promptDiv.style.maxHeight = '90px';
+    promptDiv.style.overflowY = 'auto';
+    promptDiv.style.padding = '8px 12px';
+    promptDiv.style.borderRadius = '8px';
+    promptDiv.style.background = 'rgba(0,0,0,0.3)';
+    promptDiv.style.border = '1px solid rgba(255,255,255,0.08)';
+    promptDiv.style.color = 'rgba(255,255,255,0.95)';
+    promptDiv.style.fontSize = '0.82rem';
+    promptDiv.style.lineHeight = '1.45';
+    promptDiv.style.scrollbarWidth = 'thin';
+    promptDiv.textContent = pair.prompt_content;
+    tdPrompt.appendChild(promptDiv);
     
-    const fileLbl = document.createElement('span');
-    fileLbl.style.color = 'rgba(255,255,255,0.4)';
-    fileLbl.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
-    
-    titleRow.appendChild(sceneLbl);
-    titleRow.appendChild(fileLbl);
-    
-    const textarea = document.createElement('textarea');
-    textarea.value = pair.prompt_content;
-    textarea.style.width = '100%';
-    textarea.style.height = '70px';
-    textarea.style.padding = '8px';
-    textarea.style.borderRadius = '8px';
-    textarea.style.background = 'rgba(0,0,0,0.25)';
-    textarea.style.border = '1px solid rgba(255,255,255,0.1)';
-    textarea.style.color = '#fff';
-    textarea.style.fontSize = '0.85rem';
-    textarea.style.resize = 'vertical';
-    textarea.addEventListener('input', (e) => {
-      pair.prompt_content = e.target.value;
-    });
-    
-    contentCol.appendChild(titleRow);
-    contentCol.appendChild(textarea);
-    
-    const actionCol = document.createElement('div');
-    actionCol.style.display = 'flex';
-    actionCol.style.flexDirection = 'column';
-    actionCol.style.gap = '8px';
+    // 6. Action (Delete)
+    const tdAction = document.createElement('td');
+    tdAction.style.padding = '12px 16px';
+    tdAction.style.textAlign = 'center';
     
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'secondary';
-    deleteBtn.style.padding = '8px';
-    deleteBtn.style.fontSize = '0.8rem';
+    deleteBtn.style.padding = '6px 12px';
+    deleteBtn.style.fontSize = '0.78rem';
     deleteBtn.style.margin = '0';
     deleteBtn.style.color = '#f56565';
     deleteBtn.style.background = 'rgba(245, 101, 101, 0.1)';
@@ -6014,17 +6117,23 @@ function renderScannedPairs() {
       flowScannedPairs.forEach((p, i) => p.index = i + 1);
       renderScannedPairs();
     });
+    tdAction.appendChild(deleteBtn);
     
-    actionCol.appendChild(deleteBtn);
+    tr.appendChild(tdCheck);
+    tr.appendChild(tdIndex);
+    tr.appendChild(tdThumb);
+    tr.appendChild(tdSource);
+    tr.appendChild(tdPrompt);
+    tr.appendChild(tdAction);
     
-    row.appendChild(cbCol);
-    row.appendChild(thumbCol);
-    row.appendChild(contentCol);
-    row.appendChild(actionCol);
-    
-    container.appendChild(row);
+    tbody.appendChild(tr);
   });
+  
+  table.appendChild(tbody);
+  tableWrapper.appendChild(table);
+  container.appendChild(tableWrapper);
 }
+
 
 // ─── Download Project Videos Event Listeners ─────────────────
 
