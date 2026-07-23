@@ -662,68 +662,64 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
             "headers": {"accept": "*/*"}
         }, timeout=30)
         
-        if not res or not isinstance(res, dict) or res.get("error"):
-            raise Exception("TRPC project fetch returned empty or error")
-            
-        parsed_scenes = extract_scenes_from_flow_project(res)
-        if not parsed_scenes:
-            raise Exception("No scenes extracted from project data")
-            
-        # 4. Sync scenes from Flow to local database
-        db_scenes = await crud.list_scenes(video_id)
-        db_scenes_by_order = {s["display_order"]: s for s in db_scenes}
-        
-        for fs in parsed_scenes:
-            order = fs["display_order"]
-            existing = db_scenes_by_order.get(order)
-            
-            scene_data = {
-                "vertical_video_url": fs["vertical_video_url"],
-                "vertical_video_media_id": fs["vertical_video_media_id"],
-                "horizontal_video_url": fs["horizontal_video_url"],
-                "horizontal_video_media_id": fs["horizontal_video_media_id"],
-                "vertical_upscale_url": fs["vertical_upscale_url"],
-                "vertical_upscale_media_id": fs["vertical_upscale_media_id"],
-                "horizontal_upscale_url": fs["horizontal_upscale_url"],
-                "horizontal_upscale_media_id": fs["horizontal_upscale_media_id"],
-            }
-            
-            if existing:
-                scene_id = existing["id"]
-                if fs["vertical_video_url"] and not existing.get("vertical_video_status"):
-                    scene_data["vertical_video_status"] = "COMPLETED"
-                if fs["horizontal_video_url"] and not existing.get("horizontal_video_status"):
-                    scene_data["horizontal_video_status"] = "COMPLETED"
-                if fs["vertical_upscale_url"] and not existing.get("vertical_upscale_status"):
-                    scene_data["vertical_upscale_status"] = "COMPLETED"
-                if fs["horizontal_upscale_url"] and not existing.get("horizontal_upscale_status"):
-                    scene_data["horizontal_upscale_status"] = "COMPLETED"
-                    
-                await crud.update_scene(scene_id, **scene_data)
-            else:
-                new_scene = await crud.create_scene(
-                    video_id=video_id,
-                    display_order=order,
-                    prompt=fs.get("prompt_content") or f"Scene {order}",
-                    source="system"
-                )
-                scene_id = new_scene["id"]
-                if fs["vertical_video_url"]:
-                    scene_data["vertical_video_status"] = "COMPLETED"
-                if fs["horizontal_video_url"]:
-                    scene_data["horizontal_video_status"] = "COMPLETED"
-                if fs["vertical_upscale_url"]:
-                    scene_data["vertical_upscale_status"] = "COMPLETED"
-                if fs["horizontal_upscale_url"]:
-                    scene_data["horizontal_upscale_status"] = "COMPLETED"
-                await crud.update_scene(scene_id, **scene_data)
+        if res and isinstance(res, dict) and not res.get("error"):
+            parsed_scenes = extract_scenes_from_flow_project(res)
+            if parsed_scenes:
+                # 4. Sync scenes from Flow to local database
+                db_scenes = await crud.list_scenes(video_id)
+                db_scenes_by_order = {s["display_order"]: s for s in db_scenes}
                 
+                for fs in parsed_scenes:
+                    order = fs["display_order"]
+                    existing = db_scenes_by_order.get(order)
+                    
+                    scene_data = {
+                        "vertical_video_url": fs["vertical_video_url"],
+                        "vertical_video_media_id": fs["vertical_video_media_id"],
+                        "horizontal_video_url": fs["horizontal_video_url"],
+                        "horizontal_video_media_id": fs["horizontal_video_media_id"],
+                        "vertical_upscale_url": fs["vertical_upscale_url"],
+                        "vertical_upscale_media_id": fs["vertical_upscale_media_id"],
+                        "horizontal_upscale_url": fs["horizontal_upscale_url"],
+                        "horizontal_upscale_media_id": fs["horizontal_upscale_media_id"],
+                    }
+                    
+                    if existing:
+                        scene_id = existing["id"]
+                        if fs["vertical_video_url"] and not existing.get("vertical_video_status"):
+                            scene_data["vertical_video_status"] = "COMPLETED"
+                        if fs["horizontal_video_url"] and not existing.get("horizontal_video_status"):
+                            scene_data["horizontal_video_status"] = "COMPLETED"
+                        if fs["vertical_upscale_url"] and not existing.get("vertical_upscale_status"):
+                            scene_data["vertical_upscale_status"] = "COMPLETED"
+                        if fs["horizontal_upscale_url"] and not existing.get("horizontal_upscale_status"):
+                            scene_data["horizontal_upscale_status"] = "COMPLETED"
+                            
+                        await crud.update_scene(scene_id, **scene_data)
+                    else:
+                        new_scene = await crud.create_scene(
+                            video_id=video_id,
+                            display_order=order,
+                            prompt=fs.get("prompt_content") or f"Scene {order}",
+                            source="system"
+                        )
+                        scene_id = new_scene["id"]
+                        if fs["vertical_video_url"]:
+                            scene_data["vertical_video_status"] = "COMPLETED"
+                        if fs["horizontal_video_url"]:
+                            scene_data["horizontal_video_status"] = "COMPLETED"
+                        if fs["vertical_upscale_url"]:
+                            scene_data["vertical_upscale_status"] = "COMPLETED"
+                        if fs["horizontal_upscale_url"]:
+                            scene_data["horizontal_upscale_status"] = "COMPLETED"
+                        await crud.update_scene(scene_id, **scene_data)
+                logger.info("Successfully synced %d scenes from Google Flow to local DB", len(parsed_scenes))
+            else:
+                logger.warning("No scenes extracted from project data, skipping sync")
+        else:
+            logger.warning("TRPC project fetch returned empty or error, skipping sync")
     except Exception as e:
-        logger.warning("Upscale sync project failed: %s", e)
-        raise HTTPException(
-            status_code=400,
-            detail=f"ไม่สามารถซิงก์ข้อมูลล่าสุดจาก Google Flow ได้: {str(e)}"
-        )
+        logger.warning("Upscale sync project failed, will rely on local DB scenes: %s", e)
         
     # 5. Fetch all scenes again from SQLite (synced)
     synced_scenes = await crud.list_scenes(video_id)
