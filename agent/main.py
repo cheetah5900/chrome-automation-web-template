@@ -88,24 +88,24 @@ def _force_free_port(port: int):
                     except OSError:
                         pass
     except Exception as e:
-        logger.warning("Failed to force release port %d: %e", port, e)
+        logger.warning("Failed to force release port %d: %s", port, e)
 
 
 async def run_ws_server():
-    """Run WebSocket server for extension connections with automatic port cleanup."""
-    _force_free_port(WS_PORT)
-    await asyncio.sleep(0.3)
-    try:
-        async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
-            logger.info("WebSocket server listening on ws://%s:%d", WS_HOST, WS_PORT)
-            await asyncio.Future()  # run forever
-    except OSError as e:
-        logger.warning("Port %d bind error (%s). Retrying force cleanup...", WS_PORT, e)
+    """Run WebSocket server for extension connections with automatic port cleanup and infinite retry."""
+    retry_delay = 0.5
+    while True:
         _force_free_port(WS_PORT)
-        await asyncio.sleep(0.5)
-        async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
-            logger.info("WebSocket server listening on ws://%s:%d (after retry)", WS_HOST, WS_PORT)
-            await asyncio.Future()
+        await asyncio.sleep(0.3)
+        try:
+            async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
+                logger.info("WebSocket server listening on ws://%s:%d", WS_HOST, WS_PORT)
+                retry_delay = 0.5  # reset delay on success
+                await asyncio.Future()  # run forever
+        except OSError as e:
+            logger.warning("Port %d bind error (%s). Retrying in %.1f seconds...", WS_PORT, e, retry_delay)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 30.0)  # exponential backoff up to 30s
 
 
 # ─── FastAPI App ─────────────────────────────────────────────
