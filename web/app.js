@@ -6118,12 +6118,8 @@ async function updateProjectStats() {
             }
             
             return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseenter="this.style.background='rgba(255,255,255,0.02)'" onmouseleave="this.style.background='transparent'">
-              <td style="padding: 8px 12px; font-weight: 500;">${item.display_order}</td>
               <td style="padding: 8px 12px; color: rgba(255,255,255,0.7);">${trackingDisplay}</td>
               <td style="padding: 8px 12px;">${orientStr}</td>
-              <td style="padding: 8px 12px; text-align: center;">${videoStatus}</td>
-              <td style="padding: 8px 12px; text-align: center;">${upscaleStatus}</td>
-              <td style="padding: 8px 12px; color: rgba(255,255,255,0.5); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="${item.prompt}">${item.prompt}</td>
             </tr>`;
           }).join('');
         }
