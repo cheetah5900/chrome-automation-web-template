@@ -5697,17 +5697,19 @@ function initFlowKitUploaderListeners() {
     const val = rangeInput.value.trim();
     if (!val) return;
     
-    const maxVal = flowScannedPairs.length;
-    const selectedIndices = parseRangeString(val, maxVal);
+    const selectedIndices = parseRangeString(val);
+    console.log("applyFlowRangeSelection parsed indices:", Array.from(selectedIndices));
     
     flowScannedPairs.forEach(p => {
-      p.checked = selectedIndices.has(p.index);
+      const idxNum = Number(p.index);
+      p.checked = selectedIndices.has(idxNum);
+      console.log(`Pair index ${p.index} (numeric: ${idxNum}) matches selection: ${p.checked}`);
     });
     
     renderScannedPairs();
   }
 
-  function parseRangeString(rangeStr, maxVal) {
+  function parseRangeString(rangeStr) {
     const selected = new Set();
     if (!rangeStr) return selected;
     
@@ -5725,15 +5727,13 @@ function initFlowKitUploaderListeners() {
             const min = Math.min(start, end);
             const max = Math.max(start, end);
             for (let i = min; i <= max; i++) {
-              if (i > 0 && i <= maxVal) {
-                selected.add(i);
-              }
+              selected.add(i);
             }
           }
         }
       } else {
         const val = parseInt(part, 10);
-        if (!isNaN(val) && val > 0 && val <= maxVal) {
+        if (!isNaN(val)) {
           selected.add(val);
         }
       }
@@ -5741,7 +5741,6 @@ function initFlowKitUploaderListeners() {
     return selected;
   }
 
-  document.getElementById('cfg_flow_select_range')?.addEventListener('input', applyFlowRangeSelection);
   document.getElementById('cfg_flow_select_range')?.addEventListener('change', applyFlowRangeSelection);
   document.getElementById('cfg_flow_select_range')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
