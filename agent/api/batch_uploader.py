@@ -524,9 +524,7 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
             w_video_media_list = [m for m in w_media_list if m.get("video")]
             
             if meta.get("archived", False):
-                # If archived, only include if it has at least one completed video!
-                if not w_video_media_list:
-                    continue
+                continue
                     
             prompt = meta.get("displayName") or ""
             

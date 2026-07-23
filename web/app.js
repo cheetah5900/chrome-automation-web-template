@@ -2141,6 +2141,8 @@ async function runVideoHelper(btnElement) {
     
     let combineSets = [];
     let durations = [];
+    let transitions = [];
+    let fadeDurations = [];
     let viewChannelData = null;
     
     const folderInput = document.getElementById('viewChannelFolderText');
@@ -2165,14 +2167,10 @@ async function runVideoHelper(btnElement) {
       }
       outputPathVal = folderVal;
       combineSets = folderList.map(f => [f]);
-    } else {
-      combineSets = [[folderVal]];
     }
     
     if (subModeVal === 'view_channel') {
       const container = document.getElementById('viewDurationsContainer');
-      const transitions = [];
-      const fadeDurations = [];
       if (container) {
         const durInputs = container.querySelectorAll('input[id^="viewDur"]');
         durInputs.forEach(input => {
@@ -2213,6 +2211,7 @@ async function runVideoHelper(btnElement) {
       };
     }
 
+    if (isBatch) {
       combineSets.forEach((folders, idx) => {
         const setObj = {
           index: subModeVal === 'view_channel' ? `view_channel_combine_${idx + 1}` : `combine_${idx + 1}`,
@@ -2244,7 +2243,56 @@ async function runVideoHelper(btnElement) {
         
         activeSets.push(setObj);
       });
+    } else {
+      // Manual Mode: Collect configured sets from the 20 tabs!
+      for (let i = 1; i <= 20; i++) {
+        const noInput = document.getElementById(`videoNo_${i}`);
+        const noVal = noInput ? noInput.value.trim() : '';
+        const videoInput = document.getElementById(`videoInputPathText_${i}`);
+        const videoVal = videoInput ? videoInput.value.trim() : '';
+        const videoFileInput = document.getElementById(`videoInputPathFile_${i}`);
+        const videoFileObj = videoFileInput && videoFileInput.files.length > 0 ? videoFileInput.files[0] : null;
+        
+        const imageInput = document.getElementById(`imageInputPathText_${i}`);
+        const imageVal = imageInput ? imageInput.value.trim() : '';
+        const imageFileInput = document.getElementById(`imageInputPathFile_${i}`);
+        const imageFileObj = imageFileInput && imageFileInput.files.length > 0 ? imageFileInput.files[0] : null;
+        
+        // We consider a set active if the user specified a subfolder number AND (a video path or video file)
+        if (noVal && (videoVal || videoFileObj)) {
+          const setObj = {
+            index: i,
+            label: `Set ${i}`,
+            videoFile: videoFileObj,
+            imageFile: imageFileObj,
+            videoPathVal: videoVal,
+            imagePathVal: imageVal,
+            no: noVal,
+            amount: '1',
+            foldersJson: '',
+            videoSpeed: speedVal
+          };
+          
+          if (subModeVal === 'view_channel' && viewChannelData) {
+            setObj.subMode = 'view_channel';
+            setObj.durationsJson = JSON.stringify(durations);
+            setObj.transitionsJson = JSON.stringify(transitions);
+            setObj.fadeDurationsJson = JSON.stringify(fadeDurations);
+            setObj.audioPath = viewChannelData.audioPath;
+            setObj.audioBoost = viewChannelData.audioBoost;
+            setObj.videoAudioBoost = viewChannelData.videoAudioBoost;
+            setObj.contrast = viewChannelData.contrast;
+            setObj.saturation = viewChannelData.saturation;
+            setObj.brightness = viewChannelData.brightness;
+            setObj.gamma = viewChannelData.gamma;
+            setObj.unsharp = viewChannelData.unsharp;
+          }
+          activeSets.push(setObj);
+        }
+      }
+      outputPathVal = folderVal;
     }
+  }
 
   if (activeSets.length === 0) {
     if (modeVal === 'cover') {
