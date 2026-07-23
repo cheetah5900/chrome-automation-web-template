@@ -1010,6 +1010,11 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         columns = [col[0] for col in cursor.description]
         scenes = [dict(zip(columns, row)) for row in rows]
         
+    video_titles = {}
+    if scenes:
+        videos = await crud.list_videos(body.project_id)
+        video_titles = {v["id"]: v["title"] for v in videos}
+        
     # 2. Try fetching project details directly from Google Flow via extension TRPC if not found locally
     if not scenes:
         client = get_flow_client()
@@ -1095,7 +1100,14 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                 if local_path and local_path.exists():
                     orient_suffix = "vertical" if p == "vertical" else "horizontal"
                     upscale_suffix = "_upscaled" if is_upscale else ""
-                    arcname = f"scene_{display_order:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                    
+                    vid = scene.get("video_id")
+                    run_title = slugify(video_titles.get(vid, "run")) if vid else ""
+                    if run_title:
+                        arcname = f"{run_title}/scene_{display_order:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                    else:
+                        arcname = f"scene_{display_order:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                        
                     zip_file.write(local_path, arcname=arcname)
                     video_added = True
                     
