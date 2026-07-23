@@ -827,11 +827,6 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
             "method": "GET",
             "headers": {"accept": "*/*"}
         }, timeout=15)
-        try:
-            with open("project_11_8_raw.json", "w") as f:
-                _json.dump(res, f, indent=2)
-        except Exception as e:
-            logger.warning("Failed to write project_11_8_raw.json: %s", e)
         if res and isinstance(res, dict) and not res.get("error"):
             scenes = extract_scenes_from_flow_project(res)
             if scenes:
@@ -1551,6 +1546,24 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                 local_path = resolve_local_file(url, media_id, project_slug, display_order, scene_id, is_upscale)
                 temp_downloaded_path = None
                 
+                if not local_path and media_id:
+                    client = get_flow_client()
+                    if client.connected:
+                        try:
+                            cache_dir = Path("output/_workflow_videos")
+                            cache_dir.mkdir(parents=True, exist_ok=True)
+                            suffix = "_upscaled" if is_upscale else ""
+                            cache_path = cache_dir / f"{media_id}{suffix}.mp4"
+                            
+                            logger.info("File for media %s missing locally. Attempting fallback download via Google Flow get_media...", media_id[:12])
+                            from agent.services.video_reviewer import _download_via_get_media
+                            await _download_via_get_media(media_id, cache_path)
+                            if cache_path.exists():
+                                local_path = cache_path
+                                logger.info("Successfully downloaded and cached video via get_media fallback: %s", cache_path)
+                        except Exception as e:
+                            logger.warning("Failed get_media download fallback for %s: %s", media_id[:12], e)
+                            
                 if not local_path and url.startswith("http"):
                     try:
                         temp_downloaded_path = await download_file_to_temp(url)
