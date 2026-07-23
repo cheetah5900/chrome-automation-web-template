@@ -139,6 +139,9 @@ async def lifespan(app: FastAPI):
     # Start background tasks
     ws_task = asyncio.create_task(run_ws_server())
     worker_task = asyncio.create_task(controller.start())
+    # Keep strong references to prevent garbage collection
+    app.state.ws_task = ws_task
+    app.state.worker_task = worker_task
     logger.info("WS server + worker started")
 
     yield

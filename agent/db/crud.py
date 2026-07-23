@@ -211,6 +211,15 @@ async def list_scenes(video_id: str) -> list[dict]:
     return [dict(r) for r in await cur.fetchall()]
 
 
+async def list_project_scenes(project_id: str) -> list[dict]:
+    videos = await list_videos(project_id)
+    all_scenes = []
+    for v in videos:
+        scenes = await list_scenes(v["id"])
+        all_scenes.extend(scenes)
+    return all_scenes
+
+
 async def list_scenes_by_media_id(media_id: str) -> list[dict]:
     """Find scenes where any media_id field matches the given UUID."""
     db = await get_db()
