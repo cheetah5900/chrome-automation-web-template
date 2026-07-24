@@ -2454,20 +2454,23 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     if not _macos_file_exists(reference_image):
                         raise RuntimeError(f"Reference image file not found on macOS: {reference_image}")
                     
-                    _activate_chrome()
-                    time.sleep(1.0)
-                    
                     # We will try to upload using Cmd + U first (Primary).
                     # If that fails, we will try the '+' button (Fallback).
                     upload_success = False
                     
-                    log("Primary: Sending Cmd + U keystroke via System Events to trigger file modal...")
+                    log("Primary: Activating browser and sending Cmd + U keystroke to trigger file modal...")
                     try:
                         app_name = _get_active_browser_app_name()
                         cmd_u_script = f"""
-                        tell application "{app_name}" to activate
-                        delay 0.25
+                        tell application "{app_name}"
+                            activate
+                        end tell
+                        delay 0.3
                         tell application "System Events"
+                            try
+                                set frontmost of process "{app_name}" to true
+                            end try
+                            delay 0.2
                             key code 32 using command down
                         end tell
                         """
@@ -4273,12 +4276,18 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
             return {"ok": False, "message": f"ยกเลิกการอัพโหลดแล้ว (สำเร็จ {idx}/{len(images)} รูป)"}
             
         log(f"Uploading image {idx+1}/{len(images)}: {os.path.basename(img_path)}")
-        _activate_chrome()
-        time.sleep(1.0)
-        
         # Press Cmd + U to open file picker (Use key code 32 for 'U' to bypass keyboard layout issues)
-        cmd_u_script = """
+        app_name = _get_active_browser_app_name()
+        cmd_u_script = f"""
+        tell application "{app_name}"
+            activate
+        end tell
+        delay 0.3
         tell application "System Events"
+            try
+                set frontmost of process "{app_name}" to true
+            end try
+            delay 0.2
             key code 32 using command down
         end tell
         """
