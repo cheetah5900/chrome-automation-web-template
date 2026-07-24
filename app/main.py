@@ -2317,7 +2317,6 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             if has_images:
                 # Physically switch to the ChatGPT tab in macOS Chrome UI!
                 _physical_switch_to_tab("chatgpt.com")
-                _activate_chrome()
                 time.sleep(0.5)
             else:
                 # Background-safe Selenium tab switch
@@ -2458,16 +2457,23 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     # If that fails, we will try the '+' button (Fallback).
                     upload_success = False
                     
-                    log("Primary: Activating browser and sending Cmd + U keystroke to trigger file modal...")
+                    log("Primary: Sending Cmd + U keystroke to trigger file modal...")
                     try:
                         app_name = _get_active_browser_app_name()
-                        cmd_u_script = f"""
-                        tell application "{app_name}" to activate
-                        delay 0.5
-                        tell application "System Events"
-                            key code 32 using command down
-                        end tell
-                        """
+                        if run_idx == 0:
+                            cmd_u_script = f"""
+                            tell application "{app_name}" to activate
+                            delay 0.5
+                            tell application "System Events"
+                                key code 32 using command down
+                            end tell
+                            """
+                        else:
+                            cmd_u_script = """
+                            tell application "System Events"
+                                key code 32 using command down
+                            end tell
+                            """
                         subprocess.run(["osascript", "-e", cmd_u_script], check=False)
                         log("Waiting 0.75 seconds for file modal to fully open...")
                         time.sleep(0.75)
@@ -2609,38 +2615,20 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 # Now click submit button
                 log("กำลังคลิกปุ่มส่ง prompt (#composer-submit-button)...")
                 submit_success = False
-                for click_attempt in range(3):
+                try:
+                    submit_btn = WebDriverWait(driver, 5).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-submit-button"))
+                    )
+                    submit_btn.click()
+                    submit_success = True
+                except Exception:
                     try:
-                        submit_btn = WebDriverWait(driver, 10).until(
-                            EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-submit-button"))
-                        )
-                        submit_btn.click()
+                        driver.execute_script("document.querySelector('#composer-submit-button').click();")
                         submit_success = True
-                        break
-                    except Exception:
-                        try:
-                            driver.execute_script("document.querySelector('#composer-submit-button').click();")
-                            submit_success = True
-                            break
-                        except Exception:
-                            pass
-                    time.sleep(1.5)
-
-                # Check if it transitioned to active generation
-                started = False
-                for sec in range(3):
-                    try:
-                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                        if any(b.is_displayed() for b in stop_btns):
-                            started = True
-                            break
                     except Exception:
                         pass
-                    time.sleep(1.5)
 
-                if started or submit_success:
-                    log("ยืนยัน: ส่ง prompt เรียบร้อยแล้ว (ChatGPT กำลังทำการเจเนอเรตคำตอบ)!")
-                else:
+                if not submit_success:
                     log("ไม่พบการตอบสนองของปุ่มส่ง กำลังลองส่งด้วยการเคาะปุ่ม Enter...")
                     try:
                         box.send_keys(Keys.ENTER)
@@ -2654,8 +2642,6 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 log("Submit button click and generation wait bypassed for this debug session as requested.")
                 raise RuntimeError("Bypassed submit for debug session. Aborting bulk prompt loop.")
 
-            # Force Chrome focus one last time after sending prompt to prevent focus loss
-            _activate_chrome()
             return {"ok": True, "status": "submitted"}
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -4274,13 +4260,20 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
         log(f"Uploading image {idx+1}/{len(images)}: {os.path.basename(img_path)}")
         # Press Cmd + U to open file picker (Use key code 32 for 'U' to bypass keyboard layout issues)
         app_name = _get_active_browser_app_name()
-        cmd_u_script = f"""
-        tell application "{app_name}" to activate
-        delay 0.5
-        tell application "System Events"
-            key code 32 using command down
-        end tell
-        """
+        if idx == 0:
+            cmd_u_script = f"""
+            tell application "{app_name}" to activate
+            delay 0.5
+            tell application "System Events"
+                key code 32 using command down
+            end tell
+            """
+        else:
+            cmd_u_script = """
+            tell application "System Events"
+                key code 32 using command down
+            end tell
+            """
         subprocess.run(["osascript", "-e", cmd_u_script], check=False)
         
         log("Waiting 1.5 seconds for file modal to fully open...")
