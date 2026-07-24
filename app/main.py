@@ -1883,16 +1883,18 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                         raise RuntimeError("Browser connection lost.")
                     import subprocess
                     escaped_path = file_path.replace('"', '\\"')
+                    app_name = _get_active_browser_app_name()
                     script = f"""
                     set the clipboard to "{escaped_path}"
-                    delay 0.25
+                    tell application "{app_name}" to activate
+                    delay 0.5
                     tell application "System Events"
                         key code 5 using {{command down, shift down}}
-                        delay 0.4
-                        key code 9 using {{command down}}
-                        delay 0.5
-                        keystroke return
                         delay 0.75
+                        key code 9 using {{command down}}
+                        delay 0.75
+                        keystroke return
+                        delay 1.25
                         keystroke return
                     end tell
                     """
@@ -2422,16 +2424,18 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         raise RuntimeError("Browser connection lost.")
                     import subprocess
                     escaped_path = file_path.replace('"', '\\"')
+                    app_name = _get_active_browser_app_name()
                     script = f"""
                     set the clipboard to "{escaped_path}"
-                    delay 0.25
+                    tell application "{app_name}" to activate
+                    delay 0.5
                     tell application "System Events"
                         key code 5 using {{command down, shift down}}
-                        delay 0.4
-                        key code 9 using {{command down}}
-                        delay 0.5
-                        keystroke return
                         delay 0.75
+                        key code 9 using {{command down}}
+                        delay 0.75
+                        keystroke return
+                        delay 1.25
                         keystroke return
                     end tell
                     """
@@ -2462,15 +2466,9 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     try:
                         app_name = _get_active_browser_app_name()
                         cmd_u_script = f"""
-                        tell application "{app_name}"
-                            activate
-                        end tell
-                        delay 0.3
+                        tell application "{app_name}" to activate
+                        delay 0.5
                         tell application "System Events"
-                            try
-                                set frontmost of process "{app_name}" to true
-                            end try
-                            delay 0.2
                             key code 32 using command down
                         end tell
                         """
@@ -4241,8 +4239,10 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
         
     def upload_macos_file_dialog(file_path: str):
         escaped_path = file_path.replace('"', '\\"')
+        app_name = _get_active_browser_app_name()
         script = f"""
         set the clipboard to "{escaped_path}"
+        tell application "{app_name}" to activate
         delay 0.5
         tell application "System Events"
             -- Press Cmd + Shift + G to open path dialog
@@ -4251,11 +4251,11 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
             
             -- Press Cmd + V to paste
             key code 9 using {{command down}}
-            delay 1.0
+            delay 0.75
             
             -- Enter to confirm path
             keystroke return
-            delay 1.5
+            delay 1.25
             
             -- Enter to confirm file selection
             keystroke return
@@ -4279,15 +4279,9 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
         # Press Cmd + U to open file picker (Use key code 32 for 'U' to bypass keyboard layout issues)
         app_name = _get_active_browser_app_name()
         cmd_u_script = f"""
-        tell application "{app_name}"
-            activate
-        end tell
-        delay 0.3
+        tell application "{app_name}" to activate
+        delay 0.5
         tell application "System Events"
-            try
-                set frontmost of process "{app_name}" to true
-            end try
-            delay 0.2
             key code 32 using command down
         end tell
         """
