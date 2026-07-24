@@ -123,6 +123,24 @@ async def test_get_project_endpoint(project_id: str):
     return res
 
 
+@router.get("/test-get-initial-data/{project_id}")
+async def test_get_initial_data_endpoint(project_id: str):
+    client = get_flow_client()
+    if not client.connected:
+        return {"error": "Extension not connected"}
+    import urllib.parse
+    import json
+    input_params = {"json": {"projectId": project_id}}
+    encoded_input = urllib.parse.quote(json.dumps(input_params))
+    url = f"https://labs.google/fx/api/trpc/flow.projectInitialData?input={encoded_input}"
+    res = await client._send("trpc_request", {
+        "url": url,
+        "method": "GET",
+        "headers": {"accept": "*/*"}
+    }, timeout=30)
+    return res
+
+
 class CreateFlowProjectRequest(BaseModel):
     name: str
 

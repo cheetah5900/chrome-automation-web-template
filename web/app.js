@@ -4445,6 +4445,7 @@ function updateFlowVideoModelDropdowns(tier) {
     if (tier === 'PAYGATE_TIER_ONE') {
       const options = [
         { value: 'fast', text: 'veo3 (Quality / Fast)' },
+        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
         { value: 'lite', text: 'lite (Lite)' },
         { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' },
         { value: 'veo_3_1_r2v_fast', text: 'veo_3_1_r2v_fast (Reference Frame)' }
@@ -4457,6 +4458,7 @@ function updateFlowVideoModelDropdowns(tier) {
       });
     } else {
       const options = [
+        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
         { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' },
         { value: 'veo_3_1_r2v_fast_landscape_ultra_relaxed', text: 'veo_3_1_r2v_fast_landscape_ultra_relaxed (Reference Frame Relaxed)' }
       ];
@@ -4483,6 +4485,7 @@ function updateFlowVideoModelDropdowns(tier) {
     if (tier === 'PAYGATE_TIER_ONE') {
       const options = [
         { value: 'fast', text: 'veo3 (Quality / Fast)' },
+        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
         { value: 'lite', text: 'lite (Lite)' },
         { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' }
       ];
@@ -4494,6 +4497,7 @@ function updateFlowVideoModelDropdowns(tier) {
       });
     } else {
       const options = [
+        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
         { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' }
       ];
       options.forEach(o => {
