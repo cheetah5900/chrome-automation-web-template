@@ -2642,6 +2642,7 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 log("Submit button click and generation wait bypassed for this debug session as requested.")
                 raise RuntimeError("Bypassed submit for debug session. Aborting bulk prompt loop.")
 
+            _activate_chrome()
             return {"ok": True, "status": "submitted"}
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -4284,6 +4285,7 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
         log("Waiting 2.5 seconds for file upload to settle...")
         time.sleep(2.5) 
 
+    _activate_chrome()
     return {"ok": True, "message": f"อัพโหลด {len(images)} รูปไปยัง Google Flow เรียบร้อยแล้ว"}
 
 
