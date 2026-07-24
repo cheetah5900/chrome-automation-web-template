@@ -2460,20 +2460,11 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     log("Primary: Sending Cmd + U keystroke to trigger file modal...")
                     try:
                         app_name = _get_active_browser_app_name()
-                        if run_idx == 0:
-                            cmd_u_script = f"""
-                            tell application "{app_name}" to activate
-                            delay 0.5
-                            tell application "System Events"
-                                key code 32 using command down
-                            end tell
-                            """
-                        else:
-                            cmd_u_script = """
-                            tell application "System Events"
-                                key code 32 using command down
-                            end tell
-                            """
+                        cmd_u_script = """
+                        tell application "System Events"
+                            key code 32 using command down
+                        end tell
+                        """
                         subprocess.run(["osascript", "-e", cmd_u_script], check=False)
                         log("Waiting 0.75 seconds for file modal to fully open...")
                         time.sleep(0.75)
@@ -2642,7 +2633,6 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 log("Submit button click and generation wait bypassed for this debug session as requested.")
                 raise RuntimeError("Bypassed submit for debug session. Aborting bulk prompt loop.")
 
-            _activate_chrome()
             return {"ok": True, "status": "submitted"}
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -4260,21 +4250,11 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
             
         log(f"Uploading image {idx+1}/{len(images)}: {os.path.basename(img_path)}")
         # Press Cmd + U to open file picker (Use key code 32 for 'U' to bypass keyboard layout issues)
-        app_name = _get_active_browser_app_name()
-        if idx == 0:
-            cmd_u_script = f"""
-            tell application "{app_name}" to activate
-            delay 0.5
-            tell application "System Events"
-                key code 32 using command down
-            end tell
-            """
-        else:
-            cmd_u_script = """
-            tell application "System Events"
-                key code 32 using command down
-            end tell
-            """
+        cmd_u_script = """
+        tell application "System Events"
+            key code 32 using command down
+        end tell
+        """
         subprocess.run(["osascript", "-e", cmd_u_script], check=False)
         
         log("Waiting 1.5 seconds for file modal to fully open...")
@@ -4285,7 +4265,6 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
         log("Waiting 2.5 seconds for file upload to settle...")
         time.sleep(2.5) 
 
-    _activate_chrome()
     return {"ok": True, "message": f"อัพโหลด {len(images)} รูปไปยัง Google Flow เรียบร้อยแล้ว"}
 
 
