@@ -282,6 +282,12 @@
             <div id="cooldownTracker" style="display: none; margin-top: 12px; padding: 12px; border-radius: 10px; background: rgba(237, 137, 54, 0.1); border: 1px solid rgba(237, 137, 54, 0.25); text-align: center; color: #ed8936; font-size: 0.9rem;">
               ⏳ <b>Cooldown:</b> Round <span id="cooldownRound">-</span> | Remaining: <span id="cooldownTime">-</span> before submitting
             </div>
+
+            <!-- Force Stop button -->
+            <button class="step-action-btn has-tooltip" id="btn_stop_generation" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s; margin-bottom: 0; display: flex; align-items: center; justify-content: center;">
+              <span class="btn-text">Force Stop Generation</span>
+              <div class="custom-tooltip" id="tooltip_btn_stop_generation"></div>
+            </button>
           </section>
 
           <!-- Console Card -->
