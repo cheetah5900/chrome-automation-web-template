@@ -452,7 +452,6 @@ def _physical_switch_to_tab(url_part):
                 if URL of t contains "{url_part}" then
                     set active tab index of w to tabIndex
                     set index of w to 1
-                    activate
                     return true
                 end if
                 set tabIndex to tabIndex + 1
