@@ -417,12 +417,6 @@ def _activate_chrome():
             end if
         end repeat
     end tell
-    delay 0.2
-    tell application "System Events"
-        try
-            set frontmost of process "{app_name}" to true
-        end try
-    end tell
     """
     try:
         subprocess.run(["osascript", "-e", script], check=False)
