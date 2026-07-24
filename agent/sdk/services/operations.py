@@ -468,7 +468,7 @@ class OperationService:
             elif custom_tier == "veo3":
                 custom_tier = "quality"
 
-            if tier == "PAYGATE_TIER_TWO" and custom_tier in ("fast", "quality", "omni_flash", "lite"):
+            if tier == "PAYGATE_TIER_TWO" and custom_tier in ("fast", "quality", "lite"):
                 logger.info("Downgrading model selection '%s' to 'lite_low_priority' due to PAYGATE_TIER_TWO account limits", custom_tier)
                 custom_tier = "lite_low_priority"
 
@@ -487,7 +487,7 @@ class OperationService:
                     custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
                     tier = "PAYGATE_TIER_ONE"
                 elif custom_tier == "omni_flash":
-                    custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
+                    custom_model_key = "abra_i2v_10s"
                     tier = "PAYGATE_TIER_ONE"
             elif "veo" in custom_tier:
                 custom_model_key = custom_tier
