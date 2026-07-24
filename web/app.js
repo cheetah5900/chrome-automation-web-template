@@ -766,6 +766,8 @@ async function loadConfig() {
   try {
     const config = await jsonFetch('/api/config');
     loadVideoPresets(config.video_presets);
+    loadFlowVideoPresets(config.flow_video_presets);
+    loadFlowPoPresets(config.flow_po_presets);
     const folderInput = document.getElementById('cfg_folder_name');
     if (folderInput) folderInput.value = config.folder_name || '';
     const localInput = document.getElementById('cfg_local_path');
@@ -1965,6 +1967,296 @@ function applyVideoPreset(presetName) {
 
   updateDurationsSum();
   updateTooltips();
+}
+
+let globalFlowVideoPresets = {};
+let globalFlowPoPresets = {};
+
+function loadFlowVideoPresets(presets) {
+  globalFlowVideoPresets = presets || {};
+  renderFlowVideoPresetsSelect();
+}
+
+function renderFlowVideoPresetsSelect(selectedKey = '') {
+  const select = document.getElementById('flowVideoPresetSelect');
+  if (!select) return;
+  
+  select.innerHTML = '<option value="">-- เลือก Preset หรือตั้งค่าเอง --</option>';
+  
+  Object.keys(globalFlowVideoPresets).forEach(key => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = key;
+    select.appendChild(opt);
+  });
+  
+  if (selectedKey) {
+    select.value = selectedKey;
+  }
+}
+
+function applyFlowVideoPreset(presetName) {
+  if (!presetName || !globalFlowVideoPresets[presetName]) {
+    const port = document.getElementById('cfg_flow_port');
+    if (port) port.value = '9222';
+    const proj = document.getElementById('cfg_flow_project_dropdown');
+    if (proj) proj.selectedIndex = 0;
+    const imagesDir = document.getElementById('cfg_flow_images_dir');
+    if (imagesDir) imagesDir.value = '';
+    const promptsDir = document.getElementById('cfg_flow_prompts_dir');
+    if (promptsDir) promptsDir.value = '';
+    const model = document.getElementById('cfg_flow_video_model');
+    if (model) model.value = '';
+    const orientation = document.getElementById('cfg_flow_orientation');
+    if (orientation) orientation.value = 'VERTICAL';
+    const outputCount = document.getElementById('cfg_flow_output_count');
+    if (outputCount) outputCount.value = '1';
+    const duration = document.getElementById('cfg_flow_duration_seconds');
+    if (duration) duration.value = '5';
+    const upscale = document.getElementById('cfg_flow_upscale_res');
+    if (upscale) upscale.value = 'NONE';
+    const loop = document.getElementById('cfg_flow_loop_count');
+    if (loop) loop.value = '1';
+    return;
+  }
+  
+  const preset = globalFlowVideoPresets[presetName];
+  const port = document.getElementById('cfg_flow_port');
+  if (port && preset.port !== undefined) port.value = preset.port;
+  
+  const proj = document.getElementById('cfg_flow_project_dropdown');
+  if (proj && preset.project_id !== undefined) {
+    proj.value = preset.project_id;
+    proj.dispatchEvent(new Event('change'));
+  }
+  
+  const imagesDir = document.getElementById('cfg_flow_images_dir');
+  if (imagesDir && preset.images_dir !== undefined) imagesDir.value = preset.images_dir;
+  
+  const promptsDir = document.getElementById('cfg_flow_prompts_dir');
+  if (promptsDir && preset.prompts_dir !== undefined) promptsDir.value = preset.prompts_dir;
+  
+  const model = document.getElementById('cfg_flow_video_model');
+  if (model && preset.video_model !== undefined) model.value = preset.video_model;
+  
+  const orientation = document.getElementById('cfg_flow_orientation');
+  if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
+  
+  const outputCount = document.getElementById('cfg_flow_output_count');
+  if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
+  
+  const duration = document.getElementById('cfg_flow_duration_seconds');
+  if (duration && preset.duration_seconds !== undefined) duration.value = preset.duration_seconds;
+  
+  const upscale = document.getElementById('cfg_flow_upscale_res');
+  if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
+  
+  const loop = document.getElementById('cfg_flow_loop_count');
+  if (loop && preset.loop_count !== undefined) loop.value = preset.loop_count;
+  
+  updateTooltips();
+}
+
+async function saveFlowVideoPreset() {
+  const select = document.getElementById('flowVideoPresetSelect');
+  const currentKey = select ? select.value : '';
+  const presetName = prompt('ระบุชื่อ Preset หรือระบุชื่อเดิมเพื่อบันทึกทับ:', currentKey || '');
+  if (!presetName) return;
+  const cleanName = presetName.trim();
+  if (!cleanName) return;
+  
+  const preset = {
+    port: document.getElementById('cfg_flow_port')?.value || '9222',
+    project_id: document.getElementById('cfg_flow_project_dropdown')?.value || '',
+    images_dir: document.getElementById('cfg_flow_images_dir')?.value || '',
+    prompts_dir: document.getElementById('cfg_flow_prompts_dir')?.value || '',
+    video_model: document.getElementById('cfg_flow_video_model')?.value || '',
+    orientation: document.getElementById('cfg_flow_orientation')?.value || 'VERTICAL',
+    output_count: parseInt(document.getElementById('cfg_flow_output_count')?.value || '1', 10),
+    duration_seconds: parseInt(document.getElementById('cfg_flow_duration_seconds')?.value || '5', 10),
+    upscale_resolution: document.getElementById('cfg_flow_upscale_res')?.value || 'NONE',
+    loop_count: parseInt(document.getElementById('cfg_flow_loop_count')?.value || '1', 10)
+  };
+  
+  globalFlowVideoPresets[cleanName] = preset;
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'flow_video_presets', value: globalFlowVideoPresets })
+    });
+    renderFlowVideoPresetsSelect(cleanName);
+    alert(`บันทึก Preset "${cleanName}" สำเร็จ`);
+  } catch (e) {
+    alert(`เกิดข้อผิดพลาดในการบันทึก: ${e.message}`);
+  }
+}
+
+async function deleteFlowVideoPreset() {
+  const select = document.getElementById('flowVideoPresetSelect');
+  const selectedKey = select ? select.value : '';
+  if (!selectedKey) {
+    alert('กรุณาเลือก Preset ที่ต้องการลบก่อน');
+    return;
+  }
+  
+  if (!confirm(`คุณต้องการลบ Preset "${selectedKey}" ใช่หรือไม่?`)) return;
+  
+  delete globalFlowVideoPresets[selectedKey];
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'flow_video_presets', value: globalFlowVideoPresets })
+    });
+    renderFlowVideoPresetsSelect();
+    alert(`ลบ Preset "${selectedKey}" สำเร็จ`);
+  } catch (e) {
+    alert(`เกิดข้อผิดพลาดในการลบ: ${e.message}`);
+  }
+}
+
+// Prompt-Only Mode presets
+function loadFlowPoPresets(presets) {
+  globalFlowPoPresets = presets || {};
+  renderFlowPoPresetsSelect();
+}
+
+function renderFlowPoPresetsSelect(selectedKey = '') {
+  const select = document.getElementById('flowPoPresetSelect');
+  if (!select) return;
+  
+  select.innerHTML = '<option value="">-- เลือก Preset หรือตั้งค่าเอง --</option>';
+  
+  Object.keys(globalFlowPoPresets).forEach(key => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = key;
+    select.appendChild(opt);
+  });
+  
+  if (selectedKey) {
+    select.value = selectedKey;
+  }
+}
+
+function applyFlowPoPreset(presetName) {
+  if (!presetName || !globalFlowPoPresets[presetName]) {
+    const port = document.getElementById('cfg_flow_po_port');
+    if (port) port.value = '9222';
+    const proj = document.getElementById('cfg_flow_po_project_dropdown');
+    if (proj) proj.selectedIndex = 0;
+    const promptsDir = document.getElementById('cfg_flow_po_prompts_dir');
+    if (promptsDir) promptsDir.value = '';
+    const model = document.getElementById('cfg_flow_po_video_model');
+    if (model) model.value = '';
+    const orientation = document.getElementById('cfg_flow_po_orientation');
+    if (orientation) orientation.value = 'VERTICAL';
+    const outputCount = document.getElementById('cfg_flow_po_output_count');
+    if (outputCount) outputCount.value = '1';
+    const duration = document.getElementById('cfg_flow_po_duration_seconds');
+    if (duration) duration.value = '5';
+    const upscale = document.getElementById('cfg_flow_po_upscale_res');
+    if (upscale) upscale.value = 'NONE';
+    const loop = document.getElementById('cfg_flow_po_loop_count');
+    if (loop) loop.value = '1';
+    return;
+  }
+  
+  const preset = globalFlowPoPresets[presetName];
+  const port = document.getElementById('cfg_flow_po_port');
+  if (port && preset.port !== undefined) port.value = preset.port;
+  
+  const proj = document.getElementById('cfg_flow_po_project_dropdown');
+  if (proj && preset.project_id !== undefined) {
+    proj.value = preset.project_id;
+    proj.dispatchEvent(new Event('change'));
+  }
+  
+  const promptsDir = document.getElementById('cfg_flow_po_prompts_dir');
+  if (promptsDir && preset.prompts_dir !== undefined) promptsDir.value = preset.prompts_dir;
+  
+  const model = document.getElementById('cfg_flow_po_video_model');
+  if (model && preset.video_model !== undefined) model.value = preset.video_model;
+  
+  const orientation = document.getElementById('cfg_flow_po_orientation');
+  if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
+  
+  const outputCount = document.getElementById('cfg_flow_po_output_count');
+  if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
+  
+  const duration = document.getElementById('cfg_flow_po_duration_seconds');
+  if (duration && preset.duration_seconds !== undefined) duration.value = preset.duration_seconds;
+  
+  const upscale = document.getElementById('cfg_flow_po_upscale_res');
+  if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
+  
+  const loop = document.getElementById('cfg_flow_po_loop_count');
+  if (loop && preset.loop_count !== undefined) loop.value = preset.loop_count;
+  
+  updateTooltips();
+}
+
+async function saveFlowPoPreset() {
+  const select = document.getElementById('flowPoPresetSelect');
+  const currentKey = select ? select.value : '';
+  const presetName = prompt('ระบุชื่อ Preset หรือระบุชื่อเดิมเพื่อบันทึกทับ:', currentKey || '');
+  if (!presetName) return;
+  const cleanName = presetName.trim();
+  if (!cleanName) return;
+  
+  const preset = {
+    port: document.getElementById('cfg_flow_po_port')?.value || '9222',
+    project_id: document.getElementById('cfg_flow_po_project_dropdown')?.value || '',
+    prompts_dir: document.getElementById('cfg_flow_po_prompts_dir')?.value || '',
+    video_model: document.getElementById('cfg_flow_po_video_model')?.value || '',
+    orientation: document.getElementById('cfg_flow_po_orientation')?.value || 'VERTICAL',
+    output_count: parseInt(document.getElementById('cfg_flow_po_output_count')?.value || '1', 10),
+    duration_seconds: parseInt(document.getElementById('cfg_flow_po_duration_seconds')?.value || '5', 10),
+    upscale_resolution: document.getElementById('cfg_flow_po_upscale_res')?.value || 'NONE',
+    loop_count: parseInt(document.getElementById('cfg_flow_po_loop_count')?.value || '1', 10)
+  };
+  
+  globalFlowPoPresets[cleanName] = preset;
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'flow_po_presets', value: globalFlowPoPresets })
+    });
+    renderFlowPoPresetsSelect(cleanName);
+    alert(`บันทึก Preset "${cleanName}" สำเร็จ`);
+  } catch (e) {
+    alert(`เกิดข้อผิดพลาดในการบันทึก: ${e.message}`);
+  }
+}
+
+async function deleteFlowPoPreset() {
+  const select = document.getElementById('flowPoPresetSelect');
+  const selectedKey = select ? select.value : '';
+  if (!selectedKey) {
+    alert('กรุณาเลือก Preset ที่ต้องการลบก่อน');
+    return;
+  }
+  
+  if (!confirm(`คุณต้องการลบ Preset "${selectedKey}" ใช่หรือไม่?`)) return;
+  
+  delete globalFlowPoPresets[selectedKey];
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'flow_po_presets', value: globalFlowPoPresets })
+    });
+    renderFlowPoPresetsSelect();
+    alert(`ลบ Preset "${selectedKey}" สำเร็จ`);
+  } catch (e) {
+    alert(`เกิดข้อผิดพลาดในการลบ: ${e.message}`);
+  }
 }
 
 async function saveVideoPreset() {
@@ -3243,6 +3535,46 @@ function initWorkflowActionListeners() {
   if (deletePresetBtn) {
     deletePresetBtn.addEventListener('click', () => {
       deleteVideoPreset();
+    });
+  }
+
+  // Flow Video presets
+  const flowVideoPresetSelect = document.getElementById('flowVideoPresetSelect');
+  if (flowVideoPresetSelect) {
+    flowVideoPresetSelect.addEventListener('change', (e) => {
+      applyFlowVideoPreset(e.target.value);
+    });
+  }
+  const saveFlowVideoPresetBtn = document.getElementById('saveFlowVideoPresetBtn');
+  if (saveFlowVideoPresetBtn) {
+    saveFlowVideoPresetBtn.addEventListener('click', () => {
+      saveFlowVideoPreset();
+    });
+  }
+  const deleteFlowVideoPresetBtn = document.getElementById('deleteFlowVideoPresetBtn');
+  if (deleteFlowVideoPresetBtn) {
+    deleteFlowVideoPresetBtn.addEventListener('click', () => {
+      deleteFlowVideoPreset();
+    });
+  }
+
+  // Flow Prompt-Only presets
+  const flowPoPresetSelect = document.getElementById('flowPoPresetSelect');
+  if (flowPoPresetSelect) {
+    flowPoPresetSelect.addEventListener('change', (e) => {
+      applyFlowPoPreset(e.target.value);
+    });
+  }
+  const saveFlowPoPresetBtn = document.getElementById('saveFlowPoPresetBtn');
+  if (saveFlowPoPresetBtn) {
+    saveFlowPoPresetBtn.addEventListener('click', () => {
+      saveFlowPoPreset();
+    });
+  }
+  const deleteFlowPoPresetBtn = document.getElementById('deleteFlowPoPresetBtn');
+  if (deleteFlowPoPresetBtn) {
+    deleteFlowPoPresetBtn.addEventListener('click', () => {
+      deleteFlowPoPreset();
     });
   }
 
