@@ -1886,8 +1886,6 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                     app_name = _get_active_browser_app_name()
                     script = f"""
                     set the clipboard to "{escaped_path}"
-                    tell application "{app_name}" to activate
-                    delay 0.5
                     tell application "System Events"
                         key code 5 using {{command down, shift down}}
                         delay 0.75
@@ -2427,8 +2425,6 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     app_name = _get_active_browser_app_name()
                     script = f"""
                     set the clipboard to "{escaped_path}"
-                    tell application "{app_name}" to activate
-                    delay 0.5
                     tell application "System Events"
                         key code 5 using {{command down, shift down}}
                         delay 0.75
@@ -2658,6 +2654,8 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 log("Submit button click and generation wait bypassed for this debug session as requested.")
                 raise RuntimeError("Bypassed submit for debug session. Aborting bulk prompt loop.")
 
+            # Force Chrome focus one last time after sending prompt to prevent focus loss
+            _activate_chrome()
             return {"ok": True, "status": "submitted"}
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -4242,8 +4240,6 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
         app_name = _get_active_browser_app_name()
         script = f"""
         set the clipboard to "{escaped_path}"
-        tell application "{app_name}" to activate
-        delay 0.5
         tell application "System Events"
             -- Press Cmd + Shift + G to open path dialog
             key code 5 using {{command down, shift down}}
