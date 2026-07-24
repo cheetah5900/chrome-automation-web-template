@@ -2396,6 +2396,17 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     else:
                         log("Warning: AppleScript file-dialog automation encountered an issue and could not upload file.")
 
+                    # Check for duplicate file upload pop-up
+                    try:
+                        dup_xpath = "//*[contains(text(), \"already uploaded this file\") or contains(text(), \"uploaded this file\")]"
+                        dup_elems = driver.find_elements(By.XPATH, dup_xpath)
+                        if any(e.is_displayed() for e in dup_elems):
+                            log("🚨 ตรวจพบป๊อปอัปแจ้งเตือนอัปโหลดไฟล์ซ้ำ (You've already uploaded this file.)")
+                            raise RuntimeError("Duplicate file upload detected: You've already uploaded this file.")
+                    except Exception as e:
+                        if "Duplicate file" in str(e):
+                            raise e
+
                 # Re-resolve the input box after files have finished uploading, as DOM updates may make the old reference stale
                 box = None
                 for s in input_strats:
