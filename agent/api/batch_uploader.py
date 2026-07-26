@@ -526,6 +526,21 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
     if isinstance(workflows, list) and workflows:
         media = project_contents.get("media", [])
         
+        # Build image media to workflow name map
+        workflow_display_names = {}
+        for wrk in workflows:
+            wrk_id = wrk.get("name")
+            wrk_name = wrk.get("metadata", {}).get("displayName")
+            if wrk_id and wrk_name:
+                workflow_display_names[wrk_id] = wrk_name
+
+        image_media_to_name = {}
+        for md in media:
+            md_id = md.get("name")
+            wrk_id = md.get("workflowId")
+            if md_id and wrk_id and wrk_id in workflow_display_names:
+                image_media_to_name[md_id] = workflow_display_names[wrk_id]
+        
         # Group media by workflowId
         media_by_workflow = {}
         for m in media:
@@ -588,6 +603,8 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
                 for img_in in img_inputs:
                     if img_in.get("imageUsageType") == "IMAGE_USAGE_TYPE_START_IMAGE":
                         img_media_id = img_in.get("mediaId")
+                        if img_media_id and img_media_id in image_media_to_name:
+                            img_handle = image_media_to_name[img_media_id]
                         break
             except Exception:
                 pass
@@ -1645,6 +1662,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         
     counters = {"vertical": 1, "horizontal": 1}
     dup_counters = {}
+    not_mapped_counter = 0
         
     temp_dir = Path(tempfile.mkdtemp())
     zip_path = temp_dir / f"{project_slug}_videos.zip"
@@ -1754,11 +1772,10 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                                 img_name = img_name[len(project_slug) + 1:]
                             img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
                             img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
-                        else:
-                            img_name = resolve_storyboard_filename(display_order)
                             
                     if not img_name:
-                        img_name = f"{display_order + 1:02d}"
+                        not_mapped_counter += 1
+                        img_name = f"not mapped_{not_mapped_counter}"
                     
                     dup_key = f"{p}_{img_name}"
                     dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
