@@ -1593,12 +1593,35 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     try:
         local_scenes = await crud.list_project_scenes(body.project_id)
         local_order_map = {s["id"]: s["display_order"] for s in local_scenes}
-        logger.info("Found %d local scenes for project %s to map display order", len(local_scenes), body.project_id[:12])
+        local_image_name_map = {}
+        for s in local_scenes:
+            img_url = s.get("vertical_image_url") or s.get("horizontal_image_url")
+            if img_url:
+                if img_url.startswith("file://"):
+                    local_image_name_map[s["id"]] = Path(img_url[7:]).stem
+                else:
+                    local_image_name_map[s["id"]] = Path(img_url).stem
+        logger.info("Found %d local scenes for project %s to map display order and image names", len(local_scenes), body.project_id[:12])
     except Exception as e:
         logger.warning("Failed to fetch local project scenes: %s. Falling back to default ordering.", e)
         local_order_map = {}
+        local_image_name_map = {}
 
-    scenes.sort(key=lambda s: local_order_map.get(s.get("id"), s.get("display_order", 9999)))
+    def get_sort_key(s):
+        s_id = s.get("id")
+        img_name = local_image_name_map.get(s_id)
+        if img_name:
+            import re
+            num_part = re.search(r"\d+", img_name)
+            if num_part:
+                try:
+                    return int(num_part.group())
+                except Exception:
+                    pass
+            return img_name
+        return local_order_map.get(s_id, s.get("display_order", 9999))
+
+    scenes.sort(key=get_sort_key)
         
     counters = {"vertical": 1, "horizontal": 1}
     dup_counters = {}
@@ -1680,8 +1703,8 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     upscale_suffix = "_upscaled" if is_upscale else ""
                     
                     has_start_image = bool(scene.get(f"{p}_image_media_id") or scene.get(f"{p}_image_url"))
-                    if has_start_image:
-                        img_name = None
+                    img_name = local_image_name_map.get(scene_id)
+                    if not img_name and has_start_image:
                         img_url = scene.get(f"{p}_image_url")
                         if img_url:
                             if img_url.startswith("file://"):
@@ -1698,7 +1721,8 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                             img_name = img_name[len(project_slug) + 1:]
                         img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
                         img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
-                        
+                    
+                    if img_name:
                         dup_key = f"{p}_{img_name}"
                         dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
                         dup_idx = dup_counters[dup_key]
