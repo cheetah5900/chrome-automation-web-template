@@ -1010,6 +1010,8 @@ async def upscale_project_videos(body: UpscaleProjectRequest):
                 scene_data = {}
                 for field in ("vertical_video_url", "vertical_video_media_id",
                               "horizontal_video_url", "horizontal_video_media_id",
+                              "vertical_image_url", "vertical_image_media_id",
+                              "horizontal_image_url", "horizontal_image_media_id",
                               "vertical_upscale_url", "vertical_upscale_media_id",
                               "horizontal_upscale_url", "horizontal_upscale_media_id"):
                     if fs.get(field) is not None:
