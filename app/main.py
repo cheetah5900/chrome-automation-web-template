@@ -5342,6 +5342,7 @@ class StoryboardAutofillPayload(BaseModel):
     autofill_characters: bool = True
     autofill_locations: bool = True
     autofill_props: bool = True
+    autofill_scenes: bool = True
 
 
 @app.post("/api/step/storyboard-autofill")
@@ -5371,6 +5372,8 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
             targets.append("Autofill Locations")
         if payload.autofill_props:
             targets.append("Autofill Props")
+        if payload.autofill_scenes:
+            targets.append("Autofill Scene")
 
         if not targets:
             return {"ok": True, "clicked_count": 0, "clicked_buttons": []}

@@ -7289,6 +7289,7 @@ document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', a
   const chkChars = document.getElementById('chkAutofillChars')?.checked;
   const chkLocs = document.getElementById('chkAutofillLocs')?.checked;
   const chkProps = document.getElementById('chkAutofillProps')?.checked;
+  const chkScenes = document.getElementById('chkAutofillScenes')?.checked;
   
   const storyboardConsole = document.getElementById('storyboardConsole');
   if (storyboardConsole) {
@@ -7317,7 +7318,8 @@ document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', a
       body: JSON.stringify({
         autofill_characters: chkChars,
         autofill_locations: chkLocs,
-        autofill_props: chkProps
+        autofill_props: chkProps,
+        autofill_scenes: chkScenes
       })
     });
     
