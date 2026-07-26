@@ -1810,9 +1810,9 @@ async def dump_flow_project(body: DownloadProjectVideosRequest):
     
     import urllib.parse
     import json as _json
-    input_params = {"json": {"projectId": body.project_id, "toolName": "PINHOLE"}}
+    input_params = {"json": {"projectId": body.project_id}}
     encoded_input = urllib.parse.quote(_json.dumps(input_params))
-    url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
+    url = f"https://labs.google/fx/api/trpc/flow.projectInitialData?input={encoded_input}"
     
     resp = await client._send("trpc_request", {
         "url": url,
