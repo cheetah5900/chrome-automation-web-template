@@ -7285,26 +7285,21 @@ document.getElementById('btnGeneratePendingScenes')?.addEventListener('click', a
 
 // Storyboard Autofill Event Listeners & Configs
 document.addEventListener('DOMContentLoaded', () => {
-  // Load persisted delay from localStorage on startup
-  const savedDelay = localStorage.getItem('flowkit_autofill_delay');
+  // Load persisted default delay from localStorage on startup (fallback to 1.5)
+  const savedDelayDefault = localStorage.getItem('flowkit_autofill_delay_default');
   const delayInput = document.getElementById('numAutofillDelay');
-  if (delayInput && savedDelay) {
-    delayInput.value = savedDelay;
+  if (delayInput) {
+    delayInput.value = savedDelayDefault || '1.5';
   }
 
-  // Update localStorage when delay changes
-  document.getElementById('numAutofillDelay')?.addEventListener('change', (e) => {
-    localStorage.setItem('flowkit_autofill_delay', e.target.value);
-  });
-
-  // Set Default Delay button
+  // Set Default Delay button (saves current input value as the new default)
   document.getElementById('btnSetAutofillDelayDefault')?.addEventListener('click', (e) => {
     e.preventDefault();
     const delayInput = document.getElementById('numAutofillDelay');
     if (delayInput) {
-      delayInput.value = '1.5';
-      localStorage.setItem('flowkit_autofill_delay', '1.5');
-      showToast('Reset delay to default (1.5s)', 'info');
+      const currentVal = delayInput.value;
+      localStorage.setItem('flowkit_autofill_delay_default', currentVal);
+      showToast(`บันทึกดีเลย์ ${currentVal} วินาที เป็นค่าเริ่มต้นใหม่เรียบร้อยแล้ว`, 'success');
     }
   });
 
