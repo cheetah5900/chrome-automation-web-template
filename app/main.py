@@ -5466,7 +5466,7 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
                     
                     let clickedCount = 0;
                     let details = [];
-                    let sceneIndex = 0;
+                    let n = 0; // 1-based storyboard scene index (1, 2, 3...)
                     
                     for (const btn of matchedButtons) {
                         if (window.autofillStopRequested) {
@@ -5478,10 +5478,17 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
                         const isSceneButton = txt.includes("Autofill Scene");
                         
                         if (isSceneButton) {
-                            sceneIndex++;
+                            n++; // 1st storyboard scene button is n = 1
+                            
+                            // Apply n + 3 logic: user typed range (e.g., 5-10) is checked against (n + 3)
+                            const overallIndex = n + 3; // n + 3 maps 1 -> 4, 2 -> 5, 3 -> 6...
+                            
                             if (hasRange) {
-                                if (sceneIndex < rangeStart || sceneIndex > rangeEnd) {
-                                    continue; // Skip scenes outside target range
+                                const targetStart = rangeStart + 3; // Shift start range by +3
+                                const targetEnd = rangeEnd + 3;     // Shift end range by +3
+                                
+                                if (overallIndex < targetStart || overallIndex > targetEnd) {
+                                    continue; // Skip scenes outside n + 3 target range
                                 }
                             }
                         }
