@@ -87,3 +87,17 @@ Before outputting any final code, you MUST think step-by-step internally and str
 - DO NOT add complex window existence checks inside AppleScript dialog workflows. Use a simple, reliable `delay 1.0` before sending keystrokes.
 - Use clipboard pasting (`keystroke "v" using {command down}`) for putting the filepath into the path sheet.
 - Always perform the file upload sequence *before* typing/submitting the prompt, and wait at least 3 seconds after pasting the prompt before clicking send.
+
+## Google Flow Image-to-Video Mapping & Synced Virtual Scenes
+- When generating standard image-to-video, Google Flow generates a brand new `mediaId` (Image Cloud ID) for each uploaded image. 
+- Local SQLite database scenes are mapped to image filenames using `vertical_image_url` or `local_image_name_map` containing media IDs of the first upload attempt.
+- If the local worker process is aborted or restarted before saving the generated video's `vertical_video_media_id`, the database record remains disconnected (`None` video ID).
+- When a user performs a Retroactive Sync/Download, the system fetches all on-cloud workflows from Google Flow. To resolve the original storyboard image filename of these synced/virtual scenes without relying on local DB entries, the system uses a **Programmatic Lookup Chain**:
+  1. Construct a map of `workflowId -> displayName` (e.g. `"04.png"`).
+  2. Construct a map of `imageMediaId -> workflow_displayName` by linking media items to their parent workflow's `displayName`.
+  3. Extract the `startImage.mediaId` (e.g., `"e6872a15-..."`) from the video request metadata.
+  4. Lookup the `startImage.mediaId` in the map to resolve the original filename (e.g., `"04"`).
+- **Fallback Naming Rule**:
+  - If a video does not have any image-to-video mapping (e.g. Prompt-Only / Text-to-Video runs), name it as `not mapped_{count}.mp4` where `count` is a 1-indexed counter incremented for each unmapped video in the project.
+- **Sorting Rule**:
+  - Zip entries must be sorted numerically by their resolved storyboard numbers (e.g., `01.mp4`, `02.mp4`...) first. Use `(0, int(parsed_digits))` for mapped ones and `(1, display_order)` for unmapped ones in `get_sort_key` to ensure correct ordering.
