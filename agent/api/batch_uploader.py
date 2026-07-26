@@ -1841,25 +1841,6 @@ class GeneratePendingRequest(BaseModel):
     output_count: int = 1
 
 
-@router.post("/dump-flow-project")
-async def dump_flow_project(body: DownloadProjectVideosRequest):
-    client = get_flow_client()
-    if not client.connected:
-        raise HTTPException(503, "Extension not connected")
-    
-    import urllib.parse
-    import json as _json
-    input_params = {"json": {"projectId": body.project_id}}
-    encoded_input = urllib.parse.quote(_json.dumps(input_params))
-    url = f"https://labs.google/fx/api/trpc/flow.projectInitialData?input={encoded_input}"
-    
-    resp = await client._send("trpc_request", {
-        "url": url,
-        "method": "GET",
-        "headers": {"accept": "*/*"}
-    }, timeout=15)
-    return resp
-
 @router.post("/generate-pending")
 async def generate_pending_scenes(body: GeneratePendingRequest):
     from agent.db.schema import get_db, _db_lock
