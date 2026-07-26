@@ -307,8 +307,8 @@ async def scan_directories(body: ScanRequest):
             "prompt_content": prompt_content
         })
         
-    # Finally, if there are leftover prompts with no images
-    if len(remaining_prompts) > len(unmatched_images):
+    # Finally, if there are leftover prompts with no images (only in Prompt-Only Mode, i.e., has_images is False)
+    if not has_images and len(remaining_prompts) > len(unmatched_images):
         for pf in remaining_prompts[len(unmatched_images):]:
             prompt_content = ""
             prompt_path = os.path.join(prompts_dir, pf)
