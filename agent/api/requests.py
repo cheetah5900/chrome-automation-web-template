@@ -161,7 +161,7 @@ async def update(rid: str, body: RequestUpdate):
 
 @router.post("/cancel-all")
 async def cancel_all_requests():
-    """Cancel all PENDING and PROCESSING requests by marking them as FAILED."""
+    """Cancel all PENDING and PROCESSING requests by marking them as FAILED and cancelling active tasks."""
     import logging
     logger = logging.getLogger(__name__)
     
@@ -176,9 +176,18 @@ async def cancel_all_requests():
     try:
         from agent.worker.processor import get_worker_controller
         controller = get_worker_controller()
-        controller._active_ids.clear()
         controller._deferred.clear()
         controller._retry_after.clear()
+        
+        # Cancel active asyncio tasks executing/waiting in _run_one
+        cancelled_tasks = 0
+        for rid, task in list(controller._active_tasks.items()):
+            if not task.done():
+                task.cancel()
+                cancelled_tasks += 1
+        logger.info("Cancelled %d active worker tasks on cancel-all request", cancelled_tasks)
+        controller._active_ids.clear()
+        controller._active_tasks.clear()
     except Exception as e:
         logger.warning("Failed to reset worker controller memory on cancel-all: %s", e)
         

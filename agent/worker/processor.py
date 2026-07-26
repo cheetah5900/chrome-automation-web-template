@@ -68,6 +68,7 @@ class WorkerController:
     def __init__(self):
         self._shutdown = asyncio.Event()
         self._active_ids: set[str] = set()
+        self._active_tasks: dict[str, asyncio.Task] = {}
         # Initialize with default cooldown as both min and max
         self._rate_limiter = APIRateLimiter(MAX_CONCURRENT_REQUESTS, API_COOLDOWN, API_COOLDOWN)
         self._deferred: dict[str, float] = {}  # rid -> defer_until timestamp
@@ -166,7 +167,8 @@ class WorkerController:
 
                     self._active_ids.add(rid)
                     slots_available -= 1
-                    asyncio.create_task(self._run_one(req))
+                    task = asyncio.create_task(self._run_one(req))
+                    self._active_tasks[rid] = task
 
                 # Prune stale deferred/retry entries for requests no longer pending
                 pending_ids = {r["id"] for r in pending}
@@ -181,13 +183,34 @@ class WorkerController:
     async def _run_one(self, req: dict):
         rid = req["id"]
         try:
+            # Check DB status before rate-limiter acquisition
+            db_req = await crud.get_request(rid)
+            if not db_req or db_req.get("status") != "PENDING":
+                logger.info("Request %s status changed to %s, skipping _run_one", rid[:8], db_req.get("status") if db_req else "None")
+                return
+
             await self._rate_limiter.acquire()
             try:
-                await _process_one(req, self._deferred, self._retry_after)
+                # Re-check DB status after rate-limiter acquisition
+                db_req = await crud.get_request(rid)
+                if not db_req or db_req.get("status") != "PENDING":
+                    logger.info("Request %s status changed to %s during acquisition delay, skipping", rid[:8], db_req.get("status") if db_req else "None")
+                    return
+                await _process_one(db_req, self._deferred, self._retry_after)
             finally:
                 self._rate_limiter.release()
+        except asyncio.CancelledError:
+            logger.info("Request task %s cancelled", rid[:8])
+            try:
+                db_req = await crud.get_request(rid)
+                if db_req and db_req.get("status") in ("PENDING", "PROCESSING"):
+                    await crud.update_request(rid, status="FAILED", error_message="Cancelled by user")
+            except Exception as e:
+                logger.warning("Failed to update status on CancelledError: %s", e)
+            raise
         finally:
             self._active_ids.discard(rid)
+            self._active_tasks.pop(rid, None)
 
 
 async def _prerequisites_met(req: dict, orientation: str) -> bool:
