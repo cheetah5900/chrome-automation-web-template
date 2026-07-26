@@ -6409,6 +6409,41 @@ function initFlowKitUploaderListeners() {
       }
     }
   });
+
+  document.getElementById('btnCancelFlowKitBatch')?.addEventListener('click', async () => {
+    if (!confirm('คุณต้องการยกเลิกงานที่ค้างในคิวทั้งหมดและหยุดการพยายามยิงซ้ำ (Retry) หรือไม่?')) {
+      return;
+    }
+    const msg = document.getElementById('flowKitMsg');
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg';
+      msg.style.color = '#fff';
+      msg.textContent = 'กำลังทำการยกเลิก...';
+    }
+    try {
+      const res = await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
+      if (res && res.ok) {
+        logToConsole(`ยกเลิกงานในคิวทั้งหมดสำเร็จ (ยกเลิกไป ${res.cancelled_count} งาน)`);
+        if (msg) {
+          msg.className = 'msg';
+          msg.style.color = '#10b981';
+          msg.textContent = `ยกเลิกงานทั้งหมดเรียบร้อยแล้ว (จำนวน ${res.cancelled_count} งาน)`;
+        }
+      } else {
+        throw new Error('ไม่สามารถยกเลิกได้');
+      }
+    } catch (err) {
+      console.error(err);
+      logToConsole(`Error cancelling batch: ${err.message || err}`, 'error');
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = `เกิดข้อผิดพลาด: ${err.message || err}`;
+      }
+    }
+    updateProjectStats();
+  });
   
   updateProjectStats();
 }
@@ -7210,6 +7245,41 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
       msg.textContent = `เกิดข้อผิดพลาด: ${err.message || err}`;
     }
   }
+});
+
+document.getElementById('btnCancelFlowKitBatchPO')?.addEventListener('click', async () => {
+  if (!confirm('คุณต้องการยกเลิกงานที่ค้างในคิวทั้งหมดและหยุดการพยายามยิงซ้ำ (Retry) หรือไม่?')) {
+    return;
+  }
+  const msg = document.getElementById('flowKitPOMsg');
+  if (msg) {
+    msg.style.display = 'block';
+    msg.className = 'msg';
+    msg.style.color = '#fff';
+    msg.textContent = 'กำลังทำการยกเลิก...';
+  }
+  try {
+    const res = await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
+    if (res && res.ok) {
+      logToConsole(`ยกเลิกงานในคิวทั้งหมดสำเร็จ (ยกเลิกไป ${res.cancelled_count} งาน)`);
+      if (msg) {
+        msg.className = 'msg';
+        msg.style.color = '#10b981';
+        msg.textContent = `ยกเลิกงานทั้งหมดเรียบร้อยแล้ว (จำนวน ${res.cancelled_count} งาน)`;
+      }
+    } else {
+      throw new Error('ไม่สามารถยกเลิกได้');
+    }
+  } catch (err) {
+    console.error(err);
+    logToConsole(`Error cancelling batch: ${err.message || err}`, 'error');
+    if (msg) {
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = `เกิดข้อผิดพลาด: ${err.message || err}`;
+    }
+  }
+  updateProjectStats();
 });
 
 document.getElementById('cfg_flow_project_dropdown')?.addEventListener('change', (e) => {

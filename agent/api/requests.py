@@ -157,3 +157,29 @@ async def update(rid: str, body: RequestUpdate):
     if not r:
         raise HTTPException(404, "Request not found")
     return r
+
+
+@router.post("/cancel-all")
+async def cancel_all_requests():
+    """Cancel all PENDING and PROCESSING requests by marking them as FAILED."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    pending = await crud.list_requests(status="PENDING")
+    processing = await crud.list_requests(status="PROCESSING")
+    
+    count = 0
+    for r in pending + processing:
+        await crud.update_request(r["id"], status="FAILED", error_message="Cancelled by user")
+        count += 1
+        
+    try:
+        from agent.worker.processor import get_worker_controller
+        controller = get_worker_controller()
+        controller._active_ids.clear()
+        controller._deferred.clear()
+        controller._retry_after.clear()
+    except Exception as e:
+        logger.warning("Failed to reset worker controller memory on cancel-all: %s", e)
+        
+    return {"ok": True, "cancelled_count": count}
