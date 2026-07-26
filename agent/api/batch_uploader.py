@@ -1731,7 +1731,6 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     orient_suffix = "vertical" if p == "vertical" else "horizontal"
                     upscale_suffix = "_upscaled" if is_upscale else ""
                     
-                    has_start_image = bool(scene.get(f"{p}_image_media_id") or scene.get(f"{p}_image_url"))
                     img_name = None
                     if media_id:
                         img_name = local_image_name_map.get(media_id)
@@ -1740,42 +1739,35 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                         if std_m:
                             img_name = local_image_name_map.get(std_m)
                             
-                    if not img_name and has_start_image:
+                    if not img_name:
                         img_url = scene.get(f"{p}_image_url")
                         if img_url:
                             if img_url.startswith("file://"):
                                 img_name = Path(img_url[7:]).stem
                             else:
                                 img_name = Path(img_url).stem
-                        if not img_name:
+                        if img_name:
+                            import re
+                            if project_slug and img_name.startswith(f"{project_slug}_"):
+                                img_name = img_name[len(project_slug) + 1:]
+                            img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
+                            img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
+                        else:
                             img_name = resolve_storyboard_filename(display_order)
-                        if not img_name:
-                            img_name = f"Scene_{display_order:02d}"
-                        
-                        import re
-                        if project_slug and img_name.startswith(f"{project_slug}_"):
-                            img_name = img_name[len(project_slug) + 1:]
-                        img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
-                        img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
+                            
+                    if not img_name:
+                        img_name = f"{display_order + 1:02d}"
                     
-                    if img_name:
-                        dup_key = f"{p}_{img_name}"
-                        dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
-                        dup_idx = dup_counters[dup_key]
-                        
-                        suffix_str = ""
-                        if is_upscale:
-                            suffix_str += "_upscaled"
-                        if dup_idx > 1:
-                            suffix_str += f"_{dup_idx}"
-                        arcname = f"{img_name}{suffix_str}.mp4"
-                    else:
-                        idx = counters[p]
-                        suffix_str = ""
-                        if is_upscale:
-                            suffix_str += "_upscaled"
-                        arcname = f"scene_{idx:03d}{suffix_str}.mp4"
-                        counters[p] += 1
+                    dup_key = f"{p}_{img_name}"
+                    dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
+                    dup_idx = dup_counters[dup_key]
+                    
+                    suffix_str = ""
+                    if is_upscale:
+                        suffix_str += "_upscaled"
+                    if dup_idx > 1:
+                        suffix_str += f"_{dup_idx}"
+                    arcname = f"{img_name}{suffix_str}.mp4"
                         
                     zip_file.write(local_path, arcname=arcname)
                     video_added = True
