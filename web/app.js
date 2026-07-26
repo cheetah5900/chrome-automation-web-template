@@ -7409,4 +7409,21 @@ document.getElementById('btnStopStoryboardAutofill')?.addEventListener('click', 
   }
 });
 
+// Toggle Autofill Scenes config visibility based on checkbox state
+document.getElementById('chkAutofillScenes')?.addEventListener('change', (e) => {
+  const configDiv = document.getElementById('autofillScenesConfig');
+  if (configDiv) {
+    configDiv.style.display = e.target.checked ? 'flex' : 'none';
+  }
+});
+
+// Run same check on DOMContentLoaded to match initial state
+document.addEventListener('DOMContentLoaded', () => {
+  const chkScenes = document.getElementById('chkAutofillScenes');
+  const configDiv = document.getElementById('autofillScenesConfig');
+  if (chkScenes && configDiv) {
+    configDiv.style.display = chkScenes.checked ? 'flex' : 'none';
+  }
+});
+
 

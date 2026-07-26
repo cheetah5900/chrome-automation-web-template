@@ -335,26 +335,31 @@
                 <span>Autofill Props (ข้อมูลอุปกรณ์ประกอบฉาก)</span>
               </label>
 
-              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: #fff;">
-                <input type="checkbox" id="chkAutofillScenes" checked style="width: 16px; height: 16px; accent-color: #8b5cf6;" />
-                <span>Autofill Scenes (ข้อมูลฉาก)</span>
-              </label>
-            </div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: #fff;">
+                  <input type="checkbox" id="chkAutofillScenes" checked style="width: 16px; height: 16px; accent-color: #8b5cf6;" />
+                  <span>Autofill Scenes (ข้อมูลฉาก)</span>
+                </label>
+                
+                <!-- Nested configuration for Autofill Scenes -->
+                <div id="autofillScenesConfig" style="margin-left: 26px; padding-left: 14px; border-left: 2px solid rgba(139, 92, 246, 0.4); display: flex; flex-direction: column; gap: 12px; margin-top: 6px;">
+                  <!-- Delay Control -->
+                  <div style="background: rgba(255,255,255,0.01); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.04);">
+                    <label style="font-size: 0.8rem; font-weight: bold; color: rgba(255,255,255,0.75); margin-bottom: 6px; display: block;">ดีเลย์ระหว่างการกดแต่ละปุ่ม (วินาที):</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <input type="number" id="numAutofillDelay" value="1.5" min="0.1" step="0.1" style="width: 70px; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); color: #fff; font-size: 0.85rem;" />
+                      <span style="font-size: 0.8rem; color: rgba(255,255,255,0.5); flex-grow: 1;">วินาที</span>
+                      <button id="btnSetAutofillDelayDefault" style="padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 0.72rem; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">Default</button>
+                    </div>
+                  </div>
 
-            <!-- Delay Control -->
-            <div style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
-              <label style="font-size: 0.85rem; font-weight: bold; color: rgba(255,255,255,0.85); margin-bottom: 8px; display: block;">ดีเลย์ระหว่างการกดแต่ละปุ่ม (วินาที):</label>
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <input type="number" id="numAutofillDelay" value="1.5" min="0.1" step="0.1" style="width: 80px; padding: 8px 12px; border-radius: 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); color: #fff; font-size: 0.9rem;" />
-                <span style="font-size: 0.85rem; color: rgba(255,255,255,0.6); flex-grow: 1;">วินาที</span>
-                <button id="btnSetAutofillDelayDefault" style="padding: 6px 12px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 0.78rem; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">Default</button>
+                  <!-- Scene Range Control -->
+                  <div style="background: rgba(255,255,255,0.01); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.04);">
+                    <label style="font-size: 0.8rem; font-weight: bold; color: rgba(255,255,255,0.75); margin-bottom: 6px; display: block;">ระบุลำดับฉากที่ต้องการกด (เช่น 5-10 หรือ 5 หรือเว้นว่างเพื่อกดทั้งหมด):</label>
+                    <input type="text" id="txtAutofillRange" placeholder="เว้นว่างเพื่อกดทั้งหมด" style="width: 100%; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); color: #fff; font-size: 0.85rem;" />
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <!-- Scene Range Control -->
-            <div style="margin-bottom: 24px; background: rgba(255,255,255,0.02); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
-              <label style="font-size: 0.85rem; font-weight: bold; color: rgba(255,255,255,0.85); margin-bottom: 8px; display: block;">ระบุลำดับฉากที่ต้องการกด (เช่น 5-10 หรือ 5 หรือเว้นว่างเพื่อกดทั้งหมด):</label>
-              <input type="text" id="txtAutofillRange" placeholder="เว้นว่างเพื่อกดทั้งหมด" style="width: 100%; padding: 8px 12px; border-radius: 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); color: #fff; font-size: 0.9rem;" />
             </div>
 
             <!-- Buttons Group -->
