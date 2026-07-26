@@ -5344,6 +5344,7 @@ class StoryboardAutofillPayload(BaseModel):
     autofill_props: bool = True
     autofill_scenes: bool = True
     delay_seconds: float = 1.5
+    scene_range: str = ""
 
 
 @app.post("/api/step/storyboard-autofill")
@@ -5418,6 +5419,9 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
             log("Warning: No matching autofill buttons found in default content or any iframes. Running script on default content.")
 
         try:
+            # Initialize stop flag to false
+            driver.execute_script("window.autofillStopRequested = false;")
+            
             # 4. Execute JS in browser context with async script for delayed clicking
             delay_ms = int(payload.delay_seconds * 1000)
             
@@ -5425,9 +5429,11 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
             const callback = arguments[arguments.length - 1];
             const targets = arguments[0];
             const delayMs = arguments[1];
+            const rangeStr = arguments[2];
             
             (async () => {
                 try {
+                    window.autofillStopRequested = false;
                     const buttons = Array.from(document.querySelectorAll('button'));
                     const matchedButtons = [];
                     for (const btn of buttons) {
@@ -5437,18 +5443,61 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
                         }
                     }
                     
+                    // Filter by range if specified
+                    let finalButtons = matchedButtons;
+                    if (rangeStr && rangeStr.trim()) {
+                        let startIndex = 1;
+                        let endIndex = matchedButtons.length;
+                        const parts = rangeStr.trim().split('-');
+                        if (parts.length === 2) {
+                            const s = parseInt(parts[0], 10);
+                            const e = parseInt(parts[1], 10);
+                            if (!isNaN(s)) startIndex = s;
+                            if (!isNaN(e)) endIndex = e;
+                        } else {
+                            const s = parseInt(rangeStr.trim(), 10);
+                            if (!isNaN(s)) {
+                                startIndex = s;
+                                endIndex = s;
+                            }
+                        }
+                        
+                        finalButtons = [];
+                        for (let i = 0; i < matchedButtons.length; i++) {
+                            const btnNumber = i + 1;
+                            if (btnNumber >= startIndex && btnNumber <= endIndex) {
+                                finalButtons.push(matchedButtons[i]);
+                            }
+                        }
+                    }
+                    
                     let clickedCount = 0;
                     let details = [];
-                    for (const btn of matchedButtons) {
+                    for (const btn of finalButtons) {
+                        if (window.autofillStopRequested) {
+                            details.push("[STOPPED BY USER]");
+                            break;
+                        }
                         // Scroll to button to ensure visibility and prevent click interception
                         btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
                         // Small delay after scrolling to let UI settle
                         await new Promise(r => setTimeout(r, 200));
+                        if (window.autofillStopRequested) {
+                            details.push("[STOPPED BY USER]");
+                            break;
+                        }
                         btn.click();
                         clickedCount++;
                         details.push(btn.textContent.trim());
                         if (delayMs > 0) {
-                            await new Promise(r => setTimeout(r, delayMs));
+                            // Check stop request in chunks of 100ms during the delay
+                            const startWait = Date.now();
+                            while (Date.now() - startWait < delayMs) {
+                                if (window.autofillStopRequested) {
+                                    break;
+                                }
+                                await new Promise(r => setTimeout(r, 100));
+                            }
                         }
                     }
                     callback({ ok: true, clicked_count: clickedCount, clicked_buttons: details });
@@ -5461,7 +5510,7 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
             total_timeout = max(60, int(20 * payload.delay_seconds) + 15)
             driver.set_script_timeout(total_timeout)
             
-            result = driver.execute_async_script(script, targets, delay_ms)
+            result = driver.execute_async_script(script, targets, delay_ms, payload.scene_range)
             if not result.get("ok"):
                 raise Exception(result.get("error", "Unknown script error"))
                 
@@ -5472,6 +5521,37 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
             driver.switch_to.default_content()
     except Exception as e:
         log(f"[Storyboard Autofill] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/step/storyboard-autofill/stop")
+async def stop_storyboard_autofill() -> dict[str, Any]:
+    try:
+        bot = browser_manager.get()
+        if bot and bot.driver:
+            for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+                if bot.switch_to_tab_containing(url_part):
+                    # Set the flag on both the main window and all sub-iframes
+                    script = """
+                    window.autofillStopRequested = true;
+                    try {
+                        const iframes = document.querySelectorAll('iframe');
+                        for (const iframe of iframes) {
+                            try {
+                                const iframeDoc = iframe.contentDocument || iframe.contentWindow;
+                                if (iframeDoc) {
+                                    iframeDoc.autofillStopRequested = true;
+                                }
+                            } catch(e) {}
+                        }
+                    } catch(e) {}
+                    """
+                    bot.driver.execute_script(script)
+                    log("[Storyboard Autofill] Sent stop request to browser context.")
+                    return {"ok": True, "message": "Stop request sent successfully"}
+        return {"ok": False, "message": "Browser or driver not active"}
+    except Exception as e:
+        log(f"[Storyboard Autofill] Stop Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

@@ -7284,6 +7284,32 @@ document.getElementById('btnGeneratePendingScenes')?.addEventListener('click', a
 
 
 // Storyboard Autofill Event Listener
+// Load persisted delay from localStorage on startup
+document.addEventListener('DOMContentLoaded', () => {
+  const savedDelay = localStorage.getItem('flowkit_autofill_delay');
+  const delayInput = document.getElementById('numAutofillDelay');
+  if (delayInput && savedDelay) {
+    delayInput.value = savedDelay;
+  }
+});
+
+// Update localStorage when delay changes
+document.getElementById('numAutofillDelay')?.addEventListener('change', (e) => {
+  localStorage.setItem('flowkit_autofill_delay', e.target.value);
+});
+
+// Set Default Delay button
+document.getElementById('btnSetAutofillDelayDefault')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  const delayInput = document.getElementById('numAutofillDelay');
+  if (delayInput) {
+    delayInput.value = '1.5';
+    localStorage.setItem('flowkit_autofill_delay', '1.5');
+    showToast('Reset delay to default (1.5s)', 'info');
+  }
+});
+
+// Storyboard Autofill Event Listener
 document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', async () => {
   const btn = document.getElementById('btnRunStoryboardAutofill');
   const chkChars = document.getElementById('chkAutofillChars')?.checked;
@@ -7292,6 +7318,7 @@ document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', a
   const chkScenes = document.getElementById('chkAutofillScenes')?.checked;
   
   const delaySecVal = parseFloat(document.getElementById('numAutofillDelay')?.value || '1.5');
+  const rangeVal = document.getElementById('txtAutofillRange')?.value || '';
   
   const storyboardConsole = document.getElementById('storyboardConsole');
   if (storyboardConsole) {
@@ -7322,7 +7349,8 @@ document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', a
         autofill_locations: chkLocs,
         autofill_props: chkProps,
         autofill_scenes: chkScenes,
-        delay_seconds: delaySecVal
+        delay_seconds: delaySecVal,
+        scene_range: rangeVal
       })
     });
     
@@ -7350,6 +7378,34 @@ document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', a
       const btnText = btn.querySelector('.btn-text');
       if (btnText) btnText.textContent = '⚡ RUN AUTOFILL BUTTONS';
     }
+  }
+});
+
+// Force Stop Autofill Event Listener
+document.getElementById('btnStopStoryboardAutofill')?.addEventListener('click', async () => {
+  const storyboardConsole = document.getElementById('storyboardConsole');
+  const logToStoryboardConsole = (text, type = 'info') => {
+    if (!storyboardConsole) return;
+    const div = document.createElement('div');
+    div.className = `console-line ${type}`;
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    storyboardConsole.appendChild(div);
+    storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
+  };
+
+  try {
+    logToStoryboardConsole('Sending Force Stop request to browser...', 'warning');
+    const res = await jsonFetch('/api/step/storyboard-autofill/stop', {
+      method: 'POST'
+    });
+    if (res && res.ok) {
+      logToStoryboardConsole('Force Stop request sent successfully! Checking if active script terminated...', 'success');
+      showToast('Autofill Force Stop request sent!', 'info');
+    } else {
+      logToStoryboardConsole('Failed to send stop request: ' + (res.message || 'Unknown'), 'error');
+    }
+  } catch (err) {
+    logToStoryboardConsole('Error sending stop request: ' + (err.message || err), 'error');
   }
 });
 
