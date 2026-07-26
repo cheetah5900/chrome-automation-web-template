@@ -341,6 +341,15 @@
               </label>
             </div>
 
+            <!-- Delay Control -->
+            <div style="margin-bottom: 24px; background: rgba(255,255,255,0.02); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+              <label style="font-size: 0.85rem; font-weight: bold; color: rgba(255,255,255,0.85); margin-bottom: 8px; display: block;">ดีเลย์ระหว่างการกดแต่ละปุ่ม (วินาที):</label>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <input type="number" id="numAutofillDelay" value="1.5" min="0.1" step="0.1" style="width: 80px; padding: 8px 12px; border-radius: 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); color: #fff; font-size: 0.9rem;" />
+                <span style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">วินาที</span>
+              </div>
+            </div>
+
             <!-- Run Button -->
             <div class="relative inline-block w-full">
               <button id="btnRunStoryboardAutofill" class="primary" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); border: none; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;">

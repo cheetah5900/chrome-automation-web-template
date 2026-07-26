@@ -5343,6 +5343,7 @@ class StoryboardAutofillPayload(BaseModel):
     autofill_locations: bool = True
     autofill_props: bool = True
     autofill_scenes: bool = True
+    delay_seconds: float = 1.5
 
 
 @app.post("/api/step/storyboard-autofill")
@@ -5378,25 +5379,53 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
         if not targets:
             return {"ok": True, "clicked_count": 0, "clicked_buttons": []}
 
-        # 3. Execute JS in browser context to find and click the buttons
-        import json as _json
-        js_targets = _json.dumps(targets)
-        script = f"""
-        const targets = {js_targets};
-        const buttons = Array.from(document.querySelectorAll('button'));
-        let clickedCount = 0;
-        let details = [];
-        for (const btn of buttons) {{
-            const txt = btn.textContent.trim();
-            if (targets.some(t => txt.includes(t))) {{
-                btn.click();
-                clickedCount++;
-                details.push(txt);
-            }}
-        }}
-        return {{ clicked_count: clickedCount, clicked_buttons: details }};
+        # 3. Execute JS in browser context with async script for delayed clicking
+        delay_ms = int(payload.delay_seconds * 1000)
+        
+        script = """
+        const callback = arguments[arguments.length - 1];
+        const targets = arguments[0];
+        const delayMs = arguments[1];
+        
+        (async () => {
+            try {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const matchedButtons = [];
+                for (const btn of buttons) {
+                    const txt = btn.textContent.trim();
+                    if (targets.some(t => txt.includes(t))) {
+                        matchedButtons.push(btn);
+                    }
+                }
+                
+                let clickedCount = 0;
+                let details = [];
+                for (const btn of matchedButtons) {
+                    // Scroll to button to ensure visibility and prevent click interception
+                    btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    // Small delay after scrolling to let UI settle
+                    await new Promise(r => setTimeout(r, 200));
+                    btn.click();
+                    clickedCount++;
+                    details.push(btn.textContent.trim());
+                    if (delayMs > 0) {
+                        await new Promise(r => setTimeout(r, delayMs));
+                    }
+                }
+                callback({ ok: true, clicked_count: clickedCount, clicked_buttons: details });
+            } catch (e) {
+                callback({ ok: false, error: e.toString() });
+            }
+        })();
         """
-        result = driver.execute_script(script)
+        # Set script timeout in driver to be larger than total delay
+        total_timeout = max(60, int(20 * payload.delay_seconds) + 15)
+        driver.set_script_timeout(total_timeout)
+        
+        result = driver.execute_async_script(script, targets, delay_ms)
+        if not result.get("ok"):
+            raise Exception(result.get("error", "Unknown script error"))
+            
         log(f"[Storyboard Autofill] Clicked {result['clicked_count']} autofill buttons: {result['clicked_buttons']}")
         return {"ok": True, "clicked_count": result["clicked_count"], "clicked_buttons": result["clicked_buttons"]}
     except Exception as e:

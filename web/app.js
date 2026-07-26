@@ -7291,6 +7291,8 @@ document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', a
   const chkProps = document.getElementById('chkAutofillProps')?.checked;
   const chkScenes = document.getElementById('chkAutofillScenes')?.checked;
   
+  const delaySecVal = parseFloat(document.getElementById('numAutofillDelay')?.value || '1.5');
+  
   const storyboardConsole = document.getElementById('storyboardConsole');
   if (storyboardConsole) {
     storyboardConsole.innerHTML = '<div class="console-line system">Starting Storyboard Autofill automation...</div>';
@@ -7319,7 +7321,8 @@ document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', a
         autofill_characters: chkChars,
         autofill_locations: chkLocs,
         autofill_props: chkProps,
-        autofill_scenes: chkScenes
+        autofill_scenes: chkScenes,
+        delay_seconds: delaySecVal
       })
     });
     
