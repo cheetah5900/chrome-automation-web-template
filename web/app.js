@@ -2007,44 +2007,32 @@ function renderFlowVideoPresetsSelect(selectedKey = '') {
 
 function applyFlowVideoPreset(presetName) {
   if (!presetName || !globalFlowVideoPresets[presetName]) {
-    const port = document.getElementById('cfg_flow_port');
-    if (port) port.value = '9222';
     const proj = document.getElementById('cfg_flow_project_dropdown');
     if (proj) proj.selectedIndex = 0;
-    const imagesDir = document.getElementById('cfg_flow_images_dir');
-    if (imagesDir) imagesDir.value = '';
-    const promptsDir = document.getElementById('cfg_flow_prompts_dir');
-    if (promptsDir) promptsDir.value = '';
     const model = document.getElementById('cfg_flow_video_model');
     if (model) model.value = '';
     const orientation = document.getElementById('cfg_flow_orientation');
     if (orientation) orientation.value = 'VERTICAL';
     const outputCount = document.getElementById('cfg_flow_output_count');
     if (outputCount) outputCount.value = '1';
-    const duration = document.getElementById('cfg_flow_duration_seconds');
-    if (duration) duration.value = '5';
-    const upscale = document.getElementById('cfg_flow_upscale_res');
+    const upscale = document.getElementById('cfg_flow_upscale_auto');
     if (upscale) upscale.value = 'NONE';
-    const loop = document.getElementById('cfg_flow_loop_count');
-    if (loop) loop.value = '1';
+    const lakornPath = document.getElementById('cfg_flow_lakorn_path');
+    if (lakornPath) lakornPath.value = '';
+    const lakornTon = document.getElementById('cfg_flow_lakorn_ton');
+    if (lakornTon) lakornTon.value = '';
+    const lakornEp = document.getElementById('cfg_flow_lakorn_ep');
+    if (lakornEp) lakornEp.value = '';
     return;
   }
   
   const preset = globalFlowVideoPresets[presetName];
-  const port = document.getElementById('cfg_flow_port');
-  if (port && preset.port !== undefined) port.value = preset.port;
   
   const proj = document.getElementById('cfg_flow_project_dropdown');
   if (proj && preset.project_id !== undefined) {
     proj.value = preset.project_id;
     proj.dispatchEvent(new Event('change'));
   }
-  
-  const imagesDir = document.getElementById('cfg_flow_images_dir');
-  if (imagesDir && preset.images_dir !== undefined) imagesDir.value = preset.images_dir;
-  
-  const promptsDir = document.getElementById('cfg_flow_prompts_dir');
-  if (promptsDir && preset.prompts_dir !== undefined) promptsDir.value = preset.prompts_dir;
   
   const model = document.getElementById('cfg_flow_video_model');
   if (model && preset.video_model !== undefined) model.value = preset.video_model;
@@ -2055,14 +2043,17 @@ function applyFlowVideoPreset(presetName) {
   const outputCount = document.getElementById('cfg_flow_output_count');
   if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
   
-  const duration = document.getElementById('cfg_flow_duration_seconds');
-  if (duration && preset.duration_seconds !== undefined) duration.value = preset.duration_seconds;
-  
-  const upscale = document.getElementById('cfg_flow_upscale_res');
+  const upscale = document.getElementById('cfg_flow_upscale_auto');
   if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
   
-  const loop = document.getElementById('cfg_flow_loop_count');
-  if (loop && preset.loop_count !== undefined) loop.value = preset.loop_count;
+  const lakornPath = document.getElementById('cfg_flow_lakorn_path');
+  if (lakornPath && preset.lakorn_path !== undefined) lakornPath.value = preset.lakorn_path;
+  
+  const lakornTon = document.getElementById('cfg_flow_lakorn_ton');
+  if (lakornTon && preset.lakorn_ton !== undefined) lakornTon.value = preset.lakorn_ton;
+  
+  const lakornEp = document.getElementById('cfg_flow_lakorn_ep');
+  if (lakornEp && preset.lakorn_ep !== undefined) lakornEp.value = preset.lakorn_ep;
   
   updateTooltips();
 }
@@ -2076,16 +2067,14 @@ async function saveFlowVideoPreset() {
   if (!cleanName) return;
   
   const preset = {
-    port: document.getElementById('cfg_flow_port')?.value || '9222',
     project_id: document.getElementById('cfg_flow_project_dropdown')?.value || '',
-    images_dir: document.getElementById('cfg_flow_images_dir')?.value || '',
-    prompts_dir: document.getElementById('cfg_flow_prompts_dir')?.value || '',
     video_model: document.getElementById('cfg_flow_video_model')?.value || '',
     orientation: document.getElementById('cfg_flow_orientation')?.value || 'VERTICAL',
     output_count: parseInt(document.getElementById('cfg_flow_output_count')?.value || '1', 10),
-    duration_seconds: parseInt(document.getElementById('cfg_flow_duration_seconds')?.value || '5', 10),
-    upscale_resolution: document.getElementById('cfg_flow_upscale_res')?.value || 'NONE',
-    loop_count: parseInt(document.getElementById('cfg_flow_loop_count')?.value || '1', 10)
+    upscale_resolution: document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE',
+    lakorn_path: document.getElementById('cfg_flow_lakorn_path')?.value || '',
+    lakorn_ton: document.getElementById('cfg_flow_lakorn_ton')?.value || '',
+    lakorn_ep: document.getElementById('cfg_flow_lakorn_ep')?.value || ''
   };
   
   globalFlowVideoPresets[cleanName] = preset;
@@ -2154,30 +2143,22 @@ function renderFlowPoPresetsSelect(selectedKey = '') {
 
 function applyFlowPoPreset(presetName) {
   if (!presetName || !globalFlowPoPresets[presetName]) {
-    const port = document.getElementById('cfg_flow_po_port');
-    if (port) port.value = '9222';
     const proj = document.getElementById('cfg_flow_po_project_dropdown');
     if (proj) proj.selectedIndex = 0;
-    const promptsDir = document.getElementById('cfg_flow_po_prompts_dir');
-    if (promptsDir) promptsDir.value = '';
+    const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
+    if (promptsPath) promptsPath.value = '';
     const model = document.getElementById('cfg_flow_po_video_model');
     if (model) model.value = '';
     const orientation = document.getElementById('cfg_flow_po_orientation');
     if (orientation) orientation.value = 'VERTICAL';
     const outputCount = document.getElementById('cfg_flow_po_output_count');
     if (outputCount) outputCount.value = '1';
-    const duration = document.getElementById('cfg_flow_po_duration_seconds');
-    if (duration) duration.value = '5';
-    const upscale = document.getElementById('cfg_flow_po_upscale_res');
+    const upscale = document.getElementById('cfg_flow_po_upscale_auto');
     if (upscale) upscale.value = 'NONE';
-    const loop = document.getElementById('cfg_flow_po_loop_count');
-    if (loop) loop.value = '1';
     return;
   }
   
   const preset = globalFlowPoPresets[presetName];
-  const port = document.getElementById('cfg_flow_po_port');
-  if (port && preset.port !== undefined) port.value = preset.port;
   
   const proj = document.getElementById('cfg_flow_po_project_dropdown');
   if (proj && preset.project_id !== undefined) {
@@ -2185,8 +2166,8 @@ function applyFlowPoPreset(presetName) {
     proj.dispatchEvent(new Event('change'));
   }
   
-  const promptsDir = document.getElementById('cfg_flow_po_prompts_dir');
-  if (promptsDir && preset.prompts_dir !== undefined) promptsDir.value = preset.prompts_dir;
+  const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
+  if (promptsPath && preset.prompts_path !== undefined) promptsPath.value = preset.prompts_path;
   
   const model = document.getElementById('cfg_flow_po_video_model');
   if (model && preset.video_model !== undefined) model.value = preset.video_model;
@@ -2197,14 +2178,8 @@ function applyFlowPoPreset(presetName) {
   const outputCount = document.getElementById('cfg_flow_po_output_count');
   if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
   
-  const duration = document.getElementById('cfg_flow_po_duration_seconds');
-  if (duration && preset.duration_seconds !== undefined) duration.value = preset.duration_seconds;
-  
-  const upscale = document.getElementById('cfg_flow_po_upscale_res');
+  const upscale = document.getElementById('cfg_flow_po_upscale_auto');
   if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
-  
-  const loop = document.getElementById('cfg_flow_po_loop_count');
-  if (loop && preset.loop_count !== undefined) loop.value = preset.loop_count;
   
   updateTooltips();
 }
@@ -2218,15 +2193,12 @@ async function saveFlowPoPreset() {
   if (!cleanName) return;
   
   const preset = {
-    port: document.getElementById('cfg_flow_po_port')?.value || '9222',
     project_id: document.getElementById('cfg_flow_po_project_dropdown')?.value || '',
-    prompts_dir: document.getElementById('cfg_flow_po_prompts_dir')?.value || '',
+    prompts_path: document.getElementById('cfg_flow_po_prompts_path')?.value || '',
     video_model: document.getElementById('cfg_flow_po_video_model')?.value || '',
     orientation: document.getElementById('cfg_flow_po_orientation')?.value || 'VERTICAL',
     output_count: parseInt(document.getElementById('cfg_flow_po_output_count')?.value || '1', 10),
-    duration_seconds: parseInt(document.getElementById('cfg_flow_po_duration_seconds')?.value || '5', 10),
-    upscale_resolution: document.getElementById('cfg_flow_po_upscale_res')?.value || 'NONE',
-    loop_count: parseInt(document.getElementById('cfg_flow_po_loop_count')?.value || '1', 10)
+    upscale_resolution: document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE'
   };
   
   globalFlowPoPresets[cleanName] = preset;
