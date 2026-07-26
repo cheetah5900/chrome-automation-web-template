@@ -1592,34 +1592,52 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         
     try:
         local_scenes = await crud.list_project_scenes(body.project_id)
-        local_order_map = {s["id"]: s["display_order"] for s in local_scenes}
+        local_order_map = {}
         local_image_name_map = {}
         for s in local_scenes:
             img_url = s.get("vertical_image_url") or s.get("horizontal_image_url")
+            img_stem = None
             if img_url:
                 if img_url.startswith("file://"):
-                    local_image_name_map[s["id"]] = Path(img_url[7:]).stem
+                    img_stem = Path(img_url[7:]).stem
                 else:
-                    local_image_name_map[s["id"]] = Path(img_url).stem
-        logger.info("Found %d local scenes for project %s to map display order and image names", len(local_scenes), body.project_id[:12])
+                    img_stem = Path(img_url).stem
+            
+            for prefix in ("vertical", "horizontal"):
+                std_m = s.get(f"{prefix}_video_media_id")
+                ups_m = s.get(f"{prefix}_upscale_media_id")
+                if std_m:
+                    local_order_map[std_m] = s["display_order"]
+                    if img_stem:
+                        local_image_name_map[std_m] = img_stem
+                if ups_m:
+                    local_order_map[ups_m] = s["display_order"]
+                    if img_stem:
+                        local_image_name_map[ups_m] = img_stem
+        logger.info("Found %d local scenes for project %s to map display order and image names by media IDs", len(local_scenes), body.project_id[:12])
     except Exception as e:
         logger.warning("Failed to fetch local project scenes: %s. Falling back to default ordering.", e)
         local_order_map = {}
         local_image_name_map = {}
 
     def get_sort_key(s):
-        s_id = s.get("id")
-        img_name = local_image_name_map.get(s_id)
-        if img_name:
-            import re
-            num_part = re.search(r"\d+", img_name)
-            if num_part:
-                try:
-                    return int(num_part.group())
-                except Exception:
-                    pass
-            return img_name
-        return local_order_map.get(s_id, s.get("display_order", 9999))
+        for prefix in ("vertical", "horizontal"):
+            for key in (f"{prefix}_video_media_id", f"{prefix}_upscale_media_id"):
+                m_id = s.get(key)
+                if m_id:
+                    img_name = local_image_name_map.get(m_id)
+                    if img_name:
+                        import re
+                        num_part = re.search(r"\d+", img_name)
+                        if num_part:
+                            try:
+                                return int(num_part.group())
+                            except Exception:
+                                pass
+                        return img_name
+                    if m_id in local_order_map:
+                        return local_order_map[m_id]
+        return s.get("display_order", 9999)
 
     scenes.sort(key=get_sort_key)
         
@@ -1633,7 +1651,18 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for scene in scenes:
-            display_order = local_order_map.get(scene.get("id"), scene.get("display_order", 0))
+            display_order = 0
+            for prefix in ("vertical", "horizontal"):
+                for key in (f"{prefix}_video_media_id", f"{prefix}_upscale_media_id"):
+                    m_id = scene.get(key)
+                    if m_id and m_id in local_order_map:
+                        display_order = local_order_map[m_id]
+                        break
+                if display_order:
+                    break
+            if not display_order:
+                display_order = scene.get("display_order", 0)
+                
             scene_id = scene.get("id", "")
             
             for p in ("vertical", "horizontal"):
@@ -1703,7 +1732,14 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     upscale_suffix = "_upscaled" if is_upscale else ""
                     
                     has_start_image = bool(scene.get(f"{p}_image_media_id") or scene.get(f"{p}_image_url"))
-                    img_name = local_image_name_map.get(scene_id)
+                    img_name = None
+                    if media_id:
+                        img_name = local_image_name_map.get(media_id)
+                    if not img_name:
+                        std_m = scene.get(f"{p}_video_media_id")
+                        if std_m:
+                            img_name = local_image_name_map.get(std_m)
+                            
                     if not img_name and has_start_image:
                         img_url = scene.get(f"{p}_image_url")
                         if img_url:
