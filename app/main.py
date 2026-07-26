@@ -1246,7 +1246,9 @@ def _default_config() -> dict[str, Any]:
                 }
             },
             "flowkit_worker_delay_min": 10.0,
-            "flowkit_worker_delay_max": 20.0
+            "flowkit_worker_delay_max": 20.0,
+            "flow_video_presets": {},
+            "flow_po_presets": {}
         }
     else:
         h = os.path.expanduser("~")
@@ -1312,7 +1314,9 @@ def _default_config() -> dict[str, Any]:
                 }
             },
             "flowkit_worker_delay_min": 10.0,
-            "flowkit_worker_delay_max": 20.0
+            "flowkit_worker_delay_max": 20.0,
+            "flow_video_presets": {},
+            "flow_po_presets": {}
         }
 
     # Dynamically ensure all 30 rounds of image prompts and 10 rounds of video prompts are initialized in config

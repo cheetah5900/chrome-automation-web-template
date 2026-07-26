@@ -2018,11 +2018,20 @@ function applyFlowVideoPreset(presetName) {
     const upscale = document.getElementById('cfg_flow_upscale_auto');
     if (upscale) upscale.value = 'NONE';
     const lakornPath = document.getElementById('cfg_flow_lakorn_path');
-    if (lakornPath) lakornPath.value = '';
+    if (lakornPath) {
+      lakornPath.value = '';
+      lakornPath.dispatchEvent(new Event('input'));
+    }
     const lakornTon = document.getElementById('cfg_flow_lakorn_ton');
-    if (lakornTon) lakornTon.value = '';
+    if (lakornTon) {
+      lakornTon.value = '';
+      lakornTon.dispatchEvent(new Event('input'));
+    }
     const lakornEp = document.getElementById('cfg_flow_lakorn_ep');
-    if (lakornEp) lakornEp.value = '';
+    if (lakornEp) {
+      lakornEp.value = '';
+      lakornEp.dispatchEvent(new Event('input'));
+    }
     return;
   }
   
@@ -2047,13 +2056,22 @@ function applyFlowVideoPreset(presetName) {
   if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
   
   const lakornPath = document.getElementById('cfg_flow_lakorn_path');
-  if (lakornPath && preset.lakorn_path !== undefined) lakornPath.value = preset.lakorn_path;
+  if (lakornPath && preset.lakorn_path !== undefined) {
+    lakornPath.value = preset.lakorn_path;
+    lakornPath.dispatchEvent(new Event('input'));
+  }
   
   const lakornTon = document.getElementById('cfg_flow_lakorn_ton');
-  if (lakornTon && preset.lakorn_ton !== undefined) lakornTon.value = preset.lakorn_ton;
+  if (lakornTon && preset.lakorn_ton !== undefined) {
+    lakornTon.value = preset.lakorn_ton;
+    lakornTon.dispatchEvent(new Event('input'));
+  }
   
   const lakornEp = document.getElementById('cfg_flow_lakorn_ep');
-  if (lakornEp && preset.lakorn_ep !== undefined) lakornEp.value = preset.lakorn_ep;
+  if (lakornEp && preset.lakorn_ep !== undefined) {
+    lakornEp.value = preset.lakorn_ep;
+    lakornEp.dispatchEvent(new Event('input'));
+  }
   
   updateTooltips();
 }
@@ -4648,6 +4666,8 @@ let isScanningRetry = false;
 async function loadVideoPrompts() {
   try {
     const config = await jsonFetch('/api/config');
+    loadFlowVideoPresets(config.flow_video_presets);
+    loadFlowPoPresets(config.flow_po_presets);
 
     let maxRoundConfig = 1;
     for (const key in config) {
