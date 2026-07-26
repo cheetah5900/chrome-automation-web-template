@@ -1802,6 +1802,14 @@ class GeneratePendingRequest(BaseModel):
     output_count: int = 1
 
 
+@router.post("/dump-flow-project")
+async def dump_flow_project(body: DownloadProjectVideosRequest):
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    resp = await client.send_trpc_request("project.getProject", {"projectId": body.project_id})
+    return resp
+
 @router.post("/generate-pending")
 async def generate_pending_scenes(body: GeneratePendingRequest):
     from agent.db.schema import get_db, _db_lock
