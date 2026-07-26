@@ -6249,6 +6249,18 @@ function initFlowKitUploaderListeners() {
     const selectedIndices = parseRangeString(val);
     console.log("applyFlowRangeSelection parsed indices:", Array.from(selectedIndices));
     
+    const missingImageIndices = [];
+    selectedIndices.forEach(idxNum => {
+      const pair = flowScannedPairs.find(p => Number(p.index) === idxNum);
+      if (!pair || !pair.image_path || !pair.image_name) {
+        missingImageIndices.push(idxNum);
+      }
+    });
+    
+    if (missingImageIndices.length > 0) {
+      alert(`⚠️ คำเตือน: ลำดับต่อไปนี้ไม่มีรูปภาพประกอบ: ${missingImageIndices.sort((a, b) => a - b).join(', ')}`);
+    }
+    
     flowScannedPairs.forEach(p => {
       const idxNum = Number(p.index);
       p.checked = selectedIndices.has(idxNum);
