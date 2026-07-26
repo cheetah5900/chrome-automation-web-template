@@ -7326,19 +7326,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Toggle Autofill Scenes config visibility based on checkbox state
-  const chkScenes = document.getElementById('chkAutofillScenes');
-  const configDiv = document.getElementById('autofillScenesConfig');
-  if (chkScenes && configDiv) {
-    configDiv.style.display = chkScenes.checked ? 'flex' : 'none';
+  // Load and bind checkbox states with local storage
+  const chkChars = document.getElementById('chkAutofillChars');
+  if (chkChars) {
+    const saved = localStorage.getItem('flowkit_autofill_chars');
+    if (saved !== null) chkChars.checked = (saved === 'true');
+    chkChars.addEventListener('change', () => {
+      localStorage.setItem('flowkit_autofill_chars', chkChars.checked);
+    });
   }
 
-  chkScenes?.addEventListener('change', (e) => {
-    const configDiv = document.getElementById('autofillScenesConfig');
+  const chkLocs = document.getElementById('chkAutofillLocs');
+  if (chkLocs) {
+    const saved = localStorage.getItem('flowkit_autofill_locs');
+    if (saved !== null) chkLocs.checked = (saved === 'true');
+    chkLocs.addEventListener('change', () => {
+      localStorage.setItem('flowkit_autofill_locs', chkLocs.checked);
+    });
+  }
+
+  const chkProps = document.getElementById('chkAutofillProps');
+  if (chkProps) {
+    const saved = localStorage.getItem('flowkit_autofill_props');
+    if (saved !== null) chkProps.checked = (saved === 'true');
+    chkProps.addEventListener('change', () => {
+      localStorage.setItem('flowkit_autofill_props', chkProps.checked);
+    });
+  }
+
+  const chkScenes = document.getElementById('chkAutofillScenes');
+  const configDiv = document.getElementById('autofillScenesConfig');
+  if (chkScenes) {
+    const saved = localStorage.getItem('flowkit_autofill_scenes');
+    if (saved !== null) chkScenes.checked = (saved === 'true');
+    
+    // Set initial visibility
     if (configDiv) {
-      configDiv.style.display = e.target.checked ? 'flex' : 'none';
+      configDiv.style.display = chkScenes.checked ? 'flex' : 'none';
     }
-  });
+
+    chkScenes.addEventListener('change', () => {
+      localStorage.setItem('flowkit_autofill_scenes', chkScenes.checked);
+      if (configDiv) {
+        configDiv.style.display = chkScenes.checked ? 'flex' : 'none';
+      }
+    });
+  }
 
   // Storyboard Autofill Event Listener
   document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', async () => {
