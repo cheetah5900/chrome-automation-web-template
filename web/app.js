@@ -7283,147 +7283,144 @@ document.getElementById('btnGeneratePendingScenes')?.addEventListener('click', a
 });
 
 
-// Storyboard Autofill Event Listener
-// Load persisted delay from localStorage on startup
+// Storyboard Autofill Event Listeners & Configs
 document.addEventListener('DOMContentLoaded', () => {
+  // Load persisted delay from localStorage on startup
   const savedDelay = localStorage.getItem('flowkit_autofill_delay');
   const delayInput = document.getElementById('numAutofillDelay');
   if (delayInput && savedDelay) {
     delayInput.value = savedDelay;
   }
-});
 
-// Update localStorage when delay changes
-document.getElementById('numAutofillDelay')?.addEventListener('change', (e) => {
-  localStorage.setItem('flowkit_autofill_delay', e.target.value);
-});
+  // Update localStorage when delay changes
+  document.getElementById('numAutofillDelay')?.addEventListener('change', (e) => {
+    localStorage.setItem('flowkit_autofill_delay', e.target.value);
+  });
 
-// Set Default Delay button
-document.getElementById('btnSetAutofillDelayDefault')?.addEventListener('click', (e) => {
-  e.preventDefault();
-  const delayInput = document.getElementById('numAutofillDelay');
-  if (delayInput) {
-    delayInput.value = '1.5';
-    localStorage.setItem('flowkit_autofill_delay', '1.5');
-    showToast('Reset delay to default (1.5s)', 'info');
-  }
-});
-
-// Storyboard Autofill Event Listener
-document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', async () => {
-  const btn = document.getElementById('btnRunStoryboardAutofill');
-  const chkChars = document.getElementById('chkAutofillChars')?.checked;
-  const chkLocs = document.getElementById('chkAutofillLocs')?.checked;
-  const chkProps = document.getElementById('chkAutofillProps')?.checked;
-  const chkScenes = document.getElementById('chkAutofillScenes')?.checked;
-  
-  const delaySecVal = parseFloat(document.getElementById('numAutofillDelay')?.value || '1.5');
-  const rangeVal = document.getElementById('txtAutofillRange')?.value || '';
-  
-  const storyboardConsole = document.getElementById('storyboardConsole');
-  if (storyboardConsole) {
-    storyboardConsole.innerHTML = '<div class="console-line system">Starting Storyboard Autofill automation...</div>';
-  }
-  
-  const logToStoryboardConsole = (text, type = 'info') => {
-    if (!storyboardConsole) return;
-    const div = document.createElement('div');
-    div.className = `console-line ${type}`;
-    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
-    storyboardConsole.appendChild(div);
-    storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
-  };
-
-  if (btn) {
-    btn.disabled = true;
-    const btnText = btn.querySelector('.btn-text');
-    if (btnText) btnText.textContent = 'กำลังทำงาน...';
-  }
-  
-  try {
-    logToStoryboardConsole('Sending request to backend...', 'info');
-    const res = await jsonFetch('/api/step/storyboard-autofill', {
-      method: 'POST',
-      body: JSON.stringify({
-        autofill_characters: chkChars,
-        autofill_locations: chkLocs,
-        autofill_props: chkProps,
-        autofill_scenes: chkScenes,
-        delay_seconds: delaySecVal,
-        scene_range: rangeVal
-      })
-    });
-    
-    if (res && res.ok) {
-      logToStoryboardConsole(`SUCCESS: Clicked ${res.clicked_count} autofill button(s).`, 'success');
-      if (res.clicked_buttons && res.clicked_buttons.length > 0) {
-        res.clicked_buttons.forEach(btnName => {
-          logToStoryboardConsole(`- Clicked button: "${btnName}"`, 'success');
-        });
-      } else {
-        logToStoryboardConsole('No matching autofill buttons were found on the active page.', 'warning');
-      }
-      showToast('Storyboard Autofill completed successfully!', 'success');
-    } else {
-      const errMsg = res ? res.detail || JSON.stringify(res) : 'Unknown error';
-      logToStoryboardConsole(`FAILED: ${errMsg}`, 'error');
-      showToast('Autofill failed: ' + errMsg, 'error');
+  // Set Default Delay button
+  document.getElementById('btnSetAutofillDelayDefault')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const delayInput = document.getElementById('numAutofillDelay');
+    if (delayInput) {
+      delayInput.value = '1.5';
+      localStorage.setItem('flowkit_autofill_delay', '1.5');
+      showToast('Reset delay to default (1.5s)', 'info');
     }
-  } catch (err) {
-    logToStoryboardConsole(`ERROR: ${err.message || err}`, 'error');
-    showToast('Autofill error: ' + (err.message || err), 'error');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      const btnText = btn.querySelector('.btn-text');
-      if (btnText) btnText.textContent = '⚡ RUN AUTOFILL BUTTONS';
-    }
-  }
-});
+  });
 
-// Force Stop Autofill Event Listener
-document.getElementById('btnStopStoryboardAutofill')?.addEventListener('click', async () => {
-  const storyboardConsole = document.getElementById('storyboardConsole');
-  const logToStoryboardConsole = (text, type = 'info') => {
-    if (!storyboardConsole) return;
-    const div = document.createElement('div');
-    div.className = `console-line ${type}`;
-    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
-    storyboardConsole.appendChild(div);
-    storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
-  };
-
-  try {
-    logToStoryboardConsole('Sending Force Stop request to browser...', 'warning');
-    const res = await jsonFetch('/api/step/storyboard-autofill/stop', {
-      method: 'POST'
-    });
-    if (res && res.ok) {
-      logToStoryboardConsole('Force Stop request sent successfully! Checking if active script terminated...', 'success');
-      showToast('Autofill Force Stop request sent!', 'info');
-    } else {
-      logToStoryboardConsole('Failed to send stop request: ' + (res.message || 'Unknown'), 'error');
-    }
-  } catch (err) {
-    logToStoryboardConsole('Error sending stop request: ' + (err.message || err), 'error');
-  }
-});
-
-// Toggle Autofill Scenes config visibility based on checkbox state
-document.getElementById('chkAutofillScenes')?.addEventListener('change', (e) => {
-  const configDiv = document.getElementById('autofillScenesConfig');
-  if (configDiv) {
-    configDiv.style.display = e.target.checked ? 'flex' : 'none';
-  }
-});
-
-// Run same check on DOMContentLoaded to match initial state
-document.addEventListener('DOMContentLoaded', () => {
+  // Toggle Autofill Scenes config visibility based on checkbox state
   const chkScenes = document.getElementById('chkAutofillScenes');
   const configDiv = document.getElementById('autofillScenesConfig');
   if (chkScenes && configDiv) {
     configDiv.style.display = chkScenes.checked ? 'flex' : 'none';
   }
+
+  chkScenes?.addEventListener('change', (e) => {
+    const configDiv = document.getElementById('autofillScenesConfig');
+    if (configDiv) {
+      configDiv.style.display = e.target.checked ? 'flex' : 'none';
+    }
+  });
+
+  // Storyboard Autofill Event Listener
+  document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnRunStoryboardAutofill');
+    const chkChars = document.getElementById('chkAutofillChars')?.checked;
+    const chkLocs = document.getElementById('chkAutofillLocs')?.checked;
+    const chkProps = document.getElementById('chkAutofillProps')?.checked;
+    const chkScenes = document.getElementById('chkAutofillScenes')?.checked;
+    
+    const delaySecVal = parseFloat(document.getElementById('numAutofillDelay')?.value || '1.5');
+    const rangeVal = document.getElementById('txtAutofillRange')?.value || '';
+    
+    const storyboardConsole = document.getElementById('storyboardConsole');
+    if (storyboardConsole) {
+      storyboardConsole.innerHTML = '<div class="console-line system">Starting Storyboard Autofill automation...</div>';
+    }
+    
+    const logToStoryboardConsole = (text, type = 'info') => {
+      if (!storyboardConsole) return;
+      const div = document.createElement('div');
+      div.className = `console-line ${type}`;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      storyboardConsole.appendChild(div);
+      storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
+    };
+
+    if (btn) {
+      btn.disabled = true;
+      const btnText = btn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'กำลังทำงาน...';
+    }
+    
+    try {
+      logToStoryboardConsole('Sending request to backend...', 'info');
+      const res = await jsonFetch('/api/step/storyboard-autofill', {
+        method: 'POST',
+        body: JSON.stringify({
+          autofill_characters: chkChars,
+          autofill_locations: chkLocs,
+          autofill_props: chkProps,
+          autofill_scenes: chkScenes,
+          delay_seconds: delaySecVal,
+          scene_range: rangeVal
+        })
+      });
+      
+      if (res && res.ok) {
+        logToStoryboardConsole(`SUCCESS: Clicked ${res.clicked_count} autofill button(s).`, 'success');
+        if (res.clicked_buttons && res.clicked_buttons.length > 0) {
+          res.clicked_buttons.forEach(btnName => {
+            logToStoryboardConsole(`- Clicked button: "${btnName}"`, 'success');
+          });
+        } else {
+          logToStoryboardConsole('No matching autofill buttons were found on the active page.', 'warning');
+        }
+        showToast('Storyboard Autofill completed successfully!', 'success');
+      } else {
+        const errMsg = res ? res.detail || JSON.stringify(res) : 'Unknown error';
+        logToStoryboardConsole(`FAILED: ${errMsg}`, 'error');
+        showToast('Autofill failed: ' + errMsg, 'error');
+      }
+    } catch (err) {
+      logToStoryboardConsole(`ERROR: ${err.message || err}`, 'error');
+      showToast('Autofill error: ' + (err.message || err), 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        const btnText = btn.querySelector('.btn-text');
+        if (btnText) btnText.textContent = '⚡ RUN AUTOFILL BUTTONS';
+      }
+    }
+  });
+
+  // Force Stop Autofill Event Listener
+  document.getElementById('btnStopStoryboardAutofill')?.addEventListener('click', async () => {
+    const storyboardConsole = document.getElementById('storyboardConsole');
+    const logToStoryboardConsole = (text, type = 'info') => {
+      if (!storyboardConsole) return;
+      const div = document.createElement('div');
+      div.className = `console-line ${type}`;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      storyboardConsole.appendChild(div);
+      storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
+    };
+
+    try {
+      logToStoryboardConsole('Sending Force Stop request to browser...', 'warning');
+      const res = await jsonFetch('/api/step/storyboard-autofill/stop', {
+        method: 'POST'
+      });
+      if (res && res.ok) {
+        logToStoryboardConsole('Force Stop request sent successfully! Checking if active script terminated...', 'success');
+        showToast('Autofill Force Stop request sent!', 'info');
+      } else {
+        logToStoryboardConsole('Failed to send stop request: ' + (res.message || 'Unknown'), 'error');
+      }
+    } catch (err) {
+      logToStoryboardConsole('Error sending stop request: ' + (err.message || err), 'error');
+    }
+  });
 });
 
 
