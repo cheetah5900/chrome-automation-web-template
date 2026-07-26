@@ -5443,41 +5443,49 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
                         }
                     }
                     
-                    // Filter by range if specified
-                    let finalButtons = matchedButtons;
+                    // Parse range
+                    let rangeStart = 1;
+                    let rangeEnd = 999999;
+                    let hasRange = false;
                     if (rangeStr && rangeStr.trim()) {
-                        let startIndex = 1;
-                        let endIndex = matchedButtons.length;
+                        hasRange = true;
                         const parts = rangeStr.trim().split('-');
                         if (parts.length === 2) {
                             const s = parseInt(parts[0], 10);
                             const e = parseInt(parts[1], 10);
-                            if (!isNaN(s)) startIndex = s;
-                            if (!isNaN(e)) endIndex = e;
+                            if (!isNaN(s)) rangeStart = s;
+                            if (!isNaN(e)) rangeEnd = e;
                         } else {
                             const s = parseInt(rangeStr.trim(), 10);
                             if (!isNaN(s)) {
-                                startIndex = s;
-                                endIndex = s;
-                            }
-                        }
-                        
-                        finalButtons = [];
-                        for (let i = 0; i < matchedButtons.length; i++) {
-                            const btnNumber = i + 1;
-                            if (btnNumber >= startIndex && btnNumber <= endIndex) {
-                                finalButtons.push(matchedButtons[i]);
+                                rangeStart = s;
+                                rangeEnd = s;
                             }
                         }
                     }
                     
                     let clickedCount = 0;
                     let details = [];
-                    for (const btn of finalButtons) {
+                    let sceneIndex = 0;
+                    
+                    for (const btn of matchedButtons) {
                         if (window.autofillStopRequested) {
                             details.push("[STOPPED BY USER]");
                             break;
                         }
+                        
+                        const txt = btn.textContent.trim();
+                        const isSceneButton = txt.includes("Autofill Scene");
+                        
+                        if (isSceneButton) {
+                            sceneIndex++;
+                            if (hasRange) {
+                                if (sceneIndex < rangeStart || sceneIndex > rangeEnd) {
+                                    continue; // Skip scenes outside target range
+                                }
+                            }
+                        }
+                        
                         // Scroll to button to ensure visibility and prevent click interception
                         btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
                         // Small delay after scrolling to let UI settle
@@ -5488,7 +5496,7 @@ async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[s
                         }
                         btn.click();
                         clickedCount++;
-                        details.push(btn.textContent.trim());
+                        details.push(txt);
                         if (delayMs > 0) {
                             // Check stop request in chunks of 100ms during the delay
                             const startWait = Date.now();
