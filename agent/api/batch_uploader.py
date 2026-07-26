@@ -1590,6 +1590,16 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     if not scenes:
         raise HTTPException(status_code=404, detail="No scenes found for this project on Google Flow.")
         
+    try:
+        local_scenes = await crud.list_project_scenes(body.project_id)
+        local_order_map = {s["id"]: s["display_order"] for s in local_scenes}
+        logger.info("Found %d local scenes for project %s to map display order", len(local_scenes), body.project_id[:12])
+    except Exception as e:
+        logger.warning("Failed to fetch local project scenes: %s. Falling back to default ordering.", e)
+        local_order_map = {}
+
+    scenes.sort(key=lambda s: local_order_map.get(s.get("id"), s.get("display_order", 9999)))
+        
     counters = {"vertical": 1, "horizontal": 1}
     dup_counters = {}
         
@@ -1600,7 +1610,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for scene in scenes:
-            display_order = scene.get("display_order", 0)
+            display_order = local_order_map.get(scene.get("id"), scene.get("display_order", 0))
             scene_id = scene.get("id", "")
             
             for p in ("vertical", "horizontal"):
