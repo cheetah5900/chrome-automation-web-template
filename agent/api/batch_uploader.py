@@ -1683,6 +1683,12 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                         if not img_name:
                             img_name = f"Scene_{display_order:02d}"
                         
+                        import re
+                        if project_slug and img_name.startswith(f"{project_slug}_"):
+                            img_name = img_name[len(project_slug) + 1:]
+                        img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
+                        img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
+                        
                         dup_key = f"{p}_{img_name}"
                         dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
                         dup_idx = dup_counters[dup_key]
