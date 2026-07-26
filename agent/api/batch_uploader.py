@@ -1640,23 +1640,45 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         local_image_name_map = {}
 
     def get_sort_key(s):
+        img_name = None
         for prefix in ("vertical", "horizontal"):
             for key in (f"{prefix}_video_media_id", f"{prefix}_upscale_media_id"):
                 m_id = s.get(key)
                 if m_id:
                     img_name = local_image_name_map.get(m_id)
                     if img_name:
-                        import re
-                        num_part = re.search(r"\d+", img_name)
-                        if num_part:
-                            try:
-                                return int(num_part.group())
-                            except Exception:
-                                pass
-                        return img_name
-                    if m_id in local_order_map:
-                        return local_order_map[m_id]
-        return s.get("display_order", 9999)
+                        break
+            if img_name:
+                break
+                
+        if not img_name:
+            for prefix in ("vertical", "horizontal"):
+                img_url = s.get(f"{prefix}_image_url")
+                if img_url:
+                    if img_url.startswith("file://"):
+                        img_name = Path(img_url[7:]).stem
+                    else:
+                        img_name = Path(img_url).stem
+                    if img_name:
+                        break
+            if img_name:
+                import re
+                if project_slug and img_name.startswith(f"{project_slug}_"):
+                    img_name = img_name[len(project_slug) + 1:]
+                img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
+                img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
+
+        if img_name:
+            import re
+            num_part = re.search(r"\d+", img_name)
+            if num_part:
+                try:
+                    return (0, int(num_part.group()))
+                except Exception:
+                    pass
+            return (0, img_name)
+            
+        return (1, s.get("display_order", 9999))
 
     scenes.sort(key=get_sort_key)
         
