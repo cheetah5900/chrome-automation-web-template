@@ -257,6 +257,10 @@ class VideoGenStepPayload(BaseModel):
     google_flow_project_name: str = "7-1"
     auto_retry_mode: bool = False
     video_gen_mode: str = "selenium"
+    video_model: str = ""
+    output_count: int = 1
+    upscale_resolution: str = "NONE"
+
 
 
 
@@ -4499,19 +4503,69 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             existing_reqs = await crud.list_requests(scene_id=scene_id)
             active_req = [r for r in existing_reqs if r.get("type") == req_type and r.get("status") in ("PENDING", "PROCESSING")]
             
+            # Resolve parameters for video generation
+            edit_prompt_json = None
+            if req_type == "GENERATE_VIDEO":
+                import json as _json
+                vmodel = payload.video_model or "veo_3_1_i2v_s_fast"
+                params_dict = {
+                    "video_model": vmodel,
+                    "duration_seconds": 5,
+                    "output_count": payload.output_count
+                }
+                edit_prompt_json = _json.dumps(params_dict)
+
             if not active_req:
                 new_req = await crud.create_request(
                     project_id=project_id,
                     video_id=video_id,
                     scene_id=scene_id,
                     req_type=req_type,
-                    orientation=orientation
+                    orientation=orientation,
+                    edit_prompt=edit_prompt_json
                 )
                 log(f"[Flow Kit Queue] Submitted request: {new_req['id']}")
+                
+                # Check if we should also queue UPSCALE_VIDEO
+                if req_type == "GENERATE_VIDEO" and payload.upscale_resolution and payload.upscale_resolution != "NONE":
+                    upscale_active = [r for r in existing_reqs if r.get("type") == "UPSCALE_VIDEO" and r.get("status") in ("PENDING", "PROCESSING")]
+                    if not upscale_active:
+                        upscale_params = {
+                            "resolution": payload.upscale_resolution
+                        }
+                        await crud.create_request(
+                            project_id=project_id,
+                            video_id=video_id,
+                            scene_id=scene_id,
+                            req_type="UPSCALE_VIDEO",
+                            orientation=orientation,
+                            edit_prompt=_json.dumps(upscale_params)
+                        )
+                        log(f"[Flow Kit Queue] Submitted UPSCALE_VIDEO request for resolution: {payload.upscale_resolution}")
+                
                 return {"ok": True, "message": f"ส่งคำขอไปยังคิว Flow Kit สำเร็จ (ประเภท: {req_type})", "status": "PENDING"}
             else:
                 log(f"[Flow Kit Queue] Request already active: {active_req[0]['id']}")
+                
+                # Double-check if we should queue UPSCALE_VIDEO even if GENERATE_VIDEO is already active/pending
+                if req_type == "GENERATE_VIDEO" and payload.upscale_resolution and payload.upscale_resolution != "NONE":
+                    upscale_active = [r for r in existing_reqs if r.get("type") == "UPSCALE_VIDEO" and r.get("status") in ("PENDING", "PROCESSING")]
+                    if not upscale_active:
+                        upscale_params = {
+                            "resolution": payload.upscale_resolution
+                        }
+                        await crud.create_request(
+                            project_id=project_id,
+                            video_id=video_id,
+                            scene_id=scene_id,
+                            req_type="UPSCALE_VIDEO",
+                            orientation=orientation,
+                            edit_prompt=_json.dumps(upscale_params)
+                        )
+                        log(f"[Flow Kit Queue] Submitted UPSCALE_VIDEO request for resolution: {payload.upscale_resolution}")
+                        
                 return {"ok": True, "message": f"คำขอนี้กำลังทำงานอยู่แล้วในคิว Flow Kit (ประเภท: {req_type})", "status": active_req[0]['status']}
+
         except Exception as flow_err:
             log(f"[Flow Kit Error] {flow_err}")
             raise HTTPException(status_code=500, detail=f"Flow Kit Error: {flow_err}")
@@ -5284,7 +5338,71 @@ async def step_seedance(payload: SeedancePayload):
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาดขณะส่งพรอพต์: {e}")
 
 
+class StoryboardAutofillPayload(BaseModel):
+    autofill_characters: bool = True
+    autofill_locations: bool = True
+    autofill_props: bool = True
+
+
+@app.post("/api/step/storyboard-autofill")
+async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[str, Any]:
+    try:
+        bot = browser_manager.get()
+        if not bot or not bot.driver:
+            raise Exception("Browser is not active. Please launch a browser profile first.")
+        
+        driver = bot.driver
+        
+        # 1. Switch to Google Flow tab if it exists
+        switched = False
+        for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+            if bot.switch_to_tab_containing(url_part):
+                switched = True
+                break
+                
+        if not switched:
+            raise Exception("Google Flow tab was not found in the browser. Please open Google Flow first.")
+
+        # 2. Build list of button text targets to autofill based on payload
+        targets = []
+        if payload.autofill_characters:
+            targets.append("Autofill Characters")
+        if payload.autofill_locations:
+            targets.append("Autofill Locations")
+        if payload.autofill_props:
+            targets.append("Autofill Props")
+
+        if not targets:
+            return {"ok": True, "clicked_count": 0, "clicked_buttons": []}
+
+        # 3. Execute JS in browser context to find and click the buttons
+        import json as _json
+        js_targets = _json.dumps(targets)
+        script = f"""
+        const targets = {js_targets};
+        const buttons = Array.from(document.querySelectorAll('button'));
+        let clickedCount = 0;
+        let details = [];
+        for (const btn of buttons) {{
+            const txt = btn.textContent.trim();
+            if (targets.some(t => txt.includes(t))) {{
+                btn.click();
+                clickedCount++;
+                details.push(txt);
+            }}
+        }}
+        return {{ clicked_count: clickedCount, clicked_buttons: details }};
+        """
+        result = driver.execute_script(script)
+        log(f"[Storyboard Autofill] Clicked {result['clicked_count']} autofill buttons: {result['clicked_buttons']}")
+        return {"ok": True, "clicked_count": result["clicked_count"], "clicked_buttons": result["clicked_buttons"]}
+    except Exception as e:
+        log(f"[Storyboard Autofill] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/")
+
 def index():
     return FileResponse(BASE_DIR / "web" / "index.html")
 

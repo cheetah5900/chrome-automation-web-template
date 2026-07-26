@@ -268,6 +268,13 @@ ${step5}
 - Set 1: 4-6 (เอาคลิป 4,5,6 มารวมกัน)<br>
 - Set 2: 7-9 (เอาคลิป 7,8,9 มารวมกัน)</em>`;
   }
+
+  const tooltipRunStoryboard = document.getElementById('tooltip_btnRunStoryboardAutofill');
+  if (tooltipRunStoryboard) {
+    tooltipRunStoryboard.textContent = `📋 รันการเติมข้อมูล (Autofill):
+1. ระบบจะหาปุ่มทั้งหมดที่ตรงกับตัวเลือก
+2. สั่ง Chrome ให้คลิกเพื่อป้อนข้อมูลตัวละคร/สถานที่/อุปกรณ์ ในหน้าเว็บ Google Flow โดยอัตโนมัติ`;
+  }
 }
 
 async function loadSettings() {
@@ -706,12 +713,14 @@ inputsToListen.forEach(id => {
 // Tab Switching
 function initTabNavigation() {
   const btnImageGen = document.getElementById('tabImageGenBtn');
+  const btnStoryboardGen = document.getElementById('tabStoryboardGenBtn');
   const btnVideoGen = document.getElementById('tabVideoGenBtn');
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
   
   const viewImageGen = document.getElementById('imageGenView');
+  const viewStoryboardGen = document.getElementById('storyboardGenView');
   const viewVideoGen = document.getElementById('videoGenView');
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
@@ -719,6 +728,7 @@ function initTabNavigation() {
 
   const tabs = [
     { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
+    { btn: btnStoryboardGen, view: viewStoryboardGen, onLoad: () => { console.log('Storyboard loaded'); } },
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
@@ -5642,6 +5652,21 @@ function initVideoGenListeners() {
             const isAutoRetry = !!document.getElementById('cfg_auto_retry_mode')?.checked;
             let success = false;
 
+            const videoGenModeVal = document.getElementById('cfg_video_gen_mode')?.value || 'selenium';
+            let videoModelVal = 'veo_3_1_i2v_lite_low_priority';
+            let outputCountVal = 1;
+            let upscaleResolutionVal = 'NONE';
+            
+            if (videoGenModeVal === 'flow_kit_prompt_only') {
+              videoModelVal = document.getElementById('cfg_flow_po_video_model')?.value || 'veo_3_1_t2v_lite_low_priority';
+              outputCountVal = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
+              upscaleResolutionVal = document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE';
+            } else if (videoGenModeVal === 'flow_kit') {
+              videoModelVal = document.getElementById('cfg_flow_video_model')?.value || 'veo_3_1_i2v_lite_low_priority';
+              outputCountVal = parseInt(document.getElementById('cfg_flow_output_count')?.value, 10) || 1;
+              upscaleResolutionVal = document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE';
+            }
+
             success = await executeStep('/api/step/video-gen', {
               prompt: p,
               round_idx: r,
@@ -5653,7 +5678,11 @@ function initVideoGenListeners() {
               video_submit_selector: submitSelectorVal,
               video_wait_seconds: randomCooldown,
               is_first_run: isFirstPrompt,
-              auto_retry_mode: isAutoRetry
+              auto_retry_mode: isAutoRetry,
+              video_gen_mode: videoGenModeVal,
+              video_model: videoModelVal,
+              output_count: outputCountVal,
+              upscale_resolution: upscaleResolutionVal
             }, null, 'videoConsole');
 
             isFirstPrompt = false;
@@ -6404,6 +6433,10 @@ async function loadFlowKitProjects() {
 }
 
 async function updateProjectStats() {
+  return; // Disabled Project Scene Statuses section
+}
+
+async function updateProjectStats_disabled() {
   const genMode = document.getElementById('cfg_video_gen_mode')?.value;
   let projectId = '';
   if (genMode === 'flow_kit_prompt_only') {
@@ -7276,4 +7309,71 @@ document.getElementById('btnGeneratePendingScenes')?.addEventListener('click', a
     }
   }
 });
+
+
+// Storyboard Autofill Event Listener
+document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btnRunStoryboardAutofill');
+  const chkChars = document.getElementById('chkAutofillChars')?.checked;
+  const chkLocs = document.getElementById('chkAutofillLocs')?.checked;
+  const chkProps = document.getElementById('chkAutofillProps')?.checked;
+  
+  const storyboardConsole = document.getElementById('storyboardConsole');
+  if (storyboardConsole) {
+    storyboardConsole.innerHTML = '<div class="console-line system">Starting Storyboard Autofill automation...</div>';
+  }
+  
+  const logToStoryboardConsole = (text, type = 'info') => {
+    if (!storyboardConsole) return;
+    const div = document.createElement('div');
+    div.className = `console-line ${type}`;
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    storyboardConsole.appendChild(div);
+    storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
+  };
+
+  if (btn) {
+    btn.disabled = true;
+    const btnText = btn.querySelector('.btn-text');
+    if (btnText) btnText.textContent = 'กำลังทำงาน...';
+  }
+  
+  try {
+    logToStoryboardConsole('Sending request to backend...', 'info');
+    const res = await jsonFetch('/api/step/storyboard-autofill', {
+      method: 'POST',
+      body: JSON.stringify({
+        autofill_characters: chkChars,
+        autofill_locations: chkLocs,
+        autofill_props: chkProps
+      })
+    });
+    
+    if (res && res.ok) {
+      logToStoryboardConsole(`SUCCESS: Clicked ${res.clicked_count} autofill button(s).`, 'success');
+      if (res.clicked_buttons && res.clicked_buttons.length > 0) {
+        res.clicked_buttons.forEach(btnName => {
+          logToStoryboardConsole(`- Clicked button: "${btnName}"`, 'success');
+        });
+      } else {
+        logToStoryboardConsole('No matching autofill buttons were found on the active page.', 'warning');
+      }
+      showToast('Storyboard Autofill completed successfully!', 'success');
+    } else {
+      const errMsg = res ? res.detail || JSON.stringify(res) : 'Unknown error';
+      logToStoryboardConsole(`FAILED: ${errMsg}`, 'error');
+      showToast('Autofill failed: ' + errMsg, 'error');
+    }
+  } catch (err) {
+    logToStoryboardConsole(`ERROR: ${err.message || err}`, 'error');
+    showToast('Autofill error: ' + (err.message || err), 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      const btnText = btn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = '⚡ RUN AUTOFILL BUTTONS';
+    }
+  }
+});
+
 

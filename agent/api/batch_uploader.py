@@ -1686,10 +1686,19 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                         dup_key = f"{p}_{img_name}"
                         dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
                         dup_idx = dup_counters[dup_key]
-                        arcname = f"{project_slug}_{img_name}_{dup_idx}_{orient_suffix}{upscale_suffix}.mp4"
+                        
+                        suffix_str = ""
+                        if is_upscale:
+                            suffix_str += "_upscaled"
+                        if dup_idx > 1:
+                            suffix_str += f"_{dup_idx}"
+                        arcname = f"{img_name}{suffix_str}.mp4"
                     else:
                         idx = counters[p]
-                        arcname = f"{project_slug}_{idx:03d}_{orient_suffix}{upscale_suffix}.mp4"
+                        suffix_str = ""
+                        if is_upscale:
+                            suffix_str += "_upscaled"
+                        arcname = f"scene_{idx:03d}{suffix_str}.mp4"
                         counters[p] += 1
                         
                     zip_file.write(local_path, arcname=arcname)

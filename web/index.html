@@ -70,6 +70,7 @@
 
       <div class="tabs-container">
         <button id="tabImageGenBtn" class="tab-btn active">🖼️ Image Generation</button>
+        <button id="tabStoryboardGenBtn" class="tab-btn">📋 Storyboard Generation</button>
         <button id="tabVideoGenBtn" class="tab-btn">🎬 Video Generation</button>
         <button id="tabVideoHelperBtn" class="tab-btn">🎥 Video Helper</button>
         <button id="tabSeedanceGenBtn" class="tab-btn">💃 Seedance Gen</button>
@@ -300,6 +301,59 @@
               <div class="console-line system">Waiting for generation to start...</div>
             </div>
           </section>
+        </div>
+      </div>
+
+      <!-- VIEW: STORYBOARD GENERATION -->
+      <div id="storyboardGenView" class="tab-view hidden">
+        <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+          <!-- Left: Controls Card -->
+          <div class="card" style="flex: 1; min-width: 300px; padding: 25px; border: 1px solid rgba(139, 92, 246, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+            <h2 class="section-title" style="font-size: 1.3rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #a78bfa;">
+              📋 Storyboard Generation Autofill
+            </h2>
+            <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-bottom: 20px; line-height: 1.5;">
+              ระบบจะสแกนหาปุ่มเติมข้อมูล <code>Autofill Characters</code>, <code>Autofill Locations</code>, และ <code>Autofill Props</code> ทั้งหมดในโปรเจกต์ Google Flow ที่กำลังเปิดอยู่ในเบราว์เซอร์ และกดปุ่มทั้งหมดให้โดยอัตโนมัติ
+            </p>
+
+            <!-- Selection Checklist -->
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; background: rgba(255,255,255,0.02); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+              <label style="font-size: 0.85rem; font-weight: bold; color: rgba(255,255,255,0.85); margin-bottom: 4px; display: block;">เลือกประเภทปุ่มที่ต้องการกด:</label>
+              
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: #fff;">
+                <input type="checkbox" id="chkAutofillChars" checked style="width: 16px; height: 16px; accent-color: #8b5cf6;" />
+                <span>Autofill Characters (ข้อมูลตัวละคร)</span>
+              </label>
+
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: #fff;">
+                <input type="checkbox" id="chkAutofillLocs" checked style="width: 16px; height: 16px; accent-color: #8b5cf6;" />
+                <span>Autofill Locations (ข้อมูลสถานที่)</span>
+              </label>
+
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: #fff;">
+                <input type="checkbox" id="chkAutofillProps" checked style="width: 16px; height: 16px; accent-color: #8b5cf6;" />
+                <span>Autofill Props (ข้อมูลอุปกรณ์ประกอบฉาก)</span>
+              </label>
+            </div>
+
+            <!-- Run Button -->
+            <div class="relative inline-block w-full">
+              <button id="btnRunStoryboardAutofill" class="primary" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); border: none; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                <span class="btn-text">⚡ RUN AUTOFILL BUTTONS</span>
+              </button>
+              <div id="tooltip_btnRunStoryboardAutofill" class="tooltip-bubble">คลิกเพื่อกดปุ่ม Autofill ทั้งหมดที่เลือกในหน้า Google Flow ทันที</div>
+            </div>
+          </div>
+
+          <!-- Right: Console Card -->
+          <div class="card" style="flex: 1.5; min-width: 350px; padding: 25px; display: flex; flex-direction: column; height: 380px;">
+            <h3 style="font-size: 1rem; margin: 0 0 12px 0; color: #a78bfa; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+              📟 Storyboard Autofill Logs Console
+            </h3>
+            <div id="storyboardConsole" class="console" style="flex: 1; min-height: 250px; background: #0b0f19; font-family: monospace; font-size: 0.85rem; padding: 15px; border-radius: 8px; overflow-y: auto; color: #a0aec0; border: 1px solid rgba(255,255,255,0.05); white-space: pre-wrap; line-height: 1.4;">
+              <div class="console-line system">Waiting to start storyboard autofill...</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -736,44 +790,8 @@
             </div>
           </section>
 
-          <!-- Unified Project Scene Statuses Card -->
-          <section id="flow_downloader_stats" class="card" style="display: none; padding: 20px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
-              <h2 class="section-title" style="font-size: 1.15rem; margin-bottom: 0;">📋 สถานะไฟล์วิดีโอในโปรเจกต์ (Project Scene Statuses)</h2>
-              <div style="display: flex; gap: 8px;">
-                <button id="btnGeneratePendingScenes" class="secondary" style="padding: 6px 12px; font-size: 0.78rem; font-weight: bold; border-radius: 12px; background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.25); color: #60a5fa; margin: 0; cursor: pointer; transition: all 0.2s ease;">
-                  ⚡ เจเนอเรทรายการที่ยังไม่ได้สร้าง
-                </button>
-                <button id="btnClearPendingScenes" class="secondary" style="padding: 6px 12px; font-size: 0.78rem; font-weight: bold; border-radius: 12px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0; cursor: pointer; transition: all 0.2s ease;">
-                  🗑️ ล้างรายการที่ยังไม่ได้สร้าง
-                </button>
-              </div>
-            </div>
-            
-            <div style="display: flex; gap: 10px; justify-content: flex-start; align-items: center; width: 100%; flex-wrap: wrap; margin-bottom: 16px; background: rgba(255,255,255,0.02); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);">
-              <span style="color: rgba(255,255,255,0.6); font-weight: 500; font-size: 0.82rem;">📊 กรองตามสถานะ:</span>
-              <span id="badge_filter_all" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; font-size: 0.82rem; transition: all 0.2s;">📋 ทั้งหมด: <strong id="flow_stats_total" style="color: #fff; font-size: 0.95rem;">0</strong></span>
-              <span id="badge_filter_created" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid transparent; color: #8da6ff; font-size: 0.82rem; transition: all 0.2s;">🎬 สร้างแล้ว: <strong id="flow_stats_created_count" style="color: #8da6ff; font-size: 0.95rem;">0</strong></span>
-              <span id="badge_filter_upscaled" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid transparent; color: #5eff5e; font-size: 0.82rem; transition: all 0.2s;">⚡ Upscale แล้ว: <strong id="flow_stats_upscaled" style="color: #5eff5e; font-size: 0.95rem;">0</strong></span>
-              <span id="badge_filter_remaining" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid transparent; color: #ffb86c; font-size: 0.82rem; transition: all 0.2s;">⏳ ยังไม่ได้ upscale: <strong id="flow_stats_remaining" style="color: #ffb86c; font-size: 0.95rem;">0</strong></span>
-              <span id="badge_filter_pending" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid transparent; color: rgba(255,255,255,0.6); font-size: 0.82rem; transition: all 0.2s;">💤 ยังไม่ได้สร้าง: <strong id="flow_stats_pending_count" style="color: rgba(255,255,255,0.8); font-size: 0.95rem;">0</strong></span>
-            </div>
 
-            <!-- Unified Scene Statuses Table -->
-            <div id="flow_stats_table_container" style="display: block; width: 100%; overflow-x: auto; max-height: 450px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,0.2);">
-              <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.8rem; color: #fff;">
-                <thead>
-                  <tr style="background: rgba(255,255,255,0.04); border-bottom: 2px solid rgba(255,255,255,0.12); color: #8da6ff; font-weight: bold;">
-                    <th style="padding: 10px 14px; width: 70%;">รอบเจเนอเรท</th>
-                    <th style="padding: 10px 14px; width: 30%;">ทิศทาง</th>
-                  </tr>
-                </thead>
-                <tbody id="flow_stats_table_body">
-                  <!-- Dynamic rows injected here -->
-                </tbody>
-              </table>
-            </div>
-          </section>
+
 
           <!-- Flow Kit Video Downloader Section -->
           <section class="card" style="padding: 20px; border: 1px solid rgba(234, 179, 8, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
