@@ -175,6 +175,16 @@ async def startup_flow_kit():
         
         # 4. Start WebSocket Server and worker processor
         controller = get_worker_controller()
+        
+        # Load worker cooldown settings from config on startup
+        try:
+            delay_min = float(_get_config_value("flowkit_worker_delay_min", 10.0))
+            delay_max = float(_get_config_value("flowkit_worker_delay_max", 20.0))
+            controller.update_cooldown(delay_min, delay_max)
+            print(f"Flow Kit worker API delay range configured: {delay_min}s - {delay_max}s")
+        except Exception as cooldown_err:
+            print(f"Failed to apply worker cooldown range config: {cooldown_err}")
+            
         _flow_kit_ws_task = asyncio.create_task(run_ws_server())
         _flow_kit_worker_task = asyncio.create_task(controller.start())
         print("Flow Kit background services (WebSocket + Worker) started successfully!")
@@ -1234,7 +1244,9 @@ def _default_config() -> dict[str, Any]:
                     "unsharp": "5:5:0.7:3:3:0.3",
                     "durations": [3.56, 5.2, 5.6, 4.8, 4.88]
                 }
-            }
+            },
+            "flowkit_worker_delay_min": 10.0,
+            "flowkit_worker_delay_max": 20.0
         }
     else:
         h = os.path.expanduser("~")
@@ -1298,7 +1310,9 @@ def _default_config() -> dict[str, Any]:
                     "unsharp": "5:5:0.7:3:3:0.3",
                     "durations": [3.56, 5.2, 5.6, 4.8, 4.88]
                 }
-            }
+            },
+            "flowkit_worker_delay_min": 10.0,
+            "flowkit_worker_delay_max": 20.0
         }
 
     # Dynamically ensure all 30 rounds of image prompts and 10 rounds of video prompts are initialized in config
@@ -1701,6 +1715,19 @@ def set_config(payload: dict[str, Any]) -> dict[str, Any]:
 
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=4)
+            
+        # Update active worker cooldown range if present in payload
+        if "flowkit_worker_delay_min" in payload and "flowkit_worker_delay_max" in payload:
+            try:
+                from agent.worker.processor import get_worker_controller
+                controller = get_worker_controller()
+                delay_min = float(payload["flowkit_worker_delay_min"])
+                delay_max = float(payload["flowkit_worker_delay_max"])
+                controller.update_cooldown(delay_min, delay_max)
+                log(f"[Worker Config] Updated cooldown range: {delay_min}s - {delay_max}s")
+            except Exception as cooldown_err:
+                log(f"[Worker Config] Failed to update active worker delay: {cooldown_err}")
+                
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed writing config: {e}")
@@ -1725,6 +1752,19 @@ def set_default(payload: dict[str, Any]) -> dict[str, Any]:
         data[key] = value
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
+            
+        # Update active worker cooldown range if relevant key is saved
+        if key in ("flowkit_worker_delay_min", "flowkit_worker_delay_max"):
+            try:
+                from agent.worker.processor import get_worker_controller
+                controller = get_worker_controller()
+                delay_min = float(data.get("flowkit_worker_delay_min", 10.0))
+                delay_max = float(data.get("flowkit_worker_delay_max", 20.0))
+                controller.update_cooldown(delay_min, delay_max)
+                log(f"[Worker Config] Updated cooldown range after set-default: {delay_min}s - {delay_max}s")
+            except Exception as cooldown_err:
+                log(f"[Worker Config] Failed to update active worker delay on default save: {cooldown_err}")
+                
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed writing config: {e}")

@@ -33,20 +33,29 @@ _TYPE_PRIORITY = {
 }
 
 
+import random
+
+
 class APIRateLimiter:
     """Enforces max concurrent requests AND minimum gap between API calls."""
-    def __init__(self, max_concurrent: int, cooldown_seconds: float):
+    def __init__(self, max_concurrent: int, cooldown_min: float, cooldown_max: float = None):
         self._semaphore = asyncio.Semaphore(max_concurrent)
-        self._cooldown = cooldown_seconds
+        self._cooldown_min = cooldown_min
+        self._cooldown_max = cooldown_max if cooldown_max is not None else cooldown_min
         self._last_call = 0.0
         self._gate = asyncio.Lock()
+
+    def set_cooldown(self, cooldown_min: float, cooldown_max: float):
+        self._cooldown_min = cooldown_min
+        self._cooldown_max = cooldown_max
 
     async def acquire(self):
         await self._semaphore.acquire()
         async with self._gate:
             elapsed = time.monotonic() - self._last_call
-            if elapsed < self._cooldown:
-                await asyncio.sleep(self._cooldown - elapsed)
+            cooldown = random.uniform(self._cooldown_min, self._cooldown_max)
+            if elapsed < cooldown:
+                await asyncio.sleep(cooldown - elapsed)
             self._last_call = time.monotonic()
 
     def release(self):
@@ -59,9 +68,18 @@ class WorkerController:
     def __init__(self):
         self._shutdown = asyncio.Event()
         self._active_ids: set[str] = set()
-        self._rate_limiter = APIRateLimiter(MAX_CONCURRENT_REQUESTS, API_COOLDOWN)
+        # Initialize with default cooldown as both min and max
+        self._rate_limiter = APIRateLimiter(MAX_CONCURRENT_REQUESTS, API_COOLDOWN, API_COOLDOWN)
         self._deferred: dict[str, float] = {}  # rid -> defer_until timestamp
         self._retry_after: dict[str, float] = {}  # rid -> retry_after timestamp
+
+    def update_cooldown(self, cooldown_min: float, cooldown_max: float):
+        """Update worker API cooldown range dynamically."""
+        self._rate_limiter.set_cooldown(cooldown_min, cooldown_max)
+
+    def get_cooldown_range(self) -> tuple[float, float]:
+        """Get current worker API cooldown range."""
+        return self._rate_limiter._cooldown_min, self._rate_limiter._cooldown_max
 
     @property
     def active_count(self) -> int:

@@ -4726,6 +4726,13 @@ async function loadVideoPrompts() {
 
     calculateFlowKitPaths();
 
+    // Flow Kit Worker Delay Range loading
+    const workerDelayMin = document.getElementById('cfg_flowkit_worker_delay_min');
+    if (workerDelayMin) workerDelayMin.value = config.flowkit_worker_delay_min !== undefined ? config.flowkit_worker_delay_min : '10.0';
+
+    const workerDelayMax = document.getElementById('cfg_flowkit_worker_delay_max');
+    if (workerDelayMax) workerDelayMax.value = config.flowkit_worker_delay_max !== undefined ? config.flowkit_worker_delay_max : '20.0';
+
     const videoGenMode = document.getElementById('cfg_video_gen_mode');
     if (videoGenMode) {
       videoGenMode.value = config.video_gen_mode || 'selenium';
@@ -5071,6 +5078,8 @@ async function saveVideoPrompts(silent = false) {
       video_settings_selector: document.getElementById('cfg_video_settings_selector')?.value.trim() || '',
       video_submit_selector: document.getElementById('cfg_video_submit_selector')?.value.trim() || '',
       video_gen_mode: document.getElementById('cfg_video_gen_mode')?.value || 'selenium',
+      flowkit_worker_delay_min: parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0,
+      flowkit_worker_delay_max: parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0,
     };
     
     for (const k in payload) {
@@ -5528,6 +5537,20 @@ function initVideoGenListeners() {
   const autoRetryCheckbox = document.getElementById('cfg_auto_retry_mode');
   if (autoRetryCheckbox) {
     autoRetryCheckbox.addEventListener('change', () => {
+      saveVideoPrompts(true);
+    });
+  }
+
+  const workerDelayMinInput = document.getElementById('cfg_flowkit_worker_delay_min');
+  if (workerDelayMinInput) {
+    workerDelayMinInput.addEventListener('change', () => {
+      saveVideoPrompts(true);
+    });
+  }
+
+  const workerDelayMaxInput = document.getElementById('cfg_flowkit_worker_delay_max');
+  if (workerDelayMaxInput) {
+    workerDelayMaxInput.addEventListener('change', () => {
       saveVideoPrompts(true);
     });
   }
