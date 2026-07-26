@@ -1807,7 +1807,18 @@ async def dump_flow_project(body: DownloadProjectVideosRequest):
     client = get_flow_client()
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
-    resp = await client.send_trpc_request("project.getProject", {"projectId": body.project_id})
+    
+    import urllib.parse
+    import json as _json
+    input_params = {"json": {"projectId": body.project_id, "toolName": "PINHOLE"}}
+    encoded_input = urllib.parse.quote(_json.dumps(input_params))
+    url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
+    
+    resp = await client._send("trpc_request", {
+        "url": url,
+        "method": "GET",
+        "headers": {"accept": "*/*"}
+    }, timeout=15)
     return resp
 
 @router.post("/generate-pending")
