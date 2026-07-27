@@ -6249,22 +6249,35 @@ function initFlowKitUploaderListeners() {
     const selectedIndices = parseRangeString(val);
     console.log("applyFlowRangeSelection parsed indices:", Array.from(selectedIndices));
     
-    const missingImageIndices = [];
-    selectedIndices.forEach(idxNum => {
-      const pair = flowScannedPairs.find(p => Number(p.index) === idxNum);
-      if (!pair || !pair.image_path || !pair.image_name) {
-        missingImageIndices.push(idxNum);
+    const getPairFileNumber = (p) => {
+      const name = p.image_name || p.prompt_name || '';
+      const match = name.match(/^(\d+)/);
+      return match ? parseInt(match[1], 10) : Number(p.index);
+    };
+
+    const isPromptOnly = flowScannedPairs.every(p => !p.image_path);
+    if (!isPromptOnly) {
+      const missingImageIndices = [];
+      selectedIndices.forEach(idxNum => {
+        const pair = flowScannedPairs.find(p => {
+          const fileNum = getPairFileNumber(p);
+          return fileNum === idxNum || Number(p.index) === idxNum;
+        });
+        if (!pair || !pair.image_path || !pair.image_name) {
+          missingImageIndices.push(idxNum);
+        }
+      });
+      
+      if (missingImageIndices.length > 0) {
+        alert(`⚠️ คำเตือน: ลำดับต่อไปนี้ไม่มีรูปภาพประกอบ: ${missingImageIndices.sort((a, b) => a - b).join(', ')}`);
       }
-    });
-    
-    if (missingImageIndices.length > 0) {
-      alert(`⚠️ คำเตือน: ลำดับต่อไปนี้ไม่มีรูปภาพประกอบ: ${missingImageIndices.sort((a, b) => a - b).join(', ')}`);
     }
     
     flowScannedPairs.forEach(p => {
+      const fileNum = getPairFileNumber(p);
       const idxNum = Number(p.index);
-      p.checked = selectedIndices.has(idxNum);
-      console.log(`Pair index ${p.index} (numeric: ${idxNum}) matches selection: ${p.checked}`);
+      p.checked = selectedIndices.has(fileNum) || selectedIndices.has(idxNum);
+      console.log(`Pair index ${p.index} (fileNum: ${fileNum}, numeric: ${idxNum}) matches selection: ${p.checked}`);
     });
     
     renderScannedPairs();
