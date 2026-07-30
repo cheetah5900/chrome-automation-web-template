@@ -1984,7 +1984,8 @@ let globalFlowPoPresets = {};
 
 function loadFlowVideoPresets(presets) {
   globalFlowVideoPresets = presets || {};
-  renderFlowVideoPresetsSelect();
+  const lastPreset = localStorage.getItem('flowVideoLastPreset') || '';
+  renderFlowVideoPresetsSelect(lastPreset);
 }
 
 function renderFlowVideoPresetsSelect(selectedKey = '') {
@@ -2000,7 +2001,7 @@ function renderFlowVideoPresetsSelect(selectedKey = '') {
     select.appendChild(opt);
   });
   
-  if (selectedKey) {
+  if (selectedKey && globalFlowVideoPresets.hasOwnProperty(selectedKey)) {
     select.value = selectedKey;
   }
 }
@@ -2103,7 +2104,9 @@ async function saveFlowVideoPreset() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'flow_video_presets', value: globalFlowVideoPresets })
     });
+    localStorage.setItem('flowVideoLastPreset', cleanName);
     renderFlowVideoPresetsSelect(cleanName);
+    applyFlowVideoPreset(cleanName);
     alert(`บันทึก Preset "${cleanName}" สำเร็จ`);
   } catch (e) {
     alert(`เกิดข้อผิดพลาดในการบันทึก: ${e.message}`);
@@ -2128,7 +2131,11 @@ async function deleteFlowVideoPreset() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'flow_video_presets', value: globalFlowVideoPresets })
     });
+    if (localStorage.getItem('flowVideoLastPreset') === selectedKey) {
+      localStorage.removeItem('flowVideoLastPreset');
+    }
     renderFlowVideoPresetsSelect();
+    applyFlowVideoPreset('');
     alert(`ลบ Preset "${selectedKey}" สำเร็จ`);
   } catch (e) {
     alert(`เกิดข้อผิดพลาดในการลบ: ${e.message}`);
@@ -3550,7 +3557,9 @@ function initWorkflowActionListeners() {
   const flowVideoPresetSelect = document.getElementById('flowVideoPresetSelect');
   if (flowVideoPresetSelect) {
     flowVideoPresetSelect.addEventListener('change', (e) => {
-      applyFlowVideoPreset(e.target.value);
+      const presetName = e.target.value;
+      localStorage.setItem('flowVideoLastPreset', presetName);
+      applyFlowVideoPreset(presetName);
     });
   }
   const saveFlowVideoPresetBtn = document.getElementById('saveFlowVideoPresetBtn');
@@ -4734,24 +4743,35 @@ async function loadVideoPrompts() {
     const submitSel = document.getElementById('cfg_video_submit_selector');
     if (submitSel) submitSel.value = config.video_submit_selector || '';
 
+    const lastPresetName = localStorage.getItem('flowVideoLastPreset') || '';
+    let lakornPathVal = '';
+    let lakornTonVal = '';
+    let lakornEpVal = '';
+    if (lastPresetName && globalFlowVideoPresets[lastPresetName]) {
+      const p = globalFlowVideoPresets[lastPresetName];
+      lakornPathVal = p.lakorn_path || '';
+      lakornTonVal = p.lakorn_ton || '';
+      lakornEpVal = p.lakorn_ep || '';
+    }
+
     const lakornPath = document.getElementById('cfg_video_lakorn_path');
-    if (lakornPath) lakornPath.value = config.video_lakorn_path || '';
+    if (lakornPath) lakornPath.value = lakornPathVal;
 
     const lakornTon = document.getElementById('cfg_video_lakorn_ton');
-    if (lakornTon) lakornTon.value = config.video_lakorn_ton || '';
+    if (lakornTon) lakornTon.value = lakornTonVal;
 
     const lakornEp = document.getElementById('cfg_video_lakorn_ep');
-    if (lakornEp) lakornEp.value = config.video_lakorn_ep || '';
+    if (lakornEp) lakornEp.value = lakornEpVal;
 
     // Flow Kit parallel inputs loading
     const flowLakornPath = document.getElementById('cfg_flow_lakorn_path');
-    if (flowLakornPath) flowLakornPath.value = config.video_lakorn_path || localStorage.getItem('flowkit_default_lakorn_path') || '';
+    if (flowLakornPath) flowLakornPath.value = lakornPathVal;
 
     const flowLakornTon = document.getElementById('cfg_flow_lakorn_ton');
-    if (flowLakornTon) flowLakornTon.value = config.video_lakorn_ton || '';
+    if (flowLakornTon) flowLakornTon.value = lakornTonVal;
 
     const flowLakornEp = document.getElementById('cfg_flow_lakorn_ep');
-    if (flowLakornEp) flowLakornEp.value = config.video_lakorn_ep || '';
+    if (flowLakornEp) flowLakornEp.value = lakornEpVal;
 
     // Prompt Only parallel inputs loading
     const flowPOPromptsPath = document.getElementById('cfg_flow_po_prompts_path');
@@ -4776,6 +4796,9 @@ async function loadVideoPrompts() {
     renderVideoGenTabs();
     renderVideoActiveRoundsDropdown();
     renderVideoPromptsForRound(1);
+    
+    // Apply last saved preset values to ensure all dropdowns and inputs are fully synced
+    applyFlowVideoPreset(lastPresetName);
   } catch (e) {
         writeConsoleLine(`Failed to load video prompts: ${e.message}`, 'error', 'videoConsole');
   }
@@ -5428,10 +5451,7 @@ function initVideoGenListeners() {
 
   if (cfgVideoLakornPathInput) {
     cfgVideoLakornPathInput.addEventListener('input', (e) => {
-      jsonFetch('/api/config/set-default', {
-        method: 'POST',
-        body: JSON.stringify({ key: 'video_lakorn_path', value: e.target.value.trim() })
-      }).catch(err => console.error('Failed to save video_lakorn_path:', err));
+      // Auto-save on input removed. Scoped to presets only.
     });
   }
 
@@ -5456,10 +5476,7 @@ function initVideoGenListeners() {
       let val = e.target.value;
       val = val.replace(/[^a-zA-Z0-9\s._-]/g, '');
       e.target.value = val;
-      jsonFetch('/api/config/set-default', {
-        method: 'POST',
-        body: JSON.stringify({ key: 'video_lakorn_ton', value: val })
-      }).catch(err => console.error('Failed to save video_lakorn_ton:', err));
+      // Auto-save on input removed. Scoped to presets only.
     });
   }
 
@@ -5468,10 +5485,7 @@ function initVideoGenListeners() {
       let val = e.target.value;
       val = val.replace(/[^a-zA-Z0-9\s._-]/g, '');
       e.target.value = val;
-      jsonFetch('/api/config/set-default', {
-        method: 'POST',
-        body: JSON.stringify({ key: 'video_lakorn_ep', value: val })
-      }).catch(err => console.error('Failed to save video_lakorn_ep:', err));
+      // Auto-save on input removed. Scoped to presets only.
     });
   }
 
@@ -6180,9 +6194,7 @@ function initFlowKitUploaderListeners() {
         const selInput = document.getElementById('cfg_video_lakorn_path');
         if (input) input.value = res.path;
         if (selInput) selInput.value = res.path;
-        localStorage.setItem('flowkit_default_lakorn_path', res.path);
         calculateFlowKitPaths();
-        saveVideoPrompts(true);
       }
     } catch (err) {
       console.error('Failed to browse folder:', err);
@@ -6493,7 +6505,7 @@ async function loadFlowKitProjects() {
     if (res && res.projects) {
       flowProjectsList = res.projects;
       
-      const populate = (dd) => {
+      const populate = (dd, isPo = false) => {
         if (!dd) return;
         dd.innerHTML = '';
         res.projects.forEach(p => {
@@ -6502,16 +6514,27 @@ async function loadFlowKitProjects() {
           opt.textContent = `${p.name} (${p.id.slice(0, 8)})`;
           dd.appendChild(opt);
         });
-        const savedDefault = localStorage.getItem('flowkit_default_project_id');
-        if (savedDefault && res.projects.some(p => p.id === savedDefault)) {
-          dd.value = savedDefault;
-        } else if (res.projects.length > 0) {
-          dd.value = res.projects[0].id;
+        
+        let targetProjId = '';
+        if (!isPo) {
+          const lastPreset = localStorage.getItem('flowVideoLastPreset') || '';
+          targetProjId = (lastPreset && globalFlowVideoPresets[lastPreset]) ? (globalFlowVideoPresets[lastPreset].project_id || '') : '';
+        }
+        
+        if (targetProjId && res.projects.some(p => p.id === targetProjId)) {
+          dd.value = targetProjId;
+        } else {
+          const savedDefault = localStorage.getItem('flowkit_default_project_id');
+          if (savedDefault && res.projects.some(p => p.id === savedDefault)) {
+            dd.value = savedDefault;
+          } else if (res.projects.length > 0) {
+            dd.value = res.projects[0].id;
+          }
         }
       };
       
-      populate(dropdown);
-      populate(poDropdown);
+      populate(dropdown, false);
+      populate(poDropdown, true);
       await updateProjectStats();
     }
   } catch (err) {
