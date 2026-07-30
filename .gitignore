@@ -7,16 +7,30 @@ runtime/*.local.json
 web/node_modules/
 /.venv_system
 
-# Temporary media files
+# Temporary media and zip files
 *.mp4
 *.mp3
 *.aac
+*.zip
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# OS specific files
+.DS_Store
 
 # Log and output files
 *.log
 output.txt
 stderr.txt
 stdout.txt
+
+# Web temporary files
+web/project_data.json
+web/projects.txt
+web/schema.txt
 
 # Test and regression scripts
 test_*.py
