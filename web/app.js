@@ -2925,6 +2925,7 @@ async function saveImagePrompts(silent = false) {
       }
     }
     
+    const activeRounds = getActiveRounds();
     // Populate all 20 rounds of prompts and statuses
     for (let r = 1; r <= getImageGenMaxRound(); r++) {
       const p_key = r === 1 ? 'image_prompts' : `image_prompts_${r}`;
@@ -2933,8 +2934,7 @@ async function saveImagePrompts(silent = false) {
       payload[s_key] = statusesByRound[r] || [];
 
       // Populate active state per round
-      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
-      payload[`round_active_${r}`] = roundCheckbox ? roundCheckbox.checked : true;
+      payload[`round_active_${r}`] = activeRounds.has(r);
       
       // Populate folder path per round
       payload[`reference_images_dir_round_${r}`] = refImagesDirByRound[r] || '';
@@ -3144,43 +3144,71 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
   return success;
 }
 
+function getActiveRounds() {
+  const input = document.getElementById('activeRoundsInput');
+  const activeRounds = new Set();
+  const maxRound = getImageGenMaxRound();
+  if (!input) {
+    for (let r = 1; r <= maxRound; r++) {
+      activeRounds.add(r);
+    }
+    return activeRounds;
+  }
+  const val = input.value.trim();
+  if (!val) return activeRounds;
+  
+  const parts = val.split(',');
+  for (let part of parts) {
+    part = part.trim();
+    if (!part) continue;
+    
+    if (part.includes('-')) {
+      const [startStr, endStr] = part.split('-');
+      const start = parseInt(startStr, 10);
+      const end = parseInt(endStr, 10);
+      if (!isNaN(start) && !isNaN(end)) {
+        const from = Math.min(start, end);
+        const to = Math.max(start, end);
+        for (let i = from; i <= to; i++) {
+          if (i >= 1 && i <= maxRound) {
+            activeRounds.add(i);
+          }
+        }
+      }
+    } else {
+      const num = parseInt(part, 10);
+      if (!isNaN(num) && num >= 1 && num <= maxRound) {
+        activeRounds.add(num);
+      }
+    }
+  }
+  return activeRounds;
+}
+
 function saveImageGenActiveState() {
-  const state = {};
-  document.querySelectorAll('.round-active-checkbox').forEach(cb => {
-    state[cb.dataset.round] = cb.checked;
-  });
-  localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(state));
+  const inputEl = document.getElementById('activeRoundsInput');
+  if (inputEl) {
+    localStorage.setItem('imageGenActiveRoundsInput', inputEl.value.trim());
+  }
 }
 
 // Initialize steps listeners
   function renderImageGenTabs() {
     const container = document.getElementById('promptTabsContainer');
-    const checkboxContainer = document.getElementById('activeRoundsCheckboxes');
-    if (!container || !checkboxContainer) return;
+    if (!container) return;
     container.innerHTML = '';
-    checkboxContainer.innerHTML = '';
     
-    let savedActiveState = {};
-    try {
-      const stored = localStorage.getItem('imageGenActiveRoundsState');
-      if (stored) savedActiveState = JSON.parse(stored);
-    } catch(e) {}
+    let savedActiveInput = localStorage.getItem('imageGenActiveRoundsInput');
+    if (savedActiveInput === null) {
+      savedActiveInput = '1-' + getImageGenMaxRound();
+      localStorage.setItem('imageGenActiveRoundsInput', savedActiveInput);
+    }
+    const activeRoundsInput = document.getElementById('activeRoundsInput');
+    if (activeRoundsInput && !activeRoundsInput.value) {
+      activeRoundsInput.value = savedActiveInput;
+    }
 
     for (let r = 1; r <= getImageGenMaxRound(); r++) {
-      const isChecked = savedActiveState.hasOwnProperty(r) ? savedActiveState[r] : true;
-      
-      // Checkbox for dropdown
-      const cbLabel = document.createElement('label');
-      cbLabel.style.cssText = 'display: flex; align-items: center; width: 100%; font-size: 0.85rem; cursor: pointer; color: #fff; padding: 6px 4px; border-radius: 4px; transition: background 0.2s; box-sizing: border-box;';
-      cbLabel.onmouseover = () => cbLabel.style.background = 'rgba(255,255,255,0.05)';
-      cbLabel.onmouseout = () => cbLabel.style.background = 'transparent';
-      cbLabel.innerHTML = `<div style="flex: 0 0 10%; display: flex; justify-content: flex-start; align-items: center;"><input type="checkbox" class="round-active-checkbox" data-round="${r}" ${isChecked ? 'checked' : ''} style="margin: 0; cursor: pointer;" /></div><div style="flex: 0 0 90%; user-select: none;">Round ${r}</div>`;
-      
-      const cbInput = cbLabel.querySelector('input');
-      cbInput.addEventListener('change', saveImageGenActiveState);
-      
-      checkboxContainer.appendChild(cbLabel);
-
       // Tab Button
       const btn = document.createElement('button');
       btn.className = 'prompt-tab-btn' + (r === 1 ? ' active' : '');
@@ -3215,10 +3243,6 @@ function saveImageGenActiveState() {
     }
 
     updateImageGenTabIndicators();
-
-    if (!localStorage.getItem('imageGenActiveRoundsState')) {
-      saveImageGenActiveState();
-    }
   }
 
   function updateImageGenTabIndicators() {
@@ -3272,31 +3296,14 @@ function initWorkflowActionListeners() {
   });
 
 
-  // Active Rounds Dropdown toggle and selection bindings for Image Gen
-  const activeRoundsBtn = document.getElementById('activeRoundsBtn');
-  const activeRoundsMenu = document.getElementById('activeRoundsMenu');
-  if (activeRoundsBtn && activeRoundsMenu) {
-    activeRoundsBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      activeRoundsMenu.style.display = activeRoundsMenu.style.display === 'none' ? 'block' : 'none';
-    });
-    document.addEventListener('click', () => {
-      activeRoundsMenu.style.display = 'none';
-    });
-    activeRoundsMenu.addEventListener('click', (e) => e.stopPropagation());
-  }
-
-  const selectAllBtn = document.getElementById('selectAllRoundsBtn');
-  const deselectAllBtn = document.getElementById('deselectAllRoundsBtn');
-  if (selectAllBtn) {
-    selectAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = true);
+  // Active Rounds Input change binding for Image Gen
+  const activeRoundsInput = document.getElementById('activeRoundsInput');
+  if (activeRoundsInput) {
+    activeRoundsInput.addEventListener('change', () => {
       saveImageGenActiveState();
+      saveImagePrompts(true);
     });
-  }
-  if (deselectAllBtn) {
-    deselectAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = false);
+    activeRoundsInput.addEventListener('input', () => {
       saveImageGenActiveState();
     });
   }
@@ -3330,6 +3337,7 @@ function initWorkflowActionListeners() {
     
     // Clear localStorage active state
     localStorage.removeItem('imageGenActiveRoundsState');
+    localStorage.removeItem('imageGenActiveRoundsInput');
     
     renderImageGenTabs();
     renderImagePromptsForRound(1);
@@ -3972,12 +3980,15 @@ function initWorkflowActionListeners() {
           currentPromptRound = 1;
 
           const maxRounds = getImageGenMaxRound();
-          const activeRoundsState = {};
           for (let r = 1; r <= maxRounds; r++) {
             initImageGenRound(r);
-            activeRoundsState[r] = true;
           }
-          localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(activeRoundsState));
+          const defaultActiveRounds = `1-${maxRounds}`;
+          localStorage.setItem('imageGenActiveRoundsInput', defaultActiveRounds);
+          const activeRoundsInput = document.getElementById('activeRoundsInput');
+          if (activeRoundsInput) {
+            activeRoundsInput.value = defaultActiveRounds;
+          }
 
           if (res.ref_images_dir) {
             // Update refImagesDirByRound for all rounds
@@ -4040,12 +4051,12 @@ function initWorkflowActionListeners() {
 
     let hasProcessedAnyRound = false;
 
+    const activeRounds = getActiveRounds();
     for (let r = 1; r <= getImageGenMaxRound(); r++) {
       if (shouldStopGeneration) {
         break;
       }
-      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
-      const isRoundActive = roundCheckbox ? roundCheckbox.checked : true;
+      const isRoundActive = activeRounds.has(r);
       if (!isRoundActive) {
         writeConsoleLine(`Round ${r}: Skip processing (Round is inactive/disabled).`, 'info', 'imageConsole');
         continue;
@@ -4561,11 +4572,13 @@ function initFileImports() {
 
   // Duplicate resetAllRoundsBtn listener removed
 
-  document.querySelectorAll('.round-active-checkbox').forEach(cb => {
-    cb.addEventListener('change', () => {
+  const activeRoundsInput = document.getElementById('activeRoundsInput');
+  if (activeRoundsInput) {
+    activeRoundsInput.addEventListener('change', () => {
+      saveImageGenActiveState();
       saveImagePrompts(true);
     });
-  });
+  }
 }
 
 let videoPromptsByRound = {};
@@ -6026,9 +6039,7 @@ const staticTooltips = {
   // Image Gen
   "browseLakornPathBtn": "📁 เลือกโฟลเดอร์ละคร (Browse...):<br>- เลือกโฟลเดอร์รูปภาพหรือบทละคร",
   "setLakornPathDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set default):<br>- จำ Path โฟลเดอร์ปัจจุบันไว้",
-  "activeRoundsBtn": "✅ เลือกรอบที่จะทำงาน (Active Rounds):<br>- ติ๊กเลือกว่าจะให้บอทรันใน Round ไหนบ้าง",
-  "selectAllRoundsBtn": "☑️ เลือกทุกรอบ (Select All)",
-  "deselectAllRoundsBtn": "🔲 ยกเลิกทุกรอบ (Deselect All)",
+  "activeRoundsWrapper": "✅ เลือกรอบที่จะทำงาน (Active Rounds):<br>- ใส่ตัวเลขรอบที่ต้องการ เช่น 1-10 หรือระบุทีละรอบ เช่น 1,3,5 หรือผสม เช่น 1-5,7,9",
   "addRoundBtn": "➕ เพิ่มรอบพรอพต์ (Add Round):<br>- สร้างหน้าต่างพรอพต์รอบใหม่",
   "resetAllRoundsBtn": "🔄 ล้างข้อมูลทุกรอบ (Reset All):<br>- ลบพรอพต์ทั้งหมดในทุกรอบ",
   "addImagePromptBtn": "➕ เพิ่มพรอพต์ (Add Prompt):<br>- เพิ่มพรอพต์ใหม่ในรอบปัจจุบัน",
