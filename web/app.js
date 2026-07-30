@@ -1985,6 +1985,15 @@ let globalFlowPoPresets = {};
 function loadFlowVideoPresets(presets) {
   globalFlowVideoPresets = presets || {};
   renderFlowVideoPresetsSelect();
+  
+  const savedPreset = localStorage.getItem('flowkit_video_preset') || '';
+  const select = document.getElementById('flowVideoPresetSelect');
+  if (select && savedPreset && globalFlowVideoPresets[savedPreset]) {
+    select.value = savedPreset;
+    applyFlowVideoPreset(savedPreset);
+  } else {
+    applyFlowVideoPreset('');
+  }
 }
 
 function renderFlowVideoPresetsSelect(selectedKey = '') {
@@ -2103,7 +2112,9 @@ async function saveFlowVideoPreset() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'flow_video_presets', value: globalFlowVideoPresets })
     });
+    localStorage.setItem('flowkit_video_preset', cleanName);
     renderFlowVideoPresetsSelect(cleanName);
+    applyFlowVideoPreset(cleanName);
     alert(`บันทึก Preset "${cleanName}" สำเร็จ`);
   } catch (e) {
     alert(`เกิดข้อผิดพลาดในการบันทึก: ${e.message}`);
@@ -2128,7 +2139,9 @@ async function deleteFlowVideoPreset() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'flow_video_presets', value: globalFlowVideoPresets })
     });
+    localStorage.removeItem('flowkit_video_preset');
     renderFlowVideoPresetsSelect();
+    applyFlowVideoPreset('');
     alert(`ลบ Preset "${selectedKey}" สำเร็จ`);
   } catch (e) {
     alert(`เกิดข้อผิดพลาดในการลบ: ${e.message}`);
@@ -2139,6 +2152,15 @@ async function deleteFlowVideoPreset() {
 function loadFlowPoPresets(presets) {
   globalFlowPoPresets = presets || {};
   renderFlowPoPresetsSelect();
+  
+  const savedPreset = localStorage.getItem('flowkit_po_preset') || '';
+  const select = document.getElementById('flowPoPresetSelect');
+  if (select && savedPreset && globalFlowPoPresets[savedPreset]) {
+    select.value = savedPreset;
+    applyFlowPoPreset(savedPreset);
+  } else {
+    applyFlowPoPreset('');
+  }
 }
 
 function renderFlowPoPresetsSelect(selectedKey = '') {
@@ -2227,7 +2249,9 @@ async function saveFlowPoPreset() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'flow_po_presets', value: globalFlowPoPresets })
     });
+    localStorage.setItem('flowkit_po_preset', cleanName);
     renderFlowPoPresetsSelect(cleanName);
+    applyFlowPoPreset(cleanName);
     alert(`บันทึก Preset "${cleanName}" สำเร็จ`);
   } catch (e) {
     alert(`เกิดข้อผิดพลาดในการบันทึก: ${e.message}`);
@@ -2252,7 +2276,9 @@ async function deleteFlowPoPreset() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'flow_po_presets', value: globalFlowPoPresets })
     });
+    localStorage.removeItem('flowkit_po_preset');
     renderFlowPoPresetsSelect();
+    applyFlowPoPreset('');
     alert(`ลบ Preset "${selectedKey}" สำเร็จ`);
   } catch (e) {
     alert(`เกิดข้อผิดพลาดในการลบ: ${e.message}`);
@@ -2891,6 +2917,16 @@ async function setVideoSpeedDefault() {
 }
 
 
+function isImageRoundActive(r) {
+  const activeRoundInput = document.getElementById('cfg_image_active_round');
+  if (!activeRoundInput) return true;
+  const activeVal = parseInt(activeRoundInput.value, 10);
+  if (isNaN(activeVal) || activeVal === 0) {
+    return true;
+  }
+  return r === activeVal;
+}
+
 async function saveImagePrompts(silent = false) {
   const isSilent = silent === true;
   commitCurrentRoundFromDOM();
@@ -2933,8 +2969,7 @@ async function saveImagePrompts(silent = false) {
       payload[s_key] = statusesByRound[r] || [];
 
       // Populate active state per round
-      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
-      payload[`round_active_${r}`] = roundCheckbox ? roundCheckbox.checked : true;
+      payload[`round_active_${r}`] = isImageRoundActive(r);
       
       // Populate folder path per round
       payload[`reference_images_dir_round_${r}`] = refImagesDirByRound[r] || '';
@@ -3145,42 +3180,28 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
 }
 
 function saveImageGenActiveState() {
-  const state = {};
-  document.querySelectorAll('.round-active-checkbox').forEach(cb => {
-    state[cb.dataset.round] = cb.checked;
-  });
-  localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(state));
+  const input = document.getElementById('cfg_image_active_round');
+  if (input) {
+    localStorage.setItem('imageGenActiveRound', input.value);
+  }
 }
 
 // Initialize steps listeners
   function renderImageGenTabs() {
     const container = document.getElementById('promptTabsContainer');
-    const checkboxContainer = document.getElementById('activeRoundsCheckboxes');
-    if (!container || !checkboxContainer) return;
+    if (!container) return;
     container.innerHTML = '';
-    checkboxContainer.innerHTML = '';
     
-    let savedActiveState = {};
-    try {
-      const stored = localStorage.getItem('imageGenActiveRoundsState');
-      if (stored) savedActiveState = JSON.parse(stored);
-    } catch(e) {}
+    const activeRoundInput = document.getElementById('cfg_image_active_round');
+    if (activeRoundInput && !activeRoundInput.dataset.initialized) {
+      activeRoundInput.value = localStorage.getItem('imageGenActiveRound') || '0';
+      activeRoundInput.addEventListener('input', () => {
+        saveImageGenActiveState();
+      });
+      activeRoundInput.dataset.initialized = 'true';
+    }
 
     for (let r = 1; r <= getImageGenMaxRound(); r++) {
-      const isChecked = savedActiveState.hasOwnProperty(r) ? savedActiveState[r] : true;
-      
-      // Checkbox for dropdown
-      const cbLabel = document.createElement('label');
-      cbLabel.style.cssText = 'display: flex; align-items: center; width: 100%; font-size: 0.85rem; cursor: pointer; color: #fff; padding: 6px 4px; border-radius: 4px; transition: background 0.2s; box-sizing: border-box;';
-      cbLabel.onmouseover = () => cbLabel.style.background = 'rgba(255,255,255,0.05)';
-      cbLabel.onmouseout = () => cbLabel.style.background = 'transparent';
-      cbLabel.innerHTML = `<div style="flex: 0 0 10%; display: flex; justify-content: flex-start; align-items: center;"><input type="checkbox" class="round-active-checkbox" data-round="${r}" ${isChecked ? 'checked' : ''} style="margin: 0; cursor: pointer;" /></div><div style="flex: 0 0 90%; user-select: none;">Round ${r}</div>`;
-      
-      const cbInput = cbLabel.querySelector('input');
-      cbInput.addEventListener('change', saveImageGenActiveState);
-      
-      checkboxContainer.appendChild(cbLabel);
-
       // Tab Button
       const btn = document.createElement('button');
       btn.className = 'prompt-tab-btn' + (r === 1 ? ' active' : '');
@@ -3215,23 +3236,12 @@ function saveImageGenActiveState() {
     }
 
     updateImageGenTabIndicators();
-
-    if (!localStorage.getItem('imageGenActiveRoundsState')) {
-      saveImageGenActiveState();
-    }
   }
 
   function updateImageGenTabIndicators() {
     document.querySelectorAll('.prompt-tab-btn').forEach(btn => {
       const r = parseInt(btn.dataset.round);
-      const hasData = promptsByRound[r] && promptsByRound[r].length > 0;
-      if (hasData) {
-        if (!btn.innerHTML.includes('🔴')) {
-          btn.innerHTML = `R${r} <span style="font-size: 0.6rem; color: #ff4a4a; margin-left: 4px;">🔴</span>`;
-        }
-      } else {
-        btn.innerHTML = `R${r}`;
-      }
+      btn.innerHTML = `R${r}`;
     });
   }
   function updateDurationsSum() {
@@ -3272,32 +3282,13 @@ function initWorkflowActionListeners() {
   });
 
 
-  // Active Rounds Dropdown toggle and selection bindings for Image Gen
-  const activeRoundsBtn = document.getElementById('activeRoundsBtn');
-  const activeRoundsMenu = document.getElementById('activeRoundsMenu');
-  if (activeRoundsBtn && activeRoundsMenu) {
-    activeRoundsBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      activeRoundsMenu.style.display = activeRoundsMenu.style.display === 'none' ? 'block' : 'none';
-    });
-    document.addEventListener('click', () => {
-      activeRoundsMenu.style.display = 'none';
-    });
-    activeRoundsMenu.addEventListener('click', (e) => e.stopPropagation());
-  }
-
-  const selectAllBtn = document.getElementById('selectAllRoundsBtn');
-  const deselectAllBtn = document.getElementById('deselectAllRoundsBtn');
-  if (selectAllBtn) {
-    selectAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = true);
+  // Active Round Input selection bindings for Image Gen
+  const activeRoundInput = document.getElementById('cfg_image_active_round');
+  if (activeRoundInput) {
+    activeRoundInput.value = localStorage.getItem('imageGenActiveRound') || '0';
+    activeRoundInput.addEventListener('input', () => {
       saveImageGenActiveState();
-    });
-  }
-  if (deselectAllBtn) {
-    deselectAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = false);
-      saveImageGenActiveState();
+      saveImagePrompts(true);
     });
   }
 
@@ -3329,7 +3320,8 @@ function initWorkflowActionListeners() {
     currentPromptRound = 1;
     
     // Clear localStorage active state
-    localStorage.removeItem('imageGenActiveRoundsState');
+    localStorage.removeItem('imageGenActiveRound');
+    if (activeRoundInput) activeRoundInput.value = '0';
     
     renderImageGenTabs();
     renderImagePromptsForRound(1);
@@ -3542,7 +3534,18 @@ function initWorkflowActionListeners() {
   const flowVideoPresetSelect = document.getElementById('flowVideoPresetSelect');
   if (flowVideoPresetSelect) {
     flowVideoPresetSelect.addEventListener('change', (e) => {
+      localStorage.setItem('flowkit_video_preset', e.target.value);
       applyFlowVideoPreset(e.target.value);
+      
+      const isPresetSelected = e.target.value !== '';
+      const flowLakornTon = document.getElementById('cfg_flow_lakorn_ton');
+      if (flowLakornTon && !isPresetSelected) {
+        flowLakornTon.value = '';
+      }
+      const flowLakornEp = document.getElementById('cfg_flow_lakorn_ep');
+      if (flowLakornEp && !isPresetSelected) {
+        flowLakornEp.value = '';
+      }
     });
   }
   const saveFlowVideoPresetBtn = document.getElementById('saveFlowVideoPresetBtn');
@@ -3562,6 +3565,7 @@ function initWorkflowActionListeners() {
   const flowPoPresetSelect = document.getElementById('flowPoPresetSelect');
   if (flowPoPresetSelect) {
     flowPoPresetSelect.addEventListener('change', (e) => {
+      localStorage.setItem('flowkit_po_preset', e.target.value);
       applyFlowPoPreset(e.target.value);
     });
   }
@@ -3972,12 +3976,12 @@ function initWorkflowActionListeners() {
           currentPromptRound = 1;
 
           const maxRounds = getImageGenMaxRound();
-          const activeRoundsState = {};
           for (let r = 1; r <= maxRounds; r++) {
             initImageGenRound(r);
-            activeRoundsState[r] = true;
           }
-          localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(activeRoundsState));
+          localStorage.setItem('imageGenActiveRound', '0');
+          const activeRoundInput = document.getElementById('cfg_image_active_round');
+          if (activeRoundInput) activeRoundInput.value = '0';
 
           if (res.ref_images_dir) {
             // Update refImagesDirByRound for all rounds
@@ -4044,8 +4048,7 @@ function initWorkflowActionListeners() {
       if (shouldStopGeneration) {
         break;
       }
-      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
-      const isRoundActive = roundCheckbox ? roundCheckbox.checked : true;
+      const isRoundActive = isImageRoundActive(r);
       if (!isRoundActive) {
         writeConsoleLine(`Round ${r}: Skip processing (Round is inactive/disabled).`, 'info', 'imageConsole');
         continue;
@@ -4561,11 +4564,7 @@ function initFileImports() {
 
   // Duplicate resetAllRoundsBtn listener removed
 
-  document.querySelectorAll('.round-active-checkbox').forEach(cb => {
-    cb.addEventListener('change', () => {
-      saveImagePrompts(true);
-    });
-  });
+  // Obsolete checkboxes listener removed
 }
 
 let videoPromptsByRound = {};
@@ -4734,11 +4733,26 @@ async function loadVideoPrompts() {
     const flowLakornPath = document.getElementById('cfg_flow_lakorn_path');
     if (flowLakornPath) flowLakornPath.value = config.video_lakorn_path || localStorage.getItem('flowkit_default_lakorn_path') || '';
 
+    const flowVideoPresetSelect = document.getElementById('flowVideoPresetSelect');
+    const isPresetSelected = flowVideoPresetSelect && flowVideoPresetSelect.value !== '';
+
     const flowLakornTon = document.getElementById('cfg_flow_lakorn_ton');
-    if (flowLakornTon) flowLakornTon.value = config.video_lakorn_ton || '';
+    if (flowLakornTon) {
+      if (!isPresetSelected) {
+        flowLakornTon.value = '';
+      } else {
+        flowLakornTon.value = config.video_lakorn_ton || '';
+      }
+    }
 
     const flowLakornEp = document.getElementById('cfg_flow_lakorn_ep');
-    if (flowLakornEp) flowLakornEp.value = config.video_lakorn_ep || '';
+    if (flowLakornEp) {
+      if (!isPresetSelected) {
+        flowLakornEp.value = '';
+      } else {
+        flowLakornEp.value = config.video_lakorn_ep || '';
+      }
+    }
 
     // Prompt Only parallel inputs loading
     const flowPOPromptsPath = document.getElementById('cfg_flow_po_prompts_path');
