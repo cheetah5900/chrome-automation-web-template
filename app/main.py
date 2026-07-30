@@ -102,6 +102,96 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Flow Kit (GFA) Integration ──────────────────────────────
+try:
+    from agent.api.characters import router as characters_router
+    from agent.api.projects import router as projects_router
+    from agent.api.videos import router as videos_router
+    from agent.api.scenes import router as scenes_router
+    from agent.api.requests import router as requests_router
+    from agent.api.flow import router as flow_router
+    from agent.api.reviews import router as reviews_router
+    from agent.api.tts import router as tts_router
+    from agent.api.materials import router as materials_router
+    from agent.api.music import router as music_router
+    from agent.api.models import router as models_router
+    from agent.api.active_project import router as active_project_router
+    from agent.api.batch_uploader import router as batch_uploader_router
+    from agent.main import ext_callback, dashboard_ws, health as flow_health
+
+    app.include_router(projects_router, prefix="/api")
+    app.include_router(scenes_router, prefix="/api")
+    app.include_router(videos_router, prefix="/api")
+    app.include_router(characters_router, prefix="/api")
+    app.include_router(requests_router, prefix="/api")
+    app.include_router(flow_router, prefix="/api")
+    app.include_router(reviews_router, prefix="/api")
+    app.include_router(tts_router, prefix="/api")
+    app.include_router(materials_router, prefix="/api")
+    app.include_router(music_router, prefix="/api")
+    app.include_router(models_router)
+    app.include_router(active_project_router)
+    app.include_router(batch_uploader_router, prefix="/api")
+
+    # Native callback and WS handlers for extension/dashboard
+    app.post("/api/ext/callback")(ext_callback)
+    app.websocket("/ws/dashboard")(dashboard_ws)
+    app.get("/health")(flow_health)
+    
+    print("Flow Kit routers registered successfully.")
+except ImportError as e:
+    print(f"Skipping Flow Kit routers/callbacks import: {e}")
+
+# Flow Kit startup background tasks
+_flow_kit_ws_task = None
+_flow_kit_worker_task = None
+
+@app.on_event("startup")
+async def startup_flow_kit():
+    global _flow_kit_ws_task, _flow_kit_worker_task
+    try:
+        from agent.db.schema import init_db
+        from agent.materials import register_material, _BUILTIN_IDS
+        from agent.db.crud import list_materials as db_list_materials
+        from agent.sdk import init_sdk
+        from agent.services.flow_client import get_flow_client
+        from agent.worker.processor import get_worker_controller
+        from agent.main import run_ws_server
+        
+        # 1. Init Flow Kit database
+        await init_db()
+        
+        # 2. Load custom materials
+        try:
+            custom_materials = await db_list_materials()
+            for m in custom_materials:
+                if m["id"] not in _BUILTIN_IDS:
+                    register_material(m)
+        except Exception as e:
+            print(f"Failed to load custom materials: {e}")
+            
+        # 3. Init SDK
+        init_sdk(get_flow_client())
+        
+        # 4. Start WebSocket Server and worker processor
+        controller = get_worker_controller()
+        
+        # Load worker cooldown settings from config on startup
+        try:
+            delay_min = float(_get_config_value("flowkit_worker_delay_min", 10.0))
+            delay_max = float(_get_config_value("flowkit_worker_delay_max", 20.0))
+            controller.update_cooldown(delay_min, delay_max)
+            print(f"Flow Kit worker API delay range configured: {delay_min}s - {delay_max}s")
+        except Exception as cooldown_err:
+            print(f"Failed to apply worker cooldown range config: {cooldown_err}")
+            
+        _flow_kit_ws_task = asyncio.create_task(run_ws_server())
+        _flow_kit_worker_task = asyncio.create_task(controller.start())
+        print("Flow Kit background services (WebSocket + Worker) started successfully!")
+    except Exception as e:
+        print(f"Failed to start Flow Kit background services: {e}")
+
+
 
 class ProviderPayload(BaseModel):
     provider: str
@@ -176,6 +266,11 @@ class VideoGenStepPayload(BaseModel):
     google_flow_email: str = "dogdadcatmom@gmail.com"
     google_flow_project_name: str = "7-1"
     auto_retry_mode: bool = False
+    video_gen_mode: str = "selenium"
+    video_model: str = ""
+    output_count: int = 1
+    upscale_resolution: str = "NONE"
+
 
 
 
@@ -365,7 +460,6 @@ def _physical_switch_to_tab(url_part):
                 if URL of t contains "{url_part}" then
                     set active tab index of w to tabIndex
                     set index of w to 1
-                    activate
                     return true
                 end if
                 set tabIndex to tabIndex + 1
@@ -632,6 +726,20 @@ def select_profile(payload: SelectProfilePayload):
 
 @app.post("/api/profiles/launch")
 async def launch_profile(payload: LaunchProfilePayload):
+    # Reset extension connection state so newly launched Chrome profile gets a fresh WebSocket handshake
+    try:
+        from agent.services.flow_client import get_flow_client
+        client = get_flow_client()
+        if client._extension_ws:
+            try:
+                await client._extension_ws.close()
+            except Exception:
+                pass
+        client.clear_extension()
+        client._flow_key = None
+    except Exception as e:
+        logger.warning("Failed to reset extension state on launch: %s", e)
+
     profile = _find_profile(payload.name)
 
     profile_path = profile["path"]
@@ -663,10 +771,12 @@ async def launch_profile(payload: LaunchProfilePayload):
     # Launch without --user-data-dir if it is the Everyday Chrome profile, to load untouched daily sessions directly
     from pathlib import Path
     everyday_profile = str(Path.home() / "Library/Application Support/Google/Chrome")
+    ext_dir = str(Path(__file__).resolve().parent.parent / "extension")
     if profile_path == "/Users/litar/Library/Application Support/Google/Chrome" or profile_path == everyday_profile:
         cmd = [
             chrome_binary,
             f"--remote-debugging-port={debug_port}",
+            f"--load-extension={ext_dir}",
             *startup_urls,
         ]
     else:
@@ -674,6 +784,7 @@ async def launch_profile(payload: LaunchProfilePayload):
             chrome_binary,
             f"--remote-debugging-port={debug_port}",
             f"--user-data-dir={profile_path}",
+            f"--load-extension={ext_dir}",
             *startup_urls,
         ]
 
@@ -1133,7 +1244,11 @@ def _default_config() -> dict[str, Any]:
                     "unsharp": "5:5:0.7:3:3:0.3",
                     "durations": [3.56, 5.2, 5.6, 4.8, 4.88]
                 }
-            }
+            },
+            "flowkit_worker_delay_min": 10.0,
+            "flowkit_worker_delay_max": 20.0,
+            "flow_video_presets": {},
+            "flow_po_presets": {}
         }
     else:
         h = os.path.expanduser("~")
@@ -1197,7 +1312,11 @@ def _default_config() -> dict[str, Any]:
                     "unsharp": "5:5:0.7:3:3:0.3",
                     "durations": [3.56, 5.2, 5.6, 4.8, 4.88]
                 }
-            }
+            },
+            "flowkit_worker_delay_min": 10.0,
+            "flowkit_worker_delay_max": 20.0,
+            "flow_video_presets": {},
+            "flow_po_presets": {}
         }
 
     # Dynamically ensure all 30 rounds of image prompts and 10 rounds of video prompts are initialized in config
@@ -1582,6 +1701,15 @@ def get_config() -> dict[str, Any]:
             return {**defaults, **data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed reading config: {e}")
+@app.get("/api/utils/serve-image")
+def serve_image(path: str):
+    import os
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+    path = path.strip()
+    if not os.path.exists(path) or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path)
 
 
 @app.post("/api/config")
@@ -1591,6 +1719,19 @@ def set_config(payload: dict[str, Any]) -> dict[str, Any]:
 
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=4)
+            
+        # Update active worker cooldown range if present in payload
+        if "flowkit_worker_delay_min" in payload and "flowkit_worker_delay_max" in payload:
+            try:
+                from agent.worker.processor import get_worker_controller
+                controller = get_worker_controller()
+                delay_min = float(payload["flowkit_worker_delay_min"])
+                delay_max = float(payload["flowkit_worker_delay_max"])
+                controller.update_cooldown(delay_min, delay_max)
+                log(f"[Worker Config] Updated cooldown range: {delay_min}s - {delay_max}s")
+            except Exception as cooldown_err:
+                log(f"[Worker Config] Failed to update active worker delay: {cooldown_err}")
+                
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed writing config: {e}")
@@ -1615,6 +1756,19 @@ def set_default(payload: dict[str, Any]) -> dict[str, Any]:
         data[key] = value
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
+            
+        # Update active worker cooldown range if relevant key is saved
+        if key in ("flowkit_worker_delay_min", "flowkit_worker_delay_max"):
+            try:
+                from agent.worker.processor import get_worker_controller
+                controller = get_worker_controller()
+                delay_min = float(data.get("flowkit_worker_delay_min", 10.0))
+                delay_max = float(data.get("flowkit_worker_delay_max", 20.0))
+                controller.update_cooldown(delay_min, delay_max)
+                log(f"[Worker Config] Updated cooldown range after set-default: {delay_min}s - {delay_max}s")
+            except Exception as cooldown_err:
+                log(f"[Worker Config] Failed to update active worker delay on default save: {cooldown_err}")
+                
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed writing config: {e}")
@@ -1770,16 +1924,16 @@ def step3(payload: dict[str, Any]) -> dict[str, Any]:
                         raise RuntimeError("Browser connection lost.")
                     import subprocess
                     escaped_path = file_path.replace('"', '\\"')
+                    app_name = _get_active_browser_app_name()
                     script = f"""
                     set the clipboard to "{escaped_path}"
-                    delay 0.25
                     tell application "System Events"
                         key code 5 using {{command down, shift down}}
-                        delay 0.4
-                        key code 9 using {{command down}}
-                        delay 0.5
-                        keystroke return
                         delay 0.75
+                        key code 9 using {{command down}}
+                        delay 0.75
+                        keystroke return
+                        delay 1.25
                         keystroke return
                     end tell
                     """
@@ -2038,105 +2192,13 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 driver.get("https://chatgpt.com/")
                 time.sleep(3.0)
             
-            # 2. Check if currently generating, and wait until complete
+            # 2. Setup constants
             stop_xpath = (
                 "//button[@id='composer-submit-button' and (@aria-label='Stop answering' or @data-testid='stop-button')]"
             )
             check_interval = int(_get_config_value("check_interval_seconds", 60))
             max_checks = int(_get_config_value("max_checks", 3))
             first_time_waiting = int(_get_config_value("first_time_waiting", check_interval))
-            
-            is_generating = False
-            try:
-                stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                is_generating = any(b.is_displayed() for b in stop_btns)
-                if not is_generating:
-                    dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                    if any(d.is_displayed() for d in dots):
-                        log("ตรวจพบสถานะกำลังสร้างรูปภาพ (image-gen-loading-state-dots)")
-                        is_generating = True
-            except Exception:
-                pass
-                
-            if is_generating:
-                elapsed = time.time() - last_submit_time if last_submit_time > 0 else 0.0
-                remaining_wait = first_time_waiting - elapsed
-                log(f"ตรวจพบว่า ChatGPT กำลังทำงานอยู่จากรอบก่อนหน้า (รันมาแล้ว {elapsed:.1f} วินาที)... รอให้เจเนอเรตเสร็จสิ้นก่อนเริ่มทำรายการใหม่...")
-                
-                if remaining_wait > 0:
-                    log(f"เริ่มนับถอยหลัง First Time Waiting ทุกๆ 1 วินาที (เหลืออีก {int(remaining_wait)} วินาที จาก {first_time_waiting} วินาที)...")
-                    for s in range(int(remaining_wait), 0, -1):
-                        if not is_driver_alive(driver):
-                            raise RuntimeError("Browser connection lost (Force Stopped).")
-                        log(f"First Time Waiting: เหลืออีก {s} วินาที จะเริ่มตรวจสอบปุ่ม Send")
-                        time.sleep(1)
-                
-                generation_completed = False
-                try:
-                    stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                    visible = any(b.is_displayed() for b in stop_btns)
-                    dots_visible = False
-                    dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                    if any(d.is_displayed() for d in dots):
-                        dots_visible = True
-                    if not visible and not dots_visible:
-                        log("ตรวจพบว่าปุ่ม Send ว่างและไม่มี Loading dots แล้ว กำลังรอตรวจซ้ำอีก 3 วินาทีเพื่อความแน่ใจ...")
-                        time.sleep(3.0)
-                        stop_btns_re = driver.find_elements(By.XPATH, stop_xpath)
-                        visible_re = any(b.is_displayed() for b in stop_btns_re)
-                        dots_re = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                        dots_visible_re = any(d.is_displayed() for d in dots_re)
-                        if not visible_re and not dots_visible_re:
-                            log("ตรวจพบปุ่ม Send พร้อมใช้งานและรูปสร้างเสร็จแล้ว (หลังครบ First Time Waiting)")
-                            generation_completed = True
-                        else:
-                            log(f"ตรวจพบการสลับสถานะชั่วคราว ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible_re}, กำลังสร้างรูปภาพ: {dots_visible_re})")
-                    else:
-                        log(f"ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible}, กำลังสร้างรูปภาพ: {dots_visible})")
-                except Exception:
-                    generation_completed = True
-                    
-                if not generation_completed:
-                    check_count = 1
-                    for check_idx in range(1, max_checks + 1):
-                        log(f"เริ่มตรวจรอบที่ {check_count} (Interval {check_interval} วินาที)...")
-                        for s in range(check_interval, 0, -1):
-                            if not is_driver_alive(driver):
-                                raise RuntimeError("Browser connection lost (Force Stopped).")
-                            log(f"Interval Check ครั้งที่ {check_count}: เหลืออีก {s} วินาที")
-                            time.sleep(1)
-                        check_count += 1
-                        try:
-                            stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                            visible = any(b.is_displayed() for b in stop_btns)
-                            dots_visible = False
-                            dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                            if any(d.is_displayed() for d in dots):
-                                dots_visible = True
-                            if not visible and not dots_visible:
-                                log("ตรวจพบว่าปุ่ม Send ว่างและไม่มี Loading dots แล้ว กำลังรอตรวจซ้ำอีก 3 วินาทีเพื่อความแน่ใจ...")
-                                time.sleep(3.0)
-                                stop_btns_re = driver.find_elements(By.XPATH, stop_xpath)
-                                visible_re = any(b.is_displayed() for b in stop_btns_re)
-                                dots_re = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
-                                dots_visible_re = any(d.is_displayed() for d in dots_re)
-                                if not visible_re and not dots_visible_re:
-                                    log(f"ตรวจพบปุ่ม Send พร้อมใช้งานและรูปสร้างเสร็จแล้ว (ในการตรวจสอบครั้งที่ {check_count-1})")
-                                    generation_completed = True
-                                    break
-                                else:
-                                    log(f"ตรวจพบการสลับสถานะชั่วคราว ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible_re}, กำลังสร้างรูปภาพ: {dots_visible_re})")
-                            else:
-                                log(f"ChatGPT ยังคงเจเนอเรตอยู่ (ปุ่ม Stop: {visible}, กำลังสร้างรูปภาพ: {dots_visible}) ผ่านการตรวจสอบแล้ว {check_count-1} ครั้ง")
-                        except Exception:
-                            log("ไม่พบปุ่ม Stop แล้ว ChatGPT เจเนอเรตเสร็จสิ้น")
-                            generation_completed = True
-                            break
-                    if not generation_completed:
-                        log("ข้อผิดพลาด: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ ChatGPT ยังทำงานไม่เสร็จสิ้น")
-                        raise RuntimeError("หยุดการทำงาน: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ปุ่มยังไม่พร้อมใช้งาน")
-            else:
-                log("ChatGPT ว่างอยู่ (ไม่มีการเจเนอเรตค้างไว้) ดำเนินการขั้นตอนถัดไปได้ทันที...")
 
             chatgpt_chat_mode = payload.get("chatgpt_chat_mode", "new")
             chatgpt_url = payload.get("chatgpt_url")
@@ -2204,7 +2266,6 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             if has_images:
                 # Physically switch to the ChatGPT tab in macOS Chrome UI!
                 _physical_switch_to_tab("chatgpt.com")
-                _activate_chrome()
                 time.sleep(0.5)
             else:
                 # Background-safe Selenium tab switch
@@ -2309,16 +2370,16 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         raise RuntimeError("Browser connection lost.")
                     import subprocess
                     escaped_path = file_path.replace('"', '\\"')
+                    app_name = _get_active_browser_app_name()
                     script = f"""
                     set the clipboard to "{escaped_path}"
-                    delay 0.25
                     tell application "System Events"
                         key code 5 using {{command down, shift down}}
-                        delay 0.4
-                        key code 9 using {{command down}}
-                        delay 0.5
-                        keystroke return
                         delay 0.75
+                        key code 9 using {{command down}}
+                        delay 0.75
+                        keystroke return
+                        delay 1.25
                         keystroke return
                     end tell
                     """
@@ -2341,19 +2402,14 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                     if not _macos_file_exists(reference_image):
                         raise RuntimeError(f"Reference image file not found on macOS: {reference_image}")
                     
-                    _activate_chrome()
-                    time.sleep(1.0)
-                    
                     # We will try to upload using Cmd + U first (Primary).
                     # If that fails, we will try the '+' button (Fallback).
                     upload_success = False
                     
-                    log("Primary: Sending Cmd + U keystroke via System Events to trigger file modal...")
+                    log("Primary: Sending Cmd + U keystroke to trigger file modal...")
                     try:
                         app_name = _get_active_browser_app_name()
-                        cmd_u_script = f"""
-                        tell application "{app_name}" to activate
-                        delay 0.25
+                        cmd_u_script = """
                         tell application "System Events"
                             key code 32 using command down
                         end tell
@@ -2387,6 +2443,17 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                         time.sleep(1.25)
                     else:
                         log("Warning: AppleScript file-dialog automation encountered an issue and could not upload file.")
+
+                    # Check for duplicate file upload pop-up
+                    try:
+                        dup_xpath = "//*[contains(text(), \"already uploaded this file\") or contains(text(), \"uploaded this file\")]"
+                        dup_elems = driver.find_elements(By.XPATH, dup_xpath)
+                        if any(e.is_displayed() for e in dup_elems):
+                            log("🚨 ตรวจพบป๊อปอัปแจ้งเตือนอัปโหลดไฟล์ซ้ำ (You've already uploaded this file.)")
+                            raise RuntimeError("Duplicate file upload detected: You've already uploaded this file.")
+                    except Exception as e:
+                        if "Duplicate file" in str(e):
+                            raise e
 
                 # Re-resolve the input box after files have finished uploading, as DOM updates may make the old reference stale
                 box = None
@@ -2495,42 +2562,116 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
             # Click at '#composer-submit-button' to submit
             bypass_submit = False
             if not bypass_submit:
+                # ─── Wait for previous generation to finish before clicking submit ───
+                is_generating = False
+                try:
+                    stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                    is_generating = any(b.is_displayed() for b in stop_btns)
+                    if not is_generating:
+                        dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                        if any(d.is_displayed() for d in dots):
+                            log("ตรวจพบสถานะกำลังสร้างรูปภาพ (image-gen-loading-state-dots)")
+                            is_generating = True
+                except Exception:
+                    pass
+                    
+                if is_generating:
+                    elapsed = time.time() - last_submit_time if last_submit_time > 0 else 0.0
+                    remaining_wait = first_time_waiting - elapsed
+                    log(f"ตรวจพบว่า ChatGPT กำลังทำงานอยู่จากรอบก่อนหน้า (รันมาแล้ว {elapsed:.1f} วินาที)... รอให้เจเนอเรตเสร็จสิ้นก่อนส่ง Prompt ถัดไป...")
+                    
+                    if remaining_wait > 0:
+                        log(f"เริ่มนับถอยหลัง First Time Waiting ทุกๆ 1 วินาที (เหลืออีก {int(remaining_wait)} วินาที จาก {first_time_waiting} วินาที)...")
+                        for s in range(int(remaining_wait), 0, -1):
+                            if not is_driver_alive(driver):
+                                raise RuntimeError("Browser connection lost (Force Stopped).")
+                            log(f"First Time Waiting: เหลืออีก {s} วินาที จะเริ่มตรวจสอบปุ่ม Send")
+                            time.sleep(1)
+                    
+                    generation_completed = False
+                    try:
+                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                        visible = any(b.is_displayed() for b in stop_btns)
+                        dots_visible = False
+                        dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                        if any(d.is_displayed() for d in dots):
+                            dots_visible = True
+                        if not visible and not dots_visible:
+                            log("ตรวจพบว่าปุ่ม Send ว่างและไม่มี Loading dots แล้ว กำลังรอตรวจซ้ำอีก 3 วินาทีเพื่อความแน่ใจ...")
+                            time.sleep(3.0)
+                            stop_btns_re = driver.find_elements(By.XPATH, stop_xpath)
+                            visible_re = any(b.is_displayed() for b in stop_btns_re)
+                            dots_re = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                            dots_visible_re = any(d.is_displayed() for d in dots_re)
+                            if not visible_re and not dots_visible_re:
+                                log("ตรวจพบปุ่ม Send พร้อมใช้งานและรูปสร้างเสร็จแล้ว (หลังครบ First Time Waiting)")
+                                generation_completed = True
+                            else:
+                                log(f"ตรวจพบการสลับสถานะชั่วคราว ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible_re}, กำลังสร้างรูปภาพ: {dots_visible_re})")
+                        else:
+                            log(f"ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible}, กำลังสร้างรูปภาพ: {dots_visible})")
+                    except Exception:
+                        generation_completed = True
+                        
+                    if not generation_completed:
+                        check_count = 1
+                        for check_idx in range(1, max_checks + 1):
+                            log(f"เริ่มตรวจรอบที่ {check_count} (Interval {check_interval} วินาที)...")
+                            for s in range(check_interval, 0, -1):
+                                if not is_driver_alive(driver):
+                                    raise RuntimeError("Browser connection lost (Force Stopped).")
+                                log(f"Interval Check ครั้งที่ {check_count}: เหลืออีก {s} วินาที")
+                                time.sleep(1)
+                            check_count += 1
+                            try:
+                                stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                                visible = any(b.is_displayed() for b in stop_btns)
+                                dots_visible = False
+                                dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                                if any(d.is_displayed() for d in dots):
+                                    dots_visible = True
+                                if not visible and not dots_visible:
+                                    log("ตรวจพบว่าปุ่ม Send ว่างและไม่มี Loading dots แล้ว กำลังรอตรวจซ้ำอีก 3 วินาทีเพื่อความแน่ใจ...")
+                                    time.sleep(3.0)
+                                    stop_btns_re = driver.find_elements(By.XPATH, stop_xpath)
+                                    visible_re = any(b.is_displayed() for b in stop_btns_re)
+                                    dots_re = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                                    dots_visible_re = any(d.is_displayed() for d in dots_re)
+                                    if not visible_re and not dots_visible_re:
+                                        log(f"ตรวจพบปุ่ม Send พร้อมใช้งานและรูปสร้างเสร็จแล้ว (ในการตรวจสอบครั้งที่ {check_count-1})")
+                                        generation_completed = True
+                                        break
+                                    else:
+                                        log(f"ตรวจพบการสลับสถานะชั่วคราว ChatGPT ยังคงทำงานอยู่ (ปุ่ม Stop: {visible_re}, กำลังสร้างรูปภาพ: {dots_visible_re})")
+                                else:
+                                    log(f"ChatGPT ยังคงเจเนอเรตอยู่ (ปุ่ม Stop: {visible}, กำลังสร้างรูปภาพ: {dots_visible}) ผ่านการตรวจสอบแล้ว {check_count-1} ครั้ง")
+                            except Exception:
+                                log("ไม่พบปุ่ม Stop แล้ว ChatGPT เจเนอเรตเสร็จสิ้น")
+                                generation_completed = True
+                                break
+                        if not generation_completed:
+                            log("ข้อผิดพลาด: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ ChatGPT ยังทำงานไม่เสร็จสิ้น")
+                            raise RuntimeError("หยุดการทำงาน: ตรวจสอบปุ่ม Send ครบตามจำนวน Max Checks แล้วแต่ปุ่มยังไม่พร้อมใช้งาน")
+                else:
+                    log("ChatGPT ว่างอยู่ (ไม่มีการเจเนอเรตค้างไว้) ดำเนินการกดส่งพรอพต์ได้ทันที...")
 
                 # Now click submit button
                 log("กำลังคลิกปุ่มส่ง prompt (#composer-submit-button)...")
                 submit_success = False
-                for click_attempt in range(3):
+                try:
+                    submit_btn = WebDriverWait(driver, 5).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-submit-button"))
+                    )
+                    submit_btn.click()
+                    submit_success = True
+                except Exception:
                     try:
-                        submit_btn = WebDriverWait(driver, 10).until(
-                            EC.element_to_be_clickable((By.CSS_SELECTOR, "#composer-submit-button"))
-                        )
-                        submit_btn.click()
+                        driver.execute_script("document.querySelector('#composer-submit-button').click();")
                         submit_success = True
-                        break
-                    except Exception:
-                        try:
-                            driver.execute_script("document.querySelector('#composer-submit-button').click();")
-                            submit_success = True
-                            break
-                        except Exception:
-                            pass
-                    time.sleep(1.5)
-
-                # Check if it transitioned to active generation
-                started = False
-                for sec in range(3):
-                    try:
-                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
-                        if any(b.is_displayed() for b in stop_btns):
-                            started = True
-                            break
                     except Exception:
                         pass
-                    time.sleep(1.5)
 
-                if started or submit_success:
-                    log("ยืนยัน: ส่ง prompt เรียบร้อยแล้ว (ChatGPT กำลังทำการเจเนอเรตคำตอบ)!")
-                else:
+                if not submit_success:
                     log("ไม่พบการตอบสนองของปุ่มส่ง กำลังลองส่งด้วยการเคาะปุ่ม Enter...")
                     try:
                         box.send_keys(Keys.ENTER)
@@ -2540,6 +2681,25 @@ def step3_chatgpt(payload: dict[str, Any]) -> dict[str, Any]:
                 # Update last submit timestamp immediately
                 import time
                 last_submit_time = time.time()
+                
+                # ─── Wait for the new generation to start (Stop button / loading dots appear) ───
+                log("กำลังตรวจสอบว่า ChatGPT เริ่มทำงานและเริ่มสร้างภาพหรือยัง...")
+                generation_started = False
+                for check_start in range(16): # 16 attempts, 0.25s each = 4 seconds
+                    try:
+                        stop_btns = driver.find_elements(By.XPATH, stop_xpath)
+                        visible = any(b.is_displayed() for b in stop_btns)
+                        dots = driver.find_elements(By.CSS_SELECTOR, "[data-testid='image-gen-loading-state-dots']")
+                        dots_visible = any(d.is_displayed() for d in dots)
+                        if visible or dots_visible:
+                            log("ตรวจพบว่า ChatGPT เริ่มสร้างภาพแล้ว (ปุ่ม Stop / Loading dots ปรากฏขึ้นแล้ว)")
+                            generation_started = True
+                            break
+                    except Exception:
+                        pass
+                    time.sleep(0.25)
+                if not generation_started:
+                    log("คำเตือน: ไม่พบปุ่ม Stop หรือ Loading dots ขึ้นมาใน 4 วินาที ดำเนินการต่อ...")
             else:
                 log("Submit button click and generation wait bypassed for this debug session as requested.")
                 raise RuntimeError("Bypassed submit for debug session. Aborting bulk prompt loop.")
@@ -4084,7 +4244,6 @@ def import_lakorn_video_auto(payload: ImportLakornVideoPayload):
         "message": f"นำเข้าข้อมูลพรอพต์วิดีโอสำหรับตอนที่ {ep_num} เรียบร้อยแล้ว (จำนวน {len(prompt_files)} ฉาก)"
     }
 
-
 _upload_images_stop_flag = False
 
 @app.post("/api/step/stop-upload-google-flow")
@@ -4126,9 +4285,9 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
         
     def upload_macos_file_dialog(file_path: str):
         escaped_path = file_path.replace('"', '\\"')
+        app_name = _get_active_browser_app_name()
         script = f"""
         set the clipboard to "{escaped_path}"
-        delay 0.5
         tell application "System Events"
             -- Press Cmd + Shift + G to open path dialog
             key code 5 using {{command down, shift down}}
@@ -4136,11 +4295,11 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
             
             -- Press Cmd + V to paste
             key code 9 using {{command down}}
-            delay 1.0
+            delay 0.75
             
             -- Enter to confirm path
             keystroke return
-            delay 1.5
+            delay 1.25
             
             -- Enter to confirm file selection
             keystroke return
@@ -4161,9 +4320,6 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
             return {"ok": False, "message": f"ยกเลิกการอัพโหลดแล้ว (สำเร็จ {idx}/{len(images)} รูป)"}
             
         log(f"Uploading image {idx+1}/{len(images)}: {os.path.basename(img_path)}")
-        _activate_chrome()
-        time.sleep(1.0)
-        
         # Press Cmd + U to open file picker (Use key code 32 for 'U' to bypass keyboard layout issues)
         cmd_u_script = """
         tell application "System Events"
@@ -4184,10 +4340,279 @@ def upload_google_flow_images(payload: UploadImagesGoogleFlowPayload) -> dict[st
 
 
 @app.post("/api/step/video-gen")
-def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
+async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     # _activate_chrome()
     prompt = payload.prompt.strip()
     round_idx = payload.round_idx
+    
+    # ─── Flow Kit Mode Handler ──────────────────────────────────
+    if payload.video_gen_mode == "flow_kit":
+        try:
+            from agent.db import crud
+            from agent.services.flow_client import get_flow_client
+            
+            # 1. Verify extension is connected
+            client = get_flow_client()
+            if not client.connected:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Flow Kit Extension is not connected! Please open Chrome and make sure the extension connects to the WebSocket server on port 9222."
+                )
+                
+            # 2. Get or create project in Flow Kit DB
+            project_name = payload.google_flow_project_name or "default_project"
+            projects = await crud.list_projects()
+            target_project = None
+            for p in projects:
+                if p.get("name") == project_name:
+                    target_project = p
+                    break
+            
+            if not target_project:
+                target_project = await crud.create_project(
+                    name=project_name,
+                    description="Auto-created via Cockpit integration",
+                    material="realistic"
+                )
+            project_id = target_project["id"]
+            
+            # 3. Get or create video in project
+            videos = await crud.list_videos(project_id)
+            target_video = None
+            for v in videos:
+                if v.get("title") == "Default Video":
+                    target_video = v
+                    break
+            if not target_video:
+                target_video = await crud.create_video(
+                    project_id=project_id,
+                    title="Default Video",
+                    description="Auto-created video container",
+                    orientation="VERTICAL"
+                )
+            video_id = target_video["id"]
+            
+            # 4. Get or create scene for this round
+            scenes = await crud.list_scenes(video_id)
+            target_scene = None
+            display_order = round_idx
+            for s in scenes:
+                if s.get("display_order") == display_order:
+                    target_scene = s
+                    break
+            
+            if not target_scene:
+                target_scene = await crud.create_scene(
+                    video_id=video_id,
+                    display_order=display_order,
+                    prompt=prompt
+                )
+            else:
+                # Update prompt if changed
+                if target_scene.get("prompt") != prompt:
+                    await crud.update_scene(target_scene["id"], prompt=prompt)
+                    target_scene = await crud.get_scene(target_scene["id"])
+            
+            scene_id = target_scene["id"]
+            
+            # 4.5. Check for matching local storyboard image to upload if it exists
+            # We first need to check if there is an image already completed or uploaded.
+            # If not, let's look for local storyboard files under the episode folder.
+            orientation = target_video.get("orientation") or "VERTICAL"
+            image_media_id = target_scene.get("vertical_image_media_id") if orientation == "VERTICAL" else target_scene.get("horizontal_image_media_id")
+            
+            if not image_media_id:
+                try:
+                    import json
+                    from pathlib import Path
+                    
+                    config_data = {}
+                    if os.path.exists(CONFIG_FILE):
+                        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                            config_data = json.load(f) or {}
+                    
+                    lakorn_path = config_data.get("video_lakorn_path", "").strip()
+                    ton_num = config_data.get("video_lakorn_ton", "").strip()
+                    ep_num = config_data.get("video_lakorn_ep", "").strip()
+                    
+                    if lakorn_path and ton_num:
+                        ep_dir = find_episode_dir(lakorn_path, ton_num)
+                        if ep_dir:
+                            # Search for storyboard directory
+                            storyboard_dir = None
+                            for candidate in ["6 - Storyboards", "6-Storyboards", "Storyboards", "storyboards", "3 - Storyboard", "3-Storyboard", "Storyboard", "storyboard", "3 - Animation Image", "Animation Image", "animation image", "3 - Story Board", "Story Board", "story board"]:
+                                cand_path = ep_dir / candidate
+                                if cand_path.exists() and cand_path.is_dir():
+                                    storyboard_dir = cand_path
+                                    break
+                            
+                            # Fallback if no matching candidate
+                            if not storyboard_dir:
+                                for d in ep_dir.iterdir():
+                                    if d.is_dir() and ("storyboard" in d.name.lower() or "story board" in d.name.lower() or "image" in d.name.lower()):
+                                        storyboard_dir = d
+                                        break
+                            
+                            if storyboard_dir:
+                                # Find specific EP subfolder under storyboard_dir (e.g. ep_num subfolder)
+                                ep_storyboard_dir = find_sub_ep_dir(storyboard_dir, ep_num) if ep_num else storyboard_dir
+                                if not ep_storyboard_dir:
+                                    ep_storyboard_dir = storyboard_dir
+                                
+                                # Search for file starting with round_idx
+                                matched_img_path = None
+                                valid_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+                                for f in ep_storyboard_dir.iterdir():
+                                    if f.is_file() and f.suffix.lower() in valid_exts:
+                                        # Match names like: "01.png", "1.png", "01_pose.jpg", "1-pose.png", "round_01.png", "round_1.png"
+                                        name_no_ext = f.stem.lower()
+                                        candidates = [
+                                            f"{round_idx:02d}",
+                                            f"{round_idx}",
+                                            f"round_{round_idx:02d}",
+                                            f"round_{round_idx}",
+                                            f"round {round_idx:02d}",
+                                            f"round {round_idx}"
+                                        ]
+                                        
+                                        # Check exact prefix matches
+                                        is_match = False
+                                        for cand in candidates:
+                                            if name_no_ext == cand:
+                                                is_match = True
+                                                break
+                                            if name_no_ext.startswith(cand) and name_no_ext[len(cand)] in ('_', '-', ' ', '.'):
+                                                is_match = True
+                                                break
+                                        
+                                        if is_match:
+                                            matched_img_path = f
+                                            break
+                                
+                                if matched_img_path:
+                                    log(f"[Flow Kit Storyboard] Found matching local storyboard image: {matched_img_path.name}. Uploading to Google Flow...")
+                                    import base64
+                                    import mimetypes
+                                    
+                                    with open(matched_img_path, "rb") as img_f:
+                                        img_bytes = img_f.read()
+                                    
+                                    b64 = base64.b64encode(img_bytes).decode()
+                                    mime = mimetypes.guess_type(str(matched_img_path))[0] or "image/png"
+                                    file_name = matched_img_path.name
+                                    
+                                    upload_res = await client.upload_image(
+                                        b64, mime_type=mime, project_id=project_id, file_name=file_name
+                                    )
+                                    
+                                    if upload_res.get("error") or (isinstance(upload_res.get("status"), int) and upload_res["status"] >= 400):
+                                        log(f"[Flow Kit Storyboard] Failed to upload storyboard image: {upload_res.get('error')}")
+                                    else:
+                                        uploaded_media_id = upload_res.get("_mediaId")
+                                        if uploaded_media_id:
+                                            # Update database
+                                            if orientation == "VERTICAL":
+                                                await crud.update_scene(
+                                                    scene_id, 
+                                                    vertical_image_media_id=uploaded_media_id,
+                                                    vertical_image_status="COMPLETED",
+                                                    vertical_image_url=upload_res.get("url")
+                                                )
+                                            else:
+                                                await crud.update_scene(
+                                                    scene_id, 
+                                                    horizontal_image_media_id=uploaded_media_id,
+                                                    horizontal_image_status="COMPLETED",
+                                                    horizontal_image_url=upload_res.get("url")
+                                                )
+                                            # Re-fetch scene to update target_scene variable so step 5 uses it
+                                            target_scene = await crud.get_scene(scene_id)
+                                            log(f"[Flow Kit Storyboard] Uploaded and synced storyboard image Media ID: {uploaded_media_id}")
+                                        else:
+                                            log(f"[Flow Kit Storyboard] No media_id returned from upload: {upload_res}")
+                except Exception as sb_err:
+                    log(f"[Flow Kit Storyboard Warning] Failed to scan/upload storyboard: {sb_err}")
+            
+            # 5. Submit request to queue
+            orientation = target_video.get("orientation") or "VERTICAL"
+            image_media_id = target_scene.get("vertical_image_media_id") if orientation == "VERTICAL" else target_scene.get("horizontal_image_media_id")
+            
+            if not image_media_id:
+                req_type = "GENERATE_IMAGE"
+                log(f"[Flow Kit Queue] Scene {round_idx} doesn't have image media ID. Submitting GENERATE_IMAGE request...")
+            else:
+                req_type = "GENERATE_VIDEO"
+                log(f"[Flow Kit Queue] Scene {round_idx} has image media ID ({image_media_id}). Submitting GENERATE_VIDEO request...")
+                
+            existing_reqs = await crud.list_requests(scene_id=scene_id)
+            active_req = [r for r in existing_reqs if r.get("type") == req_type and r.get("status") in ("PENDING", "PROCESSING")]
+            
+            # Resolve parameters for video generation
+            edit_prompt_json = None
+            if req_type == "GENERATE_VIDEO":
+                import json as _json
+                vmodel = payload.video_model or "veo_3_1_i2v_s_fast"
+                params_dict = {
+                    "video_model": vmodel,
+                    "duration_seconds": 5,
+                    "output_count": payload.output_count
+                }
+                edit_prompt_json = _json.dumps(params_dict)
+
+            if not active_req:
+                new_req = await crud.create_request(
+                    project_id=project_id,
+                    video_id=video_id,
+                    scene_id=scene_id,
+                    req_type=req_type,
+                    orientation=orientation,
+                    edit_prompt=edit_prompt_json
+                )
+                log(f"[Flow Kit Queue] Submitted request: {new_req['id']}")
+                
+                # Check if we should also queue UPSCALE_VIDEO
+                if req_type == "GENERATE_VIDEO" and payload.upscale_resolution and payload.upscale_resolution != "NONE":
+                    upscale_active = [r for r in existing_reqs if r.get("type") == "UPSCALE_VIDEO" and r.get("status") in ("PENDING", "PROCESSING")]
+                    if not upscale_active:
+                        upscale_params = {
+                            "resolution": payload.upscale_resolution
+                        }
+                        await crud.create_request(
+                            project_id=project_id,
+                            video_id=video_id,
+                            scene_id=scene_id,
+                            req_type="UPSCALE_VIDEO",
+                            orientation=orientation,
+                            edit_prompt=_json.dumps(upscale_params)
+                        )
+                        log(f"[Flow Kit Queue] Submitted UPSCALE_VIDEO request for resolution: {payload.upscale_resolution}")
+                
+                return {"ok": True, "message": f"ส่งคำขอไปยังคิว Flow Kit สำเร็จ (ประเภท: {req_type})", "status": "PENDING"}
+            else:
+                log(f"[Flow Kit Queue] Request already active: {active_req[0]['id']}")
+                
+                # Double-check if we should queue UPSCALE_VIDEO even if GENERATE_VIDEO is already active/pending
+                if req_type == "GENERATE_VIDEO" and payload.upscale_resolution and payload.upscale_resolution != "NONE":
+                    upscale_active = [r for r in existing_reqs if r.get("type") == "UPSCALE_VIDEO" and r.get("status") in ("PENDING", "PROCESSING")]
+                    if not upscale_active:
+                        upscale_params = {
+                            "resolution": payload.upscale_resolution
+                        }
+                        await crud.create_request(
+                            project_id=project_id,
+                            video_id=video_id,
+                            scene_id=scene_id,
+                            req_type="UPSCALE_VIDEO",
+                            orientation=orientation,
+                            edit_prompt=_json.dumps(upscale_params)
+                        )
+                        log(f"[Flow Kit Queue] Submitted UPSCALE_VIDEO request for resolution: {payload.upscale_resolution}")
+                        
+                return {"ok": True, "message": f"คำขอนี้กำลังทำงานอยู่แล้วในคิว Flow Kit (ประเภท: {req_type})", "status": active_req[0]['status']}
+
+        except Exception as flow_err:
+            log(f"[Flow Kit Error] {flow_err}")
+            raise HTTPException(status_code=500, detail=f"Flow Kit Error: {flow_err}")
     google_flow_path = payload.google_flow_path.strip()
     video_input_selector = payload.video_input_selector.strip()
     video_settings_selector = payload.video_settings_selector.strip()
@@ -4957,7 +5382,240 @@ async def step_seedance(payload: SeedancePayload):
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาดขณะส่งพรอพต์: {e}")
 
 
+class StoryboardAutofillPayload(BaseModel):
+    autofill_characters: bool = True
+    autofill_locations: bool = True
+    autofill_props: bool = True
+    autofill_scenes: bool = True
+    delay_seconds: float = 1.5
+    scene_range: str = ""
+
+
+@app.post("/api/step/storyboard-autofill")
+async def step_storyboard_autofill(payload: StoryboardAutofillPayload) -> dict[str, Any]:
+    try:
+        bot = browser_manager.get()
+        if not bot or not bot.driver:
+            raise Exception("Browser is not active. Please launch a browser profile first.")
+        
+        driver = bot.driver
+        
+        # 1. Switch to Google Flow tab if it exists
+        switched = False
+        for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+            if bot.switch_to_tab_containing(url_part):
+                switched = True
+                break
+                
+        if not switched:
+            raise Exception("Google Flow tab was not found in the browser. Please open Google Flow first.")
+
+        # 2. Build list of button text targets to autofill based on payload
+        targets = []
+        if payload.autofill_characters:
+            targets.append("Autofill Characters")
+        if payload.autofill_locations:
+            targets.append("Autofill Locations")
+        if payload.autofill_props:
+            targets.append("Autofill Props")
+        if payload.autofill_scenes:
+            targets.append("Autofill Scene")
+
+        if not targets:
+            return {"ok": True, "clicked_count": 0, "clicked_buttons": []}
+
+        # 3. Check if buttons are in main window or inside an iframe
+        target_frame = None
+        
+        # Check default content first
+        buttons_count = driver.execute_script("""
+            const targets = arguments[0];
+            const buttons = Array.from(document.querySelectorAll('button'));
+            return buttons.filter(btn => targets.some(t => btn.textContent.trim().includes(t))).length;
+        """, targets)
+        
+        if buttons_count > 0:
+            target_frame = "default"
+        else:
+            # Check iframes
+            iframes = driver.find_elements("tag name", "iframe")
+            for iframe in iframes:
+                try:
+                    driver.switch_to.frame(iframe)
+                    count = driver.execute_script("""
+                        const targets = arguments[0];
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        return buttons.filter(btn => targets.some(t => btn.textContent.trim().includes(t))).length;
+                    """, targets)
+                    if count > 0:
+                        target_frame = iframe
+                        break
+                except Exception:
+                    pass
+                finally:
+                    driver.switch_to.default_content()
+
+        # Switch to the frame if found
+        if target_frame and target_frame != "default":
+            driver.switch_to.frame(target_frame)
+            log("Switched to iframe containing autofill buttons.")
+        elif not target_frame:
+            log("Warning: No matching autofill buttons found in default content or any iframes. Running script on default content.")
+
+        try:
+            # Initialize stop flag to false
+            driver.execute_script("window.autofillStopRequested = false;")
+            
+            # 4. Execute JS in browser context with async script for delayed clicking
+            delay_ms = int(payload.delay_seconds * 1000)
+            
+            script = """
+            const callback = arguments[arguments.length - 1];
+            const targets = arguments[0];
+            const delayMs = arguments[1];
+            const rangeStr = arguments[2];
+            
+            (async () => {
+                try {
+                    window.autofillStopRequested = false;
+                    const buttons = Array.from(document.querySelectorAll('button'));
+                    const matchedButtons = [];
+                    for (const btn of buttons) {
+                        const txt = btn.textContent.trim();
+                        if (targets.some(t => txt.includes(t))) {
+                            matchedButtons.push(btn);
+                        }
+                    }
+                    
+                    // Parse range
+                    let rangeStart = 1;
+                    let rangeEnd = 999999;
+                    let hasRange = false;
+                    if (rangeStr && rangeStr.trim()) {
+                        hasRange = true;
+                        const parts = rangeStr.trim().split('-');
+                        if (parts.length === 2) {
+                            const s = parseInt(parts[0], 10);
+                            const e = parseInt(parts[1], 10);
+                            if (!isNaN(s)) rangeStart = s;
+                            if (!isNaN(e)) rangeEnd = e;
+                        } else {
+                            const s = parseInt(rangeStr.trim(), 10);
+                            if (!isNaN(s)) {
+                                rangeStart = s;
+                                rangeEnd = s;
+                            }
+                        }
+                    }
+                    
+                    let clickedCount = 0;
+                    let details = [];
+                    let n = 0; // 1-based storyboard scene index (1, 2, 3...)
+                    
+                    for (const btn of matchedButtons) {
+                        if (window.autofillStopRequested) {
+                            details.push("[STOPPED BY USER]");
+                            break;
+                        }
+                        
+                        const txt = btn.textContent.trim();
+                        const isSceneButton = txt.includes("Autofill Scene");
+                        
+                        if (isSceneButton) {
+                            n++; // 1st storyboard scene button is n = 1
+                            
+                            // Apply n + 3 logic: user typed range (e.g., 5-10) is checked against (n + 3)
+                            const overallIndex = n + 3; // n + 3 maps 1 -> 4, 2 -> 5, 3 -> 6...
+                            
+                            if (hasRange) {
+                                const targetStart = rangeStart + 3; // Shift start range by +3
+                                const targetEnd = rangeEnd + 3;     // Shift end range by +3
+                                
+                                if (overallIndex < targetStart || overallIndex > targetEnd) {
+                                    continue; // Skip scenes outside n + 3 target range
+                                }
+                            }
+                        }
+                        
+                        // Scroll to button to ensure visibility and prevent click interception
+                        btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        // Small delay after scrolling to let UI settle
+                        await new Promise(r => setTimeout(r, 200));
+                        if (window.autofillStopRequested) {
+                            details.push("[STOPPED BY USER]");
+                            break;
+                        }
+                        btn.click();
+                        clickedCount++;
+                        details.push(txt);
+                        if (delayMs > 0) {
+                            // Check stop request in chunks of 100ms during the delay
+                            const startWait = Date.now();
+                            while (Date.now() - startWait < delayMs) {
+                                if (window.autofillStopRequested) {
+                                    break;
+                                }
+                                await new Promise(r => setTimeout(r, 100));
+                            }
+                        }
+                    }
+                    callback({ ok: true, clicked_count: clickedCount, clicked_buttons: details });
+                } catch (e) {
+                    callback({ ok: false, error: e.toString() });
+                }
+            })();
+            """
+            # Set script timeout in driver to be larger than total delay
+            total_timeout = max(60, int(20 * payload.delay_seconds) + 15)
+            driver.set_script_timeout(total_timeout)
+            
+            result = driver.execute_async_script(script, targets, delay_ms, payload.scene_range)
+            if not result.get("ok"):
+                raise Exception(result.get("error", "Unknown script error"))
+                
+            log(f"[Storyboard Autofill] Clicked {result['clicked_count']} autofill buttons: {result['clicked_buttons']}")
+            return {"ok": True, "clicked_count": result["clicked_count"], "clicked_buttons": result["clicked_buttons"]}
+        finally:
+            # Always return to default content context
+            driver.switch_to.default_content()
+    except Exception as e:
+        log(f"[Storyboard Autofill] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/step/storyboard-autofill/stop")
+async def stop_storyboard_autofill() -> dict[str, Any]:
+    try:
+        bot = browser_manager.get()
+        if bot and bot.driver:
+            for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+                if bot.switch_to_tab_containing(url_part):
+                    # Set the flag on both the main window and all sub-iframes
+                    script = """
+                    window.autofillStopRequested = true;
+                    try {
+                        const iframes = document.querySelectorAll('iframe');
+                        for (const iframe of iframes) {
+                            try {
+                                const iframeDoc = iframe.contentDocument || iframe.contentWindow;
+                                if (iframeDoc) {
+                                    iframeDoc.autofillStopRequested = true;
+                                }
+                            } catch(e) {}
+                        }
+                    } catch(e) {}
+                    """
+                    bot.driver.execute_script(script)
+                    log("[Storyboard Autofill] Sent stop request to browser context.")
+                    return {"ok": True, "message": "Stop request sent successfully"}
+        return {"ok": False, "message": "Browser or driver not active"}
+    except Exception as e:
+        log(f"[Storyboard Autofill] Stop Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/")
+
 def index():
     return FileResponse(BASE_DIR / "web" / "index.html")
 

@@ -15,7 +15,8 @@
       "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Generate Image Dino",
       "debug_port": 9222,
       "startup_urls": [
-        "https://chatgpt.com/"
+        "https://chatgpt.com/",
+        "https://labs.google/fx/tools/flow"
       ],
       "browser_type": "chrome"
     },

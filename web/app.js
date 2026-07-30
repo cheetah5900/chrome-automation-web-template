@@ -268,6 +268,13 @@ ${step5}
 - Set 1: 4-6 (เอาคลิป 4,5,6 มารวมกัน)<br>
 - Set 2: 7-9 (เอาคลิป 7,8,9 มารวมกัน)</em>`;
   }
+
+  const tooltipRunStoryboard = document.getElementById('tooltip_btnRunStoryboardAutofill');
+  if (tooltipRunStoryboard) {
+    tooltipRunStoryboard.textContent = `📋 รันการเติมข้อมูล (Autofill):
+1. ระบบจะหาปุ่มทั้งหมดที่ตรงกับตัวเลือก
+2. สั่ง Chrome ให้คลิกเพื่อป้อนข้อมูลตัวละคร/สถานที่/อุปกรณ์ ในหน้าเว็บ Google Flow โดยอัตโนมัติ`;
+  }
 }
 
 async function loadSettings() {
@@ -706,12 +713,14 @@ inputsToListen.forEach(id => {
 // Tab Switching
 function initTabNavigation() {
   const btnImageGen = document.getElementById('tabImageGenBtn');
+  const btnStoryboardGen = document.getElementById('tabStoryboardGenBtn');
   const btnVideoGen = document.getElementById('tabVideoGenBtn');
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
   
   const viewImageGen = document.getElementById('imageGenView');
+  const viewStoryboardGen = document.getElementById('storyboardGenView');
   const viewVideoGen = document.getElementById('videoGenView');
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
@@ -719,6 +728,7 @@ function initTabNavigation() {
 
   const tabs = [
     { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
+    { btn: btnStoryboardGen, view: viewStoryboardGen, onLoad: () => { console.log('Storyboard loaded'); } },
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
@@ -736,6 +746,16 @@ function initTabNavigation() {
       if (tab.view) tab.view.classList.remove('hidden');
       if (tab.onLoad) tab.onLoad();
       
+      // Control Flow Kit polling based on active tab
+      if (tab.btn === btnVideoGen) {
+        const mode = document.getElementById('cfg_video_gen_mode')?.value || 'selenium';
+        if (mode === 'flow_kit') {
+          startFlowKitPolling();
+        }
+      } else {
+        stopFlowKitPolling();
+      }
+
       // Save active tab ID to localStorage
       localStorage.setItem('activeNavigationTab', tab.btn.id);
     });
@@ -756,6 +776,8 @@ async function loadConfig() {
   try {
     const config = await jsonFetch('/api/config');
     loadVideoPresets(config.video_presets);
+    loadFlowVideoPresets(config.flow_video_presets);
+    loadFlowPoPresets(config.flow_po_presets);
     const folderInput = document.getElementById('cfg_folder_name');
     if (folderInput) folderInput.value = config.folder_name || '';
     const localInput = document.getElementById('cfg_local_path');
@@ -1957,6 +1979,293 @@ function applyVideoPreset(presetName) {
   updateTooltips();
 }
 
+let globalFlowVideoPresets = {};
+let globalFlowPoPresets = {};
+
+function loadFlowVideoPresets(presets) {
+  globalFlowVideoPresets = presets || {};
+  const lastPreset = localStorage.getItem('flowVideoLastPreset') || '';
+  renderFlowVideoPresetsSelect(lastPreset);
+}
+
+function renderFlowVideoPresetsSelect(selectedKey = '') {
+  const select = document.getElementById('flowVideoPresetSelect');
+  if (!select) return;
+  
+  select.innerHTML = '<option value="">-- เลือก Preset หรือตั้งค่าเอง --</option>';
+  
+  Object.keys(globalFlowVideoPresets).forEach(key => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = key;
+    select.appendChild(opt);
+  });
+  
+  if (selectedKey && globalFlowVideoPresets.hasOwnProperty(selectedKey)) {
+    select.value = selectedKey;
+  }
+}
+
+function applyFlowVideoPreset(presetName) {
+  if (!presetName || !globalFlowVideoPresets[presetName]) {
+    const proj = document.getElementById('cfg_flow_project_dropdown');
+    if (proj) proj.selectedIndex = 0;
+    const model = document.getElementById('cfg_flow_video_model');
+    if (model) model.value = '';
+    const orientation = document.getElementById('cfg_flow_orientation');
+    if (orientation) orientation.value = 'VERTICAL';
+    const outputCount = document.getElementById('cfg_flow_output_count');
+    if (outputCount) outputCount.value = '1';
+    const upscale = document.getElementById('cfg_flow_upscale_auto');
+    if (upscale) upscale.value = 'NONE';
+    const lakornPath = document.getElementById('cfg_flow_lakorn_path');
+    if (lakornPath) {
+      lakornPath.value = '';
+      lakornPath.dispatchEvent(new Event('input'));
+    }
+    const lakornTon = document.getElementById('cfg_flow_lakorn_ton');
+    if (lakornTon) {
+      lakornTon.value = '';
+      lakornTon.dispatchEvent(new Event('input'));
+    }
+    const lakornEp = document.getElementById('cfg_flow_lakorn_ep');
+    if (lakornEp) {
+      lakornEp.value = '';
+      lakornEp.dispatchEvent(new Event('input'));
+    }
+    return;
+  }
+  
+  const preset = globalFlowVideoPresets[presetName];
+  
+  const proj = document.getElementById('cfg_flow_project_dropdown');
+  if (proj && preset.project_id !== undefined) {
+    proj.value = preset.project_id;
+    proj.dispatchEvent(new Event('change'));
+  }
+  
+  const model = document.getElementById('cfg_flow_video_model');
+  if (model && preset.video_model !== undefined) model.value = preset.video_model;
+  
+  const orientation = document.getElementById('cfg_flow_orientation');
+  if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
+  
+  const outputCount = document.getElementById('cfg_flow_output_count');
+  if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
+  
+  const upscale = document.getElementById('cfg_flow_upscale_auto');
+  if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
+  
+  const lakornPath = document.getElementById('cfg_flow_lakorn_path');
+  if (lakornPath && preset.lakorn_path !== undefined) {
+    lakornPath.value = preset.lakorn_path;
+    lakornPath.dispatchEvent(new Event('input'));
+  }
+  
+  const lakornTon = document.getElementById('cfg_flow_lakorn_ton');
+  if (lakornTon && preset.lakorn_ton !== undefined) {
+    lakornTon.value = preset.lakorn_ton;
+    lakornTon.dispatchEvent(new Event('input'));
+  }
+  
+  const lakornEp = document.getElementById('cfg_flow_lakorn_ep');
+  if (lakornEp && preset.lakorn_ep !== undefined) {
+    lakornEp.value = preset.lakorn_ep;
+    lakornEp.dispatchEvent(new Event('input'));
+  }
+  
+  updateTooltips();
+}
+
+async function saveFlowVideoPreset() {
+  const select = document.getElementById('flowVideoPresetSelect');
+  const currentKey = select ? select.value : '';
+  const presetName = prompt('ระบุชื่อ Preset หรือระบุชื่อเดิมเพื่อบันทึกทับ:', currentKey || '');
+  if (!presetName) return;
+  const cleanName = presetName.trim();
+  if (!cleanName) return;
+  
+  const preset = {
+    project_id: document.getElementById('cfg_flow_project_dropdown')?.value || '',
+    video_model: document.getElementById('cfg_flow_video_model')?.value || '',
+    orientation: document.getElementById('cfg_flow_orientation')?.value || 'VERTICAL',
+    output_count: parseInt(document.getElementById('cfg_flow_output_count')?.value || '1', 10),
+    upscale_resolution: document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE',
+    lakorn_path: document.getElementById('cfg_flow_lakorn_path')?.value || '',
+    lakorn_ton: document.getElementById('cfg_flow_lakorn_ton')?.value || '',
+    lakorn_ep: document.getElementById('cfg_flow_lakorn_ep')?.value || ''
+  };
+  
+  globalFlowVideoPresets[cleanName] = preset;
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'flow_video_presets', value: globalFlowVideoPresets })
+    });
+    localStorage.setItem('flowVideoLastPreset', cleanName);
+    renderFlowVideoPresetsSelect(cleanName);
+    applyFlowVideoPreset(cleanName);
+    alert(`บันทึก Preset "${cleanName}" สำเร็จ`);
+  } catch (e) {
+    alert(`เกิดข้อผิดพลาดในการบันทึก: ${e.message}`);
+  }
+}
+
+async function deleteFlowVideoPreset() {
+  const select = document.getElementById('flowVideoPresetSelect');
+  const selectedKey = select ? select.value : '';
+  if (!selectedKey) {
+    alert('กรุณาเลือก Preset ที่ต้องการลบก่อน');
+    return;
+  }
+  
+  if (!confirm(`คุณต้องการลบ Preset "${selectedKey}" ใช่หรือไม่?`)) return;
+  
+  delete globalFlowVideoPresets[selectedKey];
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'flow_video_presets', value: globalFlowVideoPresets })
+    });
+    if (localStorage.getItem('flowVideoLastPreset') === selectedKey) {
+      localStorage.removeItem('flowVideoLastPreset');
+    }
+    renderFlowVideoPresetsSelect();
+    applyFlowVideoPreset('');
+    alert(`ลบ Preset "${selectedKey}" สำเร็จ`);
+  } catch (e) {
+    alert(`เกิดข้อผิดพลาดในการลบ: ${e.message}`);
+  }
+}
+
+// Prompt-Only Mode presets
+function loadFlowPoPresets(presets) {
+  globalFlowPoPresets = presets || {};
+  renderFlowPoPresetsSelect();
+}
+
+function renderFlowPoPresetsSelect(selectedKey = '') {
+  const select = document.getElementById('flowPoPresetSelect');
+  if (!select) return;
+  
+  select.innerHTML = '<option value="">-- เลือก Preset หรือตั้งค่าเอง --</option>';
+  
+  Object.keys(globalFlowPoPresets).forEach(key => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = key;
+    select.appendChild(opt);
+  });
+  
+  if (selectedKey) {
+    select.value = selectedKey;
+  }
+}
+
+function applyFlowPoPreset(presetName) {
+  if (!presetName || !globalFlowPoPresets[presetName]) {
+    const proj = document.getElementById('cfg_flow_po_project_dropdown');
+    if (proj) proj.selectedIndex = 0;
+    const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
+    if (promptsPath) promptsPath.value = '';
+    const model = document.getElementById('cfg_flow_po_video_model');
+    if (model) model.value = '';
+    const orientation = document.getElementById('cfg_flow_po_orientation');
+    if (orientation) orientation.value = 'VERTICAL';
+    const outputCount = document.getElementById('cfg_flow_po_output_count');
+    if (outputCount) outputCount.value = '1';
+    const upscale = document.getElementById('cfg_flow_po_upscale_auto');
+    if (upscale) upscale.value = 'NONE';
+    return;
+  }
+  
+  const preset = globalFlowPoPresets[presetName];
+  
+  const proj = document.getElementById('cfg_flow_po_project_dropdown');
+  if (proj && preset.project_id !== undefined) {
+    proj.value = preset.project_id;
+    proj.dispatchEvent(new Event('change'));
+  }
+  
+  const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
+  if (promptsPath && preset.prompts_path !== undefined) promptsPath.value = preset.prompts_path;
+  
+  const model = document.getElementById('cfg_flow_po_video_model');
+  if (model && preset.video_model !== undefined) model.value = preset.video_model;
+  
+  const orientation = document.getElementById('cfg_flow_po_orientation');
+  if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
+  
+  const outputCount = document.getElementById('cfg_flow_po_output_count');
+  if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
+  
+  const upscale = document.getElementById('cfg_flow_po_upscale_auto');
+  if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
+  
+  updateTooltips();
+}
+
+async function saveFlowPoPreset() {
+  const select = document.getElementById('flowPoPresetSelect');
+  const currentKey = select ? select.value : '';
+  const presetName = prompt('ระบุชื่อ Preset หรือระบุชื่อเดิมเพื่อบันทึกทับ:', currentKey || '');
+  if (!presetName) return;
+  const cleanName = presetName.trim();
+  if (!cleanName) return;
+  
+  const preset = {
+    project_id: document.getElementById('cfg_flow_po_project_dropdown')?.value || '',
+    prompts_path: document.getElementById('cfg_flow_po_prompts_path')?.value || '',
+    video_model: document.getElementById('cfg_flow_po_video_model')?.value || '',
+    orientation: document.getElementById('cfg_flow_po_orientation')?.value || 'VERTICAL',
+    output_count: parseInt(document.getElementById('cfg_flow_po_output_count')?.value || '1', 10),
+    upscale_resolution: document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE'
+  };
+  
+  globalFlowPoPresets[cleanName] = preset;
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'flow_po_presets', value: globalFlowPoPresets })
+    });
+    renderFlowPoPresetsSelect(cleanName);
+    alert(`บันทึก Preset "${cleanName}" สำเร็จ`);
+  } catch (e) {
+    alert(`เกิดข้อผิดพลาดในการบันทึก: ${e.message}`);
+  }
+}
+
+async function deleteFlowPoPreset() {
+  const select = document.getElementById('flowPoPresetSelect');
+  const selectedKey = select ? select.value : '';
+  if (!selectedKey) {
+    alert('กรุณาเลือก Preset ที่ต้องการลบก่อน');
+    return;
+  }
+  
+  if (!confirm(`คุณต้องการลบ Preset "${selectedKey}" ใช่หรือไม่?`)) return;
+  
+  delete globalFlowPoPresets[selectedKey];
+  
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'flow_po_presets', value: globalFlowPoPresets })
+    });
+    renderFlowPoPresetsSelect();
+    alert(`ลบ Preset "${selectedKey}" สำเร็จ`);
+  } catch (e) {
+    alert(`เกิดข้อผิดพลาดในการลบ: ${e.message}`);
+  }
+}
+
 async function saveVideoPreset() {
   const select = document.getElementById('videoPresetSelect');
   const currentKey = select ? select.value : '';
@@ -2131,6 +2440,8 @@ async function runVideoHelper(btnElement) {
     
     let combineSets = [];
     let durations = [];
+    let transitions = [];
+    let fadeDurations = [];
     let viewChannelData = null;
     
     const folderInput = document.getElementById('viewChannelFolderText');
@@ -2155,14 +2466,10 @@ async function runVideoHelper(btnElement) {
       }
       outputPathVal = folderVal;
       combineSets = folderList.map(f => [f]);
-    } else {
-      combineSets = [[folderVal]];
     }
     
     if (subModeVal === 'view_channel') {
       const container = document.getElementById('viewDurationsContainer');
-      const transitions = [];
-      const fadeDurations = [];
       if (container) {
         const durInputs = container.querySelectorAll('input[id^="viewDur"]');
         durInputs.forEach(input => {
@@ -2203,6 +2510,7 @@ async function runVideoHelper(btnElement) {
       };
     }
 
+    if (isBatch) {
       combineSets.forEach((folders, idx) => {
         const setObj = {
           index: subModeVal === 'view_channel' ? `view_channel_combine_${idx + 1}` : `combine_${idx + 1}`,
@@ -2234,7 +2542,56 @@ async function runVideoHelper(btnElement) {
         
         activeSets.push(setObj);
       });
+    } else {
+      // Manual Mode: Collect configured sets from the 20 tabs!
+      for (let i = 1; i <= 20; i++) {
+        const noInput = document.getElementById(`videoNo_${i}`);
+        const noVal = noInput ? noInput.value.trim() : '';
+        const videoInput = document.getElementById(`videoInputPathText_${i}`);
+        const videoVal = videoInput ? videoInput.value.trim() : '';
+        const videoFileInput = document.getElementById(`videoInputPathFile_${i}`);
+        const videoFileObj = videoFileInput && videoFileInput.files.length > 0 ? videoFileInput.files[0] : null;
+        
+        const imageInput = document.getElementById(`imageInputPathText_${i}`);
+        const imageVal = imageInput ? imageInput.value.trim() : '';
+        const imageFileInput = document.getElementById(`imageInputPathFile_${i}`);
+        const imageFileObj = imageFileInput && imageFileInput.files.length > 0 ? imageFileInput.files[0] : null;
+        
+        // We consider a set active if the user specified a subfolder number AND (a video path or video file)
+        if (noVal && (videoVal || videoFileObj)) {
+          const setObj = {
+            index: i,
+            label: `Set ${i}`,
+            videoFile: videoFileObj,
+            imageFile: imageFileObj,
+            videoPathVal: videoVal,
+            imagePathVal: imageVal,
+            no: noVal,
+            amount: '1',
+            foldersJson: '',
+            videoSpeed: speedVal
+          };
+          
+          if (subModeVal === 'view_channel' && viewChannelData) {
+            setObj.subMode = 'view_channel';
+            setObj.durationsJson = JSON.stringify(durations);
+            setObj.transitionsJson = JSON.stringify(transitions);
+            setObj.fadeDurationsJson = JSON.stringify(fadeDurations);
+            setObj.audioPath = viewChannelData.audioPath;
+            setObj.audioBoost = viewChannelData.audioBoost;
+            setObj.videoAudioBoost = viewChannelData.videoAudioBoost;
+            setObj.contrast = viewChannelData.contrast;
+            setObj.saturation = viewChannelData.saturation;
+            setObj.brightness = viewChannelData.brightness;
+            setObj.gamma = viewChannelData.gamma;
+            setObj.unsharp = viewChannelData.unsharp;
+          }
+          activeSets.push(setObj);
+        }
+      }
+      outputPathVal = folderVal;
     }
+  }
 
   if (activeSets.length === 0) {
     if (modeVal === 'cover') {
@@ -2575,6 +2932,7 @@ async function saveImagePrompts(silent = false) {
       }
     }
     
+    const activeRounds = getActiveRounds();
     // Populate all 20 rounds of prompts and statuses
     for (let r = 1; r <= getImageGenMaxRound(); r++) {
       const p_key = r === 1 ? 'image_prompts' : `image_prompts_${r}`;
@@ -2583,8 +2941,7 @@ async function saveImagePrompts(silent = false) {
       payload[s_key] = statusesByRound[r] || [];
 
       // Populate active state per round
-      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
-      payload[`round_active_${r}`] = roundCheckbox ? roundCheckbox.checked : true;
+      payload[`round_active_${r}`] = activeRounds.has(r);
       
       // Populate folder path per round
       payload[`reference_images_dir_round_${r}`] = refImagesDirByRound[r] || '';
@@ -2794,43 +3151,71 @@ async function executeStep(stepEndpoint, payload = {}, btnElement = null, consol
   return success;
 }
 
+function getActiveRounds() {
+  const input = document.getElementById('activeRoundsInput');
+  const activeRounds = new Set();
+  const maxRound = getImageGenMaxRound();
+  if (!input) {
+    for (let r = 1; r <= maxRound; r++) {
+      activeRounds.add(r);
+    }
+    return activeRounds;
+  }
+  const val = input.value.trim();
+  if (!val) return activeRounds;
+  
+  const parts = val.split(',');
+  for (let part of parts) {
+    part = part.trim();
+    if (!part) continue;
+    
+    if (part.includes('-')) {
+      const [startStr, endStr] = part.split('-');
+      const start = parseInt(startStr, 10);
+      const end = parseInt(endStr, 10);
+      if (!isNaN(start) && !isNaN(end)) {
+        const from = Math.min(start, end);
+        const to = Math.max(start, end);
+        for (let i = from; i <= to; i++) {
+          if (i >= 1 && i <= maxRound) {
+            activeRounds.add(i);
+          }
+        }
+      }
+    } else {
+      const num = parseInt(part, 10);
+      if (!isNaN(num) && num >= 1 && num <= maxRound) {
+        activeRounds.add(num);
+      }
+    }
+  }
+  return activeRounds;
+}
+
 function saveImageGenActiveState() {
-  const state = {};
-  document.querySelectorAll('.round-active-checkbox').forEach(cb => {
-    state[cb.dataset.round] = cb.checked;
-  });
-  localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(state));
+  const inputEl = document.getElementById('activeRoundsInput');
+  if (inputEl) {
+    localStorage.setItem('imageGenActiveRoundsInput', inputEl.value.trim());
+  }
 }
 
 // Initialize steps listeners
   function renderImageGenTabs() {
     const container = document.getElementById('promptTabsContainer');
-    const checkboxContainer = document.getElementById('activeRoundsCheckboxes');
-    if (!container || !checkboxContainer) return;
+    if (!container) return;
     container.innerHTML = '';
-    checkboxContainer.innerHTML = '';
     
-    let savedActiveState = {};
-    try {
-      const stored = localStorage.getItem('imageGenActiveRoundsState');
-      if (stored) savedActiveState = JSON.parse(stored);
-    } catch(e) {}
+    let savedActiveInput = localStorage.getItem('imageGenActiveRoundsInput');
+    if (savedActiveInput === null) {
+      savedActiveInput = '1-' + getImageGenMaxRound();
+      localStorage.setItem('imageGenActiveRoundsInput', savedActiveInput);
+    }
+    const activeRoundsInput = document.getElementById('activeRoundsInput');
+    if (activeRoundsInput && !activeRoundsInput.value) {
+      activeRoundsInput.value = savedActiveInput;
+    }
 
     for (let r = 1; r <= getImageGenMaxRound(); r++) {
-      const isChecked = savedActiveState.hasOwnProperty(r) ? savedActiveState[r] : true;
-      
-      // Checkbox for dropdown
-      const cbLabel = document.createElement('label');
-      cbLabel.style.cssText = 'display: flex; align-items: center; width: 100%; font-size: 0.85rem; cursor: pointer; color: #fff; padding: 6px 4px; border-radius: 4px; transition: background 0.2s; box-sizing: border-box;';
-      cbLabel.onmouseover = () => cbLabel.style.background = 'rgba(255,255,255,0.05)';
-      cbLabel.onmouseout = () => cbLabel.style.background = 'transparent';
-      cbLabel.innerHTML = `<div style="flex: 0 0 10%; display: flex; justify-content: flex-start; align-items: center;"><input type="checkbox" class="round-active-checkbox" data-round="${r}" ${isChecked ? 'checked' : ''} style="margin: 0; cursor: pointer;" /></div><div style="flex: 0 0 90%; user-select: none;">Round ${r}</div>`;
-      
-      const cbInput = cbLabel.querySelector('input');
-      cbInput.addEventListener('change', saveImageGenActiveState);
-      
-      checkboxContainer.appendChild(cbLabel);
-
       // Tab Button
       const btn = document.createElement('button');
       btn.className = 'prompt-tab-btn' + (r === 1 ? ' active' : '');
@@ -2865,10 +3250,6 @@ function saveImageGenActiveState() {
     }
 
     updateImageGenTabIndicators();
-
-    if (!localStorage.getItem('imageGenActiveRoundsState')) {
-      saveImageGenActiveState();
-    }
   }
 
   function updateImageGenTabIndicators() {
@@ -2922,31 +3303,14 @@ function initWorkflowActionListeners() {
   });
 
 
-  // Active Rounds Dropdown toggle and selection bindings for Image Gen
-  const activeRoundsBtn = document.getElementById('activeRoundsBtn');
-  const activeRoundsMenu = document.getElementById('activeRoundsMenu');
-  if (activeRoundsBtn && activeRoundsMenu) {
-    activeRoundsBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      activeRoundsMenu.style.display = activeRoundsMenu.style.display === 'none' ? 'block' : 'none';
-    });
-    document.addEventListener('click', () => {
-      activeRoundsMenu.style.display = 'none';
-    });
-    activeRoundsMenu.addEventListener('click', (e) => e.stopPropagation());
-  }
-
-  const selectAllBtn = document.getElementById('selectAllRoundsBtn');
-  const deselectAllBtn = document.getElementById('deselectAllRoundsBtn');
-  if (selectAllBtn) {
-    selectAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = true);
+  // Active Rounds Input change binding for Image Gen
+  const activeRoundsInput = document.getElementById('activeRoundsInput');
+  if (activeRoundsInput) {
+    activeRoundsInput.addEventListener('change', () => {
       saveImageGenActiveState();
+      saveImagePrompts(true);
     });
-  }
-  if (deselectAllBtn) {
-    deselectAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.round-active-checkbox').forEach(cb => cb.checked = false);
+    activeRoundsInput.addEventListener('input', () => {
       saveImageGenActiveState();
     });
   }
@@ -2980,6 +3344,7 @@ function initWorkflowActionListeners() {
     
     // Clear localStorage active state
     localStorage.removeItem('imageGenActiveRoundsState');
+    localStorage.removeItem('imageGenActiveRoundsInput');
     
     renderImageGenTabs();
     renderImagePromptsForRound(1);
@@ -3185,6 +3550,48 @@ function initWorkflowActionListeners() {
   if (deletePresetBtn) {
     deletePresetBtn.addEventListener('click', () => {
       deleteVideoPreset();
+    });
+  }
+
+  // Flow Video presets
+  const flowVideoPresetSelect = document.getElementById('flowVideoPresetSelect');
+  if (flowVideoPresetSelect) {
+    flowVideoPresetSelect.addEventListener('change', (e) => {
+      const presetName = e.target.value;
+      localStorage.setItem('flowVideoLastPreset', presetName);
+      applyFlowVideoPreset(presetName);
+    });
+  }
+  const saveFlowVideoPresetBtn = document.getElementById('saveFlowVideoPresetBtn');
+  if (saveFlowVideoPresetBtn) {
+    saveFlowVideoPresetBtn.addEventListener('click', () => {
+      saveFlowVideoPreset();
+    });
+  }
+  const deleteFlowVideoPresetBtn = document.getElementById('deleteFlowVideoPresetBtn');
+  if (deleteFlowVideoPresetBtn) {
+    deleteFlowVideoPresetBtn.addEventListener('click', () => {
+      deleteFlowVideoPreset();
+    });
+  }
+
+  // Flow Prompt-Only presets
+  const flowPoPresetSelect = document.getElementById('flowPoPresetSelect');
+  if (flowPoPresetSelect) {
+    flowPoPresetSelect.addEventListener('change', (e) => {
+      applyFlowPoPreset(e.target.value);
+    });
+  }
+  const saveFlowPoPresetBtn = document.getElementById('saveFlowPoPresetBtn');
+  if (saveFlowPoPresetBtn) {
+    saveFlowPoPresetBtn.addEventListener('click', () => {
+      saveFlowPoPreset();
+    });
+  }
+  const deleteFlowPoPresetBtn = document.getElementById('deleteFlowPoPresetBtn');
+  if (deleteFlowPoPresetBtn) {
+    deleteFlowPoPresetBtn.addEventListener('click', () => {
+      deleteFlowPoPreset();
     });
   }
 
@@ -3582,12 +3989,15 @@ function initWorkflowActionListeners() {
           currentPromptRound = 1;
 
           const maxRounds = getImageGenMaxRound();
-          const activeRoundsState = {};
           for (let r = 1; r <= maxRounds; r++) {
             initImageGenRound(r);
-            activeRoundsState[r] = true;
           }
-          localStorage.setItem('imageGenActiveRoundsState', JSON.stringify(activeRoundsState));
+          const defaultActiveRounds = `1-${maxRounds}`;
+          localStorage.setItem('imageGenActiveRoundsInput', defaultActiveRounds);
+          const activeRoundsInput = document.getElementById('activeRoundsInput');
+          if (activeRoundsInput) {
+            activeRoundsInput.value = defaultActiveRounds;
+          }
 
           if (res.ref_images_dir) {
             // Update refImagesDirByRound for all rounds
@@ -3650,12 +4060,12 @@ function initWorkflowActionListeners() {
 
     let hasProcessedAnyRound = false;
 
+    const activeRounds = getActiveRounds();
     for (let r = 1; r <= getImageGenMaxRound(); r++) {
       if (shouldStopGeneration) {
         break;
       }
-      const roundCheckbox = document.querySelector(`.round-active-checkbox[data-round="${r}"]`);
-      const isRoundActive = roundCheckbox ? roundCheckbox.checked : true;
+      const isRoundActive = activeRounds.has(r);
       if (!isRoundActive) {
         writeConsoleLine(`Round ${r}: Skip processing (Round is inactive/disabled).`, 'info', 'imageConsole');
         continue;
@@ -4171,11 +4581,13 @@ function initFileImports() {
 
   // Duplicate resetAllRoundsBtn listener removed
 
-  document.querySelectorAll('.round-active-checkbox').forEach(cb => {
-    cb.addEventListener('change', () => {
+  const activeRoundsInput = document.getElementById('activeRoundsInput');
+  if (activeRoundsInput) {
+    activeRoundsInput.addEventListener('change', () => {
+      saveImageGenActiveState();
       saveImagePrompts(true);
     });
-  });
+  }
 }
 
 let videoPromptsByRound = {};
@@ -4276,6 +4688,8 @@ let isScanningRetry = false;
 async function loadVideoPrompts() {
   try {
     const config = await jsonFetch('/api/config');
+    loadFlowVideoPresets(config.flow_video_presets);
+    loadFlowPoPresets(config.flow_po_presets);
 
     let maxRoundConfig = 1;
     for (const key in config) {
@@ -4329,23 +4743,276 @@ async function loadVideoPrompts() {
     const submitSel = document.getElementById('cfg_video_submit_selector');
     if (submitSel) submitSel.value = config.video_submit_selector || '';
 
+    const lastPresetName = localStorage.getItem('flowVideoLastPreset') || '';
+    let lakornPathVal = '';
+    let lakornTonVal = '';
+    let lakornEpVal = '';
+    if (lastPresetName && globalFlowVideoPresets[lastPresetName]) {
+      const p = globalFlowVideoPresets[lastPresetName];
+      lakornPathVal = p.lakorn_path || '';
+      lakornTonVal = p.lakorn_ton || '';
+      lakornEpVal = p.lakorn_ep || '';
+    }
+
     const lakornPath = document.getElementById('cfg_video_lakorn_path');
-    if (lakornPath) lakornPath.value = config.video_lakorn_path || '';
+    if (lakornPath) lakornPath.value = lakornPathVal;
 
     const lakornTon = document.getElementById('cfg_video_lakorn_ton');
-    if (lakornTon) lakornTon.value = config.video_lakorn_ton || '';
+    if (lakornTon) lakornTon.value = lakornTonVal;
 
     const lakornEp = document.getElementById('cfg_video_lakorn_ep');
-    if (lakornEp) lakornEp.value = config.video_lakorn_ep || '';
+    if (lakornEp) lakornEp.value = lakornEpVal;
+
+    // Flow Kit parallel inputs loading
+    const flowLakornPath = document.getElementById('cfg_flow_lakorn_path');
+    if (flowLakornPath) flowLakornPath.value = lakornPathVal;
+
+    const flowLakornTon = document.getElementById('cfg_flow_lakorn_ton');
+    if (flowLakornTon) flowLakornTon.value = lakornTonVal;
+
+    const flowLakornEp = document.getElementById('cfg_flow_lakorn_ep');
+    if (flowLakornEp) flowLakornEp.value = lakornEpVal;
+
+    // Prompt Only parallel inputs loading
+    const flowPOPromptsPath = document.getElementById('cfg_flow_po_prompts_path');
+    if (flowPOPromptsPath) flowPOPromptsPath.value = localStorage.getItem('flowkit_po_default_prompts_path') || '';
+
+    calculateFlowKitPaths();
+
+    // Flow Kit Worker Delay Range loading
+    const workerDelayMin = document.getElementById('cfg_flowkit_worker_delay_min');
+    if (workerDelayMin) workerDelayMin.value = config.flowkit_worker_delay_min !== undefined ? config.flowkit_worker_delay_min : '10.0';
+
+    const workerDelayMax = document.getElementById('cfg_flowkit_worker_delay_max');
+    if (workerDelayMax) workerDelayMax.value = config.flowkit_worker_delay_max !== undefined ? config.flowkit_worker_delay_max : '20.0';
+
+    const videoGenMode = document.getElementById('cfg_video_gen_mode');
+    if (videoGenMode) {
+      videoGenMode.value = config.video_gen_mode || 'selenium';
+      videoGenMode.dispatchEvent(new Event('change'));
+    }
 
     currentVideoPromptRound = 1;
     renderVideoGenTabs();
     renderVideoActiveRoundsDropdown();
     renderVideoPromptsForRound(1);
+    
+    // Apply last saved preset values to ensure all dropdowns and inputs are fully synced
+    applyFlowVideoPreset(lastPresetName);
   } catch (e) {
         writeConsoleLine(`Failed to load video prompts: ${e.message}`, 'error', 'videoConsole');
   }
 }
+
+let flowKitPollingInterval = null;
+let currentFlowTier = null;
+
+function updateFlowVideoModelDropdowns(tier) {
+  const modelDd = document.getElementById('cfg_flow_video_model');
+  const poModelDd = document.getElementById('cfg_flow_po_video_model');
+  
+  if (modelDd) {
+    const prevVal = modelDd.value;
+    modelDd.innerHTML = '';
+    const optDefault = document.createElement('option');
+    optDefault.value = '';
+    optDefault.textContent = 'Default (Auto-resolve by Aspect Ratio)';
+    modelDd.appendChild(optDefault);
+    
+    if (tier === 'PAYGATE_TIER_ONE') {
+      const options = [
+        { value: 'fast', text: 'veo3 (Quality / Fast)' },
+        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
+        { value: 'lite', text: 'lite (Lite)' },
+        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' },
+        { value: 'veo_3_1_r2v_fast', text: 'veo_3_1_r2v_fast (Reference Frame)' }
+      ];
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        modelDd.appendChild(opt);
+      });
+    } else {
+      const options = [
+        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
+        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' },
+        { value: 'veo_3_1_r2v_fast_landscape_ultra_relaxed', text: 'veo_3_1_r2v_fast_landscape_ultra_relaxed (Reference Frame Relaxed)' }
+      ];
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        modelDd.appendChild(opt);
+      });
+    }
+    if (prevVal && [...modelDd.options].some(o => o.value === prevVal)) {
+      modelDd.value = prevVal;
+    }
+  }
+  
+  if (poModelDd) {
+    const prevVal = poModelDd.value;
+    poModelDd.innerHTML = '';
+    const optDefault = document.createElement('option');
+    optDefault.value = '';
+    optDefault.textContent = 'Default (Auto-resolve by Aspect Ratio)';
+    poModelDd.appendChild(optDefault);
+    
+    if (tier === 'PAYGATE_TIER_ONE') {
+      const options = [
+        { value: 'fast', text: 'veo3 (Quality / Fast)' },
+        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
+        { value: 'lite', text: 'lite (Lite)' },
+        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' }
+      ];
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        poModelDd.appendChild(opt);
+      });
+    } else {
+      const options = [
+        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
+        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' }
+      ];
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        poModelDd.appendChild(opt);
+      });
+    }
+    if (prevVal && [...poModelDd.options].some(o => o.value === prevVal)) {
+      poModelDd.value = prevVal;
+    }
+  }
+}
+
+function startFlowKitPolling() {
+  if (flowKitPollingInterval) return;
+  
+  const updateStatus = async () => {
+    try {
+      const res = await jsonFetch('/api/flow/status');
+      const badge = document.getElementById('flow_kit_status_badge');
+      const hdrBadge = document.getElementById('fk_header_status');
+      const poHdrBadge = document.getElementById('fk_po_header_status');
+      
+      const setConnected = (el) => {
+        if (!el) return;
+        el.textContent = 'Connected';
+        el.style.background = 'rgba(16, 185, 129, 0.15)';
+        el.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+        el.style.color = '#10b981';
+      };
+      
+      const setDisconnected = (el) => {
+        if (!el) return;
+        el.textContent = 'Disconnected';
+        el.style.background = 'rgba(245, 101, 101, 0.15)';
+        el.style.borderColor = 'rgba(245, 101, 101, 0.25)';
+        el.style.color = '#f56565';
+      };
+      
+      if (res && res.connected) {
+        setConnected(badge);
+        setConnected(hdrBadge);
+        setConnected(poHdrBadge);
+        
+        // Fetch current tier if connected
+        try {
+          const tierRes = await jsonFetch('/api/batch-uploader/flow-tier');
+          if (tierRes && tierRes.tier) {
+            const tierName = tierRes.tier === 'PAYGATE_TIER_ONE' ? 'Tier One (Premium)' : 'Tier Two (Free/Labs)';
+            const tierColor = tierRes.tier === 'PAYGATE_TIER_ONE' ? '#10b981' : '#38bdf8';
+            
+            const tb1 = document.getElementById('fk_header_tier');
+            const tb2 = document.getElementById('fk_po_header_tier');
+            if (tb1) {
+              tb1.textContent = tierName;
+              tb1.style.color = tierColor;
+            }
+            if (tb2) {
+              tb2.textContent = tierName;
+              tb2.style.color = tierColor;
+            }
+            
+            if (currentFlowTier !== tierRes.tier) {
+              currentFlowTier = tierRes.tier;
+              updateFlowVideoModelDropdowns(currentFlowTier);
+            }
+          }
+        } catch (tierErr) {
+          console.warn('Failed to fetch flow tier:', tierErr);
+        }
+      } else {
+        setDisconnected(badge);
+        setDisconnected(hdrBadge);
+        setDisconnected(poHdrBadge);
+        
+        const tb1 = document.getElementById('fk_header_tier');
+        const tb2 = document.getElementById('fk_po_header_tier');
+        if (tb1) {
+          tb1.textContent = 'Offline';
+          tb1.style.color = 'rgba(255,255,255,0.4)';
+        }
+        if (tb2) {
+          tb2.textContent = 'Offline';
+          tb2.style.color = 'rgba(255,255,255,0.4)';
+        }
+      }
+    } catch (err) {
+      console.error('Failed to poll Flow Kit status:', err);
+    }
+  };
+  
+  updateStatus();
+  flowKitPollingInterval = setInterval(updateStatus, 5000);
+}
+
+function stopFlowKitPolling() {
+  if (flowKitPollingInterval) {
+    clearInterval(flowKitPollingInterval);
+    flowKitPollingInterval = null;
+  }
+}
+
+// Add event listener for cfg_video_gen_mode change
+document.getElementById('cfg_video_gen_mode')?.addEventListener('change', (e) => {
+  const mode = e.target.value;
+  const seleniumSection = document.getElementById('selenium_mode_section');
+  const flowKitSection = document.getElementById('flow_kit_mode_section');
+  const flowKitPromptOnlySection = document.getElementById('flow_kit_prompt_only_section');
+  const flowKitDownloaderSection = document.getElementById('flow_kit_downloader_section');
+  const scannedPairsSection = document.getElementById('scannedPairsSection');
+  if (scannedPairsSection) scannedPairsSection.style.display = 'none';
+
+  if (mode === 'flow_kit') {
+    if (seleniumSection) seleniumSection.style.display = 'none';
+    if (flowKitSection) flowKitSection.style.display = 'block';
+    if (flowKitPromptOnlySection) flowKitPromptOnlySection.style.display = 'none';
+    if (flowKitDownloaderSection) flowKitDownloaderSection.style.display = 'block';
+    startFlowKitPolling();
+    loadFlowKitProjects();
+    calculateFlowKitPaths();
+  } else if (mode === 'flow_kit_prompt_only') {
+    if (seleniumSection) seleniumSection.style.display = 'none';
+    if (flowKitSection) flowKitSection.style.display = 'none';
+    if (flowKitPromptOnlySection) flowKitPromptOnlySection.style.display = 'block';
+    if (flowKitDownloaderSection) flowKitDownloaderSection.style.display = 'block';
+    startFlowKitPolling();
+    loadFlowKitProjects();
+  } else {
+    if (seleniumSection) seleniumSection.style.display = 'block';
+    if (flowKitSection) flowKitSection.style.display = 'none';
+    if (flowKitPromptOnlySection) flowKitPromptOnlySection.style.display = 'none';
+    if (flowKitDownloaderSection) flowKitDownloaderSection.style.display = 'none';
+    stopFlowKitPolling();
+  }
+  saveVideoPrompts(true);
+});
 
 function renderVideoPromptsForRound(roundNum) {
   const container = document.getElementById('videoPromptList');
@@ -4466,6 +5133,9 @@ async function saveVideoPrompts(silent = false) {
       video_input_selector: document.getElementById('cfg_video_input_selector')?.value.trim() || '',
       video_settings_selector: document.getElementById('cfg_video_settings_selector')?.value.trim() || '',
       video_submit_selector: document.getElementById('cfg_video_submit_selector')?.value.trim() || '',
+      video_gen_mode: document.getElementById('cfg_video_gen_mode')?.value || 'selenium',
+      flowkit_worker_delay_min: parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0,
+      flowkit_worker_delay_max: parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0,
     };
     
     for (const k in payload) {
@@ -4781,10 +5451,7 @@ function initVideoGenListeners() {
 
   if (cfgVideoLakornPathInput) {
     cfgVideoLakornPathInput.addEventListener('input', (e) => {
-      jsonFetch('/api/config/set-default', {
-        method: 'POST',
-        body: JSON.stringify({ key: 'video_lakorn_path', value: e.target.value.trim() })
-      }).catch(err => console.error('Failed to save video_lakorn_path:', err));
+      // Auto-save on input removed. Scoped to presets only.
     });
   }
 
@@ -4809,10 +5476,7 @@ function initVideoGenListeners() {
       let val = e.target.value;
       val = val.replace(/[^a-zA-Z0-9\s._-]/g, '');
       e.target.value = val;
-      jsonFetch('/api/config/set-default', {
-        method: 'POST',
-        body: JSON.stringify({ key: 'video_lakorn_ton', value: val })
-      }).catch(err => console.error('Failed to save video_lakorn_ton:', err));
+      // Auto-save on input removed. Scoped to presets only.
     });
   }
 
@@ -4821,10 +5485,7 @@ function initVideoGenListeners() {
       let val = e.target.value;
       val = val.replace(/[^a-zA-Z0-9\s._-]/g, '');
       e.target.value = val;
-      jsonFetch('/api/config/set-default', {
-        method: 'POST',
-        body: JSON.stringify({ key: 'video_lakorn_ep', value: val })
-      }).catch(err => console.error('Failed to save video_lakorn_ep:', err));
+      // Auto-save on input removed. Scoped to presets only.
     });
   }
 
@@ -4927,6 +5588,20 @@ function initVideoGenListeners() {
     });
   }
 
+  const workerDelayMinInput = document.getElementById('cfg_flowkit_worker_delay_min');
+  if (workerDelayMinInput) {
+    workerDelayMinInput.addEventListener('change', () => {
+      saveVideoPrompts(true);
+    });
+  }
+
+  const workerDelayMaxInput = document.getElementById('cfg_flowkit_worker_delay_max');
+  if (workerDelayMaxInput) {
+    workerDelayMaxInput.addEventListener('change', () => {
+      saveVideoPrompts(true);
+    });
+  }
+
   const btnRunGoogleFlow = document.getElementById('btnRunGoogleFlow');
   const btnStopVideoGeneration = document.getElementById('btnStopVideoGeneration');
 
@@ -5019,6 +5694,21 @@ function initVideoGenListeners() {
             const isAutoRetry = !!document.getElementById('cfg_auto_retry_mode')?.checked;
             let success = false;
 
+            const videoGenModeVal = document.getElementById('cfg_video_gen_mode')?.value || 'selenium';
+            let videoModelVal = 'veo_3_1_i2v_lite_low_priority';
+            let outputCountVal = 1;
+            let upscaleResolutionVal = 'NONE';
+            
+            if (videoGenModeVal === 'flow_kit_prompt_only') {
+              videoModelVal = document.getElementById('cfg_flow_po_video_model')?.value || 'veo_3_1_t2v_lite_low_priority';
+              outputCountVal = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
+              upscaleResolutionVal = document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE';
+            } else if (videoGenModeVal === 'flow_kit') {
+              videoModelVal = document.getElementById('cfg_flow_video_model')?.value || 'veo_3_1_i2v_lite_low_priority';
+              outputCountVal = parseInt(document.getElementById('cfg_flow_output_count')?.value, 10) || 1;
+              upscaleResolutionVal = document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE';
+            }
+
             success = await executeStep('/api/step/video-gen', {
               prompt: p,
               round_idx: r,
@@ -5030,7 +5720,11 @@ function initVideoGenListeners() {
               video_submit_selector: submitSelectorVal,
               video_wait_seconds: randomCooldown,
               is_first_run: isFirstPrompt,
-              auto_retry_mode: isAutoRetry
+              auto_retry_mode: isAutoRetry,
+              video_gen_mode: videoGenModeVal,
+              video_model: videoModelVal,
+              output_count: outputCountVal,
+              upscale_resolution: upscaleResolutionVal
             }, null, 'videoConsole');
 
             isFirstPrompt = false;
@@ -5100,6 +5794,8 @@ function initVideoGenListeners() {
       }
     });
   }
+  
+  initFlowKitUploaderListeners();
 }
 
 function seedancePromptRowTemplate(text = '') {
@@ -5357,11 +6053,10 @@ const staticTooltips = {
   // Image Gen
   "browseLakornPathBtn": "📁 เลือกโฟลเดอร์ละคร (Browse...):<br>- เลือกโฟลเดอร์รูปภาพหรือบทละคร",
   "setLakornPathDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set default):<br>- จำ Path โฟลเดอร์ปัจจุบันไว้",
-  "activeRoundsBtn": "✅ เลือกรอบที่จะทำงาน (Active Rounds):<br>- ติ๊กเลือกว่าจะให้บอทรันใน Round ไหนบ้าง",
-  "selectAllRoundsBtn": "☑️ เลือกทุกรอบ (Select All)",
-  "deselectAllRoundsBtn": "🔲 ยกเลิกทุกรอบ (Deselect All)",
+  "activeRoundsWrapper": "✅ เลือกรอบที่จะทำงาน (Active Rounds):<br>- ใส่ตัวเลขรอบที่ต้องการ เช่น 1-10 หรือระบุทีละรอบ เช่น 1,3,5 หรือผสม เช่น 1-5,7,9",
   "addRoundBtn": "➕ เพิ่มรอบพรอพต์ (Add Round):<br>- สร้างหน้าต่างพรอพต์รอบใหม่",
-  "resetAllRoundsBtn": "🔄 ล้างข้อมูลทุกรอบ (Reset All):<br>- ลบพรอพต์ทั้งหมดในทุกรอบ",
+  "resetAllRoundsBtn": "🔄 ล้างข้อมูลทุกรอบ (Empty All Round):<br>- ลบพรอพต์ทั้งหมดในทุกรอบ",
+  "resetAllRoundsBtn2": "🔄 ล้างข้อมูลทุกรอบ (Empty All Round):<br>- ลบพรอพต์ทั้งหมดในทุกรอบ",
   "addImagePromptBtn": "➕ เพิ่มพรอพต์ (Add Prompt):<br>- เพิ่มพรอพต์ใหม่ในรอบปัจจุบัน",
   "saveImagePromptsBtn": "💾 บันทึกพรอพต์ (Save Prompts):<br>- บันทึกพรอพต์และภาพลงไฟล์ Config",
   "deleteAllImagePromptsBtn": "🗑️ ลบพรอพต์ทั้งหมด (Delete All):<br>- ลบพรอพต์ทั้งหมดในรอบนี้",
@@ -5450,3 +6145,1483 @@ setupLogStream();
 
 // Start periodic real-time status check every 3 seconds
 setInterval(updatePortStatus, 3000);
+
+// ==========================================
+// FLOW KIT BATCH UPLOADER & SYNC CONTROLLER
+// ==========================================
+
+let flowScannedPairs = [];
+let flowProjectsList = [];
+
+function initFlowKitUploaderListeners() {
+  // Initialize dropdowns with a default tier on startup
+  updateFlowVideoModelDropdowns('PAYGATE_TIER_TWO');
+
+  // 1. Sync Inputs between Selenium and Flow Kit
+  const syncInputs = (id1, id2) => {
+    const el1 = document.getElementById(id1);
+    const el2 = document.getElementById(id2);
+    if (el1 && el2) {
+      el1.addEventListener('input', (e) => {
+        el2.value = e.target.value;
+        calculateFlowKitPaths();
+      });
+      el2.addEventListener('input', (e) => {
+        el1.value = e.target.value;
+        calculateFlowKitPaths();
+      });
+    }
+  };
+  syncInputs('cfg_video_lakorn_path', 'cfg_flow_lakorn_path');
+  syncInputs('cfg_video_lakorn_ton', 'cfg_flow_lakorn_ton');
+  syncInputs('cfg_video_lakorn_ep', 'cfg_flow_lakorn_ep');
+
+  // 2. Set Default Project button
+  document.getElementById('setFlowProjectDefaultBtn')?.addEventListener('click', () => {
+    const val = document.getElementById('cfg_flow_project_dropdown')?.value;
+    if (val) {
+      localStorage.setItem('flowkit_default_project_id', val);
+      showToast('บันทึกโปรเจกต์เริ่มต้นเรียบร้อยแล้ว', 'success');
+    }
+  });
+
+  // 3. Folder Browse Button
+  document.getElementById('browseFlowLakornPathBtn')?.addEventListener('click', async () => {
+    try {
+      const res = await jsonFetch('/api/batch-uploader/browse-folder', { method: 'POST' });
+      if (res && res.path) {
+        const input = document.getElementById('cfg_flow_lakorn_path');
+        const selInput = document.getElementById('cfg_video_lakorn_path');
+        if (input) input.value = res.path;
+        if (selInput) selInput.value = res.path;
+        calculateFlowKitPaths();
+      }
+    } catch (err) {
+      console.error('Failed to browse folder:', err);
+    }
+  });
+
+  // 4. Scan & Sync Button
+  document.getElementById('btnScanFlowKit')?.addEventListener('click', async () => {
+    const sbPath = document.getElementById('lbl_resolved_storyboard_path')?.textContent;
+    const prPath = document.getElementById('lbl_resolved_prompt_path')?.textContent;
+    
+    const msg = document.getElementById('flowKitMsg');
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg';
+      msg.style.color = '#8da6ff';
+      msg.textContent = 'Scanning directories...';
+    }
+    
+    if (!sbPath || sbPath === '--' || !prPath || prPath === '--') {
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = 'กรุณากรอกละคร Path, ตอน และ EP ให้ครบถ้วนเพื่อคำนวณพาธโฟลเดอร์';
+      }
+      return;
+    }
+    
+    try {
+      const res = await jsonFetch('/api/batch-uploader/scan', {
+        method: 'POST',
+        body: JSON.stringify({
+          images_dir: sbPath,
+          prompts_dir: prPath
+        })
+      });
+      if (res && res.pairs) {
+        flowScannedPairs = res.pairs;
+        renderScannedPairs();
+        if (msg) {
+          msg.className = 'msg';
+          msg.style.color = '#10b981';
+          msg.textContent = `สแกนสำเร็จ พบทั้งหมด ${res.pairs.length} ฉาก`;
+        }
+      } else {
+        if (msg) {
+          msg.className = 'msg error';
+          msg.style.color = '#f56565';
+          msg.textContent = 'ไม่พบข้อมูลจากการสแกน';
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = `สแกนล้มเหลว: ${err.message || err}`;
+      }
+    }
+  });
+
+  // 5. Toggle All Scenes Selection
+  document.getElementById('toggleAllFlowKitScenesBtn')?.addEventListener('click', () => {
+    const allChecked = flowScannedPairs.every(p => p.checked !== false);
+    flowScannedPairs.forEach(p => p.checked = !allChecked);
+    renderScannedPairs();
+  });
+
+  // 5.5 Range Selection Handling
+  function applyFlowRangeSelection() {
+    const rangeInput = document.getElementById('cfg_flow_select_range');
+    if (!rangeInput) return;
+    const val = rangeInput.value.trim();
+    if (!val) return;
+    
+    const selectedIndices = parseRangeString(val);
+    console.log("applyFlowRangeSelection parsed indices:", Array.from(selectedIndices));
+    
+    const getPairFileNumber = (p) => {
+      const name = p.image_name || p.prompt_name || '';
+      const match = name.match(/^(\d+)/);
+      return match ? parseInt(match[1], 10) : Number(p.index);
+    };
+
+    const isPromptOnly = flowScannedPairs.every(p => !p.image_path);
+    if (!isPromptOnly) {
+      const missingImageIndices = [];
+      selectedIndices.forEach(idxNum => {
+        const pair = flowScannedPairs.find(p => {
+          const fileNum = getPairFileNumber(p);
+          return fileNum === idxNum || Number(p.index) === idxNum;
+        });
+        if (!pair || !pair.image_path || !pair.image_name) {
+          missingImageIndices.push(idxNum);
+        }
+      });
+      
+      if (missingImageIndices.length > 0) {
+        alert(`⚠️ คำเตือน: ลำดับต่อไปนี้ไม่มีรูปภาพประกอบ: ${missingImageIndices.sort((a, b) => a - b).join(', ')}`);
+      }
+    }
+    
+    flowScannedPairs.forEach(p => {
+      const fileNum = getPairFileNumber(p);
+      const idxNum = Number(p.index);
+      p.checked = selectedIndices.has(fileNum) || selectedIndices.has(idxNum);
+      console.log(`Pair index ${p.index} (fileNum: ${fileNum}, numeric: ${idxNum}) matches selection: ${p.checked}`);
+    });
+    
+    renderScannedPairs();
+  }
+
+  function parseRangeString(rangeStr) {
+    const selected = new Set();
+    if (!rangeStr) return selected;
+    
+    const parts = rangeStr.split(',');
+    for (let part of parts) {
+      part = part.trim();
+      if (!part) continue;
+      
+      if (part.includes('-')) {
+        const bounds = part.split('-');
+        if (bounds.length === 2) {
+          const start = parseInt(bounds[0].trim(), 10);
+          const end = parseInt(bounds[1].trim(), 10);
+          if (!isNaN(start) && !isNaN(end)) {
+            const min = Math.min(start, end);
+            const max = Math.max(start, end);
+            for (let i = min; i <= max; i++) {
+              selected.add(i);
+            }
+          }
+        }
+      } else {
+        const val = parseInt(part, 10);
+        if (!isNaN(val)) {
+          selected.add(val);
+        }
+      }
+    }
+    return selected;
+  }
+
+  document.getElementById('cfg_flow_select_range')?.addEventListener('change', applyFlowRangeSelection);
+  document.getElementById('cfg_flow_select_range')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      applyFlowRangeSelection();
+    }
+  });
+  document.getElementById('btnApplyFlowRange')?.addEventListener('click', applyFlowRangeSelection);
+
+  // 6. Process Batch Button
+  document.getElementById('btnProcessFlowKitBatch')?.addEventListener('click', async () => {
+    const project = document.getElementById('cfg_flow_project_dropdown')?.value;
+    const orientation = document.getElementById('cfg_flow_orientation')?.value;
+    const videoModel = document.getElementById('cfg_flow_video_model')?.value || null;
+    const outputCount = parseInt(document.getElementById('cfg_flow_output_count')?.value, 10) || 1;
+    const upscaleResolution = document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE';
+    
+    const msg = document.getElementById('flowKitMsg');
+    
+    if (!project) {
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = 'กรุณาเลือกโปรเจกต์ Google Flow ก่อนเริ่มสร้าง';
+      }
+      return;
+    }
+    
+    const validPairs = flowScannedPairs.filter(p => p.checked !== false && p.prompt_content.trim());
+    if (validPairs.length === 0) {
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = 'ไม่มีฉากที่เลือกและมีข้อความพรอพต์ในการส่งเจเนอเรท';
+      }
+      return;
+    }
+    
+    if (msg) {
+      msg.style.display = 'block';
+      msg.style.color = '#8da6ff';
+      msg.textContent = 'กำลังส่งคำขอไปยังคิว Flow Kit...';
+    }
+    
+    const videoConsole = document.getElementById('videoConsole');
+    if (videoConsole) {
+      videoConsole.innerHTML = '<div class="console-line system">Starting Flow Kit Batch Generation...</div>';
+    }
+    
+    const logToConsole = (text, type = 'info') => {
+      if (!videoConsole) return;
+      const div = document.createElement('div');
+      div.className = `console-line ${type}`;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      videoConsole.appendChild(div);
+      videoConsole.scrollTop = videoConsole.scrollHeight;
+    };
+    
+    const durationSeconds = 5;
+
+    try {
+      const payload = {
+        project_id: project,
+        orientation: orientation,
+        pairs: validPairs.map(p => ({
+          image_path: p.image_path,
+          prompt_content: p.prompt_content
+        })),
+        video_model: videoModel,
+        output_count: outputCount,
+        duration_seconds: durationSeconds,
+        upscale_resolution: upscaleResolution
+      };
+      
+      logToConsole(`Submitting batch of ${validPairs.length} scenes to Project ID: ${project}...`);
+      
+      const res = await jsonFetch('/api/batch-uploader/process', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      
+      if (res && res.results) {
+        const queued = res.results.filter(r => r.status === 'QUEUED');
+        const failed = res.results.filter(r => r.status === 'FAILED');
+        
+        logToConsole(`Batch submitted successfully! Video Container ID: ${res.video_id}`, 'success');
+        logToConsole(`Queued: ${queued.length} scenes, Failed: ${failed.length} scenes.`);
+        
+        res.results.forEach(r => {
+          if (r.status === 'QUEUED') {
+            logToConsole(`Scene queued: Image path: ${r.image_path || 'None'}, Media ID: ${r.media_id || 'None'}`, 'success');
+          } else {
+            logToConsole(`Scene failed: Image path: ${r.image_path || 'None'}, Error: ${r.error}`, 'error');
+          }
+        });
+        
+        if (msg) {
+          msg.className = 'msg';
+          msg.style.color = '#10b981';
+          msg.textContent = `ส่งคำขอเจเนอเรทสำเร็จทั้งหมด ${queued.length} ฉาก (ล้มเหลว ${failed.length} ฉาก)`;
+        }
+      } else {
+        if (msg) {
+          msg.className = 'msg error';
+          msg.style.color = '#f56565';
+          msg.textContent = 'ส่งคำขอล้มเหลว: ไม่พบผลลัพธ์จากเซิร์ฟเวอร์';
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      logToConsole(`Error submitting batch: ${err.message || err}`, 'error');
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = `ส่งคำขอล้มเหลว: ${err.message || err}`;
+      }
+    }
+  });
+
+  document.getElementById('btnCancelFlowKitBatch')?.addEventListener('click', async () => {
+    if (!confirm('คุณต้องการยกเลิกงานที่ค้างในคิวทั้งหมดและหยุดการพยายามยิงซ้ำ (Retry) หรือไม่?')) {
+      return;
+    }
+    const msg = document.getElementById('flowKitMsg');
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg';
+      msg.style.color = '#fff';
+      msg.textContent = 'กำลังทำการยกเลิก...';
+    }
+    try {
+      const res = await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
+      if (res && res.ok) {
+        logToConsole(`ยกเลิกงานในคิวทั้งหมดสำเร็จ (ยกเลิกไป ${res.cancelled_count} งาน)`);
+        if (msg) {
+          msg.className = 'msg';
+          msg.style.color = '#10b981';
+          msg.textContent = `ยกเลิกงานทั้งหมดเรียบร้อยแล้ว (จำนวน ${res.cancelled_count} งาน)`;
+        }
+      } else {
+        throw new Error('ไม่สามารถยกเลิกได้');
+      }
+    } catch (err) {
+      console.error(err);
+      logToConsole(`Error cancelling batch: ${err.message || err}`, 'error');
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = `เกิดข้อผิดพลาด: ${err.message || err}`;
+      }
+    }
+    updateProjectStats();
+  });
+  
+  updateProjectStats();
+}
+
+async function loadFlowKitProjects() {
+  try {
+    const res = await jsonFetch('/api/batch-uploader/flow-projects');
+    const dropdown = document.getElementById('cfg_flow_project_dropdown');
+    const poDropdown = document.getElementById('cfg_flow_po_project_dropdown');
+    if (res && res.projects) {
+      flowProjectsList = res.projects;
+      
+      const populate = (dd, isPo = false) => {
+        if (!dd) return;
+        dd.innerHTML = '';
+        res.projects.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = `${p.name} (${p.id.slice(0, 8)})`;
+          dd.appendChild(opt);
+        });
+        
+        let targetProjId = '';
+        if (!isPo) {
+          const lastPreset = localStorage.getItem('flowVideoLastPreset') || '';
+          targetProjId = (lastPreset && globalFlowVideoPresets[lastPreset]) ? (globalFlowVideoPresets[lastPreset].project_id || '') : '';
+        }
+        
+        if (targetProjId && res.projects.some(p => p.id === targetProjId)) {
+          dd.value = targetProjId;
+        } else {
+          const savedDefault = localStorage.getItem('flowkit_default_project_id');
+          if (savedDefault && res.projects.some(p => p.id === savedDefault)) {
+            dd.value = savedDefault;
+          } else if (res.projects.length > 0) {
+            dd.value = res.projects[0].id;
+          }
+        }
+      };
+      
+      populate(dropdown, false);
+      populate(poDropdown, true);
+      await updateProjectStats();
+    }
+  } catch (err) {
+    console.error('Failed to load Flow Kit projects:', err);
+  }
+}
+
+async function updateProjectStats() {
+  return; // Disabled Project Scene Statuses section
+}
+
+async function updateProjectStats_disabled() {
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let projectId = '';
+  if (genMode === 'flow_kit_prompt_only') {
+    projectId = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  } else {
+    projectId = document.getElementById('cfg_flow_project_dropdown')?.value;
+  }
+  
+  const statsDiv = document.getElementById('flow_downloader_stats');
+  if (!projectId) {
+    if (statsDiv) statsDiv.style.display = 'none';
+    return;
+  }
+  
+  try {
+    const res = await jsonFetch(`/api/batch-uploader/project-stats?project_id=${projectId}`);
+    const statsDiv = document.getElementById('flow_downloader_stats');
+    
+    if (res && statsDiv) {
+      const createdCount = res.created_list ? res.created_list.length : 0;
+      const pendingCount = res.pending_list ? res.pending_list.length : 0;
+      
+      document.getElementById('flow_stats_created_count').textContent = createdCount;
+      document.getElementById('flow_stats_upscaled').textContent = res.upscaled_scenes;
+      document.getElementById('flow_stats_remaining').textContent = res.remaining_scenes;
+      document.getElementById('flow_stats_pending_count').textContent = pendingCount;
+      
+      let currentFilter = 'all';
+      
+      const renderFilteredTable = (filterMode) => {
+        currentFilter = filterMode;
+        
+        // Highlight active filter chip
+        const filters = {
+          'all': 'badge_filter_all',
+          'created': 'badge_filter_created',
+          'upscaled': 'badge_filter_upscaled',
+          'remaining': 'badge_filter_remaining',
+          'pending': 'badge_filter_pending'
+        };
+        
+        Object.keys(filters).forEach(k => {
+          const el = document.getElementById(filters[k]);
+          if (el) {
+            if (k === filterMode) {
+              el.style.background = 'rgba(255, 255, 255, 0.15)';
+              el.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+            } else {
+              el.style.background = 'rgba(255, 255, 255, 0.05)';
+              el.style.borderColor = 'transparent';
+            }
+          }
+        });
+        
+        let filtered = res.all_scenes || [];
+        if (filterMode === 'created') {
+          filtered = filtered.filter(item => item.has_video);
+        } else if (filterMode === 'upscaled') {
+          filtered = filtered.filter(item => item.has_upscale);
+        } else if (filterMode === 'remaining') {
+          filtered = filtered.filter(item => item.has_video && !item.has_upscale);
+        } else if (filterMode === 'pending') {
+          filtered = filtered.filter(item => !item.has_video);
+        }
+        
+        const tbody = document.getElementById('flow_stats_table_body');
+        if (tbody) {
+          if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="padding: 16px; text-align: center; color: rgba(255,255,255,0.4);">ไม่พบรายการที่ตรงกับเงื่อนไขการกรอง</td></tr>`;
+            return;
+          }
+          
+          tbody.innerHTML = filtered.map(item => {
+            const orientStr = item.orientation === 'VERTICAL' ? 'แนวตั้ง 📱' : 'แนวนอน 🖥️';
+            
+            let videoStatus = '';
+            if (item.has_video) {
+              videoStatus = '<span style="color: #8da6ff; font-weight: bold;">สร้างแล้ว 🎬</span>';
+            } else {
+              videoStatus = '<span style="color: rgba(255,255,255,0.35);">ยังไม่ได้สร้าง ⏳</span>';
+            }
+            
+            let upscaleStatus = '';
+            if (item.has_upscale) {
+              upscaleStatus = '<span style="color: #5eff5e; font-weight: bold;">ขยายแล้ว ⚡</span>';
+            } else if (item.has_video) {
+              upscaleStatus = '<span style="color: #ffb86c;">ยังไม่ได้ขยาย ⏳</span>';
+            } else {
+              upscaleStatus = '<span style="color: rgba(255,255,255,0.2);">-</span>';
+            }
+            let trackingDisplay = '';
+            if (item.tracking_name && item.tracking_name !== '-') {
+              trackingDisplay = `<span style="color: #ffb86c; font-weight: 600; margin-right: 6px;">${item.tracking_name}</span> <span style="font-size: 0.75rem; color: rgba(255,255,255,0.4);">(รอบที่ ${item.run_num})</span>`;
+            } else {
+              trackingDisplay = `<span style="color: rgba(255,255,255,0.5);">รอบที่ ${item.run_num}</span>`;
+            }
+            
+            return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseenter="this.style.background='rgba(255,255,255,0.02)'" onmouseleave="this.style.background='transparent'">
+              <td style="padding: 8px 12px; color: rgba(255,255,255,0.7);">${trackingDisplay}</td>
+              <td style="padding: 8px 12px;">${orientStr}</td>
+            </tr>`;
+          }).join('');
+        }
+      };
+
+      // Set initial count and render
+      document.getElementById('flow_stats_total').textContent = res.all_scenes ? res.all_scenes.length : 0;
+      renderFilteredTable('all');
+      
+      // Wire up filter click events
+      const bindFilterBadge = (badgeId, mode) => {
+        const el = document.getElementById(badgeId);
+        if (el && !el.dataset.handlerAttached) {
+          el.dataset.handlerAttached = 'true';
+          el.addEventListener('click', () => {
+            renderFilteredTable(mode);
+          });
+        }
+      };
+      
+      bindFilterBadge('badge_filter_all', 'all');
+      bindFilterBadge('badge_filter_created', 'created');
+      bindFilterBadge('badge_filter_upscaled', 'upscaled');
+      bindFilterBadge('badge_filter_remaining', 'remaining');
+      bindFilterBadge('badge_filter_pending', 'pending');
+      
+      statsDiv.style.display = 'block';
+    }
+  } catch (err) {
+    console.error('Failed to fetch project stats:', err);
+  }
+}
+
+function calculateFlowKitPaths() {
+  const lakornPath = document.getElementById('cfg_flow_lakorn_path')?.value.trim() || '';
+  const ton = document.getElementById('cfg_flow_lakorn_ton')?.value.trim() || '';
+  const ep = document.getElementById('cfg_flow_lakorn_ep')?.value.trim() || '';
+  
+  const lblStoryboard = document.getElementById('lbl_resolved_storyboard_path');
+  const lblPrompt = document.getElementById('lbl_resolved_prompt_path');
+  
+  if (!lakornPath || !ton || !ep) {
+    if (lblStoryboard) lblStoryboard.textContent = '--';
+    if (lblPrompt) lblPrompt.textContent = '--';
+    return;
+  }
+  
+  const cleanBase = lakornPath.endsWith('/') ? lakornPath : lakornPath + '/';
+  
+  let epFolder = ep;
+  const epNum = parseInt(ep, 10);
+  if (!isNaN(epNum)) {
+    epFolder = `EP${epNum.toString().padStart(2, '0')}`;
+  } else if (!ep.toLowerCase().startsWith('ep')) {
+    epFolder = `EP${ep}`;
+  } else {
+    epFolder = ep.toUpperCase();
+  }
+  
+  const sbPath = `${cleanBase}${ton}/6 - Storyboards/${epFolder}`;
+  const prPath = `${cleanBase}${ton}/4 - Animation Prompt/${epFolder}`;
+  
+  if (lblStoryboard) lblStoryboard.textContent = sbPath;
+  if (lblPrompt) lblPrompt.textContent = prPath;
+}
+
+function updateSelectAllButtonText() {
+  const btn = document.getElementById('toggleAllFlowKitScenesBtn');
+  if (!btn) return;
+  if (flowScannedPairs.length === 0) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = 'block';
+  const allChecked = flowScannedPairs.every(p => p.checked !== false);
+  btn.textContent = allChecked ? 'Deselect All' : 'Select All';
+}
+
+function renderScannedPairs() {
+  const section = document.getElementById('scannedPairsSection');
+  const container = document.getElementById('scannedPairsContainer');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  if (flowScannedPairs.length === 0) {
+    if (section) section.style.display = 'none';
+    updateSelectAllButtonText();
+    return;
+  }
+  
+  if (section) section.style.display = 'block';
+  updateSelectAllButtonText();
+  
+  // Determine if we are in prompt-only (no image) mode
+  const isPromptOnly = flowScannedPairs.every(p => !p.image_path);
+  
+  // Create table element wrapper
+  const tableWrapper = document.createElement('div');
+  tableWrapper.style.overflowX = 'auto';
+  tableWrapper.style.width = '100%';
+  tableWrapper.style.background = 'rgba(0, 0, 0, 0.2)';
+  tableWrapper.style.borderRadius = '10px';
+  tableWrapper.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+  
+  const table = document.createElement('table');
+  table.style.width = '100%';
+  table.style.borderCollapse = 'collapse';
+  table.style.color = '#fff';
+  table.style.fontSize = '0.85rem';
+  table.style.textAlign = 'left';
+  
+  // Table Header
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  headerRow.style.background = 'rgba(255, 255, 255, 0.05)';
+  
+  const headers = isPromptOnly ? [
+    { text: 'Select', width: '20%', align: 'center' },
+    { text: 'Source/File', width: '80%' }
+  ] : [
+    { text: 'Select', width: '15%', align: 'center' },
+    { text: 'Thumbnail', width: '35%' },
+    { text: 'Source/File', width: '50%' }
+  ];
+  
+  headers.forEach(h => {
+    const th = document.createElement('th');
+    th.style.padding = '4px 8px';
+    th.style.borderBottom = '2px solid rgba(255,255,255,0.15)';
+    th.style.fontWeight = 'bold';
+    th.style.color = '#8da6ff';
+    if (h.width) th.style.width = h.width;
+    if (h.align) th.style.textAlign = h.align;
+    th.textContent = h.text;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+  
+  // Table Body
+  const tbody = document.createElement('tbody');
+  
+  flowScannedPairs.forEach((pair) => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
+    tr.style.background = 'rgba(255,255,255,0.01)';
+    tr.style.transition = 'background 0.2s';
+    tr.addEventListener('mouseenter', () => {
+      tr.style.background = 'rgba(255,255,255,0.04)';
+    });
+    tr.addEventListener('mouseleave', () => {
+      tr.style.background = 'rgba(255,255,255,0.01)';
+    });
+    
+    // 1. Checkbox
+    const tdCheck = document.createElement('td');
+    tdCheck.style.padding = '4px 8px';
+    tdCheck.style.textAlign = 'center';
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = pair.checked !== false;
+    checkbox.style.width = '18px';
+    checkbox.style.height = '18px';
+    checkbox.style.cursor = 'pointer';
+    checkbox.style.accentColor = '#10b981';
+    checkbox.addEventListener('change', (e) => {
+      pair.checked = e.target.checked;
+      updateSelectAllButtonText();
+    });
+    tdCheck.appendChild(checkbox);
+    tr.appendChild(tdCheck);
+    
+    if (!isPromptOnly) {
+      // 2. Thumbnail
+      const tdThumb = document.createElement('td');
+      tdThumb.style.padding = '4px 8px';
+      
+      const thumbContainer = document.createElement('div');
+      thumbContainer.style.width = '60px';
+      thumbContainer.style.height = '90px';
+      thumbContainer.style.background = 'rgba(0,0,0,0.4)';
+      thumbContainer.style.borderRadius = '6px';
+      thumbContainer.style.display = 'flex';
+      thumbContainer.style.alignItems = 'center';
+      thumbContainer.style.justifyContent = 'center';
+      thumbContainer.style.overflow = 'hidden';
+      thumbContainer.style.border = '1px solid rgba(255,255,255,0.1)';
+      
+      if (pair.image_path) {
+        const img = document.createElement('img');
+        img.src = `/api/utils/serve-image?path=${encodeURIComponent(pair.image_path)}`;
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        thumbContainer.appendChild(img);
+      } else {
+        const placeholder = document.createElement('div');
+        placeholder.style.fontSize = '0.7rem';
+        placeholder.style.color = 'rgba(255,255,255,0.4)';
+        placeholder.style.textAlign = 'center';
+        placeholder.textContent = 'No Image';
+        thumbContainer.appendChild(placeholder);
+      }
+      tdThumb.appendChild(thumbContainer);
+      tr.appendChild(tdThumb);
+    }
+    
+    // 3. Source/File name
+    const tdSource = document.createElement('td');
+    tdSource.style.padding = '4px 8px';
+    tdSource.style.color = 'rgba(255,255,255,0.5)';
+    tdSource.style.fontSize = '0.8rem';
+    tdSource.style.wordBreak = 'break-all';
+    tdSource.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
+    tr.appendChild(tdSource);
+    
+    tbody.appendChild(tr);
+  });
+
+  
+  table.appendChild(tbody);
+  tableWrapper.appendChild(table);
+  container.appendChild(tableWrapper);
+}
+
+
+// ─── Download Project Videos Event Listeners ─────────────────
+
+document.getElementById('btnConfirmDownloadAll')?.addEventListener('click', async () => {
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let project = '';
+  if (genMode === 'flow_kit_prompt_only') {
+    project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  } else {
+    project = document.getElementById('cfg_flow_project_dropdown')?.value;
+  }
+  
+  const upscale = document.getElementById('cfg_download_upscale')?.value || 'NONE';
+  const msg = document.getElementById('downloadModalMsg');
+  const btn = document.getElementById('btnConfirmDownloadAll');
+  
+  if (!project) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกโปรเจกต์ก่อนดาวน์โหลด';
+    }
+    return;
+  }
+  
+  if (msg) {
+    msg.style.display = 'block';
+    msg.className = 'msg info';
+    msg.style.color = '#38bdf8';
+    msg.textContent = 'กำลังเตรียมรวบรวมวิดีโอเพื่อดาวน์โหลด กรุณารอสักครู่...';
+  }
+  if (btn) btn.disabled = true;
+  
+  try {
+    const response = await fetch('/api/batch-uploader/download-all', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        project_id: project,
+        upscale_resolution: upscale
+      })
+    });
+    
+    if (!response.ok) {
+      let errDetail = 'เกิดข้อผิดพลาดในการดาวน์โหลด';
+      try {
+        const errData = await response.json();
+        errDetail = errData.detail || errDetail;
+      } catch(e) {}
+      throw new Error(errDetail);
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    
+    const disposition = response.headers.get('content-disposition');
+    let filename = `${project}_videos.zip`;
+    if (disposition && disposition.indexOf('attachment') !== -1) {
+      const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+      const matches = filenameRegex.exec(disposition);
+      if (matches != null && matches[1]) {
+        filename = matches[1].replace(/['"]/g, '');
+      }
+    }
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    
+    const downloadSource = response.headers.get('X-Download-Source');
+    let sourceDetail = '';
+    if (downloadSource === 'google-flow') {
+      sourceDetail = ' (ดึงข้อมูลล่าสุดจาก Google Flow ผ่าน Extension)';
+      showToast('ดาวน์โหลดวิดีโอสำเร็จ (ดึงข้อมูลล่าสุดจาก Google Flow)', 'success');
+    } else if (downloadSource === 'local-db') {
+      sourceDetail = ' (ใช้ประวัติเก่าในเครื่องสำรอง - Fallback)';
+      showToast('ดาวน์โหลดวิดีโอสำเร็จ (ใช้ประวัติเครื่องสำรอง - Fallback)', 'warning');
+    }
+    
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg success';
+      msg.style.color = '#48bb78';
+      msg.textContent = 'ดาวน์โหลดสำเร็จแล้ว!' + sourceDetail;
+    }
+    
+    setTimeout(() => {
+      if (msg) msg.style.display = 'none';
+    }, 4000);
+    
+  } catch (err) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = err.message || 'ดาวน์โหลดไม่สำเร็จ';
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+document.getElementById('btnTriggerProjectUpscale')?.addEventListener('click', async () => {
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let project = '';
+  if (genMode === 'flow_kit_prompt_only') {
+    project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  } else {
+    project = document.getElementById('cfg_flow_project_dropdown')?.value;
+  }
+  
+  const upscale = document.getElementById('cfg_download_upscale')?.value || 'NONE';
+  const msg = document.getElementById('downloadModalMsg');
+  const btn = document.getElementById('btnTriggerProjectUpscale');
+  
+  if (!project) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกโปรเจกต์ก่อนส่งทำ Upscale';
+    }
+    return;
+  }
+  
+  if (upscale === 'NONE') {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกความละเอียดในการ Upscale (1080P หรือ 4K) ก่อนดำเนินการ';
+    }
+    return;
+  }
+  
+  if (msg) {
+    msg.style.display = 'block';
+    msg.className = 'msg info';
+    msg.style.color = '#38bdf8';
+    msg.textContent = 'กำลังดึงข้อมูลและเตรียมคิวส่งทำ Upscale ฉากที่เหลือ กรุณารอสักครู่...';
+  }
+  if (btn) btn.disabled = true;
+  
+  try {
+    const response = await fetch('/api/batch-uploader/upscale-project', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        project_id: project,
+        upscale_resolution: upscale
+      })
+    });
+    
+    if (!response.ok) {
+      let errDetail = 'เกิดข้อผิดพลาดในการส่งทำ Upscale';
+      try {
+        const errData = await response.json();
+        errDetail = errData.detail || errDetail;
+      } catch(e) {}
+      throw new Error(errDetail);
+    }
+    
+    const data = await response.json();
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg success';
+      msg.style.color = '#48bb78';
+      
+      let detailText = `ส่งคำขอทำ Upscale สำเร็จ! เพิ่มเข้าคิวงานใหม่ทั้งหมด ${data.queued_count} งาน`;
+      if (data.queued_scenes && data.queued_scenes.length > 0) {
+        detailText += '\n\nฉากที่ส่งเข้าคิว:';
+        data.queued_scenes.forEach(sc => {
+          detailText += `\n- ฉากที่ ${sc.display_order} (${sc.orientation}): ${sc.prompt}`;
+        });
+      }
+      
+      msg.textContent = detailText;
+      msg.style.whiteSpace = 'pre-wrap';
+      msg.style.textAlign = 'left';
+      msg.style.fontFamily = 'monospace';
+      msg.style.fontSize = '0.8rem';
+      
+      showToast(`ส่งทำ Upscale สำเร็จ ${data.queued_count} ฉาก`, 'success');
+      await updateProjectStats();
+    }
+    
+  } catch (err) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = err.message || 'ส่งทำ Upscale ไม่สำเร็จ';
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+// ─── Flow Kit Prompt-Only Mode Listeners ───────────────────────────
+document.getElementById('browseFlowPOPromptsPathBtn')?.addEventListener('click', async () => {
+  try {
+    const res = await jsonFetch('/api/batch-uploader/browse-folder', { method: 'POST' });
+    if (res && res.path) {
+      const input = document.getElementById('cfg_flow_po_prompts_path');
+      if (input) input.value = res.path;
+      localStorage.setItem('flowkit_po_default_prompts_path', res.path);
+      saveVideoPrompts(true);
+    }
+  } catch (err) {
+    console.error('Failed to browse PO prompts folder:', err);
+  }
+});
+
+document.getElementById('setFlowPOPromptsPathDefaultBtn')?.addEventListener('click', () => {
+  const val = document.getElementById('cfg_flow_po_prompts_path')?.value.trim();
+  if (val) {
+    localStorage.setItem('flowkit_po_default_prompts_path', val);
+    showToast('บันทึกโฟลเดอร์พรอพต์เริ่มต้นเรียบร้อยแล้ว', 'success');
+  } else {
+    showToast('กรุณากรอกหรือเลือกโฟลเดอร์พรอพต์ก่อนบันทึกค่าเริ่มต้น', 'error');
+  }
+});
+
+document.getElementById('setFlowPOProjectDefaultBtn')?.addEventListener('click', () => {
+  const val = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  if (val) {
+    localStorage.setItem('flowkit_default_project_id', val);
+    const mainDd = document.getElementById('cfg_flow_project_dropdown');
+    if (mainDd) mainDd.value = val;
+    showToast('บันทึกโปรเจกต์เริ่มต้นเรียบร้อยแล้ว', 'success');
+  }
+});
+
+async function handleCreateFlowProject(targetSelectId) {
+  const name = prompt('กรอกชื่อโปรเจกต์ใหม่ที่ต้องการสร้างบน Google Flow:');
+  if (!name || !name.trim()) return;
+  
+  try {
+    showToast('กำลังสร้างโปรเจกต์ใหม่บน Google Flow...', 'info');
+    const res = await jsonFetch('/api/batch-uploader/create-project', {
+      method: 'POST',
+      body: JSON.stringify({ name: name.trim() })
+    });
+    
+    if (res && res.project_id) {
+      showToast(`สร้างโปรเจกต์ "${res.name}" สำเร็จ!`, 'success');
+      localStorage.setItem('flowkit_default_project_id', res.project_id);
+      await loadFlowKitProjects();
+      const sel = document.getElementById(targetSelectId);
+      if (sel) sel.value = res.project_id;
+      const otherId = targetSelectId === 'cfg_flow_project_dropdown' ? 'cfg_flow_po_project_dropdown' : 'cfg_flow_project_dropdown';
+      const otherSel = document.getElementById(otherId);
+      if (otherSel) otherSel.value = res.project_id;
+      saveVideoPrompts(true);
+    }
+  } catch (err) {
+    console.error('Failed to create flow project:', err);
+    showToast(`เกิดข้อผิดพลาด: ${err.message || err}`, 'error');
+  }
+}
+
+document.getElementById('createFlowProjectBtn')?.addEventListener('click', () => {
+  handleCreateFlowProject('cfg_flow_project_dropdown');
+});
+
+document.getElementById('createFlowPOProjectBtn')?.addEventListener('click', () => {
+  handleCreateFlowProject('cfg_flow_po_project_dropdown');
+});
+
+document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () => {
+  const prPath = document.getElementById('cfg_flow_po_prompts_path')?.value.trim();
+  
+  const msg = document.getElementById('flowKitPOMsg');
+  if (msg) {
+    msg.style.display = 'block';
+    msg.className = 'msg';
+    msg.style.color = '#8da6ff';
+    msg.textContent = 'Scanning directories...';
+  }
+  
+  if (!prPath) {
+    if (msg) {
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกโฟลเดอร์เก็บพรอพต์ก่อนทำการสแกน';
+    }
+    return;
+  }
+  
+  try {
+    const res = await jsonFetch('/api/batch-uploader/scan', {
+      method: 'POST',
+      body: JSON.stringify({
+        images_dir: "",
+        prompts_dir: prPath
+      })
+    });
+    
+    if (res && res.pairs) {
+      flowScannedPairs = res.pairs;
+      renderScannedPairs();
+      
+      const sect = document.getElementById('scannedPairsSection');
+      if (sect) sect.style.display = 'block';
+      
+      if (msg) {
+        msg.className = 'msg';
+        msg.style.color = '#10b981';
+        msg.textContent = `สแกนสำเร็จ พบทั้งหมด ${res.pairs.length} พรอพต์ (ข้ามการแนบรูปภาพ)`;
+      }
+    } else {
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = 'ไม่พบข้อมูลจากการสแกน';
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    if (msg) {
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = `สแกนล้มเหลว: ${err.message || err}`;
+    }
+  }
+});
+
+document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', async () => {
+  const project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  const orientation = document.getElementById('cfg_flow_po_orientation')?.value;
+  const videoModel = document.getElementById('cfg_flow_po_video_model')?.value || null;
+  const outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
+  const durationSeconds = 10;
+  const upscaleResolution = document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE';
+  
+  const msg = document.getElementById('flowKitPOMsg');
+  
+  if (!project) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'กรุณาเลือกโปรเจกต์ Google Flow ก่อนเริ่มสร้าง';
+    }
+    return;
+  }
+  
+  const validPairs = flowScannedPairs.filter(p => p.checked !== false && p.prompt_content.trim());
+  if (validPairs.length === 0) {
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = 'ไม่มีฉากที่เลือกและมีข้อความพรอพต์ในการส่งเจเนอเรท';
+    }
+    return;
+  }
+  
+  if (msg) {
+    msg.style.display = 'block';
+    msg.style.color = '#8da6ff';
+    msg.textContent = 'กำลังส่งคำขอไปยังคิว Flow Kit...';
+  }
+  
+  const videoConsole = document.getElementById('videoConsole');
+  if (videoConsole) {
+    videoConsole.innerHTML = '<div class="console-line system">Starting Flow Kit Batch Generation...</div>';
+  }
+  
+  const logToConsole = (text, type = 'info') => {
+    if (!videoConsole) return;
+    const div = document.createElement('div');
+    div.className = `console-line ${type}`;
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    videoConsole.appendChild(div);
+    videoConsole.scrollTop = videoConsole.scrollHeight;
+  };
+  
+  try {
+    const payload = {
+      project_id: project,
+      orientation: orientation,
+      pairs: validPairs.map(p => ({
+        image_path: null,
+        prompt_content: p.prompt_content
+      })),
+      video_model: videoModel,
+      output_count: outputCount,
+      duration_seconds: durationSeconds,
+      upscale_resolution: upscaleResolution
+    };
+    
+    logToConsole(`Submitting prompt-only batch of ${validPairs.length} scenes to Project ID: ${project}...`);
+    
+    const res = await jsonFetch('/api/batch-uploader/process', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    
+    if (res && res.video_id) {
+      logToConsole(`Batch submitted successfully! Video Container ID: ${res.video_id}`, 'success');
+      if (msg) {
+        msg.className = 'msg';
+        msg.style.color = '#10b981';
+        msg.textContent = `เริ่มเจเนอเรทวิดีโอแบบกลุ่มสำเร็จ (Video ID: ${res.video_id})`;
+      }
+    } else {
+      logToConsole(`Batch submission failed: ${res?.error || 'Unknown error'}`, 'error');
+      if (msg) {
+        msg.className = 'msg error';
+        msg.style.color = '#f56565';
+        msg.textContent = `เกิดข้อผิดพลาด: ${res?.error || 'ส่งเจเนอเรทล้มเหลว'}`;
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    logToConsole(`Error submitting batch: ${err.message || err}`, 'error');
+    if (msg) {
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = `เกิดข้อผิดพลาด: ${err.message || err}`;
+    }
+  }
+});
+
+document.getElementById('btnCancelFlowKitBatchPO')?.addEventListener('click', async () => {
+  if (!confirm('คุณต้องการยกเลิกงานที่ค้างในคิวทั้งหมดและหยุดการพยายามยิงซ้ำ (Retry) หรือไม่?')) {
+    return;
+  }
+  const msg = document.getElementById('flowKitPOMsg');
+  if (msg) {
+    msg.style.display = 'block';
+    msg.className = 'msg';
+    msg.style.color = '#fff';
+    msg.textContent = 'กำลังทำการยกเลิก...';
+  }
+  try {
+    const res = await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
+    if (res && res.ok) {
+      logToConsole(`ยกเลิกงานในคิวทั้งหมดสำเร็จ (ยกเลิกไป ${res.cancelled_count} งาน)`);
+      if (msg) {
+        msg.className = 'msg';
+        msg.style.color = '#10b981';
+        msg.textContent = `ยกเลิกงานทั้งหมดเรียบร้อยแล้ว (จำนวน ${res.cancelled_count} งาน)`;
+      }
+    } else {
+      throw new Error('ไม่สามารถยกเลิกได้');
+    }
+  } catch (err) {
+    console.error(err);
+    logToConsole(`Error cancelling batch: ${err.message || err}`, 'error');
+    if (msg) {
+      msg.className = 'msg error';
+      msg.style.color = '#f56565';
+      msg.textContent = `เกิดข้อผิดพลาด: ${err.message || err}`;
+    }
+  }
+  updateProjectStats();
+});
+
+document.getElementById('cfg_flow_project_dropdown')?.addEventListener('change', (e) => {
+  const val = e.target.value;
+  localStorage.setItem('flowkit_default_project_id', val);
+  const other = document.getElementById('cfg_flow_po_project_dropdown');
+  if (other) other.value = val;
+  updateProjectStats();
+});
+document.getElementById('cfg_flow_po_project_dropdown')?.addEventListener('change', (e) => {
+  const val = e.target.value;
+  localStorage.setItem('flowkit_default_project_id', val);
+  const other = document.getElementById('cfg_flow_project_dropdown');
+  if (other) other.value = val;
+  updateProjectStats();
+});
+document.getElementById('cfg_video_gen_mode')?.addEventListener('change', updateProjectStats);
+
+// Clear pending scenes button click handler
+document.getElementById('btnClearPendingScenes')?.addEventListener('click', async () => {
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let projectId = '';
+  if (genMode === 'flow_kit_prompt_only') {
+    projectId = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+  } else {
+    projectId = document.getElementById('cfg_flow_project_dropdown')?.value;
+  }
+  if (!projectId) {
+    alert('กรุณาเลือกโปรเจกต์ก่อนทำการล้างรายการ');
+    return;
+  }
+  if (!confirm('คุณแน่ใจหรือไม่ที่จะล้างรายการฉากที่ยังไม่ได้สร้างทั้งหมดออกจากโปรเจกต์นี้?')) {
+    return;
+  }
+  
+  const btn = document.getElementById('btnClearPendingScenes');
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังล้าง...';
+    }
+    const res = await jsonFetch('/api/batch-uploader/clear-pending', {
+      method: 'POST',
+      body: JSON.stringify({ project_id: projectId })
+    });
+    alert(`ล้างรายการฉากที่ยังไม่ได้สร้างสำเร็จ: ลบไปทั้งหมด ${res.deleted_count} ฉาก`);
+    await updateProjectStats();
+  } catch (err) {
+    console.error('Failed to clear pending scenes:', err);
+    alert('เกิดข้อผิดพลาดในการล้างรายการ: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🗑️ ล้างรายการที่ยังไม่ได้สร้าง';
+    }
+  }
+});
+
+// Generate pending scenes button click handler
+document.getElementById('btnGeneratePendingScenes')?.addEventListener('click', async () => {
+  const genMode = document.getElementById('cfg_video_gen_mode')?.value;
+  let projectId = '';
+  let orientation = 'VERTICAL';
+  let videoModel = '';
+  let outputCount = 1;
+  
+  if (genMode === 'flow_kit_prompt_only') {
+    projectId = document.getElementById('cfg_flow_po_project_dropdown')?.value;
+    orientation = document.getElementById('cfg_flow_po_orientation')?.value || 'VERTICAL';
+    videoModel = document.getElementById('cfg_flow_po_video_model')?.value;
+    outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value || '1');
+  } else {
+    projectId = document.getElementById('cfg_flow_project_dropdown')?.value;
+    orientation = document.getElementById('cfg_flow_orientation')?.value || 'VERTICAL';
+    videoModel = document.getElementById('cfg_flow_video_model')?.value;
+    outputCount = parseInt(document.getElementById('cfg_flow_output_count')?.value || '1');
+  }
+  
+  if (!projectId) {
+    alert('กรุณาเลือกโปรเจกต์ก่อนทำการเจเนอเรท');
+    return;
+  }
+  
+  if (!confirm(`คุณแน่ใจหรือไม่ที่จะเริ่มสร้างใหม่เฉพาะฉากที่ยังสร้างไม่สำเร็จของทิศทาง ${orientation}?`)) {
+    return;
+  }
+  
+  const btn = document.getElementById('btnGeneratePendingScenes');
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังส่งงาน...';
+    }
+    const res = await jsonFetch('/api/batch-uploader/generate-pending', {
+      method: 'POST',
+      body: JSON.stringify({
+        project_id: projectId,
+        orientation: orientation,
+        video_model: videoModel,
+        output_count: outputCount
+      })
+    });
+    alert(`เริ่มคิวเจเนอเรทฉากที่ยังไม่ได้สร้างสำเร็จ: คิวเข้าทั้งหมด ${res.queued_count} ฉาก (ลำดับฉาก: ${res.queued_scenes.join(', ') || 'ไม่มี'})`);
+    await updateProjectStats();
+  } catch (err) {
+    console.error('Failed to generate pending scenes:', err);
+    alert('เกิดข้อผิดพลาดในการเจเนอเรทฉาก: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ เจเนอเรทรายการที่ยังไม่ได้สร้าง';
+    }
+  }
+});
+
+
+// Storyboard Autofill Event Listeners & Configs
+document.addEventListener('DOMContentLoaded', () => {
+  // Load persisted default delay from localStorage on startup (fallback to 1.5)
+  const savedDelayDefault = localStorage.getItem('flowkit_autofill_delay_default');
+  const delayInput = document.getElementById('numAutofillDelay');
+  if (delayInput) {
+    delayInput.value = savedDelayDefault || '1.5';
+  }
+
+  // Set Default Delay button (saves current input value as the new default)
+  document.getElementById('btnSetAutofillDelayDefault')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const delayInput = document.getElementById('numAutofillDelay');
+    if (delayInput) {
+      const currentVal = delayInput.value;
+      localStorage.setItem('flowkit_autofill_delay_default', currentVal);
+      showToast(`บันทึกดีเลย์ ${currentVal} วินาที เป็นค่าเริ่มต้นใหม่เรียบร้อยแล้ว`, 'success');
+    }
+  });
+
+  // Load and bind checkbox states with local storage
+  const chkChars = document.getElementById('chkAutofillChars');
+  if (chkChars) {
+    const saved = localStorage.getItem('flowkit_autofill_chars');
+    if (saved !== null) chkChars.checked = (saved === 'true');
+    chkChars.addEventListener('change', () => {
+      localStorage.setItem('flowkit_autofill_chars', chkChars.checked);
+    });
+  }
+
+  const chkLocs = document.getElementById('chkAutofillLocs');
+  if (chkLocs) {
+    const saved = localStorage.getItem('flowkit_autofill_locs');
+    if (saved !== null) chkLocs.checked = (saved === 'true');
+    chkLocs.addEventListener('change', () => {
+      localStorage.setItem('flowkit_autofill_locs', chkLocs.checked);
+    });
+  }
+
+  const chkProps = document.getElementById('chkAutofillProps');
+  if (chkProps) {
+    const saved = localStorage.getItem('flowkit_autofill_props');
+    if (saved !== null) chkProps.checked = (saved === 'true');
+    chkProps.addEventListener('change', () => {
+      localStorage.setItem('flowkit_autofill_props', chkProps.checked);
+    });
+  }
+
+  const chkScenes = document.getElementById('chkAutofillScenes');
+  const configDiv = document.getElementById('autofillScenesConfig');
+  if (chkScenes) {
+    const saved = localStorage.getItem('flowkit_autofill_scenes');
+    if (saved !== null) chkScenes.checked = (saved === 'true');
+    
+    // Set initial visibility
+    if (configDiv) {
+      configDiv.style.display = chkScenes.checked ? 'flex' : 'none';
+    }
+
+    chkScenes.addEventListener('change', () => {
+      localStorage.setItem('flowkit_autofill_scenes', chkScenes.checked);
+      if (configDiv) {
+        configDiv.style.display = chkScenes.checked ? 'flex' : 'none';
+      }
+    });
+  }
+
+  // Storyboard Autofill Event Listener
+  document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnRunStoryboardAutofill');
+    const chkChars = document.getElementById('chkAutofillChars')?.checked;
+    const chkLocs = document.getElementById('chkAutofillLocs')?.checked;
+    const chkProps = document.getElementById('chkAutofillProps')?.checked;
+    const chkScenes = document.getElementById('chkAutofillScenes')?.checked;
+    
+    const delaySecVal = parseFloat(document.getElementById('numAutofillDelay')?.value || '1.5');
+    const rangeVal = document.getElementById('txtAutofillRange')?.value || '';
+    
+    const storyboardConsole = document.getElementById('storyboardConsole');
+    if (storyboardConsole) {
+      storyboardConsole.innerHTML = '<div class="console-line system">Starting Storyboard Autofill automation...</div>';
+    }
+    
+    const logToStoryboardConsole = (text, type = 'info') => {
+      if (!storyboardConsole) return;
+      const div = document.createElement('div');
+      div.className = `console-line ${type}`;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      storyboardConsole.appendChild(div);
+      storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
+    };
+
+    if (btn) {
+      btn.disabled = true;
+      const btnText = btn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'กำลังทำงาน...';
+    }
+    
+    try {
+      logToStoryboardConsole('Sending request to backend...', 'info');
+      const res = await jsonFetch('/api/step/storyboard-autofill', {
+        method: 'POST',
+        body: JSON.stringify({
+          autofill_characters: chkChars,
+          autofill_locations: chkLocs,
+          autofill_props: chkProps,
+          autofill_scenes: chkScenes,
+          delay_seconds: delaySecVal,
+          scene_range: rangeVal
+        })
+      });
+      
+      if (res && res.ok) {
+        logToStoryboardConsole(`SUCCESS: Clicked ${res.clicked_count} autofill button(s).`, 'success');
+        if (res.clicked_buttons && res.clicked_buttons.length > 0) {
+          res.clicked_buttons.forEach(btnName => {
+            logToStoryboardConsole(`- Clicked button: "${btnName}"`, 'success');
+          });
+        } else {
+          logToStoryboardConsole('No matching autofill buttons were found on the active page.', 'warning');
+        }
+        showToast('Storyboard Autofill completed successfully!', 'success');
+      } else {
+        const errMsg = res ? res.detail || JSON.stringify(res) : 'Unknown error';
+        logToStoryboardConsole(`FAILED: ${errMsg}`, 'error');
+        showToast('Autofill failed: ' + errMsg, 'error');
+      }
+    } catch (err) {
+      logToStoryboardConsole(`ERROR: ${err.message || err}`, 'error');
+      showToast('Autofill error: ' + (err.message || err), 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        const btnText = btn.querySelector('.btn-text');
+        if (btnText) btnText.textContent = '⚡ RUN AUTOFILL BUTTONS';
+      }
+    }
+  });
+
+  // Force Stop Autofill Event Listener
+  document.getElementById('btnStopStoryboardAutofill')?.addEventListener('click', async () => {
+    const storyboardConsole = document.getElementById('storyboardConsole');
+    const logToStoryboardConsole = (text, type = 'info') => {
+      if (!storyboardConsole) return;
+      const div = document.createElement('div');
+      div.className = `console-line ${type}`;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      storyboardConsole.appendChild(div);
+      storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
+    };
+
+    try {
+      logToStoryboardConsole('Sending Force Stop request to browser...', 'warning');
+      const res = await jsonFetch('/api/step/storyboard-autofill/stop', {
+        method: 'POST'
+      });
+      if (res && res.ok) {
+        logToStoryboardConsole('Force Stop request sent successfully! Checking if active script terminated...', 'success');
+        showToast('Autofill Force Stop request sent!', 'info');
+      } else {
+        logToStoryboardConsole('Failed to send stop request: ' + (res.message || 'Unknown'), 'error');
+      }
+    } catch (err) {
+      logToStoryboardConsole('Error sending stop request: ' + (err.message || err), 'error');
+    }
+  });
+});
+
+

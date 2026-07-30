@@ -70,6 +70,7 @@
 
       <div class="tabs-container">
         <button id="tabImageGenBtn" class="tab-btn active">🖼️ Image Generation</button>
+        <button id="tabStoryboardGenBtn" class="tab-btn">📋 Storyboard Generation</button>
         <button id="tabVideoGenBtn" class="tab-btn">🎬 Video Generation</button>
         <button id="tabVideoHelperBtn" class="tab-btn">🎥 Video Helper</button>
         <button id="tabSeedanceGenBtn" class="tab-btn">💃 Seedance Gen</button>
@@ -77,12 +78,6 @@
 
       <!-- VIEW 2: IMAGE GENERATION -->
       <div id="imageGenView" class="tab-view">
-        <!-- Action Row -->
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
-          <button id="resetAllRoundsBtn" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; border-radius: 20px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0; cursor: pointer; transition: all 0.2s ease;">
-            🔄 RESET ALL
-          </button>
-        </div>
         <!-- Drama Auto Import Card -->
         <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
           <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
@@ -138,23 +133,25 @@
             </div>
             <p class="section-subtitle">เพิ่ม/ลด พรอพต์ที่ต้องการส่งไปเจเนอเรทภาพเป็นชุด</p>
             
-            <!-- Round Selection Tabs -->
-            <div style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
-              <div class="active-rounds-dropdown" style="position: relative;">
-                <button id="activeRoundsBtn" class="secondary has-tooltip" style="padding: 6px 12px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap; height: 35px;">Active Rounds ▾</button>
-                <div id="activeRoundsMenu" style="display: none; position: absolute; top: 100%; left: 0; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); z-index: 100; padding: 10px; border-radius: 8px; max-height: 300px; overflow-y: auto; width: 220px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-                  <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px;">
-                    <button id="selectAllRoundsBtn" style="flex:1; padding: 4px; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: white; border: none; border-radius: 4px; cursor: pointer;">Select All</button>
-                    <button id="deselectAllRoundsBtn" style="flex:1; padding: 4px; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: white; border: none; border-radius: 4px; cursor: pointer;">Deselect All</button>
-                  </div>
-                  <div id="activeRoundsCheckboxes" style="display: flex; flex-direction: column; gap: 6px;"></div>
-                </div>
+            <!-- Active Rounds & Reset Row -->
+            <div style="display: flex; gap: 12px; width: 100%; margin-bottom: 12px;">
+              <div class="has-tooltip" id="activeRoundsWrapper" style="flex: 1; display: flex; flex-direction: column; gap: 4px; position: relative;">
+                <span style="font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 500;">Active Rounds:</span>
+                <input type="text" id="activeRoundsInput" value="1-10" placeholder="เช่น 1-5, 7, 9" style="padding: 6px 12px; font-size: 0.85rem; border-radius: 8px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.15); color: #fff; height: 35px; width: 100%; box-sizing: border-box; text-align: center; margin-bottom: 0;" />
+                <div class="custom-tooltip" id="tooltip_activeRoundsWrapper"></div>
               </div>
-              <div id="promptTabsContainer" class="prompt-tabs">
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                <span style="font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 500; visibility: hidden;">Action:</span>
+                <button id="resetAllRoundsBtn2" class="secondary" title="Empty All Rounds" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; width: 100%; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin-bottom: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Empty All Round</button>
+              </div>
+            </div>
+
+            <!-- Round Selection Tabs -->
+            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px; width: 100%;">
+              <div id="promptTabsContainer" class="prompt-tabs" style="flex-grow: 1; display: flex; gap: 6px; overflow-x: auto;">
                  <!-- Tabs will be generated by JS -->
               </div>
-              <button id="addRoundBtn" class="secondary" title="Add Round" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; flex-shrink: 0;">+</button>
-              <button id="resetAllRoundsBtn2" class="secondary" title="Reset All Rounds" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; flex-shrink: 0; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">Reset All</button>
+              <button id="addRoundBtn" class="secondary" title="Add Round" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; flex-shrink: 0; margin-bottom: 0;">+</button>
             </div>
             
             <div id="imagePromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
@@ -278,17 +275,16 @@
                 </div>
               </div>
             </div>
-
-            <!-- Force Stop Button -->
-            <button class="step-action-btn has-tooltip" id="btn_stop_generation" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">
-              <span class="btn-text">Force Stop Generation</span>
-              <div class="custom-tooltip" id="tooltip_btn_stop_generation"></div>
-            </button>
-
             <!-- Cooldown Tracker Banner -->
             <div id="cooldownTracker" style="display: none; margin-top: 12px; padding: 12px; border-radius: 10px; background: rgba(237, 137, 54, 0.1); border: 1px solid rgba(237, 137, 54, 0.25); text-align: center; color: #ed8936; font-size: 0.9rem;">
               ⏳ <b>Cooldown:</b> Round <span id="cooldownRound">-</span> | Remaining: <span id="cooldownTime">-</span> before submitting
             </div>
+
+            <!-- Force Stop button -->
+            <button class="step-action-btn has-tooltip" id="btn_stop_generation" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s; margin-bottom: 0; display: flex; align-items: center; justify-content: center;">
+              <span class="btn-text">Force Stop Generation</span>
+              <div class="custom-tooltip" id="tooltip_btn_stop_generation"></div>
+            </button>
           </section>
 
           <!-- Console Card -->
@@ -301,125 +297,224 @@
               <div class="console-line system">Waiting for generation to start...</div>
             </div>
           </section>
-      </div>
-    </div>
-
-      <!-- VIEW 3: VIDEO GENERATION (GOOGLE FLOW) -->
-      <div id="videoGenView" class="tab-view hidden">
-        <!-- Action Row -->
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
-          <button id="resetAllVideoRoundsBtn" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; border-radius: 20px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0; cursor: pointer; transition: all 0.2s ease;">
-            🔄 RESET ALL
-          </button>
         </div>
+      </div>
 
-        <!-- Drama Auto Import Card -->
-        <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
-          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
-            <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
-              🎬 ระบบนำเข้าข้อมูลละครอัตโนมัติ (Drama Video Auto Import)
+      <!-- VIEW: STORYBOARD GENERATION -->
+      <div id="storyboardGenView" class="tab-view hidden">
+        <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+          <!-- Left: Controls Card -->
+          <div class="card" style="flex: 1; min-width: 300px; padding: 25px; border: 1px solid rgba(139, 92, 246, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+            <h2 class="section-title" style="font-size: 1.3rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #a78bfa;">
+              📋 Storyboard Generation Autofill
             </h2>
-          </div>
-          <p class="section-subtitle" style="margin-bottom: 16px; font-size: 0.8rem; color: #94a3b8;">
-            ระบบจะดึงพรอพต์ภาพเคลื่อนไหวจากโฟลเดอร์ "4 - Animation Prompt" ภายในตอนละครที่ระบุโดยอัตโนมัติ
-          </p>
-          <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
-            <!-- ละคร Path -->
-            <div style="flex: 2; min-width: 280px; display: flex; flex-direction: column; gap: 6px;">
-              <label for="cfg_video_lakorn_path" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">ละคร Path (Video)</label>
-              <div style="display: flex; gap: 8px;">
-                <input id="cfg_video_lakorn_path" placeholder="เช่น /Users/litar/Downloads/drama_data" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; flex: 1;" />
-                <button id="browseVideoLakornPathBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
-                <button id="setVideoLakornPathDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set default</button>
+            <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-bottom: 20px; line-height: 1.5;">
+              ระบบจะสแกนหาปุ่มเติมข้อมูล <code>Autofill Characters</code>, <code>Autofill Locations</code>, <code>Autofill Props</code>, และ <code>Autofill Scene</code> ทั้งหมดในโปรเจกต์ Google Flow ที่กำลังเปิดอยู่ในเบราว์เซอร์ และกดปุ่มทั้งหมดให้โดยอัตโนมัติ
+            </p>
+
+            <!-- Selection Checklist -->
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; background: rgba(255,255,255,0.02); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+              <label style="font-size: 0.85rem; font-weight: bold; color: rgba(255,255,255,0.85); margin-bottom: 4px; display: block;">เลือกประเภทปุ่มที่ต้องการกด:</label>
+              
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: #fff;">
+                <input type="checkbox" id="chkAutofillChars" checked style="width: 16px; height: 16px; accent-color: #8b5cf6;" />
+                <span>Autofill Characters (ข้อมูลตัวละคร)</span>
+              </label>
+
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: #fff;">
+                <input type="checkbox" id="chkAutofillLocs" checked style="width: 16px; height: 16px; accent-color: #8b5cf6;" />
+                <span>Autofill Locations (ข้อมูลสถานที่)</span>
+              </label>
+
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: #fff;">
+                <input type="checkbox" id="chkAutofillProps" checked style="width: 16px; height: 16px; accent-color: #8b5cf6;" />
+                <span>Autofill Props (ข้อมูลอุปกรณ์ประกอบฉาก)</span>
+              </label>
+
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: #fff;">
+                  <input type="checkbox" id="chkAutofillScenes" checked style="width: 16px; height: 16px; accent-color: #8b5cf6;" />
+                  <span>Autofill Scenes (ข้อมูลฉาก)</span>
+                </label>
+                
+                <!-- Nested configuration for Autofill Scenes -->
+                <div id="autofillScenesConfig" style="margin-left: 26px; padding-left: 14px; border-left: 2px solid rgba(139, 92, 246, 0.4); display: flex; flex-direction: column; gap: 12px; margin-top: 6px;">
+                  <!-- Delay Control -->
+                  <div style="background: rgba(255,255,255,0.01); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.04);">
+                    <label style="font-size: 0.8rem; font-weight: bold; color: rgba(255,255,255,0.75); margin-bottom: 6px; display: block;">ดีเลย์ระหว่างการกดแต่ละปุ่ม (วินาที):</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <input type="number" id="numAutofillDelay" value="1.5" min="0.1" step="0.1" style="width: 70px; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); color: #fff; font-size: 0.85rem;" />
+                      <span style="font-size: 0.8rem; color: rgba(255,255,255,0.5); flex-grow: 1;">วินาที</span>
+                      <button type="button" id="btnSetAutofillDelayDefault" style="padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 0.72rem; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">Set Default</button>
+                    </div>
+                  </div>
+
+                  <!-- Scene Range Control -->
+                  <div style="background: rgba(255,255,255,0.01); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.04);">
+                    <label style="font-size: 0.8rem; font-weight: bold; color: rgba(255,255,255,0.75); margin-bottom: 6px; display: block;">ระบุลำดับฉากที่ต้องการกด (เช่น 5-10 หรือ 5 หรือเว้นว่างเพื่อกดทั้งหมด):</label>
+                    <input type="text" id="txtAutofillRange" placeholder="เว้นว่างเพื่อกดทั้งหมด" style="width: 100%; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); color: #fff; font-size: 0.85rem;" />
+                  </div>
+                </div>
               </div>
             </div>
-            <!-- เลขตอนละคร -->
-            <div style="width: 120px; display: flex; flex-direction: column; gap: 6px;">
-              <label for="cfg_video_lakorn_ton" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">ตอน (เช่น 1)</label>
-              <input id="cfg_video_lakorn_ton" placeholder="เช่น 1" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; text-align: center;" />
-            </div>
-            <div style="flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 6px;">
-              <label for="cfg_video_lakorn_ep" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">EP (เช่น 2, EP02)</label>
-              <div style="display: flex; gap: 8px;">
-                <input id="cfg_video_lakorn_ep" placeholder="เช่น 2" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; text-align: center; flex: 1;" />
-                <button id="setVideoLakornEpDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set default</button>
+
+            <!-- Buttons Group -->
+            <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+              <div class="relative inline-block w-full">
+                <button id="btnRunStoryboardAutofill" class="primary" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); border: none; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                  <span class="btn-text">⚡ RUN AUTOFILL BUTTONS</span>
+                </button>
+                <div id="tooltip_btnRunStoryboardAutofill" class="tooltip-bubble">คลิกเพื่อกดปุ่ม Autofill ทั้งหมดที่เลือกในหน้า Google Flow ทันที</div>
               </div>
-            </div>
-            <!-- ปุ่มนำเข้า -->
-            <div style="display: flex; align-items: flex-end;">
-              <button id="btnImportVideoLakornAuto" class="primary has-tooltip" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
-                <span class="btn-text">📥 เพิ่มข้อมูลละคร Auto</span>
-                <div class="custom-tooltip" id="tooltip_btnImportVideoLakornAuto"></div>
+              
+              <button type="button" id="btnStopStoryboardAutofill" style="width: 100%; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border: none; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); color: #fff; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+                🛑 FORCE STOP AUTOFILL
               </button>
+            </div>
+          </div>
+
+          <!-- Right: Console Card -->
+          <div class="card" style="flex: 1.5; min-width: 350px; padding: 25px; display: flex; flex-direction: column; height: 380px;">
+            <h3 style="font-size: 1rem; margin: 0 0 12px 0; color: #a78bfa; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+              📟 Storyboard Autofill Logs Console
+            </h3>
+            <div id="storyboardConsole" class="console" style="flex: 1; min-height: 250px; background: #0b0f19; font-family: monospace; font-size: 0.85rem; padding: 15px; border-radius: 8px; overflow-y: auto; color: #a0aec0; border: 1px solid rgba(255,255,255,0.05); white-space: pre-wrap; line-height: 1.4;">
+              <div class="console-line system">Waiting to start storyboard autofill...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="videoGenView" class="tab-view hidden">
+        <!-- Top-Level Google Flow Mode Selector -->
+        <section class="card" style="padding: 16px; margin-bottom: 20px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(30, 41, 59, 0.25);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <h3 style="font-size: 1.05rem; font-weight: bold; margin: 0; color: #fff;">🤖 เลือกโหมดเจเนอเรทวิดีโอ (Generation Mode)</h3>
+              <p style="font-size: 0.78rem; margin: 0; color: rgba(255,255,255,0.5);">เลือกโหมดประมวลผลผ่าน Browser Simulation หรือเรียกใช้ Flow Kit API (Extension Bridge)</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <select id="cfg_video_gen_mode" style="padding: 10px 16px; border-radius: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.9rem; font-weight: 600; cursor: pointer; min-width: 320px;">
+                <option value="selenium">🌐 Browser Automation (Selenium - โหมดดีบั๊กเบราว์เซอร์)</option>
+                <option value="flow_kit">Flowkit แบบแนบรูป</option>
+                <option value="flow_kit_prompt_only">Flowkit แบบไม่แนบรูป</option>
+              </select>
             </div>
           </div>
         </section>
 
-        <!-- Main Layout Grid -->
-        <div style="margin-bottom: 20px;">
-          <!-- Left Column: Animation Prompts -->
-          <section class="card" style="padding: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
-              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0;">🎬 Animation Prompts (Rounds 1-10)</h2>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <label for="importVideoPromptsBatchFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 0; font-size: 0.8rem; font-weight: bold; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; transition: all 0.2s ease;">
-                  📥 Import Batch Rounds (.md, .txt)
-                </label>
-                <input type="file" id="importVideoPromptsBatchFile" accept=".txt,.md" multiple style="display: none;" />
-                <span id="videoPromptsCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Prompts</span>
-              </div>
-            </div>
-            <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">เพิ่ม/ลด พรอพต์ภาพเคลื่อนไหวที่จะส่งไปเจเนอเรทในแต่ละ Round</p>
+        <!-- Selenium Mode Section -->
+        <div id="selenium_mode_section">
+          <!-- Action Row -->
+          <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+            <button id="resetAllVideoRoundsBtn" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; border-radius: 20px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0; cursor: pointer; transition: all 0.2s ease;">
+              🔄 RESET ALL
+            </button>
+          </div>
 
-            <!-- Round Selection Tabs -->
-            <div class="prompt-tabs-row" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px; align-items: center;">
-              
-              <!-- Video Active Rounds Dropdown -->
-              <div style="position: relative; display: inline-block;">
-                <button id="videoActiveRoundsBtn" class="secondary" title="เลือก Round ที่ต้องการให้ Active (ติ๊กถูก)" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; background: rgba(58, 160, 255, 0.1); border-color: rgba(58, 160, 255, 0.3); color: #8da6ff; flex-shrink: 0; display: flex; align-items: center; gap: 6px;">
-                  Active Rounds <span style="font-size: 0.7em;">▼</span>
-                </button>
-                <div id="videoActiveRoundsMenu" style="display: none; position: absolute; top: 100%; left: 0; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); z-index: 100; padding: 10px; border-radius: 8px; max-height: 300px; overflow-y: auto; width: 220px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-                  <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px;">
-                    <button id="selectAllVideoRoundsBtn" style="flex:1; padding: 4px; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: white; border: none; border-radius: 4px; cursor: pointer;">Select All</button>
-                    <button id="deselectAllVideoRoundsBtn" style="flex:1; padding: 4px; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: white; border: none; border-radius: 4px; cursor: pointer;">Deselect All</button>
-                  </div>
-                  <div id="videoActiveRoundsCheckboxes" style="display: flex; flex-direction: column; gap: 6px;"></div>
+          <!-- Drama Auto Import Card -->
+          <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
+                🎬 ระบบนำเข้าข้อมูลละครอัตโนมัติ (Drama Video Auto Import)
+              </h2>
+            </div>
+            <p class="section-subtitle" style="margin-bottom: 16px; font-size: 0.8rem; color: #94a3b8;">
+              ระบบจะดึงพรอพต์ภาพเคลื่อนไหวจากโฟลเดอร์ "4 - Animation Prompt" ภายในตอนละครที่ระบุโดยอัตโนมัติ
+            </p>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+              <!-- ละคร Path -->
+              <div style="flex: 2; min-width: 280px; display: flex; flex-direction: column; gap: 6px;">
+                <label for="cfg_video_lakorn_path" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">ละคร Path (Video)</label>
+                <div style="display: flex; gap: 8px;">
+                  <input id="cfg_video_lakorn_path" placeholder="เช่น /Users/litar/Downloads/drama_data" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; flex: 1;" />
+                  <button id="browseVideoLakornPathBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                  <button id="setVideoLakornPathDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set default</button>
                 </div>
               </div>
-
-              <!-- Tabs Container -->
-              <div id="videoPromptTabsContainer" class="prompt-tabs">
-                 <!-- Tabs will be generated by JS -->
+              <!-- เลขตอนละคร -->
+              <div style="width: 120px; display: flex; flex-direction: column; gap: 6px;">
+                <label for="cfg_video_lakorn_ton" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">ตอน (เช่น 1)</label>
+                <input id="cfg_video_lakorn_ton" placeholder="เช่น 1" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; text-align: center;" />
               </div>
-              
-              <!-- Add / Reset Buttons -->
-              <button id="addVideoRoundBtn" class="secondary" title="Add Video Round" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; flex-shrink: 0;">+</button>
-              <button id="resetAllVideoRoundsBtn2" class="secondary" title="Reset All Video Rounds" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; flex-shrink: 0; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">Reset All</button>
+              <div style="flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 6px;">
+                <label for="cfg_video_lakorn_ep" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0; font-weight: 600;">EP (เช่น 2, EP02)</label>
+                <div style="display: flex; gap: 8px;">
+                  <input id="cfg_video_lakorn_ep" placeholder="เช่น 2" style="padding: 10px 12px; font-size: 0.9rem; border-radius: 10px; margin-bottom: 0; text-align: center; flex: 1;" />
+                  <button id="setVideoLakornEpDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set default</button>
+                </div>
+              </div>
+              <!-- ปุ่มนำเข้า -->
+              <div style="display: flex; align-items: flex-end;">
+                <button id="btnImportVideoLakornAuto" class="primary has-tooltip" style="padding: 10px 20px; font-size: 0.85rem; font-weight: bold; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: linear-gradient(135deg, #38bdf8, #0284c7); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);">
+                  <span class="btn-text">📥 เพิ่มข้อมูลละคร Auto</span>
+                  <div class="custom-tooltip" id="tooltip_btnImportVideoLakornAuto"></div>
+                </button>
+              </div>
             </div>
-
-            <!-- List of Video Prompts for current active round -->
-            <div id="videoPromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
-            <div class="row" style="align-items: center; flex-wrap: wrap; gap: 10px;">
-              <button id="addVideoPromptBtn" class="secondary">+ Add Prompt</button>
-              <button id="saveVideoPromptsBtn">Save Prompts</button>
-              <button id="deleteAllVideoPromptsBtn" class="secondary" style="background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">🗑️ Delete All</button>
-              <label for="importVideoPromptsFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 11px 16px; margin: 0; font-size: 0.9rem; font-weight: 500; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; transition: all 0.2s ease;">📥 Import (.txt, .md)</label>
-              <input type="file" id="importVideoPromptsFile" accept=".txt,.md" multiple style="display: none;" />
-            </div>
-            <p id="videoPromptMsg" class="msg"></p>
           </section>
-        </div>
 
-        <!-- Row 2: Controls & Console -->
-        <div class="layout-grid workflow-grid">
-          <!-- Video Generation Cockpit -->
-          <section class="card steps-card" style="padding: 20px;">
+          <!-- Main Layout Grid -->
+          <div style="margin-bottom: 20px;">
+            <!-- Left Column: Animation Prompts -->
+            <section class="card" style="padding: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
+                <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0;">🎬 Animation Prompts (Rounds 1-10)</h2>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <label for="importVideoPromptsBatchFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 0; font-size: 0.8rem; font-weight: bold; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; transition: all 0.2s ease;">
+                    📥 Import Batch Rounds (.md, .txt)
+                  </label>
+                  <input type="file" id="importVideoPromptsBatchFile" accept=".txt,.md" multiple style="display: none;" />
+                  <span id="videoPromptsCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Prompts</span>
+                </div>
+              </div>
+              <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">เพิ่ม/ลด พรอพต์ภาพเคลื่อนไหวที่จะส่งไปเจเนอเรทในแต่ละ Round</p>
+
+              <!-- Round Selection Tabs -->
+              <div class="prompt-tabs-row" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px; align-items: center;">
+                <!-- Video Active Rounds Dropdown -->
+                <div style="position: relative; display: inline-block;">
+                  <button id="videoActiveRoundsBtn" class="secondary" title="เลือก Round ที่ต้องการให้ Active (ติ๊กถูก)" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; background: rgba(58, 160, 255, 0.1); border-color: rgba(58, 160, 255, 0.3); color: #8da6ff; flex-shrink: 0; display: flex; align-items: center; gap: 6px;">
+                    Active Rounds <span style="font-size: 0.7em;">▼</span>
+                  </button>
+                  <div id="videoActiveRoundsMenu" style="display: none; position: absolute; top: 100%; left: 0; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); z-index: 100; padding: 10px; border-radius: 8px; max-height: 300px; overflow-y: auto; width: 220px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                    <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px;">
+                      <button id="selectAllVideoRoundsBtn" style="flex:1; padding: 4px; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: white; border: none; border-radius: 4px; cursor: pointer;">Select All</button>
+                      <button id="deselectAllVideoRoundsBtn" style="flex:1; padding: 4px; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: white; border: none; border-radius: 4px; cursor: pointer;">Deselect All</button>
+                    </div>
+                    <div id="videoActiveRoundsCheckboxes" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                  </div>
+                </div>
+
+                <!-- Tabs Container -->
+                <div id="videoPromptTabsContainer" class="prompt-tabs">
+                   <!-- Tabs will be generated by JS -->
+                </div>
+                
+                <!-- Add / Reset Buttons -->
+                <button id="addVideoRoundBtn" class="secondary" title="Add Video Round" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; flex-shrink: 0;">+</button>
+                <button id="resetAllVideoRoundsBtn2" class="secondary" title="Reset All Video Rounds" style="padding: 0 12px; height: 35px; border-radius: 8px; font-weight: bold; flex-shrink: 0; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">Reset All</button>
+              </div>
+
+              <!-- List of Video Prompts for current active round -->
+              <div id="videoPromptList" class="prompt-list" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;"></div>
+              <div class="row" style="align-items: center; flex-wrap: wrap; gap: 10px;">
+                <button id="addVideoPromptBtn" class="secondary">+ Add Prompt</button>
+                <button id="saveVideoPromptsBtn">Save Prompts</button>
+                <button id="deleteAllVideoPromptsBtn" class="secondary" style="background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">🗑️ Delete All</button>
+                <label for="importVideoPromptsFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 11px 16px; margin: 0; font-size: 0.9rem; font-weight: 500; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; transition: all 0.2s ease;">📥 Import (.txt, .md)</label>
+                <input type="file" id="importVideoPromptsFile" accept=".txt,.md" multiple style="display: none;" />
+              </div>
+              <p id="videoPromptMsg" class="msg"></p>
+            </section>
+          </div>
+
+          <!-- Controls Section -->
+          <section class="card steps-card" style="padding: 20px; margin-bottom: 20px;">
             <h2 class="section-title">🤖 Google Flow Automation Cockpit</h2>
             <p class="section-subtitle">รันการส่งพรอพต์เพื่อสร้างวิดีโอบน Google Flow อัตโนมัติ</p>
 
             <div style="margin: 14px 0; display: flex; flex-direction: column; gap: 12px;">
-
               <!-- Wait time & Auto Retry Row -->
               <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
                 <div style="max-width: 350px; width: 100%;">
@@ -439,7 +534,7 @@
               </div>
             </div>
 
-              <!-- Run Control Buttons -->
+            <!-- Run Control Buttons -->
             <div style="display: flex; gap: 12px; width: 100%; margin-top: 14px;">
               <button id="btnRunGoogleFlow" class="primary has-tooltip" style="flex: 2; padding: 14px; font-size: 1.05rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
                 <span class="btn-text">▶️ RUN GOOGLE FLOW AUTOMATION</span>
@@ -447,8 +542,6 @@
               </button>
             </div>
             
-
-
             <button class="step-action-btn has-tooltip" id="btnStopVideoGeneration" style="display: none; width: 100%; margin-top: 12px; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #f56565, #e53e3e); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s;">
               <span class="btn-text">Force Stop Generation</span>
               <div class="custom-tooltip" id="tooltip_btnStopVideoGeneration"></div>
@@ -459,9 +552,329 @@
               ⏳ <b>Cooldown:</b> Round <span id="videoCooldownRound">-</span> | Remaining: <span id="videoCooldownTime">-</span> before next round
             </div>
           </section>
+        </div>
 
+        <!-- Flow Kit Mode Section -->
+        <div id="flow_kit_mode_section" style="display: none; margin-bottom: 20px;">
+          <!-- Folder sync & settings card -->
+          <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(58, 160, 255, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
+                📁 Flow Kit Batch Uploader & Sync
+              </h2>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+                  <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Extension:</span>
+                  <span id="fk_header_status" style="font-size: 0.8rem; font-weight: bold; color: #f56565;">Disconnected</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+                  <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Tier:</span>
+                  <span id="fk_header_tier" style="font-size: 0.8rem; font-weight: bold; color: #38bdf8;">Checking...</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="layout-grid workflow-grid" style="grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+              <!-- Left Column: Settings -->
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                <h3 style="font-size: 0.95rem; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px; color: #8da6ff;">⚙️ Project Settings</h3>
+                
+                <!-- Presets Manager -->
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 5px;">
+                  <label style="font-weight: bold; color: #ffb86c; font-size: 0.8rem;">Preset การตั้งค่า:</label>
+                  <div style="display: flex; gap: 8px;">
+                    <select id="flowVideoPresetSelect" style="flex-grow: 1; padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; outline: none; margin: 0; box-sizing: border-box;">
+                      <option value="">-- เลือก Preset หรือตั้งค่าเอง --</option>
+                    </select>
+                    <button id="saveFlowVideoPresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px; border-color: #5eff5e; color: #5eff5e;">Save</button>
+                    <button id="deleteFlowVideoPresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px; border-color: #ff5e5e; color: #ff5e5e;">Delete</button>
+                  </div>
+                </div>
+                
+                <!-- Project Dropdown -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Google Flow Project:</label>
+                  <div style="display: flex; gap: 8px;">
+                    <select id="cfg_flow_project_dropdown" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; flex: 1; margin: 0; box-sizing: border-box;"></select>
+                    <button id="setFlowProjectDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px;">Default</button>
+                    <button id="createFlowProjectBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.25); color: #10b981;">+ New Project</button>
+                  </div>
+                </div>
+
+                <!-- AI Video Model Dropdown -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">AI Video Model:</label>
+                  <select id="cfg_flow_video_model" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                    <option value="">-- Loading models... --</option>
+                  </select>
+                </div>
+
+                <!-- Orientation & Output Count -->
+                <div style="display: flex; gap: 16px; align-items: flex-end; width: 100%;">
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 50%;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Orientation:</label>
+                    <select id="cfg_flow_orientation" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                      <option value="VERTICAL">Vertical (9:16)</option>
+                      <option value="HORIZONTAL">Horizontal (16:9)</option>
+                    </select>
+                  </div>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 50%;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">จำนวน (ต่อฉาก):</label>
+                    <input type="number" id="cfg_flow_output_count" value="1" min="1" max="4" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin: 0; width: 100%; box-sizing: border-box;" />
+                  </div>
+                </div>
+
+                <!-- Auto Upscale -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">upscale อัตโนมัติหลังทำ:</label>
+                  <select id="cfg_flow_upscale_auto" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                    <option value="NONE" selected>ไม่ขยาย (ปกติ)</option>
+                    <option value="VIDEO_RESOLUTION_1080P">ขยายเป็น 1080P</option>
+                    <option value="VIDEO_RESOLUTION_4K">ขยายเป็น 4K</option>
+                  </select>
+                </div>
+
+                <!-- Flow Kit Worker Delay Range -->
+                <div style="display: flex; gap: 16px; align-items: flex-end; width: 100%;">
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 50%;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Worker Delay Min (วินาที):</label>
+                    <input type="number" id="cfg_flowkit_worker_delay_min" value="10.0" min="1" step="0.5" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin: 0; width: 100%; box-sizing: border-box;" />
+                  </div>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 50%;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Worker Delay Max (วินาที):</label>
+                    <input type="number" id="cfg_flowkit_worker_delay_max" value="20.0" min="1" step="0.5" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin: 0; width: 100%; box-sizing: border-box;" />
+                  </div>
+                </div>
+
+                <!-- Spacer -->
+                <div style="height: 4px;"></div>
+              </div>
+
+              <!-- Right Column: Paths Configuration -->
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                <h3 style="font-size: 0.95rem; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px; color: #8da6ff;">📂 Episode Folders</h3>
+
+                <!-- Drama Path -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">ละคร Path (Main Folder):</label>
+                  <div style="display: flex; gap: 8px;">
+                    <input id="cfg_flow_lakorn_path" placeholder="เช่น /Users/litar/GoogleDrive/drama_data" style="padding: 10px; font-size: 0.85rem; border-radius: 10px; flex: 1; margin: 0;" />
+                    <button id="browseFlowLakornPathBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px;">Browse...</button>
+                  </div>
+                </div>
+
+                <!-- Ton & Ep -->
+                <div style="display: flex; gap: 12px;">
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">ตอน (Chapter):</label>
+                    <input id="cfg_flow_lakorn_ton" placeholder="เช่น 1" style="padding: 10px; font-size: 0.85rem; border-radius: 10px; text-align: center; margin: 0;" />
+                  </div>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">EP (Episode):</label>
+                    <input id="cfg_flow_lakorn_ep" placeholder="เช่น 2" style="padding: 10px; font-size: 0.85rem; border-radius: 10px; text-align: center; margin: 0;" />
+                  </div>
+                </div>
+
+                <!-- Resolved Folder Paths (Info Display) -->
+                <div style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 10px; font-size: 0.75rem; display: flex; flex-direction: column; gap: 6px;">
+                  <div>📸 <b>Storyboards Path:</b> <span id="lbl_resolved_storyboard_path" style="color: rgba(255,255,255,0.6); word-break: break-all;">--</span></div>
+                  <div>✍️ <b>Animation Prompts Path:</b> <span id="lbl_resolved_prompt_path" style="color: rgba(255,255,255,0.6); word-break: break-all;">--</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Scan, Run & Download Buttons -->
+            <div style="display: flex; gap: 12px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px; flex-wrap: wrap;">
+              <button id="btnScanFlowKit" class="secondary" style="flex: 1; min-width: 150px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; background: rgba(58, 160, 255, 0.1); border-color: rgba(58, 160, 255, 0.25); color: #8da6ff; cursor: pointer; transition: all 0.2s;">
+                🔍 Scan & Sync Folders
+              </button>
+              <button id="btnProcessFlowKitBatch" class="primary" style="flex: 1.5; min-width: 200px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
+                🚀 Start Batch Upload
+              </button>
+              <button id="btnCancelFlowKitBatch" class="secondary" style="flex: 1; min-width: 150px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; border-color: #ff5e5e; color: #ff5e5e; background: rgba(239, 68, 68, 0.1); cursor: pointer; transition: all 0.2s;">
+                🛑 Cancel All Tasks
+              </button>
+            </div>
+            
+            <p id="flowKitMsg" style="margin-top: 12px; font-size: 0.85rem; display: none;" class="msg"></p>
+          </section>
+        </div>
+
+        <!-- Flow Kit Prompt-Only Mode Section -->
+        <div id="flow_kit_prompt_only_section" style="display: none; margin-bottom: 20px;">
+          <!-- Folder sync & settings card -->
+          <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(168, 85, 247, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px; color: #c084fc;">
+                ⚡ Flow Kit Prompt-Only Video Generator
+              </h2>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+                  <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Extension:</span>
+                  <span id="fk_po_header_status" style="font-size: 0.8rem; font-weight: bold; color: #f56565;">Disconnected</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+                  <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Tier:</span>
+                  <span id="fk_po_header_tier" style="font-size: 0.8rem; font-weight: bold; color: #38bdf8;">Checking...</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="layout-grid workflow-grid" style="grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+              <!-- Left Column: Settings -->
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                <h3 style="font-size: 0.95rem; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px; color: #8da6ff;">⚙️ Project Settings</h3>
+                
+                <!-- Presets Manager -->
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 5px;">
+                  <label style="font-weight: bold; color: #ffb86c; font-size: 0.8rem;">Preset การตั้งค่า:</label>
+                  <div style="display: flex; gap: 8px;">
+                    <select id="flowPoPresetSelect" style="flex-grow: 1; padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; outline: none; margin: 0; box-sizing: border-box;">
+                      <option value="">-- เลือก Preset หรือตั้งค่าเอง --</option>
+                    </select>
+                    <button id="saveFlowPoPresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px; border-color: #5eff5e; color: #5eff5e;">Save</button>
+                    <button id="deleteFlowPoPresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px; border-color: #ff5e5e; color: #ff5e5e;">Delete</button>
+                  </div>
+                </div>
+                
+                <!-- Project Dropdown -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Google Flow Project:</label>
+                  <div style="display: flex; gap: 8px;">
+                    <select id="cfg_flow_po_project_dropdown" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; flex: 1; margin: 0; box-sizing: border-box;"></select>
+                    <button id="setFlowPOProjectDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px;">Default</button>
+                    <button id="createFlowPOProjectBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px; background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.25); color: #c084fc;">+ New Project</button>
+                  </div>
+                </div>
+
+                <!-- AI Video Model Dropdown -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">AI Video Model:</label>
+                  <select id="cfg_flow_po_video_model" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                    <option value="">-- Loading models... --</option>
+                  </select>
+                </div>
+
+                <!-- Orientation & Output Count -->
+                <div style="display: flex; gap: 16px; align-items: flex-end; width: 100%;">
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 50%;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Orientation:</label>
+                    <select id="cfg_flow_po_orientation" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                      <option value="VERTICAL">Vertical (9:16)</option>
+                      <option value="HORIZONTAL">Horizontal (16:9)</option>
+                    </select>
+                  </div>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 50%;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">จำนวน (ต่อฉาก):</label>
+                    <input type="number" id="cfg_flow_po_output_count" value="1" min="1" max="4" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin: 0; width: 100%; box-sizing: border-box;" />
+                  </div>
+                </div>
+
+                <!-- Auto Upscale -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">upscale อัตโนมัติหลังทำ:</label>
+                  <select id="cfg_flow_po_upscale_auto" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%; margin: 0; box-sizing: border-box;">
+                    <option value="NONE" selected>ไม่ขยาย (ปกติ)</option>
+                    <option value="VIDEO_RESOLUTION_1080P">ขยายเป็น 1080P</option>
+                    <option value="VIDEO_RESOLUTION_4K">ขยายเป็น 4K</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Right Column: Folders -->
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                <h3 style="font-size: 0.95rem; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px; color: #8da6ff;">📂 Prompts Folder Selection</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">โฟลเดอร์พรอพต์ (Prompts Folder):</label>
+                  <div style="display: flex; gap: 8px;">
+                    <input id="cfg_flow_po_prompts_path" placeholder="เลือกโฟลเดอร์ที่มีไฟล์พรอพต์ .txt / .md" style="padding: 10px; font-size: 0.85rem; border-radius: 10px; flex: 1; margin: 0;" />
+                    <button id="browseFlowPOPromptsPathBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px;">Browse...</button>
+                    <button id="setFlowPOPromptsPathDefaultBtn" class="secondary" style="padding: 10px 14px; font-size: 0.8rem; margin: 0; border-radius: 10px;">Default</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Scan & Start Buttons -->
+            <div style="display: flex; gap: 12px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px; flex-wrap: wrap;">
+              <button id="btnScanFlowKitPO" class="secondary" style="flex: 1; min-width: 150px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.25); color: #c084fc; cursor: pointer; transition: all 0.2s;">
+                🔍 Verify files (Scan Prompts)
+              </button>
+              <button id="btnProcessFlowKitBatchPO" class="primary" style="flex: 1.5; min-width: 200px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; background: linear-gradient(135deg, #a855f7, #7e22ce); border: none; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);">
+                🚀 Start batch (Start Batch Upload)
+              </button>
+              <button id="btnCancelFlowKitBatchPO" class="secondary" style="flex: 1; min-width: 150px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; border-color: #ff5e5e; color: #ff5e5e; background: rgba(239, 68, 68, 0.1); cursor: pointer; transition: all 0.2s;">
+                🛑 Cancel All Tasks
+              </button>
+            </div>
+            
+            <p id="flowKitPOMsg" style="margin-top: 12px; font-size: 0.85rem; display: none;" class="msg"></p>
+          </section>
+        </div>
+
+        <!-- Shared Flow Kit Downloader & Scanned Scenes Section -->
+        <div id="flow_kit_downloader_section" style="display: none; margin-bottom: 20px;">
+          <!-- Scanned Pairs Editable Grid -->
+          <section id="scannedPairsSection" class="card" style="padding: 20px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+              <h2 class="section-title" style="font-size: 1.15rem; margin-bottom: 0;">📸 ฉากที่สแกนพบ (Scanned Scenes)</h2>
+              <button id="toggleAllFlowKitScenesBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 20px; margin: 0; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #fff;">Deselect All</button>
+            </div>
+
+            <!-- Range Selection Input -->
+            <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px; background: rgba(255,255,255,0.02); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);">
+              <label for="cfg_flow_select_range" style="font-size: 0.85rem; color: rgba(255,255,255,0.7); font-weight: 500; display: flex; align-items: center; gap: 6px; white-space: nowrap;">
+                🎯 เลือกตามลำดับ (เช่น 1-3,5,8-10):
+              </label>
+              <input id="cfg_flow_select_range" placeholder="ระบุช่วงลำดับ เช่น 1-3,5,8-10" style="flex: 1; padding: 8px 12px; font-size: 0.85rem; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; margin: 0;" />
+              <button id="btnApplyFlowRange" class="secondary" style="padding: 8px 14px; font-size: 0.8rem; margin: 0; border-radius: 8px; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.25); color: #10b981; white-space: nowrap;">Apply</button>
+            </div>
+            
+            <div id="scannedPairsContainer" style="display: flex; flex-direction: column; gap: 12px; max-height: 550px; overflow-y: auto; scrollbar-width: thin;">
+              <!-- Scanned pairs row items will be dynamically generated by JS -->
+            </div>
+          </section>
+
+
+
+
+          <!-- Flow Kit Video Downloader Section -->
+          <section class="card" style="padding: 20px; border: 1px solid rgba(234, 179, 8, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+            <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #fef08a;">
+              📥 Flow Kit Video Downloader & Exporter
+            </h2>
+            <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-bottom: 16px; line-height: 1.4;">
+              รวบรวมไฟล์วิดีโอที่เจเนอเรทเสร็จสมบูรณ์แล้วในโปรเจกต์ที่เลือกด้านบนมาสร้างเป็นไฟล์ ZIP เพื่อดาวน์โหลดลงเครื่อง
+            </p>
+            
+            <div style="display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
+              <div style="flex: 1.5; min-width: 250px; display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">ขยายความละเอียดก่อนดาวน์โหลด (Upscale):</label>
+                <select id="cfg_download_upscale" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; cursor: pointer; width: 100%;">
+                  <option value="NONE" selected>ไม่ขยาย (ปกติ - ความละเอียดเริ่มต้น)</option>
+                  <option value="VIDEO_RESOLUTION_1080P">ขยายเป็น 1080P (หากทำ Upscale แล้ว)</option>
+                  <option value="VIDEO_RESOLUTION_4K">ขยายเป็น 4K (หากทำ Upscale แล้ว)</option>
+                </select>
+              </div>
+              
+              <button id="btnTriggerProjectUpscale" class="secondary" style="flex: 1; min-width: 200px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); color: #38bdf8; cursor: pointer; transition: all 0.2s; height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0;">
+                <span>⚡ ส่งทำ Upscale ฉากที่เหลือ</span>
+              </button>
+
+              <button id="btnConfirmDownloadAll" class="primary" style="flex: 1; min-width: 200px; padding: 12px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; background: linear-gradient(135deg, #eab308, #ca8a04); border: none; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(234, 179, 8, 0.25); height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0;">
+                <span>📥 ดาวน์โหลดวิดีโอทั้งหมด (ZIP)</span>
+              </button>
+            </div>
+            
+            <p id="downloadModalMsg" class="msg" style="margin-top: 12px; font-size: 0.85rem; display: none;"></p>
+          </section>
+        </div>
+
+        <!-- Shared Console Column -->
+        <div class="layout-grid workflow-grid">
           <!-- Console Card -->
-          <section class="card console-card">
+          <section class="card console-card" style="width: 100%;">
             <div class="console-header">
               <h3>📟 Video Generation Logs Console</h3>
               <button id="clearVideoConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
@@ -471,7 +884,7 @@
             </div>
           </section>
         </div>
-      </div>
+      </div> <!-- Close videoGenView -->
 
       <!-- VIEW 4: VIDEO HELPER -->
       <div id="videoHelperView" class="tab-view hidden">
@@ -841,6 +1254,8 @@
       <p id="modalProfileMsg" class="msg"></p>
     </div>
   </div>
+
+
 
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>

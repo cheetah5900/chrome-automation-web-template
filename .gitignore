@@ -36,3 +36,13 @@ web/schema.txt
 test_*.py
 run_regression_test.py
 config_mac.json
+
+# Databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# OS files
+.DS_Store
