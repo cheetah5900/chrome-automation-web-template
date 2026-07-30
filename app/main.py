@@ -11,6 +11,7 @@ import socket
 from urllib.parse import quote_plus
 import websockets
 import asyncio
+import threading
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = BASE_DIR / "runtime"
@@ -1180,6 +1181,7 @@ from app.workflow import (
 log_bus = LogBus()
 
 CONFIG_FILE = str(BASE_DIR / ("config_win.json" if os.name == "nt" else "config_mac.json"))
+config_lock = threading.Lock()
 
 
 def _default_config() -> dict[str, Any]:
@@ -1666,11 +1668,12 @@ def _should_focus_tabs() -> bool:
     try:
         import json
 
-        if not os.path.exists(CONFIG_FILE):
-            return False
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f) or {}
-        return bool(data.get("focus_browser_tabs"))
+        with config_lock:
+            if not os.path.exists(CONFIG_FILE):
+                return False
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            return bool(data.get("focus_browser_tabs"))
     except Exception:
         return False
 
@@ -1679,11 +1682,12 @@ def _get_config_value(key: str, default: Any = None) -> Any:
     try:
         import json
 
-        if not os.path.exists(CONFIG_FILE):
-            return default
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f) or {}
-        return data.get(key, default)
+        with config_lock:
+            if not os.path.exists(CONFIG_FILE):
+                return default
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            return data.get(key, default)
     except Exception:
         return default
 
@@ -1691,16 +1695,17 @@ def _get_config_value(key: str, default: Any = None) -> Any:
 @app.get("/api/config")
 def get_config() -> dict[str, Any]:
     defaults = _default_config()
-    if not os.path.exists(CONFIG_FILE):
-        return defaults
-    try:
-        import json
+    with config_lock:
+        if not os.path.exists(CONFIG_FILE):
+            return defaults
+        try:
+            import json
 
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f) or {}
-            return {**defaults, **data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed reading config: {e}")
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+                return {**defaults, **data}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed reading config: {e}")
 @app.get("/api/utils/serve-image")
 def serve_image(path: str):
     import os
@@ -1717,8 +1722,9 @@ def set_config(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         import json
 
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=4)
+        with config_lock:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=4)
             
         # Update active worker cooldown range if present in payload
         if "flowkit_worker_delay_min" in payload and "flowkit_worker_delay_max" in payload:
@@ -1746,16 +1752,17 @@ def set_default(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         import json
 
-        data: dict[str, Any] = {}
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f) or {}
-            except Exception:
-                data = {}
-        data[key] = value
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4)
+        with config_lock:
+            data: dict[str, Any] = {}
+            if os.path.exists(CONFIG_FILE):
+                try:
+                    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                        data = json.load(f) or {}
+                except Exception:
+                    data = {}
+            data[key] = value
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
             
         # Update active worker cooldown range if relevant key is saved
         if key in ("flowkit_worker_delay_min", "flowkit_worker_delay_max"):
@@ -4427,9 +4434,10 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                     from pathlib import Path
                     
                     config_data = {}
-                    if os.path.exists(CONFIG_FILE):
-                        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                            config_data = json.load(f) or {}
+                    with config_lock:
+                        if os.path.exists(CONFIG_FILE):
+                            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                                config_data = json.load(f) or {}
                     
                     lakorn_path = config_data.get("video_lakorn_path", "").strip()
                     ton_num = config_data.get("video_lakorn_ton", "").strip()
@@ -5188,11 +5196,12 @@ def step_video_retry(payload: VideoRetryPayload):
     target_project_name = "7-1"
     try:
         import json
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-                target_email = cfg.get("google_flow_email", "dogdadcatmom@gmail.com")
-                target_project_name = cfg.get("google_flow_project_name", "7-1")
+        with config_lock:
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    target_email = cfg.get("google_flow_email", "dogdadcatmom@gmail.com")
+                    target_project_name = cfg.get("google_flow_project_name", "7-1")
     except Exception:
         pass
 
