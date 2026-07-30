@@ -3312,7 +3312,7 @@ function initWorkflowActionListeners() {
   const resetAllRoundsBtn2 = document.getElementById('resetAllRoundsBtn2');
   
   const handleResetAll = async () => {
-    if (!confirm('ยืนยันลบ Round ทั้งหมดและรีเซ็ตค่า? (การเปลี่ยนแปลงนี้จะเคลียร์ข้อมูลพรอพต์ทั้งหมด)')) return;
+    if (!confirm('ยืนยันล้างข้อมูลทุก Round ใช่หรือไม่? (การเปลี่ยนแปลงนี้จะเคลียร์ข้อมูลพรอพต์ทั้งหมด)')) return;
     promptsByRound = { 1: [] };
     statusesByRound = { 1: [] };
     refImagesByRound = { 1: ["", "", "", "", "", "", ""] };
@@ -3327,7 +3327,7 @@ function initWorkflowActionListeners() {
     renderImagePromptsForRound(1);
     renderSelectedRefImagesList();
     await saveImagePrompts(true);
-    showToast('รีเซ็ตทุก Round สำเร็จ', 'success');
+    showToast('ล้างข้อมูลทุก Round สำเร็จ', 'success');
   };
 
   if (resetAllRoundsBtn) {
