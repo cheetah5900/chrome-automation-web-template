@@ -2017,7 +2017,10 @@ function renderFlowVideoPresetsSelect(selectedKey = '') {
 function applyFlowVideoPreset(presetName) {
   if (!presetName || !globalFlowVideoPresets[presetName]) {
     const proj = document.getElementById('cfg_flow_project_dropdown');
-    if (proj) proj.selectedIndex = 0;
+    if (proj) {
+      proj.selectedIndex = 0;
+      delete proj.dataset.pendingValue;
+    }
     const model = document.getElementById('cfg_flow_video_model');
     if (model) model.value = '';
     const orientation = document.getElementById('cfg_flow_orientation');
@@ -2048,6 +2051,7 @@ function applyFlowVideoPreset(presetName) {
   
   const proj = document.getElementById('cfg_flow_project_dropdown');
   if (proj && preset.project_id !== undefined) {
+    proj.dataset.pendingValue = preset.project_id;
     proj.value = preset.project_id;
     proj.dispatchEvent(new Event('change'));
   }
@@ -2184,7 +2188,10 @@ function renderFlowPoPresetsSelect(selectedKey = '') {
 function applyFlowPoPreset(presetName) {
   if (!presetName || !globalFlowPoPresets[presetName]) {
     const proj = document.getElementById('cfg_flow_po_project_dropdown');
-    if (proj) proj.selectedIndex = 0;
+    if (proj) {
+      proj.selectedIndex = 0;
+      delete proj.dataset.pendingValue;
+    }
     const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
     if (promptsPath) promptsPath.value = '';
     const model = document.getElementById('cfg_flow_po_video_model');
@@ -2202,6 +2209,7 @@ function applyFlowPoPreset(presetName) {
   
   const proj = document.getElementById('cfg_flow_po_project_dropdown');
   if (proj && preset.project_id !== undefined) {
+    proj.dataset.pendingValue = preset.project_id;
     proj.value = preset.project_id;
     proj.dispatchEvent(new Event('change'));
   }
@@ -4720,28 +4728,52 @@ async function loadVideoPrompts() {
     const submitSel = document.getElementById('cfg_video_submit_selector');
     if (submitSel) submitSel.value = config.video_submit_selector || '';
 
-    const lakornPath = document.getElementById('cfg_video_lakorn_path');
-    if (lakornPath) lakornPath.value = config.video_lakorn_path || '';
-
-    const lakornTon = document.getElementById('cfg_video_lakorn_ton');
-    if (lakornTon) lakornTon.value = config.video_lakorn_ton || '';
-
-    const lakornEp = document.getElementById('cfg_video_lakorn_ep');
-    if (lakornEp) lakornEp.value = config.video_lakorn_ep || '';
-
-    // Flow Kit parallel inputs loading
-    const flowLakornPath = document.getElementById('cfg_flow_lakorn_path');
-    if (flowLakornPath) flowLakornPath.value = config.video_lakorn_path || localStorage.getItem('flowkit_default_lakorn_path') || '';
-
+    // Flow Kit parallel inputs loading / Preset selection check
     const flowVideoPresetSelect = document.getElementById('flowVideoPresetSelect');
     const isPresetSelected = flowVideoPresetSelect && flowVideoPresetSelect.value !== '';
+
+    const lakornPath = document.getElementById('cfg_video_lakorn_path');
+    if (lakornPath) {
+      if (!isPresetSelected) {
+        lakornPath.value = config.video_lakorn_path || '';
+      } else {
+        lakornPath.value = lakornPath.value || config.video_lakorn_path || '';
+      }
+    }
+
+    const lakornTon = document.getElementById('cfg_video_lakorn_ton');
+    if (lakornTon) {
+      if (!isPresetSelected) {
+        lakornTon.value = config.video_lakorn_ton || '';
+      } else {
+        lakornTon.value = lakornTon.value || config.video_lakorn_ton || '';
+      }
+    }
+
+    const lakornEp = document.getElementById('cfg_video_lakorn_ep');
+    if (lakornEp) {
+      if (!isPresetSelected) {
+        lakornEp.value = config.video_lakorn_ep || '';
+      } else {
+        lakornEp.value = lakornEp.value || config.video_lakorn_ep || '';
+      }
+    }
+
+    const flowLakornPath = document.getElementById('cfg_flow_lakorn_path');
+    if (flowLakornPath) {
+      if (!isPresetSelected) {
+        flowLakornPath.value = config.video_lakorn_path || localStorage.getItem('flowkit_default_lakorn_path') || '';
+      } else {
+        flowLakornPath.value = flowLakornPath.value || config.video_lakorn_path || localStorage.getItem('flowkit_default_lakorn_path') || '';
+      }
+    }
 
     const flowLakornTon = document.getElementById('cfg_flow_lakorn_ton');
     if (flowLakornTon) {
       if (!isPresetSelected) {
         flowLakornTon.value = '';
       } else {
-        flowLakornTon.value = config.video_lakorn_ton || '';
+        flowLakornTon.value = flowLakornTon.value || config.video_lakorn_ton || '';
       }
     }
 
@@ -4750,7 +4782,7 @@ async function loadVideoPrompts() {
       if (!isPresetSelected) {
         flowLakornEp.value = '';
       } else {
-        flowLakornEp.value = config.video_lakorn_ep || '';
+        flowLakornEp.value = flowLakornEp.value || config.video_lakorn_ep || '';
       }
     }
 
@@ -6151,11 +6183,17 @@ function initFlowKitUploaderListeners() {
     const el2 = document.getElementById(id2);
     if (el1 && el2) {
       el1.addEventListener('input', (e) => {
-        el2.value = e.target.value;
+        if (el2.value !== e.target.value) {
+          el2.value = e.target.value;
+          el2.dispatchEvent(new Event('input'));
+        }
         calculateFlowKitPaths();
       });
       el2.addEventListener('input', (e) => {
-        el1.value = e.target.value;
+        if (el1.value !== e.target.value) {
+          el1.value = e.target.value;
+          el1.dispatchEvent(new Event('input'));
+        }
         calculateFlowKitPaths();
       });
     }
@@ -6486,6 +6524,7 @@ async function loadFlowKitProjects() {
       
       const populate = (dd) => {
         if (!dd) return;
+        const currentVal = dd.value || dd.dataset.pendingValue;
         dd.innerHTML = '';
         res.projects.forEach(p => {
           const opt = document.createElement('option');
@@ -6493,11 +6532,16 @@ async function loadFlowKitProjects() {
           opt.textContent = `${p.name} (${p.id.slice(0, 8)})`;
           dd.appendChild(opt);
         });
-        const savedDefault = localStorage.getItem('flowkit_default_project_id');
-        if (savedDefault && res.projects.some(p => p.id === savedDefault)) {
-          dd.value = savedDefault;
-        } else if (res.projects.length > 0) {
-          dd.value = res.projects[0].id;
+        if (currentVal && res.projects.some(p => p.id === currentVal)) {
+          dd.value = currentVal;
+          delete dd.dataset.pendingValue;
+        } else {
+          const savedDefault = localStorage.getItem('flowkit_default_project_id');
+          if (savedDefault && res.projects.some(p => p.id === savedDefault)) {
+            dd.value = savedDefault;
+          } else if (res.projects.length > 0) {
+            dd.value = res.projects[0].id;
+          }
         }
       };
       
