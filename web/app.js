@@ -4801,7 +4801,8 @@ async function loadVideoPrompts() {
 
     const videoGenMode = document.getElementById('cfg_video_gen_mode');
     if (videoGenMode) {
-      videoGenMode.value = config.video_gen_mode || 'selenium';
+      const savedMode = localStorage.getItem('last_video_gen_mode');
+      videoGenMode.value = savedMode || config.video_gen_mode || 'selenium';
       videoGenMode.dispatchEvent(new Event('change'));
     }
 
@@ -4992,6 +4993,7 @@ function stopFlowKitPolling() {
 // Add event listener for cfg_video_gen_mode change
 document.getElementById('cfg_video_gen_mode')?.addEventListener('change', (e) => {
   const mode = e.target.value;
+  localStorage.setItem('last_video_gen_mode', mode);
   const seleniumSection = document.getElementById('selenium_mode_section');
   const flowKitSection = document.getElementById('flow_kit_mode_section');
   const flowKitPromptOnlySection = document.getElementById('flow_kit_prompt_only_section');
