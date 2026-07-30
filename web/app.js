@@ -6078,7 +6078,7 @@ const staticTooltips = {
   "selectAllRoundsBtn": "☑️ เลือกทุกรอบ (Select All)",
   "deselectAllRoundsBtn": "🔲 ยกเลิกทุกรอบ (Deselect All)",
   "addRoundBtn": "➕ เพิ่มรอบพรอพต์ (Add Round):<br>- สร้างหน้าต่างพรอพต์รอบใหม่",
-  "resetAllRoundsBtn": "🔄 ล้างข้อมูลทุกรอบ (Reset All):<br>- ลบพรอพต์ทั้งหมดในทุกรอบ",
+  "resetAllRoundsBtn": "🔄 ล้างข้อมูลทุกรอบ (Empty All Round):<br>- ลบพรอพต์ทั้งหมดในทุกรอบ",
   "addImagePromptBtn": "➕ เพิ่มพรอพต์ (Add Prompt):<br>- เพิ่มพรอพต์ใหม่ในรอบปัจจุบัน",
   "saveImagePromptsBtn": "💾 บันทึกพรอพต์ (Save Prompts):<br>- บันทึกพรอพต์และภาพลงไฟล์ Config",
   "deleteAllImagePromptsBtn": "🗑️ ลบพรอพต์ทั้งหมด (Delete All):<br>- ลบพรอพต์ทั้งหมดในรอบนี้",
