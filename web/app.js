@@ -447,18 +447,41 @@ async function launchProfile() {
 
 async function updatePortStatus() {
   const badge = document.getElementById('portStatusBadge');
-  if (!badge) return;
-
   const select = document.getElementById('profileSelect');
   const launchBtn = document.getElementById('launchProfile');
-  const lockedDash = document.getElementById('lockedDashboardContent');
   const closeBtn = document.getElementById('closeBrowser');
 
+  // Sidebar navigation elements
+  const tabBrowserSetup = document.getElementById('tabBrowserSetupBtn');
+  const tabImageGen = document.getElementById('tabImageGenBtn');
+  const tabStoryboardGen = document.getElementById('tabStoryboardGenBtn');
+  const tabVideoGen = document.getElementById('tabVideoGenBtn');
+  const tabVideoHelper = document.getElementById('tabVideoHelperBtn');
+  const tabSeedanceGen = document.getElementById('tabSeedanceGenBtn');
+  
+  const sidebarSummary = document.getElementById('sidebar_profile_summary');
+  const sidebarProfileName = document.getElementById('sidebar_active_profile_name');
+  const sidebarProfilePort = document.getElementById('sidebar_active_profile_port');
+  const browserStatusDot = document.getElementById('sidebar_browser_status_dot');
+
+  const otherTabs = [tabImageGen, tabStoryboardGen, tabVideoGen, tabVideoHelper, tabSeedanceGen];
+
   if (!select || !select.value) {
-    badge.textContent = 'No Profile';
-    badge.className = 'status-badge offline';
-    if (lockedDash) lockedDash.classList.add('locked');
+    if (badge) {
+      badge.textContent = 'No Profile';
+      badge.className = 'status-badge offline';
+    }
     if (closeBtn) closeBtn.style.display = 'none';
+    
+    // Lock sidebar tabs
+    otherTabs.forEach(btn => {
+      if (btn) {
+        btn.classList.add('locked');
+        btn.disabled = true;
+      }
+    });
+    if (sidebarSummary) sidebarSummary.style.display = 'none';
+    if (browserStatusDot) browserStatusDot.style.background = '#a0aec0';
     return;
   }
 
@@ -474,11 +497,10 @@ async function updatePortStatus() {
   }
 
   if (isOnline) {
-    badge.textContent = `Online (Port ${port})`;
-    badge.className = 'status-badge online';
-    
-    // Unlock entry and show dashboard content
-    if (lockedDash) lockedDash.classList.remove('locked');
+    if (badge) {
+      badge.textContent = `Online (Port ${port})`;
+      badge.className = 'status-badge online';
+    }
     if (select) select.disabled = true;
 
     if (launchBtn) {
@@ -489,12 +511,30 @@ async function updatePortStatus() {
       launchBtn.style.background = 'rgba(72, 187, 120, 0.4)';
     }
     if (closeBtn) closeBtn.style.display = 'inline-block';
-  } else {
-    badge.textContent = `Offline (Port ${port})`;
-    badge.className = 'status-badge offline';
+
+    // Unlock sidebar tabs
+    otherTabs.forEach(btn => {
+      if (btn) {
+        btn.classList.remove('locked');
+        btn.disabled = false;
+      }
+    });
     
-    // Lock entry and hide dashboard content
-    if (lockedDash) lockedDash.classList.add('locked');
+    // Show summary in sidebar
+    if (sidebarSummary) sidebarSummary.style.display = 'block';
+    if (sidebarProfileName) sidebarProfileName.textContent = select.value;
+    if (sidebarProfilePort) sidebarProfilePort.textContent = `Port ${port}`;
+    if (browserStatusDot) browserStatusDot.style.background = '#48bb78';
+
+    // Auto navigate to the first locked tab (Image Gen) if currently on Browser Setup
+    if (tabBrowserSetup && tabBrowserSetup.classList.contains('active')) {
+      if (tabImageGen) tabImageGen.click();
+    }
+  } else {
+    if (badge) {
+      badge.textContent = `Offline (Port ${port})`;
+      badge.className = 'status-badge offline';
+    }
     if (select) select.disabled = false;
 
     if (launchBtn) {
@@ -505,6 +545,21 @@ async function updatePortStatus() {
       launchBtn.style.background = '';
     }
     if (closeBtn) closeBtn.style.display = 'none';
+
+    // Lock sidebar tabs
+    otherTabs.forEach(btn => {
+      if (btn) {
+        btn.classList.add('locked');
+        btn.disabled = true;
+      }
+    });
+    if (sidebarSummary) sidebarSummary.style.display = 'none';
+    if (browserStatusDot) browserStatusDot.style.background = '#a0aec0';
+
+    // Force navigate back to Browser Setup tab
+    if (tabBrowserSetup && !tabBrowserSetup.classList.contains('active')) {
+      tabBrowserSetup.click();
+    }
   }
 }
 
@@ -712,6 +767,7 @@ inputsToListen.forEach(id => {
 
 // Tab Switching
 function initTabNavigation() {
+  const btnBrowserSetup = document.getElementById('tabBrowserSetupBtn');
   const btnImageGen = document.getElementById('tabImageGenBtn');
   const btnStoryboardGen = document.getElementById('tabStoryboardGenBtn');
   const btnVideoGen = document.getElementById('tabVideoGenBtn');
@@ -719,6 +775,7 @@ function initTabNavigation() {
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
   
+  const viewBrowserSetup = document.getElementById('browserSetupView');
   const viewImageGen = document.getElementById('imageGenView');
   const viewStoryboardGen = document.getElementById('storyboardGenView');
   const viewVideoGen = document.getElementById('videoGenView');
@@ -727,6 +784,7 @@ function initTabNavigation() {
   const viewSeedanceGen = document.getElementById('seedanceGenView');
 
   const tabs = [
+    { btn: btnBrowserSetup, view: viewBrowserSetup, onLoad: null },
     { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
     { btn: btnStoryboardGen, view: viewStoryboardGen, onLoad: () => { console.log('Storyboard loaded'); } },
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
@@ -738,6 +796,9 @@ function initTabNavigation() {
   tabs.forEach(tab => {
     if (!tab.btn) return;
     tab.btn.addEventListener('click', () => {
+      // If locked, prevent click
+      if (tab.btn.classList.contains('locked')) return;
+
       tabs.forEach(t => {
         if (t.btn) t.btn.classList.remove('active');
         if (t.view) t.view.classList.add('hidden');
@@ -746,6 +807,13 @@ function initTabNavigation() {
       if (tab.view) tab.view.classList.remove('hidden');
       if (tab.onLoad) tab.onLoad();
       
+      // Update Header Title
+      const titleEl = document.getElementById('activeViewTitle');
+      if (titleEl) {
+        const textSpan = tab.btn.querySelector('.nav-text');
+        titleEl.textContent = textSpan ? textSpan.textContent : tab.btn.textContent;
+      }
+
       // Control Flow Kit polling based on active tab
       if (tab.btn === btnVideoGen) {
         const mode = document.getElementById('cfg_video_gen_mode')?.value || 'selenium';
@@ -765,9 +833,13 @@ function initTabNavigation() {
   const savedTabId = localStorage.getItem('activeNavigationTab');
   if (savedTabId) {
     const savedTab = tabs.find(t => t.btn && t.btn.id === savedTabId);
-    if (savedTab && savedTab.btn) {
+    if (savedTab && savedTab.btn && !savedTab.btn.classList.contains('locked')) {
       savedTab.btn.click();
+    } else {
+      if (btnBrowserSetup) btnBrowserSetup.click();
     }
+  } else {
+    if (btnBrowserSetup) btnBrowserSetup.click();
   }
 }
 
@@ -7704,6 +7776,85 @@ document.addEventListener('DOMContentLoaded', () => {
       logToStoryboardConsole('Error sending stop request: ' + (err.message || err), 'error');
     }
   });
+
+  // --- Dynamic Color Preset & Light/Dark Theme Switching System ---
+  const htmlRoot = document.documentElement;
+  const themeModeToggle = document.getElementById('themeModeToggle');
+  const colorDots = document.querySelectorAll('.color-dot');
+  
+  const toggleTheme = () => {
+    const currentTheme = htmlRoot.getAttribute('data-theme') || 'dark';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    htmlRoot.setAttribute('data-theme', newTheme);
+    localStorage.setItem('flowkit_theme', newTheme);
+    
+    const icon = themeModeToggle?.querySelector('.mode-icon');
+    const text = themeModeToggle?.querySelector('.mode-text');
+    if (icon) icon.textContent = newTheme === 'dark' ? '🌙' : '☀️';
+    if (text) text.textContent = newTheme === 'dark' ? 'Dark Mode' : 'Light Mode';
+  };
+  
+  if (themeModeToggle) {
+    themeModeToggle.addEventListener('click', toggleTheme);
+  }
+  
+  const savedTheme = localStorage.getItem('flowkit_theme') || 'dark';
+  htmlRoot.setAttribute('data-theme', savedTheme);
+  if (themeModeToggle) {
+    const icon = themeModeToggle.querySelector('.mode-icon');
+    const text = themeModeToggle.querySelector('.mode-text');
+    if (icon) icon.textContent = savedTheme === 'dark' ? '🌙' : '☀️';
+    if (text) text.textContent = savedTheme === 'dark' ? 'Dark Mode' : 'Light Mode';
+  }
+
+  const colorPresets = {
+    cobalt: {
+      primary: '#7f5cff', primaryRgb: '127, 92, 255',
+      secondary: '#3aa0ff', secondaryRgb: '58, 160, 255'
+    },
+    emerald: {
+      primary: '#10b981', primaryRgb: '16, 185, 129',
+      secondary: '#06b6d4', secondaryRgb: '6, 182, 212'
+    },
+    amethyst: {
+      primary: '#a855f7', primaryRgb: '168, 85, 247',
+      secondary: '#ec4899', secondaryRgb: '236, 72, 153'
+    },
+    sunset: {
+      primary: '#f59e0b', primaryRgb: '245, 158, 11',
+      secondary: '#ef4444', secondaryRgb: '239, 68, 68'
+    }
+  };
+
+  const applyColorPreset = (presetName) => {
+    const preset = colorPresets[presetName];
+    if (!preset) return;
+    
+    htmlRoot.style.setProperty('--primary-color', preset.primary);
+    htmlRoot.style.setProperty('--primary-rgb', preset.primaryRgb);
+    htmlRoot.style.setProperty('--secondary-color', preset.secondary);
+    htmlRoot.style.setProperty('--secondary-rgb', preset.secondaryRgb);
+    
+    colorDots.forEach(dot => {
+      if (dot.getAttribute('data-color') === presetName) {
+        dot.classList.add('active');
+      } else {
+        dot.classList.remove('active');
+      }
+    });
+    
+    localStorage.setItem('flowkit_color_preset', presetName);
+  };
+
+  colorDots.forEach(dot => {
+    dot.addEventListener('click', () => {
+      const color = dot.getAttribute('data-color');
+      applyColorPreset(color);
+    });
+  });
+
+  const savedPreset = localStorage.getItem('flowkit_color_preset') || 'cobalt';
+  applyColorPreset(savedPreset);
 });
 
 

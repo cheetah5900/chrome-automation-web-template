@@ -9,75 +9,126 @@
 <body>
   <div class="bg"></div>
 
-  <main class="container">
-    <header class="topbar">
-      <div>
-        <h1>Chrome Automation Cockpit</h1>
-        <p class="sub">จัดการ Chrome Profile + Workflow Automation</p>
-      </div>
-      <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
-        <button id="openSettings" class="gear" title="Settings">⚙️</button>
-      </div>
-    </header>
-
-    <!-- SECTION 1: CHROME PROFILES (ONE SECTION AHEAD OF OTHERS) -->
-    <section class="card profile-manager-card" style="margin-bottom: 24px; padding: 24px; background: rgba(22, 26, 50, 0.85); border-radius: 20px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-        <div>
-          <h2 style="margin: 0; font-size: 1.4rem; background: linear-gradient(135deg, #ffffff, #cfd5ff, #8da6ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🌐 Chrome Profile Manager</h2>
-          <p class="section-subtitle" style="margin: 4px 0 0 0; font-size: 0.88rem;">เลือกรันโปรไฟล์เพื่อปลดล็อกการใช้งานและเข้าสู่ระบบออโตเมชัน</p>
-        </div>
-        <div>
-          <span id="portStatusBadge" class="status-badge offline">Checking...</span>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-logo">🎬</span>
+        <div class="sidebar-branding">
+          <h2 class="sidebar-title">Flow Kit Portal</h2>
+          <span class="sidebar-subtitle">Automation Console</span>
         </div>
       </div>
-
-      <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 250px;">
-          <label style="font-size: 0.95rem; margin-bottom: 8px;">Select Available Profile</label>
-          <select id="profileSelect" style="padding: 12px; font-size: 1rem; border-radius: 12px; margin-bottom: 0;"></select>
+      
+      <!-- Theme Switcher -->
+      <div class="theme-switcher-widget">
+        <div class="theme-mode-toggle" id="themeModeToggle" title="Toggle Light/Dark Mode">
+          <span class="mode-icon">🌙</span>
+          <span class="mode-text">Dark Mode</span>
         </div>
-
-        <div style="display: flex; flex-direction: column; gap: 10px; flex: 1.2; min-width: 320px; justify-content: center;">
-          <div style="display: flex; gap: 10px; width: 100%;">
-            <button id="launchProfile" class="has-tooltip" style="flex: 2; padding: 12px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #7f5cff, #3aa0ff);">
-              <span class="btn-text">🚀 Launch Profile & Open Dashboard</span>
-              <div class="custom-tooltip" id="tooltip_launchProfile"></div>
-            </button>
-            <button id="closeBrowser" class="secondary" style="display: none; flex: 1.2; padding: 12px; font-size: 0.9rem; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">❌ Close Browser</button>
-            <button id="setProfile" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem;">Set Default</button>
-          </div>
-          <div style="display: flex; gap: 8px; width: 100%; flex-wrap: wrap;">
-            <button id="editProfileBtn" class="secondary" style="flex: 1; min-width: 90px; padding: 10px; font-size: 0.85rem;">Edit Profile</button>
-            <button id="addProfileBtn" class="secondary" style="flex: 1; min-width: 90px; padding: 10px; font-size: 0.85rem; background: rgba(72, 187, 120, 0.1); border-color: rgba(72, 187, 120, 0.2); color: #48bb78;">+ Add Profile</button>
-            <button id="deleteProfileBtn" class="secondary" style="flex: 1; min-width: 90px; padding: 10px; font-size: 0.85rem; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">🗑️ Delete</button>
-          </div>
+        <div class="color-presets-row">
+          <div class="color-dot active" data-color="cobalt" style="background: #7f5cff;" title="Cobalt Blue"></div>
+          <div class="color-dot" data-color="emerald" style="background: #10b981;" title="Emerald Mint"></div>
+          <div class="color-dot" data-color="amethyst" style="background: #a855f7;" title="Royal Amethyst"></div>
+          <div class="color-dot" data-color="sunset" style="background: #f59e0b;" title="Amber Sunset"></div>
         </div>
       </div>
-      <p id="profileMsg" class="msg" style="margin: 12px 0 0; min-height: auto; font-size: 0.88rem; text-align: center;"></p>
-    </section>
-
-    <!-- LOCKED DASHBOARD CONTENT (Disabled/Blurred unless profile is launched and active) -->
-    <div id="lockedDashboardContent" class="locked-dashboard-content locked">
-      <!-- LOCKED BANNER OVERLAY (Displayed when dashboard is locked) -->
-      <div class="locked-overlay">
-        <div class="locked-overlay-card">
-          <div class="locked-lock-icon">🔒</div>
-          <h3>Dashboard is Locked</h3>
-          <p>Please launch a Chrome Profile above to unlock all tabs and tools.</p>
+      
+      <!-- Navigation Menu -->
+      <nav class="sidebar-nav">
+        <button id="tabBrowserSetupBtn" class="sidebar-nav-btn active">
+          <span class="nav-icon">🌐</span>
+          <span class="nav-text">Browser Setup</span>
+          <span class="nav-status-dot" id="sidebar_browser_status_dot"></span>
+        </button>
+        <button id="tabImageGenBtn" class="sidebar-nav-btn locked" disabled>
+          <span class="nav-icon">🖼️</span>
+          <span class="nav-text">Image Gen</span>
+          <span class="nav-lock">🔒</span>
+        </button>
+        <button id="tabStoryboardGenBtn" class="sidebar-nav-btn locked" disabled>
+          <span class="nav-icon">📋</span>
+          <span class="nav-text">Storyboard Gen</span>
+          <span class="nav-lock">🔒</span>
+        </button>
+        <button id="tabVideoGenBtn" class="sidebar-nav-btn locked" disabled>
+          <span class="nav-icon">🎬</span>
+          <span class="nav-text">Video Gen</span>
+          <span class="nav-lock">🔒</span>
+        </button>
+        <button id="tabVideoHelperBtn" class="sidebar-nav-btn locked" disabled>
+          <span class="nav-icon">🎥</span>
+          <span class="nav-text">Video Helper</span>
+          <span class="nav-lock">🔒</span>
+        </button>
+        <button id="tabSeedanceGenBtn" class="sidebar-nav-btn locked" disabled>
+          <span class="nav-icon">💃</span>
+          <span class="nav-text">Seedance Gen</span>
+          <span class="nav-lock">🔒</span>
+        </button>
+      </nav>
+      
+      <!-- Collapsed mini indicator -->
+      <div class="sidebar-footer" id="sidebar_profile_summary" style="display: none;">
+        <div class="profile-summary-card">
+          <div class="profile-summary-header">Active Browser</div>
+          <div class="profile-summary-name" id="sidebar_active_profile_name">--</div>
+          <div class="profile-summary-port" id="sidebar_active_profile_port">Port --</div>
         </div>
       </div>
+    </aside>
+    
+    <!-- Main Content Area -->
+    <div class="main-content-wrapper">
+      <header class="app-header">
+        <div class="header-left">
+          <h1 id="activeViewTitle">Browser Setup</h1>
+          <span id="portStatusBadge" class="status-badge offline" style="margin-left: 12px;">Offline</span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button id="openSettings" class="gear" title="Settings" style="padding: 10px 14px; font-size: 0.9rem; border-radius: 10px; margin: 0;">⚙️ Settings</button>
+        </div>
+      </header>
+      
+      <main class="main-content">
+        <!-- VIEW 1: BROWSER SETUP -->
+        <div id="browserSetupView" class="tab-view">
+          <section class="card profile-manager-card" style="margin-bottom: 24px; padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h2 style="margin: 0; font-size: 1.4rem; color: var(--text-color);">🌐 Chrome Profile Manager</h2>
+                <p class="section-subtitle" style="margin: 4px 0 0 0; font-size: 0.88rem;">เลือกรันโปรไฟล์เพื่อปลดล็อกการใช้งานและเข้าสู่ระบบออโตเมชัน</p>
+              </div>
+            </div>
 
-      <div class="tabs-container">
-        <button id="tabImageGenBtn" class="tab-btn active">🖼️ Image Generation</button>
-        <button id="tabStoryboardGenBtn" class="tab-btn">📋 Storyboard Generation</button>
-        <button id="tabVideoGenBtn" class="tab-btn">🎬 Video Generation</button>
-        <button id="tabVideoHelperBtn" class="tab-btn">🎥 Video Helper</button>
-        <button id="tabSeedanceGenBtn" class="tab-btn">💃 Seedance Gen</button>
-      </div>
+            <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 250px;">
+                <label style="font-size: 0.95rem; margin-bottom: 8px;">Select Available Profile</label>
+                <select id="profileSelect" style="padding: 12px; font-size: 1rem; border-radius: 12px; margin-bottom: 0;"></select>
+              </div>
 
-      <!-- VIEW 2: IMAGE GENERATION -->
-      <div id="imageGenView" class="tab-view">
+              <div style="display: flex; flex-direction: column; gap: 10px; flex: 1.2; min-width: 320px; justify-content: center;">
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <button id="launchProfile" class="has-tooltip" style="flex: 2; padding: 12px; font-size: 1rem; font-weight: bold;">
+                    <span class="btn-text">🚀 Launch Profile & Open Dashboard</span>
+                    <div class="custom-tooltip" id="tooltip_launchProfile"></div>
+                  </button>
+                  <button id="closeBrowser" class="secondary" style="display: none; flex: 1.2; padding: 12px; font-size: 0.9rem; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0;">❌ Close Browser</button>
+                  <button id="setProfile" class="secondary" style="flex: 1; padding: 12px; font-size: 0.9rem; margin: 0;">Set Default</button>
+                </div>
+                <div style="display: flex; gap: 8px; width: 100%; flex-wrap: wrap;">
+                  <button id="editProfileBtn" class="secondary" style="flex: 1; min-width: 90px; padding: 10px; font-size: 0.85rem; margin: 0;">Edit Profile</button>
+                  <button id="addProfileBtn" class="secondary" style="flex: 1; min-width: 90px; padding: 10px; font-size: 0.85rem; background: rgba(72, 187, 120, 0.1); border-color: rgba(72, 187, 120, 0.2); color: #48bb78; margin: 0;">+ Add Profile</button>
+                  <button id="deleteProfileBtn" class="secondary" style="flex: 1; min-width: 90px; padding: 10px; font-size: 0.85rem; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565; margin: 0;">🗑️ Delete</button>
+                </div>
+              </div>
+            </div>
+            <p id="profileMsg" class="msg" style="margin: 12px 0 0; min-height: auto; font-size: 0.88rem; text-align: center;"></p>
+          </section>
+        </div>
+
+        <!-- VIEW 2: IMAGE GENERATION -->
+        <div id="imageGenView" class="tab-view hidden">
         <!-- Drama Auto Import Card -->
         <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
           <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
@@ -1192,8 +1243,9 @@
           </div>
         </div>
       </div>
-    </div> <!-- Close lockedDashboardContent -->
-  </main>
+    </main>
+  </div>
+</div>
 
 
   <div id="settingsModal" class="modal hidden">
