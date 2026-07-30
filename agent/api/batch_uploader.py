@@ -277,7 +277,6 @@ async def scan_directories(body: ScanRequest):
             prompt_content = f"Error reading file: {str(e)}"
             
         pairs.append({
-            "index": len(pairs) + 1,
             "image_name": img_name,
             "image_path": os.path.join(images_dir, img_name),
             "prompt_name": pf,
@@ -299,7 +298,6 @@ async def scan_directories(body: ScanRequest):
                 prompt_content = f"Error reading file: {str(e)}"
                 
         pairs.append({
-            "index": len(pairs) + 1,
             "image_name": img_name,
             "image_path": os.path.join(images_dir, img_name),
             "prompt_name": pf,
@@ -319,13 +317,29 @@ async def scan_directories(body: ScanRequest):
                 prompt_content = f"Error reading file: {str(e)}"
                 
             pairs.append({
-                "index": len(pairs) + 1,
                 "image_name": None,
                 "image_path": None,
                 "prompt_name": pf,
                 "prompt_path": prompt_path,
                 "prompt_content": prompt_content
             })
+
+    # Sort final pairs list naturally by image_name (or prompt_name if image_name is missing)
+    import re
+    def natural_sort_key(s: str):
+        if not s:
+            return []
+        return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
+        
+    def pair_sort_key(p):
+        name = p.get("image_name") or p.get("prompt_name") or ""
+        return natural_sort_key(name)
+        
+    pairs.sort(key=pair_sort_key)
+    
+    # Assign index dynamically after sorting
+    for idx, p in enumerate(pairs):
+        p["index"] = idx + 1
 
     logger.info("Pairing completed. Matched count: %d, Leftover images: %d, Leftover prompts: %d, Total pairs: %d",
                 len(matched_pairs), len(unmatched_images), max(0, len(remaining_prompts) - len(unmatched_images)), len(pairs))
