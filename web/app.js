@@ -6744,98 +6744,155 @@ function renderScannedPairs() {
   // Determine if we are in prompt-only (no image) mode
   const isPromptOnly = flowScannedPairs.every(p => !p.image_path);
   
-  // Create table element wrapper
-  const tableWrapper = document.createElement('div');
-  tableWrapper.style.overflowX = 'auto';
-  tableWrapper.style.width = '100%';
-  tableWrapper.style.background = 'rgba(0, 0, 0, 0.2)';
-  tableWrapper.style.borderRadius = '10px';
-  tableWrapper.style.border = '1px solid rgba(255, 255, 255, 0.08)';
-  
-  const table = document.createElement('table');
-  table.style.width = '100%';
-  table.style.borderCollapse = 'collapse';
-  table.style.color = '#fff';
-  table.style.fontSize = '0.85rem';
-  table.style.textAlign = 'left';
-  
-  // Table Header
-  const thead = document.createElement('thead');
-  const headerRow = document.createElement('tr');
-  headerRow.style.background = 'rgba(255, 255, 255, 0.05)';
-  
-  const headers = isPromptOnly ? [
-    { text: 'Select', width: '20%', align: 'center' },
-    { text: 'Source/File', width: '80%' }
-  ] : [
-    { text: 'Select', width: '15%', align: 'center' },
-    { text: 'Thumbnail', width: '35%' },
-    { text: 'Source/File', width: '50%' }
-  ];
-  
-  headers.forEach(h => {
-    const th = document.createElement('th');
-    th.style.padding = '4px 8px';
-    th.style.borderBottom = '2px solid rgba(255,255,255,0.15)';
-    th.style.fontWeight = 'bold';
-    th.style.color = '#8da6ff';
-    if (h.width) th.style.width = h.width;
-    if (h.align) th.style.textAlign = h.align;
-    th.textContent = h.text;
-    headerRow.appendChild(th);
-  });
-  thead.appendChild(headerRow);
-  table.appendChild(thead);
-  
-  // Table Body
-  const tbody = document.createElement('tbody');
-  
-  flowScannedPairs.forEach((pair) => {
-    const tr = document.createElement('tr');
-    tr.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
-    tr.style.background = 'rgba(255,255,255,0.01)';
-    tr.style.transition = 'background 0.2s';
-    tr.addEventListener('mouseenter', () => {
-      tr.style.background = 'rgba(255,255,255,0.04)';
+  if (isPromptOnly) {
+    // Create table element wrapper
+    const tableWrapper = document.createElement('div');
+    tableWrapper.style.overflowX = 'auto';
+    tableWrapper.style.width = '100%';
+    tableWrapper.style.background = 'rgba(0, 0, 0, 0.2)';
+    tableWrapper.style.borderRadius = '10px';
+    tableWrapper.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+    
+    const table = document.createElement('table');
+    table.style.width = '100%';
+    table.style.borderCollapse = 'collapse';
+    table.style.color = '#fff';
+    table.style.fontSize = '0.85rem';
+    table.style.textAlign = 'left';
+    
+    // Table Header
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    headerRow.style.background = 'rgba(255, 255, 255, 0.05)';
+    
+    const headers = [
+      { text: 'Select', width: '20%', align: 'center' },
+      { text: 'Source/File', width: '80%' }
+    ];
+    
+    headers.forEach(h => {
+      const th = document.createElement('th');
+      th.style.padding = '4px 8px';
+      th.style.borderBottom = '2px solid rgba(255,255,255,0.15)';
+      th.style.fontWeight = 'bold';
+      th.style.color = '#8da6ff';
+      if (h.width) th.style.width = h.width;
+      if (h.align) th.style.textAlign = h.align;
+      th.textContent = h.text;
+      headerRow.appendChild(th);
     });
-    tr.addEventListener('mouseleave', () => {
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    // Table Body
+    const tbody = document.createElement('tbody');
+    
+    flowScannedPairs.forEach((pair) => {
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
       tr.style.background = 'rgba(255,255,255,0.01)';
-    });
-    
-    // 1. Checkbox
-    const tdCheck = document.createElement('td');
-    tdCheck.style.padding = '4px 8px';
-    tdCheck.style.textAlign = 'center';
-    
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = pair.checked !== false;
-    checkbox.style.width = '18px';
-    checkbox.style.height = '18px';
-    checkbox.style.cursor = 'pointer';
-    checkbox.style.accentColor = '#10b981';
-    checkbox.addEventListener('change', (e) => {
-      pair.checked = e.target.checked;
-      updateSelectAllButtonText();
-    });
-    tdCheck.appendChild(checkbox);
-    tr.appendChild(tdCheck);
-    
-    if (!isPromptOnly) {
-      // 2. Thumbnail
-      const tdThumb = document.createElement('td');
-      tdThumb.style.padding = '4px 8px';
+      tr.style.transition = 'background 0.2s';
+      tr.addEventListener('mouseenter', () => {
+        tr.style.background = 'rgba(255,255,255,0.04)';
+      });
+      tr.addEventListener('mouseleave', () => {
+        tr.style.background = 'rgba(255,255,255,0.01)';
+      });
       
-      const thumbContainer = document.createElement('div');
-      thumbContainer.style.width = '60px';
-      thumbContainer.style.height = '90px';
-      thumbContainer.style.background = 'rgba(0,0,0,0.4)';
-      thumbContainer.style.borderRadius = '6px';
-      thumbContainer.style.display = 'flex';
-      thumbContainer.style.alignItems = 'center';
-      thumbContainer.style.justifyContent = 'center';
-      thumbContainer.style.overflow = 'hidden';
-      thumbContainer.style.border = '1px solid rgba(255,255,255,0.1)';
+      // 1. Checkbox
+      const tdCheck = document.createElement('td');
+      tdCheck.style.padding = '4px 8px';
+      tdCheck.style.textAlign = 'center';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = pair.checked !== false;
+      checkbox.style.width = '18px';
+      checkbox.style.height = '18px';
+      checkbox.style.cursor = 'pointer';
+      checkbox.style.accentColor = '#10b981';
+      checkbox.addEventListener('change', (e) => {
+        pair.checked = e.target.checked;
+        updateSelectAllButtonText();
+      });
+      tdCheck.appendChild(checkbox);
+      tr.appendChild(tdCheck);
+      
+      // 2. Source/File name
+      const tdSource = document.createElement('td');
+      tdSource.style.padding = '4px 8px';
+      tdSource.style.color = 'rgba(255,255,255,0.5)';
+      tdSource.style.fontSize = '0.8rem';
+      tdSource.style.wordBreak = 'break-all';
+      tdSource.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
+      tr.appendChild(tdSource);
+      
+      tbody.appendChild(tr);
+    });
+    
+    table.appendChild(tbody);
+    tableWrapper.appendChild(table);
+    container.appendChild(tableWrapper);
+  } else {
+    // Render as a 9-column grid with images and names underneath
+    const gridContainer = document.createElement('div');
+    gridContainer.style.display = 'grid';
+    gridContainer.style.gridTemplateColumns = 'repeat(9, 1fr)';
+    gridContainer.style.gap = '0px'; // No margin/gap between cells
+    gridContainer.style.width = '100%';
+    gridContainer.style.background = 'rgba(0, 0, 0, 0.2)';
+    gridContainer.style.borderRadius = '10px';
+    gridContainer.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+    gridContainer.style.padding = '4px';
+    gridContainer.style.boxSizing = 'border-box';
+    
+    flowScannedPairs.forEach((pair) => {
+      const cell = document.createElement('div');
+      cell.style.position = 'relative';
+      cell.style.display = 'flex';
+      cell.style.flexDirection = 'column';
+      cell.style.alignItems = 'center';
+      cell.style.padding = '8px'; // padding inside the cell
+      cell.style.margin = '0px'; // no margin between cells
+      cell.style.boxSizing = 'border-box';
+      cell.style.transition = 'background 0.2s, opacity 0.2s';
+      cell.style.cursor = 'pointer';
+      cell.style.borderRadius = '8px';
+      
+      // Checkbox
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = pair.checked !== false;
+      checkbox.style.position = 'absolute';
+      checkbox.style.top = '12px';
+      checkbox.style.left = '12px';
+      checkbox.style.width = '18px';
+      checkbox.style.height = '18px';
+      checkbox.style.cursor = 'pointer';
+      checkbox.style.accentColor = '#10b981';
+      checkbox.style.zIndex = '2';
+      checkbox.style.margin = '0';
+      
+      cell.style.opacity = checkbox.checked ? '1' : '0.4';
+      
+      checkbox.addEventListener('change', (e) => {
+        pair.checked = e.target.checked;
+        cell.style.opacity = pair.checked ? '1' : '0.4';
+        updateSelectAllButtonText();
+      });
+      
+      cell.appendChild(checkbox);
+      
+      // Image Wrapper
+      const imgWrapper = document.createElement('div');
+      imgWrapper.style.width = '100%';
+      imgWrapper.style.aspectRatio = '9/16';
+      imgWrapper.style.background = 'rgba(0,0,0,0.4)';
+      imgWrapper.style.borderRadius = '6px';
+      imgWrapper.style.overflow = 'hidden';
+      imgWrapper.style.border = '1px solid rgba(255,255,255,0.1)';
+      imgWrapper.style.position = 'relative';
+      imgWrapper.style.boxSizing = 'border-box';
       
       if (pair.image_path) {
         const img = document.createElement('img');
@@ -6843,35 +6900,60 @@ function renderScannedPairs() {
         img.style.width = '100%';
         img.style.height = '100%';
         img.style.objectFit = 'cover';
-        thumbContainer.appendChild(img);
+        img.style.display = 'block';
+        imgWrapper.appendChild(img);
       } else {
         const placeholder = document.createElement('div');
         placeholder.style.fontSize = '0.7rem';
         placeholder.style.color = 'rgba(255,255,255,0.4)';
         placeholder.style.textAlign = 'center';
+        placeholder.style.height = '100%';
+        placeholder.style.display = 'flex';
+        placeholder.style.alignItems = 'center';
+        placeholder.style.justifyContent = 'center';
         placeholder.textContent = 'No Image';
-        thumbContainer.appendChild(placeholder);
+        imgWrapper.appendChild(placeholder);
       }
-      tdThumb.appendChild(thumbContainer);
-      tr.appendChild(tdThumb);
-    }
+      
+      cell.appendChild(imgWrapper);
+      
+      // Filename text
+      const nameLabel = document.createElement('div');
+      nameLabel.style.marginTop = '6px';
+      nameLabel.style.fontSize = '0.75rem';
+      nameLabel.style.color = 'rgba(255, 255, 255, 0.7)';
+      nameLabel.style.textAlign = 'center';
+      nameLabel.style.width = '100%';
+      nameLabel.style.whiteSpace = 'nowrap';
+      nameLabel.style.overflow = 'hidden';
+      nameLabel.style.textOverflow = 'ellipsis';
+      nameLabel.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
+      
+      cell.appendChild(nameLabel);
+      
+      // Hover background highlighting
+      cell.addEventListener('mouseenter', () => {
+        cell.style.background = 'rgba(255, 255, 255, 0.05)';
+      });
+      cell.addEventListener('mouseleave', () => {
+        cell.style.background = 'transparent';
+      });
+      
+      // Toggle checked state on cell click
+      cell.addEventListener('click', (e) => {
+        if (e.target !== checkbox) {
+          checkbox.checked = !checkbox.checked;
+          pair.checked = checkbox.checked;
+          cell.style.opacity = pair.checked ? '1' : '0.4';
+          updateSelectAllButtonText();
+        }
+      });
+      
+      gridContainer.appendChild(cell);
+    });
     
-    // 3. Source/File name
-    const tdSource = document.createElement('td');
-    tdSource.style.padding = '4px 8px';
-    tdSource.style.color = 'rgba(255,255,255,0.5)';
-    tdSource.style.fontSize = '0.8rem';
-    tdSource.style.wordBreak = 'break-all';
-    tdSource.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
-    tr.appendChild(tdSource);
-    
-    tbody.appendChild(tr);
-  });
-
-  
-  table.appendChild(tbody);
-  tableWrapper.appendChild(table);
-  container.appendChild(tableWrapper);
+    container.appendChild(gridContainer);
+  }
 }
 
 
