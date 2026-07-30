@@ -6252,32 +6252,31 @@ function initFlowKitUploaderListeners() {
     const getPairFileNumber = (p) => {
       const name = p.image_name || p.prompt_name || '';
       const match = name.match(/^(\d+)/);
-      return match ? parseInt(match[1], 10) : Number(p.index);
+      return match ? parseInt(match[1], 10) : null;
     };
 
     const isPromptOnly = flowScannedPairs.every(p => !p.image_path);
-    if (!isPromptOnly) {
-      const missingImageIndices = [];
-      selectedIndices.forEach(idxNum => {
-        const pair = flowScannedPairs.find(p => {
-          const fileNum = getPairFileNumber(p);
-          return fileNum === idxNum || Number(p.index) === idxNum;
-        });
-        if (!pair || !pair.image_path || !pair.image_name) {
-          missingImageIndices.push(idxNum);
-        }
+    const missingImageIndices = [];
+    
+    selectedIndices.forEach(idxNum => {
+      const pair = flowScannedPairs.find(p => {
+        const fileNum = getPairFileNumber(p);
+        return fileNum !== null ? fileNum === idxNum : Number(p.index) === idxNum;
       });
-      
-      if (missingImageIndices.length > 0) {
-        alert(`⚠️ คำเตือน: ลำดับต่อไปนี้ไม่มีรูปภาพประกอบ: ${missingImageIndices.sort((a, b) => a - b).join(', ')}`);
+      if (!pair || (!isPromptOnly && (!pair.image_path || !pair.image_name))) {
+        missingImageIndices.push(idxNum);
       }
+    });
+    
+    if (missingImageIndices.length > 0) {
+      alert(`⚠️ คำเตือน: ลำดับต่อไปนี้ไม่มีรูปภาพประกอบ: ${missingImageIndices.sort((a, b) => a - b).join(', ')}`);
     }
     
     flowScannedPairs.forEach(p => {
       const fileNum = getPairFileNumber(p);
-      const idxNum = Number(p.index);
-      p.checked = selectedIndices.has(fileNum) || selectedIndices.has(idxNum);
-      console.log(`Pair index ${p.index} (fileNum: ${fileNum}, numeric: ${idxNum}) matches selection: ${p.checked}`);
+      const matchNum = fileNum !== null ? fileNum : Number(p.index);
+      p.checked = selectedIndices.has(matchNum);
+      console.log(`Pair index ${p.index} (fileNum: ${fileNum}, matchNum: ${matchNum}) matches selection: ${p.checked}`);
     });
     
     renderScannedPairs();
