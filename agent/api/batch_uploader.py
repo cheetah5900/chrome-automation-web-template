@@ -12,6 +12,10 @@ from agent.sdk.persistence.sqlite_repository import SQLiteRepository
 
 import subprocess
 import asyncio
+import re
+
+def natural_sort_key(s: str):
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/batch-uploader", tags=["batch-uploader"])
@@ -219,7 +223,7 @@ async def scan_directories(body: ScanRequest):
         except Exception as e:
             logger.exception("Failed to read images directory")
             raise HTTPException(500, f"Failed to read images directory: {str(e)}")
-        image_files.sort()
+        image_files.sort(key=natural_sort_key)
         logger.info("Filtered & sorted image files (%d files): %s", len(image_files), image_files)
 
     # Scan prompt files (supporting .txt and .md)
@@ -234,7 +238,7 @@ async def scan_directories(body: ScanRequest):
     except Exception as e:
         logger.exception("Failed to read prompts directory")
         raise HTTPException(500, f"Failed to read prompts directory: {str(e)}")
-    prompt_files.sort()
+    prompt_files.sort(key=natural_sort_key)
     logger.info("Filtered & sorted prompt files (%d files): %s", len(prompt_files), prompt_files)
 
     # Pair them up by name-based matching, falling back to index-based for leftovers
