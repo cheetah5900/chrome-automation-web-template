@@ -331,6 +331,17 @@ async def scan_directories(body: ScanRequest):
                 "prompt_content": prompt_content
             })
 
+    def first_number_key(pair):
+        name = pair.get("image_name") or pair.get("prompt_name") or ""
+        match = re.search(r'\d+', name)
+        if match:
+            return (0, int(match.group()))
+        return (1, name.lower())
+
+    pairs.sort(key=first_number_key)
+    for idx, pair in enumerate(pairs):
+        pair["index"] = idx + 1
+
     logger.info("Pairing completed. Matched count: %d, Leftover images: %d, Leftover prompts: %d, Total pairs: %d",
                 len(matched_pairs), len(unmatched_images), max(0, len(remaining_prompts) - len(unmatched_images)), len(pairs))
     return {"pairs": pairs}
