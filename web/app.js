@@ -3327,14 +3327,7 @@ function saveImageGenActiveState() {
   function updateImageGenTabIndicators() {
     document.querySelectorAll('.prompt-tab-btn').forEach(btn => {
       const r = parseInt(btn.dataset.round);
-      const hasData = promptsByRound[r] && promptsByRound[r].length > 0;
-      if (hasData) {
-        if (!btn.innerHTML.includes('🔴')) {
-          btn.innerHTML = `R${r} <span style="font-size: 0.6rem; color: #ff4a4a; margin-left: 4px;">🔴</span>`;
-        }
-      } else {
-        btn.innerHTML = `R${r}`;
-      }
+      btn.innerHTML = `R${r}`;
     });
   }
   function updateDurationsSum() {
@@ -7855,6 +7848,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const savedPreset = localStorage.getItem('flowkit_color_preset') || 'cobalt';
   applyColorPreset(savedPreset);
+
+  // --- Sidebar Collapse Toggling ---
+  const sidebar = document.querySelector('.sidebar');
+  const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+  
+  const toggleSidebar = () => {
+    if (!sidebar || !toggleSidebarBtn) return;
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    localStorage.setItem('flowkit_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+    toggleSidebarBtn.textContent = isCollapsed ? '▶' : '◀';
+  };
+  
+  if (toggleSidebarBtn && sidebar) {
+    toggleSidebarBtn.addEventListener('click', toggleSidebar);
+    
+    // Load persisted state
+    const savedCollapsed = localStorage.getItem('flowkit_sidebar_collapsed');
+    if (savedCollapsed === 'true') {
+      sidebar.classList.add('collapsed');
+      toggleSidebarBtn.textContent = '▶';
+    }
+  }
 });
 
 

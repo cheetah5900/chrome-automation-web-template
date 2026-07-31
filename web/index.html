@@ -18,6 +18,7 @@
           <h2 class="sidebar-title">Flow Kit Portal</h2>
           <span class="sidebar-subtitle">Automation Console</span>
         </div>
+        <button id="toggleSidebarBtn" class="toggle-sidebar-btn" title="Toggle Sidebar">◀</button>
       </div>
       
       <!-- Theme Switcher -->
@@ -130,7 +131,7 @@
         <!-- VIEW 2: IMAGE GENERATION -->
         <div id="imageGenView" class="tab-view hidden">
         <!-- Drama Auto Import Card -->
-        <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+        <section class="card border-blue" style="padding: 20px; margin-bottom: 20px;">
           <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
             <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
               🎬 ระบบนำเข้าข้อมูลละครอัตโนมัติ (Drama Auto Import)
@@ -355,7 +356,7 @@
       <div id="storyboardGenView" class="tab-view hidden">
         <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
           <!-- Left: Controls Card -->
-          <div class="card" style="flex: 1; min-width: 300px; padding: 25px; border: 1px solid rgba(139, 92, 246, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+          <div class="card border-purple" style="flex: 1; min-width: 300px; padding: 25px;">
             <h2 class="section-title" style="font-size: 1.3rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #a78bfa;">
               📋 Storyboard Generation Autofill
             </h2>
@@ -391,18 +392,18 @@
                 <!-- Nested configuration for Autofill Scenes -->
                 <div id="autofillScenesConfig" style="margin-left: 26px; padding-left: 14px; border-left: 2px solid rgba(139, 92, 246, 0.4); display: flex; flex-direction: column; gap: 12px; margin-top: 6px;">
                   <!-- Delay Control -->
-                  <div style="background: rgba(255,255,255,0.01); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.04);">
-                    <label style="font-size: 0.8rem; font-weight: bold; color: rgba(255,255,255,0.75); margin-bottom: 6px; display: block;">ดีเลย์ระหว่างการกดแต่ละปุ่ม (วินาที):</label>
+                  <div class="round-info-box">
+                    <label style="font-size: 0.8rem; font-weight: bold; margin-bottom: 6px; display: block;">ดีเลย์ระหว่างการกดแต่ละปุ่ม (วินาที):</label>
                     <div style="display: flex; align-items: center; gap: 8px;">
                       <input type="number" id="numAutofillDelay" value="1.5" min="0.1" step="0.1" style="width: 70px; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); color: #fff; font-size: 0.85rem;" />
-                      <span style="font-size: 0.8rem; color: rgba(255,255,255,0.5); flex-grow: 1;">วินาที</span>
+                      <span style="font-size: 0.8rem; color: var(--text-secondary); flex-grow: 1;">วินาที</span>
                       <button type="button" id="btnSetAutofillDelayDefault" style="padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 0.72rem; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">Set Default</button>
                     </div>
                   </div>
 
                   <!-- Scene Range Control -->
-                  <div style="background: rgba(255,255,255,0.01); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.04);">
-                    <label style="font-size: 0.8rem; font-weight: bold; color: rgba(255,255,255,0.75); margin-bottom: 6px; display: block;">ระบุลำดับฉากที่ต้องการกด (เช่น 5-10 หรือ 5 หรือเว้นว่างเพื่อกดทั้งหมด):</label>
+                  <div class="round-info-box">
+                    <label style="font-size: 0.8rem; font-weight: bold; margin-bottom: 6px; display: block;">ระบุลำดับฉากที่ต้องการกด (เช่น 5-10 หรือ 5 หรือเว้นว่างเพื่อกดทั้งหมด):</label>
                     <input type="text" id="txtAutofillRange" placeholder="เว้นว่างเพื่อกดทั้งหมด" style="width: 100%; padding: 6px 10px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); color: #fff; font-size: 0.85rem;" />
                   </div>
                 </div>
@@ -438,11 +439,11 @@
 
       <div id="videoGenView" class="tab-view hidden">
         <!-- Top-Level Google Flow Mode Selector -->
-        <section class="card" style="padding: 16px; margin-bottom: 20px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(30, 41, 59, 0.25);">
+        <section class="card" style="padding: 16px; margin-bottom: 20px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
             <div style="display: flex; flex-direction: column; gap: 4px;">
-              <h3 style="font-size: 1.05rem; font-weight: bold; margin: 0; color: #fff;">🤖 เลือกโหมดเจเนอเรทวิดีโอ (Generation Mode)</h3>
-              <p style="font-size: 0.78rem; margin: 0; color: rgba(255,255,255,0.5);">เลือกโหมดประมวลผลผ่าน Browser Simulation หรือเรียกใช้ Flow Kit API (Extension Bridge)</p>
+              <h3 style="font-size: 1.05rem; font-weight: bold; margin: 0;">🤖 เลือกโหมดเจเนอเรทวิดีโอ (Generation Mode)</h3>
+              <p style="font-size: 0.78rem; margin: 0; color: var(--text-secondary);">เลือกโหมดประมวลผลผ่าน Browser Simulation หรือเรียกใช้ Flow Kit API (Extension Bridge)</p>
             </div>
             <div style="display: flex; gap: 8px;">
               <select id="cfg_video_gen_mode" style="padding: 10px 16px; border-radius: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.9rem; font-weight: 600; cursor: pointer; min-width: 320px;">
@@ -464,7 +465,7 @@
           </div>
 
           <!-- Drama Auto Import Card -->
-          <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+          <section class="card border-blue" style="padding: 20px; margin-bottom: 20px;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
               <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
                 🎬 ระบบนำเข้าข้อมูลละครอัตโนมัติ (Drama Video Auto Import)
@@ -608,7 +609,7 @@
         <!-- Flow Kit Mode Section -->
         <div id="flow_kit_mode_section" style="display: none; margin-bottom: 20px;">
           <!-- Folder sync & settings card -->
-          <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(58, 160, 255, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+          <section class="card border-blue" style="padding: 20px; margin-bottom: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
               <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
                 📁 Flow Kit Batch Uploader & Sync
@@ -727,9 +728,9 @@
                 </div>
 
                 <!-- Resolved Folder Paths (Info Display) -->
-                <div style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 10px; font-size: 0.75rem; display: flex; flex-direction: column; gap: 6px;">
-                  <div>📸 <b>Storyboards Path:</b> <span id="lbl_resolved_storyboard_path" style="color: rgba(255,255,255,0.6); word-break: break-all;">--</span></div>
-                  <div>✍️ <b>Animation Prompts Path:</b> <span id="lbl_resolved_prompt_path" style="color: rgba(255,255,255,0.6); word-break: break-all;">--</span></div>
+                <div class="info-note-box">
+                  <div>📸 <b>Storyboards Path:</b> <span id="lbl_resolved_storyboard_path" style="color: var(--text-secondary); word-break: break-all;">--</span></div>
+                  <div>✍️ <b>Animation Prompts Path:</b> <span id="lbl_resolved_prompt_path" style="color: var(--text-secondary); word-break: break-all;">--</span></div>
                 </div>
               </div>
             </div>
@@ -754,7 +755,7 @@
         <!-- Flow Kit Prompt-Only Mode Section -->
         <div id="flow_kit_prompt_only_section" style="display: none; margin-bottom: 20px;">
           <!-- Folder sync & settings card -->
-          <section class="card" style="padding: 20px; margin-bottom: 20px; border: 1px solid rgba(168, 85, 247, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+          <section class="card border-purple" style="padding: 20px; margin-bottom: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
               <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 0; display: flex; align-items: center; gap: 8px; color: #c084fc;">
                 ⚡ Flow Kit Prompt-Only Video Generator
@@ -890,8 +891,7 @@
 
 
 
-          <!-- Flow Kit Video Downloader Section -->
-          <section class="card" style="padding: 20px; border: 1px solid rgba(234, 179, 8, 0.2); background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+          <section class="card border-yellow" style="padding: 20px;">
             <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #fef08a;">
               📥 Flow Kit Video Downloader & Exporter
             </h2>
