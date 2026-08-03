@@ -20,6 +20,27 @@ SETTINGS_FILE = RUNTIME_DIR / "settings.json"
 PROMPTS_FILE = RUNTIME_DIR / "prompts.json"
 REF_IMAGE_DEFAULT_FILE = RUNTIME_DIR / "ref_image_default.json"
 
+def correct_legacy_paths(data):
+    import os
+    import re
+    if isinstance(data, dict):
+        return {k: correct_legacy_paths(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [correct_legacy_paths(item) for item in data]
+    elif isinstance(data, str):
+        if data.startswith("/Users/"):
+            current_home = os.path.expanduser("~")
+            match = re.match(r"^/Users/[^/]+", data)
+            if match:
+                old_home = match.group(0)
+                if old_home != current_home:
+                    data = data.replace(old_home, current_home, 1)
+        if "MythicForge84 - วิว/วิว/Soundtrack" in data:
+            data = data.replace("MythicForge84 - วิว/วิว/Soundtrack", "[เลิกใช้] 0 - MythicForge84 - วิว /วิว - out/Soundtrack")
+        return data
+    else:
+        return data
+
 RUNTIME_DIR.mkdir(exist_ok=True)
 
 
@@ -524,7 +545,7 @@ def save_settings(payload: SaveSettingsPayload):
 
 @app.get("/api/config/reference-image/default")
 def get_ref_image_default():
-    return _read_json(REF_IMAGE_DEFAULT_FILE)
+    return correct_legacy_paths(_read_json(REF_IMAGE_DEFAULT_FILE))
 
 
 class RefImageDefaultPayload(BaseModel):
@@ -1692,13 +1713,13 @@ def _get_config_value(key: str, default: Any = None) -> Any:
 def get_config() -> dict[str, Any]:
     defaults = _default_config()
     if not os.path.exists(CONFIG_FILE):
-        return defaults
+        return correct_legacy_paths(defaults)
     try:
         import json
 
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f) or {}
-            return {**defaults, **data}
+            return correct_legacy_paths({**defaults, **data})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed reading config: {e}")
 @app.get("/api/utils/serve-image")
@@ -2958,6 +2979,60 @@ def make_video_cover(
     video_speed: str | None = Form(None),
     overwrite: str | None = Form(None),
     job_id: str | None = Form(None)
+) -> dict[str, Any]:
+    try:
+        video_path = correct_legacy_paths(video_path)
+        image_path = correct_legacy_paths(image_path)
+        output_path = correct_legacy_paths(output_path)
+        audio_path = correct_legacy_paths(audio_path)
+        
+        return _make_video_cover_impl(
+            video=video, image=image, video_path=video_path, image_path=image_path,
+            output_path=output_path, prefix=prefix, no=no, mode=mode, amount=amount,
+            suffix=suffix, folders_json=folders_json, folder_range=folder_range,
+            sub_mode=sub_mode, audio_path=audio_path, durations_json=durations_json,
+            transitions_json=transitions_json, fade_durations_json=fade_durations_json,
+            audio_boost=audio_boost, video_audio_boost=video_audio_boost,
+            contrast=contrast, saturation=saturation, brightness=brightness,
+            gamma=gamma, unsharp=unsharp, video_speed=video_speed,
+            overwrite=overwrite, job_id=job_id
+        )
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        log(f"Video Helper Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+def _make_video_cover_impl(
+    video: UploadFile | None = None,
+    image: UploadFile | None = None,
+    video_path: str | None = None,
+    image_path: str | None = None,
+    output_path: str | None = None,
+    prefix: str | None = None,
+    no: str | None = None,
+    mode: str | None = None,
+    amount: str | None = None,
+    suffix: str | None = None,
+    folders_json: str | None = None,
+    folder_range: str | None = None,
+    sub_mode: str | None = None,
+    audio_path: str | None = None,
+    durations_json: str | None = None,
+    transitions_json: str | None = None,
+    fade_durations_json: str | None = None,
+    audio_boost: str | None = None,
+    video_audio_boost: str | None = None,
+    contrast: str | None = None,
+    saturation: str | None = None,
+    brightness: str | None = None,
+    gamma: str | None = None,
+    unsharp: str | None = None,
+    video_speed: str | None = None,
+    overwrite: str | None = None,
+    job_id: str | None = None
 ) -> dict[str, Any]:
     import subprocess
     import tempfile

@@ -1,3 +1,26 @@
+async function getErrorFromResponse(res) {
+  let errMsg = `Server error: ${res.status}`;
+  try {
+    const errData = await res.json();
+    if (errData && errData.detail) {
+      return errData.detail;
+    }
+  } catch (jsonErr) {
+    try {
+      const txt = await res.text();
+      if (txt && txt.length < 500) {
+        errMsg = txt;
+      } else if (txt) {
+        const match = txt.match(/<title>([\s\S]*?)<\/title>/i) || txt.match(/<h1>([\s\S]*?)<\/h1>/i);
+        if (match && match[1]) {
+          errMsg = match[1].trim();
+        }
+      }
+    } catch (txtErr) {}
+  }
+  return errMsg;
+}
+
 function showToast(message, type = 'success') {
   const container = document.getElementById('toastContainer');
   if (!container) return;
@@ -335,7 +358,7 @@ async function loadProfiles() {
   }
   const selected = profileCache.find(x => x.name === select.value) || profileCache[0];
   fillProfileForm(selected);
-  updatePortStatus();
+  await updatePortStatus();
   updateTooltips();
 }
 
@@ -527,7 +550,7 @@ async function updatePortStatus() {
     if (browserStatusDot) browserStatusDot.style.background = '#48bb78';
 
     // Auto navigate to the first locked tab (Image Gen) if currently on Browser Setup
-    if (tabBrowserSetup && tabBrowserSetup.classList.contains('active')) {
+    if (window.isTabNavigationInitialized && tabBrowserSetup && tabBrowserSetup.classList.contains('active')) {
       if (tabImageGen) tabImageGen.click();
     }
   } else {
@@ -829,7 +852,35 @@ function initTabNavigation() {
     });
   });
 
-  // Restore active tab from localStorage
+}
+
+function restoreSavedTab() {
+  const btnBrowserSetup = document.getElementById('tabBrowserSetupBtn');
+  const btnImageGen = document.getElementById('tabImageGenBtn');
+  const btnStoryboardGen = document.getElementById('tabStoryboardGenBtn');
+  const btnVideoGen = document.getElementById('tabVideoGenBtn');
+  const btnWorkflow = document.getElementById('tabWorkflowBtn');
+  const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
+  const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
+
+  const viewBrowserSetup = document.getElementById('browserSetupView');
+  const viewImageGen = document.getElementById('imageGenView');
+  const viewStoryboardGen = document.getElementById('storyboardGenView');
+  const viewVideoGen = document.getElementById('videoGenView');
+  const viewWorkflow = document.getElementById('workflowBotView');
+  const viewVideoHelper = document.getElementById('videoHelperView');
+  const viewSeedanceGen = document.getElementById('seedanceGenView');
+
+  const tabs = [
+    { btn: btnBrowserSetup, view: viewBrowserSetup, onLoad: null },
+    { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
+    { btn: btnStoryboardGen, view: viewStoryboardGen, onLoad: () => { console.log('Storyboard loaded'); } },
+    { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
+    { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
+    { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
+    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: loadSeedancePrompts }
+  ];
+
   const savedTabId = localStorage.getItem('activeNavigationTab');
   if (savedTabId) {
     const savedTab = tabs.find(t => t.btn && t.btn.id === savedTabId);
@@ -841,6 +892,7 @@ function initTabNavigation() {
   } else {
     if (btnBrowserSetup) btnBrowserSetup.click();
   }
+  window.isTabNavigationInitialized = true;
 }
 
 // Load and populate configuration
@@ -2798,8 +2850,8 @@ async function runVideoHelper(btnElement) {
       }
       
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server error: ${response.status}`);
+        const errMsg = await getErrorFromResponse(response);
+        throw new Error(errMsg);
       }
 
       const res = await response.json();
@@ -2849,7 +2901,10 @@ async function runVideoHelper(btnElement) {
             } finally {
               clearInterval(retryInterval);
             }
-            if (!retryRes.ok) throw new Error(`Server error on retry: ${retryRes.status}`);
+            if (!retryRes.ok) {
+              const errMsg = await getErrorFromResponse(retryRes);
+              throw new Error(errMsg);
+            }
             const retryData = await retryRes.json();
             
             if (retryData.ok) {
@@ -6243,22 +6298,33 @@ function initAllTooltips() {
 }
 
 // Initial setup on load
-initAllTooltips();
-initModal();
-loadSettings();
-loadProfiles();
-loadImagePrompts();
-loadSeedancePrompts();
-renderVideoHelperBatchRows();
-initTabNavigation();
-initWorkflowActionListeners();
-initFileImports();
-initVideoGenListeners();
-initSeedanceGenListeners();
-setupLogStream();
+async function initApp() {
+  initAllTooltips();
+  initModal();
+  loadSettings();
+  loadImagePrompts();
+  loadSeedancePrompts();
+  renderVideoHelperBatchRows();
+  initTabNavigation();
+  initWorkflowActionListeners();
+  initFileImports();
+  initVideoGenListeners();
+  initSeedanceGenListeners();
+  setupLogStream();
 
-// Start periodic real-time status check every 3 seconds
-setInterval(updatePortStatus, 3000);
+  try {
+    await loadProfiles();
+  } catch (err) {
+    console.error("Failed to load profiles on startup:", err);
+  }
+
+  restoreSavedTab();
+
+  // Start periodic real-time status check every 3 seconds
+  setInterval(updatePortStatus, 3000);
+}
+
+initApp();
 
 // ==========================================
 // FLOW KIT BATCH UPLOADER & SYNC CONTROLLER
