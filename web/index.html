@@ -267,25 +267,6 @@
 
              <!-- ChatGPT project links inputs -->
             <div style="margin: 14px 0; display: flex; flex-direction: column; gap: 10px;">
-              <div>
-                <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">ChatGPT Project/Chat URL:</label>
-                <div style="display: flex; gap: 10px; width: 100%;">
-                  <input type="text" id="chatgptUrlInput" placeholder="https://chatgpt.com/g/g-..." style="padding: 10px 14px; flex-grow: 1; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0;" />
-                  <button id="setChatgptUrlDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
-                </div>
-              </div>
-              <div style="display: flex; gap: 10px; width: 100%; margin-top: 4px;">
-                <div style="flex: 1;">
-                  <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">ChatGPT Mode:</label>
-                  <select id="chatgptChatModeSelect" style="padding: 10px 14px; width: 100%; border-radius: 10px; background: rgba(22, 26, 50, 0.95); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; height: 38px; box-sizing: border-box; cursor: pointer;">
-                    <option value="new">เปิด Project URL เพื่อสร้างแชทใหม่ (New Chat)</option>
-                    <option value="existing">ใช้แชท ChatGPT ที่เปิดใช้งานอยู่เดิม (Active Chat)</option>
-                  </select>
-                </div>
-                <div style="display: flex; align-items: flex-end;">
-                  <button id="setChatgptChatModeDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; height: 38px;">Set Default</button>
-                </div>
-              </div>
               <div style="display: flex; gap: 10px; width: 100%; margin-top: 4px;">
                 <div style="flex: 1;">
                   <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">First Time Waiting (วินาที):</label>
@@ -299,32 +280,67 @@
                   <label style="font-size: 0.82rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Max Checks (ครั้ง):</label>
                   <input type="number" id="maxChecksInput" placeholder="เช่น 3" style="padding: 10px 14px; width: 100%; border-radius: 10px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.09); color: #fff; font-size: 0.85rem; margin-bottom: 0; box-sizing: border-box;" />
                 </div>
-                <div style="display: flex; align-items: flex-end;">
-                  <button id="setCheckSettingsDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; height: 38px;">Set Default</button>
+              </div>
+            </div>
+
+            <!-- Google Flow (API) Settings -->
+            <div id="flowImageGenSettings" style="margin: 14px 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 10px; background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.15);">
+              <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-color); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                ⚙️ Google Flow (API) Settings
+              </div>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap; width: 100%;">
+                <div style="flex: 1; min-width: 140px;">
+                  <label style="font-size: 0.8rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Google Flow Project:</label>
+                  <select id="cfg_flow_image_project_dropdown" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; width: 100%; box-sizing: border-box; cursor: pointer;"></select>
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                  <label style="font-size: 0.8rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Image Model:</label>
+                  <select id="flowImageModelSelect" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; width: 100%; box-sizing: border-box; cursor: pointer;">
+                    <option value="GEM_PIX_2">Imagen 3 (GEM_PIX_2)</option>
+                    <option value="NARWHAL">Imagen 2 (NARWHAL)</option>
+                  </select>
+                </div>
+                <div style="width: 80px;">
+                  <label style="font-size: 0.8rem; margin-bottom: 4px; display: block; color: rgba(255,255,255,0.65); font-weight: 500;">Quantity:</label>
+                  <input type="number" id="flowImageQuantityInput" value="1" min="1" max="4" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; width: 100%; text-align: center; box-sizing: border-box;" />
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px; align-items: flex-start; text-align: left; width: 100%;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.82rem; color: #fff; margin: 0; justify-content: flex-start; width: 100%; text-align: left;">
+                  <input type="checkbox" id="flowImageAttachRefsCheckbox" checked style="width: 16px; height: 16px; accent-color: #8b5cf6; margin: 0; cursor: pointer; flex-shrink: 0;" />
+                  <span>แนบรูปภาพอ้างอิง (Reference Images)</span>
+                </label>
+                <div id="flowImageFirstRoundNoRefsContainer" style="display: flex; align-items: center; margin-left: 26px; width: calc(100% - 26px); text-align: left;">
+                  <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.76rem; color: rgba(255,255,255,0.7); margin: 0; justify-content: flex-start; width: 100%; text-align: left;">
+                    <input type="checkbox" id="flowImageFirstRoundNoRefsCheckbox" checked style="width: 16px; height: 16px; accent-color: #8b5cf6; margin: 0; cursor: pointer; flex-shrink: 0;" />
+                    <span>ยกเว้นรอบแรก (ไม่ต้องแนบรูปใน R1)</span>
+                  </label>
                 </div>
               </div>
             </div>
 
-            <div style="display: flex; gap: 12px; margin-top: 12px; align-items: stretch;">
-              <button class="step-action-btn gemini-btn has-tooltip" id="btn_step3_gemini" style="width: 50%; padding: 14px; font-size: 1rem; margin-top: 0; margin-bottom: 0; display: flex; align-items: center; justify-content: center;">
+            <div style="display: flex; gap: 10px; margin-top: 12px; align-items: stretch; flex-wrap: wrap;">
+              <button class="step-action-btn gemini-btn has-tooltip" id="btn_step3_gemini" style="flex: 1; min-width: 100px; padding: 14px 10px; font-size: 0.95rem; margin: 0; display: flex; align-items: center; justify-content: center;">
                 Gemini
                 <div class="custom-tooltip" id="tooltip_btn_step3_gemini"></div>
               </button>
-              <div style="width: 50%; display: flex; flex-direction: column; gap: 12px;">
-                <button class="step-action-btn secondary has-tooltip" id="btn_step3_chatgpt" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); margin-top: 0; margin-bottom: 0; display: flex; align-items: center; justify-content: center;">
-                  ChatGPT
-                  <div class="custom-tooltip" id="tooltip_btn_step3_chatgpt"></div>
-                </button>
-                <div style="display: flex; gap: 6px; align-items: center; width: 100%;">
-                  <button class="step-action-btn secondary has-tooltip" id="btn_chatgpt_download" style="flex: 1; padding: 14px; font-size: 0.95rem; font-weight: bold; background: linear-gradient(135deg, #3182ce, #2b6cb0); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s; margin-top: 0; margin-bottom: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap;">
-                    <span class="btn-text">📥 ดาวน์โหลด</span>
-                    <div class="custom-tooltip" id="tooltip_btn_chatgpt_download"></div>
-                  </button>
-                  <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
-                    <span style="font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 500;">เริ่มเลข:</span>
-                    <input type="number" id="chatgpt_download_start_num" value="1" min="1" style="width: 55px; padding: 8px 6px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin-bottom: 0;" />
-                  </div>
-                </div>
+              <button class="step-action-btn secondary has-tooltip" id="btn_step3_chatgpt" style="flex: 1; min-width: 100px; padding: 14px 10px; font-size: 0.95rem; font-weight: bold; background: linear-gradient(135deg, #10a37f, #0d8366); margin: 0; display: flex; align-items: center; justify-content: center;">
+                ChatGPT
+                <div class="custom-tooltip" id="tooltip_btn_step3_chatgpt"></div>
+              </button>
+              <button class="step-action-btn has-tooltip" id="btn_step3_flow" style="flex: 1; min-width: 120px; padding: 14px 10px; font-size: 0.95rem; font-weight: bold; background: linear-gradient(135deg, #8b5cf6, #6d28d9); border: none; color: white; margin: 0; display: flex; align-items: center; justify-content: center;">
+                Google Flow (API)
+                <div class="custom-tooltip" id="tooltip_btn_step3_flow"></div>
+              </button>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center; width: 100%; margin-top: 10px;">
+              <button class="step-action-btn secondary has-tooltip" id="btn_chatgpt_download" style="flex: 1; padding: 12px; font-size: 0.9rem; font-weight: bold; background: linear-gradient(135deg, #3182ce, #2b6cb0); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; border-radius: 12px; transition: all 0.2s; margin: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap;">
+                <span class="btn-text">📥 ดาวน์โหลดรูป ChatGPT</span>
+                <div class="custom-tooltip" id="tooltip_btn_chatgpt_download"></div>
+              </button>
+              <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
+                <span style="font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 500;">เริ่มเลข:</span>
+                <input type="number" id="chatgpt_download_start_num" value="1" min="1" style="width: 55px; padding: 8px 6px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin-bottom: 0;" />
               </div>
             </div>
             <!-- Cooldown Tracker Banner -->

@@ -1305,6 +1305,7 @@ function renderImagePromptsForRound(round) {
 
 async function loadImagePrompts() {
   try {
+    await loadFlowKitProjects();
     const config = await jsonFetch('/api/config');
     const defaultData = await jsonFetch('/api/config/reference-image/default');
 
@@ -4214,26 +4215,69 @@ function initWorkflowActionListeners() {
 
         const shouldSplit = false; // Disable frontend split to let backend handle waiting natively
 
-        if (shouldSplit) {
-          // Dead code, skipped
-        } else {
-          // Normal direct execution
-          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
+        let success = false;
+        if (target === 'flow') {
+          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Generating image on Google Flow API...`, 'info', 'imageConsole');
           updateRowStatus(row, 'Generating...');
-          const success = await executeStep(endpoint, basePayload, null, 'imageConsole');
-          if (!success) {
-            updateRowStatus(row, 'Failed');
-            writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Failed to execute. Aborting loop.`, 'error', 'imageConsole');
-            await saveImagePrompts(true);
-            stopFrontendCooldown();
-            if (stopGenerationBtn) stopGenerationBtn.style.display = 'none';
-            btn.classList.remove('loading');
-            btn.disabled = false;
-            return;
+
+          // Reference image settings
+          const attachRefs = document.getElementById('flowImageAttachRefsCheckbox')?.checked;
+          const skipFirstRoundRefs = document.getElementById('flowImageFirstRoundNoRefsCheckbox')?.checked;
+
+          let refs = [];
+          if (attachRefs) {
+            if (!(r === 1 && skipFirstRoundRefs)) {
+              if (refImg1) refs.push(refImg1);
+              if (refImg2) refs.push(refImg2);
+              if (refImg3) refs.push(refImg3);
+              if (refImg4) refs.push(refImg4);
+              if (refImg5) refs.push(refImg5);
+              if (refImg6) refs.push(refImg6);
+              if (refImg7) refs.push(refImg7);
+            }
           }
 
+          const flowProj = document.getElementById('cfg_flow_image_project_dropdown')?.value;
+          const flowModel = document.getElementById('flowImageModelSelect')?.value || 'GEM_PIX_2';
+          const flowQty = parseInt(document.getElementById('flowImageQuantityInput')?.value, 10) || 1;
+
+          const payload = {
+            prompt: p,
+            project_id: flowProj,
+            model_name: flowModel,
+            quantity: flowQty,
+            reference_images: refs,
+            local_path: document.getElementById('cfg_lakorn_path')?.value || '',
+            folder_name: `ton_${document.getElementById('cfg_lakorn_ton')?.value || '1'}_ep_${document.getElementById('cfg_lakorn_ep')?.value || '1'}`,
+            round_num: r,
+            prompt_index: i + 1
+          };
+
+          try {
+            const res = await jsonFetch('/api/flow/generate-image-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            if (res && res.success) {
+              success = true;
+              const mediaList = res.media || [];
+              const mediaDetails = mediaList.map(m => `${m.filename} (ID: ${m.media_id.slice(0, 8)})`).join(', ');
+              writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Flow OK: ${mediaDetails}`, 'success', 'imageConsole');
+            } else {
+              throw new Error(res.message || 'การสร้างรูปภาพล้มเหลว');
+            }
+          } catch (err) {
+            writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Flow API Error: ${err.message}`, 'error', 'imageConsole');
+          }
+        } else {
+          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Sending prompt: "${p}"`, 'info', 'imageConsole');
+          updateRowStatus(row, 'Generating...');
+          success = await executeStep(endpoint, basePayload, null, 'imageConsole');
+
           // Start frontend cooldown tracker on successful submit
-          if (target === 'chatgpt') {
+          if (success && target === 'chatgpt') {
             const firstWaitInput = document.getElementById('firstTimeWaitingInput');
             const intervalInput = document.getElementById('checkIntervalInput');
             const maxChecksInput = document.getElementById('maxChecksInput');
@@ -4287,6 +4331,11 @@ function initWorkflowActionListeners() {
   // Step 2 ChatGPT (Bulk loop)
   document.getElementById('btn_step3_chatgpt').addEventListener('click', async (e) => {
     await runMultiRoundGeneration('chatgpt', e.target);
+  });
+
+  // Step 2 Google Flow (Bulk loop)
+  document.getElementById('btn_step3_flow')?.addEventListener('click', async (e) => {
+    await runMultiRoundGeneration('flow', e.target);
   });
 
   // ChatGPT Download Button
@@ -6600,6 +6649,8 @@ async function loadFlowKitProjects() {
       
       populate(dropdown, false);
       populate(poDropdown, true);
+      const imgDd = document.getElementById('cfg_flow_image_project_dropdown');
+      if (imgDd) populate(imgDd, true);
       await updateProjectStats();
     }
   } catch (err) {
@@ -7870,6 +7921,8 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleSidebarBtn.textContent = '▶';
     }
   }
+  
+  loadFlowKitProjects();
 });
 
 

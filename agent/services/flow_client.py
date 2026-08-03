@@ -61,6 +61,9 @@ class FlowClient:
 
     @property
     def connected(self) -> bool:
+        import os
+        if os.environ.get("MOCK_FLOW_CLIENT") == "1":
+            return True
         return self._extension_ws is not None
 
     @property
@@ -297,7 +300,9 @@ class FlowClient:
     async def generate_images(self, prompt: str, project_id: str,
                                aspect_ratio: str = "IMAGE_ASPECT_RATIO_PORTRAIT",
                                user_paygate_tier: str = "PAYGATE_TIER_TWO",
-                               character_media_ids: list[str] = None) -> dict:
+                               character_media_ids: list[str] = None,
+                               model_name: str = "GEM_PIX_2",
+                               quantity: int = 1) -> dict:
         """Generate image(s).
 
         If character_media_ids is provided, uses edit_image flow (batchGenerateImages
@@ -307,28 +312,47 @@ class FlowClient:
         Response structure:
             data.media[].name = mediaId (used for video gen)
         """
+        import os
+        if os.environ.get("MOCK_FLOW_CLIENT") == "1":
+            media = []
+            for i in range(quantity):
+                media.append({
+                    "name": "a2948942-2616-4731-a395-d1afac6a87a7",
+                    "image": {
+                        "generatedImage": {
+                            "mediaId": "a2948942-2616-4731-a395-d1afac6a87a7",
+                            "imageUri": f"http://127.0.0.1:{os.environ.get('PORT', '6969')}/health",
+                            "fifeUrl": f"http://127.0.0.1:{os.environ.get('PORT', '6969')}/health"
+                        }
+                    }
+                })
+            return {"success": True, "data": {"media": media}}
+
         ts = int(time.time() * 1000)
         ctx = self._client_context(project_id, user_paygate_tier)
 
-        request_item = {
-            "clientContext": {**ctx, "sessionId": f";{ts}"},
-            "seed": ts % 1000000,
-            "structuredPrompt": {"parts": [{"text": prompt}]},
-            "imageAspectRatio": aspect_ratio,
-            "imageModelName": IMAGE_MODELS["NANO_BANANA_PRO"],
-        }
-
-        # Add character references if provided (edit_image flow)
-        if character_media_ids:
-            request_item["imageInputs"] = [
-                {"name": mid, "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"}
-                for mid in character_media_ids
-            ]
+        requests = []
+        for i in range(quantity):
+            item_ts = ts + i
+            request_item = {
+                "clientContext": {**ctx, "sessionId": f";{item_ts}"},
+                "seed": item_ts % 1000000,
+                "structuredPrompt": {"parts": [{"text": prompt}]},
+                "imageAspectRatio": aspect_ratio,
+                "imageModelName": model_name,
+            }
+            # Add character references if provided (edit_image flow)
+            if character_media_ids:
+                request_item["imageInputs"] = [
+                    {"name": mid, "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"}
+                    for mid in character_media_ids
+                ]
+            requests.append(request_item)
 
         batch_id = f"{uuid.uuid4()}" if character_media_ids else None
         body = {
             "clientContext": ctx,
-            "requests": [request_item],
+            "requests": requests,
         }
         if batch_id:
             body["mediaGenerationContext"] = {"batchId": batch_id}
@@ -600,6 +624,17 @@ class FlowClient:
         Response: {media: {name: "uuid", ...}, workflow: {...}}
         We store media.name as the mediaId for video generation.
         """
+        import os
+        if os.environ.get("MOCK_FLOW_CLIENT") == "1":
+            return {
+                "success": True,
+                "_mediaId": "a2948942-2616-4731-a395-d1afac6a87a7",
+                "data": {
+                    "media": {
+                        "name": "a2948942-2616-4731-a395-d1afac6a87a7"
+                    }
+                }
+            }
         body = {
             "clientContext": {
                 "projectId": project_id,

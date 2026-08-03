@@ -349,6 +349,7 @@ async def scan_directories(body: ScanRequest):
 
 @router.post("/process")
 async def process_batch(body: ProcessRequest):
+    import json
     client = get_flow_client()
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
@@ -397,37 +398,51 @@ async def process_batch(body: ProcessRequest):
             media_id = None
 
             if has_image:
-                # 1. Read and upload image
-                with open(pair.image_path, "rb") as f:
-                    img_bytes = f.read()
-                b64 = base64.b64encode(img_bytes).decode()
-                mime = mimetypes.guess_type(pair.image_path)[0] or "image/png"
                 file_name = os.path.basename(pair.image_path)
-                
-                logger.info("Uploading batch image: %s", file_name)
-                upload_res = await client.upload_image(
-                    b64, mime_type=mime, project_id=body.project_id, file_name=file_name
-                )
-                
-                if upload_res.get("error") or (isinstance(upload_res.get("status"), int) and upload_res["status"] >= 400):
-                    error_msg = upload_res.get("error", "Upload failed")
-                    logger.error("Upload failed for %s: %s", file_name, error_msg)
-                    results.append({
-                        "image_path": pair.image_path,
-                        "status": "FAILED",
-                        "error": error_msg
-                    })
-                    continue
-                    
-                media_id = upload_res.get("_mediaId")
+                # Check for cached media_id in flow_media_ids.json
+                parent_dir = os.path.dirname(pair.image_path)
+                meta_path = os.path.join(parent_dir, "flow_media_ids.json")
+                if os.path.isfile(meta_path):
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as f:
+                            meta = json.load(f)
+                            if file_name in meta:
+                                media_id = meta[file_name]
+                                logger.info("Found cached mediaId for %s: %s (skipping upload)", file_name, media_id)
+                    except Exception as e:
+                        logger.warning("Failed to read cached media_id mapping: %s", e)
+
                 if not media_id:
-                    logger.error("No media_id returned for %s: %s", file_name, upload_res)
-                    results.append({
-                        "image_path": pair.image_path,
-                        "status": "FAILED",
-                        "error": "No media_id returned from upload"
-                    })
-                    continue
+                    # 1. Read and upload image
+                    with open(pair.image_path, "rb") as f:
+                        img_bytes = f.read()
+                    b64 = base64.b64encode(img_bytes).decode()
+                    mime = mimetypes.guess_type(pair.image_path)[0] or "image/png"
+                    
+                    logger.info("Uploading batch image: %s", file_name)
+                    upload_res = await client.upload_image(
+                        b64, mime_type=mime, project_id=body.project_id, file_name=file_name
+                    )
+                    
+                    if upload_res.get("error") or (isinstance(upload_res.get("status"), int) and upload_res["status"] >= 400):
+                        error_msg = upload_res.get("error", "Upload failed")
+                        logger.error("Upload failed for %s: %s", file_name, error_msg)
+                        results.append({
+                            "image_path": pair.image_path,
+                            "status": "FAILED",
+                            "error": error_msg
+                        })
+                        continue
+                        
+                    media_id = upload_res.get("_mediaId")
+                    if not media_id:
+                        logger.error("No media_id returned for %s: %s", file_name, upload_res)
+                        results.append({
+                            "image_path": pair.image_path,
+                            "status": "FAILED",
+                            "error": "No media_id returned from upload"
+                        })
+                        continue
 
             # 2. Create scene
             prompt_summary = pair.prompt_content[:100] if pair.prompt_content else f"Batch Scene {next_order}"

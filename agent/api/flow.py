@@ -15,6 +15,20 @@ class GenerateImageRequest(BaseModel):
     character_media_ids: Optional[list[str]] = None
 
 
+class GenerateImageBatchRequest(BaseModel):
+    prompt: str
+    project_id: str
+    aspect_ratio: str = "IMAGE_ASPECT_RATIO_PORTRAIT"
+    user_paygate_tier: str = "PAYGATE_TIER_ONE"
+    reference_images: Optional[list[str]] = None
+    model_name: str = "GEM_PIX_2"
+    quantity: int = 1
+    local_path: Optional[str] = ""
+    folder_name: Optional[str] = ""
+    round_num: int = 1
+    prompt_index: int = 1
+
+
 class GenerateVideoRequest(BaseModel):
     start_image_media_id: str
     prompt: str
@@ -207,3 +221,150 @@ async def upload_image(body: UploadImageRequest):
         raise HTTPException(result.get("status", 502), result.get("error", result.get("data")))
     media_id = result.get("_mediaId")
     return {"media_id": media_id, "raw": result.get("data", result)}
+
+
+@router.post("/generate-image-batch")
+async def generate_image_batch(body: GenerateImageBatchRequest):
+    """Generate image(s) on Google Flow via the Extension, download them locally, and store media IDs."""
+    import os
+    import json
+    import base64
+    import mimetypes
+    import logging
+    import httpx
+
+    logger = logging.getLogger(__name__)
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+
+    character_media_ids = []
+    # If folder settings are provided, resolve reference images
+    if body.reference_images and body.local_path and body.folder_name:
+        images_dir = os.path.join(body.local_path, body.folder_name, "Images")
+        os.makedirs(images_dir, exist_ok=True)
+        meta_path = os.path.join(images_dir, "flow_media_ids.json")
+
+        for ref_img in body.reference_images:
+            ref_path = ref_img
+            if not os.path.isabs(ref_path):
+                ref_path = os.path.join(images_dir, ref_img)
+
+            if os.path.isfile(ref_path):
+                filename = os.path.basename(ref_path)
+                cached_id = None
+                if os.path.isfile(meta_path):
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as f:
+                            meta = json.load(f)
+                            if filename in meta:
+                                cached_id = meta[filename]
+                    except Exception:
+                        pass
+
+                if cached_id:
+                    character_media_ids.append(cached_id)
+                    logger.info("Using cached reference media ID for %s: %s", filename, cached_id)
+                else:
+                    try:
+                        with open(ref_path, "rb") as f:
+                            img_bytes = f.read()
+                        b64 = base64.b64encode(img_bytes).decode()
+                        mime = mimetypes.guess_type(ref_path)[0] or "image/png"
+                        upload_res = await client.upload_image(
+                            b64, mime_type=mime, project_id=body.project_id, file_name=filename
+                        )
+                        mid = upload_res.get("_mediaId")
+                        if mid:
+                            character_media_ids.append(mid)
+                            # Save to metadata JSON
+                            meta = {}
+                            if os.path.isfile(meta_path):
+                                try:
+                                    with open(meta_path, "r", encoding="utf-8") as f:
+                                        meta = json.load(f)
+                                except Exception:
+                                    pass
+                            meta[filename] = mid
+                            with open(meta_path, "w", encoding="utf-8") as f:
+                                json.dump(meta, f, ensure_ascii=False, indent=2)
+                    except Exception as e:
+                        logger.error("Failed to upload reference image %s: %s", filename, e)
+
+    # Call client generate_images
+    result = await client.generate_images(
+        prompt=body.prompt,
+        project_id=body.project_id,
+        aspect_ratio=body.aspect_ratio,
+        user_paygate_tier=body.user_paygate_tier,
+        character_media_ids=character_media_ids or None,
+        model_name=body.model_name,
+        quantity=body.quantity
+    )
+
+    if result.get("error") or (isinstance(result.get("status"), int) and result["status"] >= 400):
+        raise HTTPException(result.get("status", 502), result.get("error", result.get("data")))
+
+    data = result.get("data", result)
+    media_list = data.get("media", [])
+    if not media_list:
+        return {"success": False, "message": "No media returned from Flow API"}
+
+    downloaded_media = []
+    if body.local_path and body.folder_name:
+        images_dir = os.path.join(body.local_path, body.folder_name, "Images")
+        os.makedirs(images_dir, exist_ok=True)
+        meta_path = os.path.join(images_dir, "flow_media_ids.json")
+
+        async with httpx.AsyncClient() as http_client:
+            for idx, item in enumerate(media_list):
+                name = item.get("name", "")
+                gen = item.get("image", {}).get("generatedImage", {})
+                media_id = gen.get("mediaId", name)
+
+                # Fetch url
+                url = None
+                for url_field in ("fifeUrl", "imageUri"):
+                    u = gen.get(url_field, "")
+                    if u:
+                        url = u
+                        break
+
+                if not url:
+                    continue
+
+                # Determine filename
+                if body.round_num == 1 and body.quantity == 1:
+                    filename = f"{body.prompt_index:02d}.png"
+                else:
+                    filename = f"R{body.round_num}_{body.prompt_index:02d}_{idx + 1}.png"
+
+                output_path = os.path.join(images_dir, filename)
+                try:
+                    resp = await http_client.get(url, timeout=30.0)
+                    if resp.status_code == 200:
+                        with open(output_path, "wb") as f:
+                            f.write(resp.content)
+                        logger.info("Saved generated image: %s", output_path)
+
+                        # Cache media ID mapping
+                        meta = {}
+                        if os.path.isfile(meta_path):
+                            try:
+                                with open(meta_path, "r", encoding="utf-8") as f:
+                                    meta = json.load(f)
+                            except Exception:
+                                pass
+                        meta[filename] = media_id
+                        with open(meta_path, "w", encoding="utf-8") as f:
+                            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+                        downloaded_media.append({
+                            "filename": filename,
+                            "media_id": media_id,
+                            "url": url
+                        })
+                except Exception as e:
+                    logger.error("Failed to download image from %s: %s", url, e)
+
+    return {"success": True, "media": downloaded_media}
