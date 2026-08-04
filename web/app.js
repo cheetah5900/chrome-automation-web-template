@@ -6321,16 +6321,20 @@ function initAllTooltips() {
 async function loadFlowImageModels() {
   try {
     const res = await jsonFetch('/api/flow/image-models');
-    const datalist = document.getElementById('flowImageModelList');
-    if (res && res.models && datalist) {
-      datalist.innerHTML = '';
+    const select = document.getElementById('flowImageModelSelect');
+    if (res && res.models && select) {
+      const currentVal = select.value;
+      select.innerHTML = '';
       res.models.forEach(m => {
         const opt = document.createElement('option');
         opt.value = m.value;
         opt.textContent = m.label;
-        datalist.appendChild(opt);
+        select.appendChild(opt);
       });
-      console.log('Successfully loaded flow image models:', res.models);
+      if (currentVal && res.models.some(m => m.value === currentVal)) {
+        select.value = currentVal;
+      }
+      console.log('Successfully loaded flow image models into select dropdown:', res.models);
     }
   } catch (err) {
     console.error('Failed to load flow image models:', err);
