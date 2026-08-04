@@ -1183,10 +1183,17 @@ function renderDropdownOptions() {
   }
   
   const currentRefs = (refImagesByRound[currentPromptRound] || []).filter(Boolean);
-  const availableImages = lastScannedImagesList.filter(img => !currentRefs.includes(img.path));
+  const activeMode = localStorage.getItem('flowkit_ref_mode') || 'local';
+  let availableImages = lastScannedImagesList.filter(img => !currentRefs.includes(img.path));
+  if (activeMode === 'project') {
+    availableImages = availableImages.filter(img => img.media_id);
+  }
   
   if (availableImages.length === 0) {
-    dropdown.innerHTML = '<option value="">-- เลือกรูปครบทุกไฟล์ในโฟลเดอร์แล้ว --</option>';
+    const noImagesMsg = activeMode === 'project'
+      ? '-- ไม่พบรูปภาพที่มี Media ID ในโฟลเดอร์นี้ --'
+      : '-- เลือกรูปครบทุกไฟล์ในโฟลเดอร์แล้ว --';
+    dropdown.innerHTML = `<option value="">${noImagesMsg}</option>`;
     return;
   }
   
@@ -1204,6 +1211,7 @@ async function scanDirectoryForImages(dirPath, isRenderingRound = false) {
   
   if (!dirPath) {
     lastScannedImagesList = [];
+    filterSelectedImagesByScanned();
     renderDropdownOptions();
     return;
   }
@@ -1220,9 +1228,38 @@ async function scanDirectoryForImages(dirPath, isRenderingRound = false) {
     } else {
       lastScannedImagesList = [];
     }
+    filterSelectedImagesByScanned();
     renderDropdownOptions();
   } catch (e) {
     dropdown.innerHTML = '<option value="">-- เกิดข้อผิดพลาดในการสแกนโฟลเดอร์ --</option>';
+  }
+}
+
+function filterSelectedImagesByScanned() {
+  const activeMode = localStorage.getItem('flowkit_ref_mode') || 'local';
+  const currentRefs = refImagesByRound[currentPromptRound] || ["", "", "", "", "", "", ""];
+  
+  const validPaths = new Set();
+  lastScannedImagesList.forEach(img => {
+    if (activeMode === 'local' || (activeMode === 'project' && img.media_id)) {
+      validPaths.add(img.path);
+    }
+  });
+
+  let changed = false;
+  const updatedRefs = currentRefs.map(path => {
+    if (!path) return "";
+    if (validPaths.has(path)) {
+      return path;
+    }
+    changed = true;
+    return "";
+  });
+  
+  if (changed) {
+    refImagesByRound[currentPromptRound] = updatedRefs;
+    renderSelectedRefImagesList();
+    saveImagePrompts(true);
   }
 }
 
@@ -1340,8 +1377,14 @@ function commitCurrentRoundFromDOM() {
 
 function renderRefImagesForRound(round) {
   const dirInput = document.getElementById('cfg_ref_images_dir');
+  const projInput = document.getElementById('cfg_project_images_path');
+  const activeMode = localStorage.getItem('flowkit_ref_mode') || 'local';
+
   if (dirInput) {
     dirInput.value = refImagesDirByRound[round] || '';
+  }
+  if (projInput && activeMode === 'project') {
+    projInput.value = refImagesDirByRound[round] || '';
   }
   scanDirectoryForImages(refImagesDirByRound[round] || '', true);
   renderSelectedRefImagesList();
@@ -3907,11 +3950,102 @@ function initWorkflowActionListeners() {
   const cfgRefImageDropdown = document.getElementById('cfg_ref_image_dropdown');
 
   if (browseRefImagesDirBtn && cfgRefImagesDirInput) {
+    // Reference Mode switching helper
+    const btnRefModeLocal = document.getElementById('btnRefModeLocal');
+    const btnRefModeProject = document.getElementById('btnRefModeProject');
+    const rowRefModeLocal = document.getElementById('rowRefModeLocal');
+    const rowRefModeProject = document.getElementById('rowRefModeProject');
+    const cfgProjectImagesPathInput = document.getElementById('cfg_project_images_path');
+
+    function setReferenceImagesMode(mode, triggerScan = true) {
+      localStorage.setItem('flowkit_ref_mode', mode);
+
+      if (mode === 'local') {
+        // Styling active local mode card
+        if (btnRefModeLocal) {
+          btnRefModeLocal.style.background = 'rgba(141, 166, 255, 0.15)';
+          btnRefModeLocal.style.borderColor = '#8da6ff';
+          const localText = btnRefModeLocal.querySelector('span:nth-child(2)');
+          if (localText) {
+            localText.style.color = '#fff';
+            localText.style.fontWeight = 'bold';
+          }
+        }
+        if (btnRefModeProject) {
+          btnRefModeProject.style.background = 'rgba(0, 0, 0, 0.2)';
+          btnRefModeProject.style.borderColor = 'rgba(255,255,255,0.06)';
+          const projText = btnRefModeProject.querySelector('span:nth-child(2)');
+          if (projText) {
+            projText.style.color = 'rgba(255,255,255,0.65)';
+            projText.style.fontWeight = '500';
+          }
+        }
+
+        if (rowRefModeLocal) rowRefModeLocal.style.display = 'flex';
+        if (rowRefModeProject) rowRefModeProject.style.display = 'none';
+
+        if (triggerScan && cfgRefImagesDirInput) {
+          const path = localStorage.getItem('flowkit_local_images_path') || '';
+          cfgRefImagesDirInput.value = path;
+          refImagesDirByRound[currentPromptRound] = path;
+          scanDirectoryForImages(path);
+          saveImagePrompts(true);
+        }
+      } else {
+        // Styling active project mode card
+        if (btnRefModeProject) {
+          btnRefModeProject.style.background = 'rgba(141, 166, 255, 0.15)';
+          btnRefModeProject.style.borderColor = '#8da6ff';
+          const projText = btnRefModeProject.querySelector('span:nth-child(2)');
+          if (projText) {
+            projText.style.color = '#fff';
+            projText.style.fontWeight = 'bold';
+          }
+        }
+        if (btnRefModeLocal) {
+          btnRefModeLocal.style.background = 'rgba(0, 0, 0, 0.2)';
+          btnRefModeLocal.style.borderColor = 'rgba(255,255,255,0.06)';
+          const localText = btnRefModeLocal.querySelector('span:nth-child(2)');
+          if (localText) {
+            localText.style.color = 'rgba(255,255,255,0.65)';
+            localText.style.fontWeight = '500';
+          }
+        }
+
+        if (rowRefModeLocal) rowRefModeLocal.style.display = 'none';
+        if (rowRefModeProject) rowRefModeProject.style.display = 'flex';
+
+        if (cfgProjectImagesPathInput && cfgRefImagesDirInput) {
+          const projPath = localStorage.getItem('flowkit_project_images_path') || '';
+          cfgProjectImagesPathInput.value = projPath;
+          cfgRefImagesDirInput.value = projPath;
+          if (triggerScan) {
+            refImagesDirByRound[currentPromptRound] = projPath;
+            scanDirectoryForImages(projPath);
+            saveImagePrompts(true);
+          }
+        }
+      }
+      renderDropdownOptions();
+    }
+
+    if (btnRefModeLocal) {
+      btnRefModeLocal.addEventListener('click', () => setReferenceImagesMode('local'));
+    }
+    if (btnRefModeProject) {
+      btnRefModeProject.addEventListener('click', () => setReferenceImagesMode('project'));
+    }
+
+    // Set initial mode
+    const initialMode = localStorage.getItem('flowkit_ref_mode') || 'local';
+    setReferenceImagesMode(initialMode, false);
+
     browseRefImagesDirBtn.addEventListener('click', async () => {
       try {
         const res = await jsonFetch('/api/utils/browse-directory');
         if (res.ok && res.path) {
           cfgRefImagesDirInput.value = res.path;
+          localStorage.setItem('flowkit_local_images_path', res.path);
           refImagesDirByRound[currentPromptRound] = res.path;
           scanDirectoryForImages(res.path);
           saveImagePrompts(true);
@@ -3921,24 +4055,38 @@ function initWorkflowActionListeners() {
       }
     });
 
-    const useProjectImagesDirBtn = document.getElementById('useProjectImagesDirBtn');
-    if (useProjectImagesDirBtn) {
-      useProjectImagesDirBtn.addEventListener('click', () => {
-        const lakornPath = document.getElementById('cfg_lakorn_path')?.value || '';
-        const lakornTon = document.getElementById('cfg_lakorn_ton')?.value || '1';
-        const lakornEp = document.getElementById('cfg_lakorn_ep')?.value || '1';
-        if (!lakornPath) {
-          showToast('กรุณาระบุ Lakorn Path ก่อน', 'warning');
-          return;
+    const browseProjectImagesPathBtn = document.getElementById('browseProjectImagesPathBtn');
+    if (browseProjectImagesPathBtn && cfgProjectImagesPathInput) {
+      cfgProjectImagesPathInput.value = localStorage.getItem('flowkit_project_images_path') || '';
+
+      browseProjectImagesPathBtn.addEventListener('click', async () => {
+        try {
+          const res = await jsonFetch('/api/utils/browse-directory');
+          if (res.ok && res.path) {
+            cfgProjectImagesPathInput.value = res.path;
+            localStorage.setItem('flowkit_project_images_path', res.path);
+            if (cfgRefImagesDirInput) {
+              cfgRefImagesDirInput.value = res.path;
+            }
+            refImagesDirByRound[currentPromptRound] = res.path;
+            scanDirectoryForImages(res.path);
+            saveImagePrompts(true);
+            showToast('บันทึกที่อยู่รูปภาพของโปรเจกต์เรียบร้อย!', 'success');
+          }
+        } catch (e) {
+          showToast(`Failed to browse directory: ${e.message}`, 'error');
         }
-        const dirPath = `${lakornPath}/ton_${lakornTon}_ep_${lakornEp}/Images`;
+      });
+
+      cfgProjectImagesPathInput.addEventListener('input', (e) => {
+        const path = e.target.value.trim();
+        localStorage.setItem('flowkit_project_images_path', path);
         if (cfgRefImagesDirInput) {
-          cfgRefImagesDirInput.value = dirPath;
-          refImagesDirByRound[currentPromptRound] = dirPath;
-          scanDirectoryForImages(dirPath);
-          saveImagePrompts(true);
-          showToast('ตั้งค่าโฟลเดอร์รูปภาพของโปรเจกต์เสร็จสิ้น!', 'success');
+          cfgRefImagesDirInput.value = path;
         }
+        refImagesDirByRound[currentPromptRound] = path;
+        scanDirectoryForImages(path);
+        saveImagePrompts(true);
       });
     }
 
@@ -3961,9 +4109,35 @@ function initWorkflowActionListeners() {
       });
     }
 
+    const setProjectImagesDirForAllBtn = document.getElementById('setProjectImagesDirForAllBtn');
+    if (setProjectImagesDirForAllBtn) {
+      setProjectImagesDirForAllBtn.addEventListener('click', () => {
+        const path = cfgProjectImagesPathInput.value.trim();
+        if (!path) {
+          showToast('กรุณาระบุหรือเลือกโฟลเดอร์ Project Images ก่อน', 'error');
+          return;
+        }
+        if (cfgRefImagesDirInput) {
+          cfgRefImagesDirInput.value = path;
+        }
+        const currentRefs = refImagesByRound[currentPromptRound] || ["", "", "", "", "", "", ""];
+        for (let r = 1; r <= getImageGenMaxRound(); r++) {
+          refImagesDirByRound[r] = path;
+          refImagesByRound[r] = [...currentRefs];
+        }
+        scanDirectoryForImages(path);
+        saveImagePrompts(true);
+        showToast('ตั้งค่าโฟลเดอร์ Project Images ให้กับทุก Round เรียบร้อยแล้ว', 'success');
+      });
+    }
+
     const handleDirChange = () => {
       const path = cfgRefImagesDirInput.value.trim();
       refImagesDirByRound[currentPromptRound] = path;
+      const activeMode = localStorage.getItem('flowkit_ref_mode') || 'local';
+      if (activeMode === 'local') {
+        localStorage.setItem('flowkit_local_images_path', path);
+      }
       scanDirectoryForImages(path);
       saveImagePrompts(true);
     };

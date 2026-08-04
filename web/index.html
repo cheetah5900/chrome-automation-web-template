@@ -227,15 +227,36 @@
             </div>
             <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">ชี้ไปยังโฟลเดอร์เดียว แล้วเลือกรูปตามลำดับที่ต้องการแนบเข้าไปในระบบ</p>
             
+            <!-- Reference Images Mode Switcher -->
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div id="btnRefModeLocal" style="flex: 1; padding: 14px 12px; border-radius: 12px; background: rgba(141, 166, 255, 0.15); border: 1.5px solid #8da6ff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
+                <span style="font-size: 1.25rem;">📂</span>
+                <span style="font-size: 0.85rem; font-weight: bold; color: #fff;">รูปจากเครื่อง (Local Images)</span>
+              </div>
+              <div id="btnRefModeProject" style="flex: 1; padding: 14px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.2); border: 1.5px solid rgba(255,255,255,0.06); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
+                <span style="font-size: 1.25rem;">🚀</span>
+                <span style="font-size: 0.85rem; font-weight: 500; color: rgba(255,255,255,0.65);">รูปจาก Project (Project Images)</span>
+              </div>
+            </div>
+            
             <div class="form-group" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 12px;">
-              <!-- Folder Path Selector -->
-              <div style="display: flex; flex-direction: column; gap: 6px;">
-                <label for="cfg_ref_images_dir" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Images Folder</label>
+              <!-- Local Images Mode Folder Row -->
+              <div id="rowRefModeLocal" style="display: flex; flex-direction: column; gap: 6px;">
+                <label for="cfg_ref_images_dir" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Images Folder (Local)</label>
                 <div style="display: flex; gap: 8px; width: 100%;">
                   <input id="cfg_ref_images_dir" placeholder="เช่น /Users/litar/Downloads/my_ref_images" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex: 1;" />
                   <button id="browseRefImagesDirBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Browse...</button>
-                  <button id="useProjectImagesDirBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Use Project Images</button>
                   <button id="setRefImagesDirForAllBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Set for all</button>
+                </div>
+              </div>
+
+              <!-- Project Images Mode Folder Row -->
+              <div id="rowRefModeProject" style="display: none; flex-direction: column; gap: 6px;">
+                <label for="cfg_project_images_path" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Project Images Folder (Project)</label>
+                <div style="display: flex; gap: 8px; width: 100%;">
+                  <input id="cfg_project_images_path" placeholder="เช่น /Users/litar/Files" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex: 1;" />
+                  <button id="browseProjectImagesPathBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Browse...</button>
+                  <button id="setProjectImagesDirForAllBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Set for all</button>
                 </div>
               </div>
 
