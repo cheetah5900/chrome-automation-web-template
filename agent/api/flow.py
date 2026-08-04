@@ -239,13 +239,16 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
         raise HTTPException(503, "Extension not connected")
 
     character_media_ids = []
-    # If folder settings are provided, resolve reference images
-    if body.reference_images and body.local_path and body.folder_name:
+    # Filter out empty or blank strings from reference_images
+    ref_images = [img for img in (body.reference_images or []) if img and img.strip()]
+
+    # If folder settings are provided and there are valid reference images, resolve them
+    if ref_images and body.local_path and body.folder_name:
         images_dir = os.path.join(body.local_path, body.folder_name, "Images")
         os.makedirs(images_dir, exist_ok=True)
         meta_path = os.path.join(images_dir, "flow_media_ids.json")
 
-        for ref_img in body.reference_images:
+        for ref_img in ref_images:
             ref_path = ref_img
             if not os.path.isabs(ref_path):
                 ref_path = os.path.join(images_dir, ref_img)
