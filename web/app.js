@@ -4555,10 +4555,18 @@ function initWorkflowActionListeners() {
           }
         }
 
-        isFirstPrompt = false;
-        updateRowStatus(row, 'Done');
-        writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Completed successfully!`, 'success', 'imageConsole');
-        await saveImagePrompts(true);
+        if (success) {
+          isFirstPrompt = false;
+          updateRowStatus(row, 'Done');
+          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Completed successfully!`, 'success', 'imageConsole');
+          await saveImagePrompts(true);
+        } else {
+          updateRowStatus(row, 'Error');
+          writeConsoleLine(`[Round ${r} - ${i + 1}/${activePrompts.length}] Generation failed! Stopping bulk loop.`, 'error', 'imageConsole');
+          await saveImagePrompts(true);
+          shouldStopGeneration = true;
+          break;
+        }
 
         // Simulate human behavior: delay randomly between 3 and 15 seconds before the next prompt inside same round (Gemini only)
         if (target === 'gemini' && i < rows.length - 1) {
@@ -4576,7 +4584,12 @@ function initWorkflowActionListeners() {
     }
 
     if (shouldStopGeneration) {
-      writeConsoleLine('Bulk Generation: Stopped by user via Force Stop.', 'error', 'imageConsole');
+      const isError = Array.from(document.querySelectorAll('#imagePromptList .prompt-row .status-badge')).some(badge => badge.textContent.trim().toLowerCase().includes('error'));
+      if (isError) {
+        writeConsoleLine('Bulk Generation: Aborted due to step error.', 'error', 'imageConsole');
+      } else {
+        writeConsoleLine('Bulk Generation: Stopped by user via Force Stop.', 'error', 'imageConsole');
+      }
     } else {
       writeConsoleLine('Bulk Generation: Completed all rounds successfully!', 'success', 'imageConsole');
     }
