@@ -48,6 +48,16 @@ window.addEventListener('TRPC_MEDIA_URLS', (e) => {
   }).catch(() => {});
 });
 
+window.addEventListener('TRPC_MODELS_INTERCEPT', (e) => {
+  const { url, body } = e.detail || {};
+  if (!body) return;
+  chrome.runtime.sendMessage({
+    type: 'TRPC_MODELS_INTERCEPT',
+    trpcUrl: url,
+    body,
+  }).catch(() => {});
+});
+
 // ─── Background Service Worker Keep-Alive Port ───────────────
 let port = null;
 function connectPort() {

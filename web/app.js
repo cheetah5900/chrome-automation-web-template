@@ -4276,20 +4276,21 @@ function initWorkflowActionListeners() {
           updateRowStatus(row, 'Generating...');
 
           // Reference image settings
-          const attachRefs = document.getElementById('flowImageAttachRefsCheckbox')?.checked;
           const skipFirstRoundRefs = document.getElementById('flowImageFirstRoundNoRefsCheckbox')?.checked;
+          const totalRoundsCount = activeRounds.size;
 
           let refs = [];
-          if (attachRefs) {
-            if (!(r === 1 && skipFirstRoundRefs)) {
-              if (refImg1) refs.push(refImg1);
-              if (refImg2) refs.push(refImg2);
-              if (refImg3) refs.push(refImg3);
-              if (refImg4) refs.push(refImg4);
-              if (refImg5) refs.push(refImg5);
-              if (refImg6) refs.push(refImg6);
-              if (refImg7) refs.push(refImg7);
-            }
+          // Skip first round references ONLY if skipFirstRoundRefs is true AND there are 2 or more active rounds.
+          const shouldSkipRefsThisRound = (r === 1 && skipFirstRoundRefs && totalRoundsCount >= 2);
+
+          if (!shouldSkipRefsThisRound) {
+            if (refImg1) refs.push(refImg1);
+            if (refImg2) refs.push(refImg2);
+            if (refImg3) refs.push(refImg3);
+            if (refImg4) refs.push(refImg4);
+            if (refImg5) refs.push(refImg5);
+            if (refImg6) refs.push(refImg6);
+            if (refImg7) refs.push(refImg7);
           }
 
           const flowProj = document.getElementById('cfg_flow_image_project_dropdown')?.value;
@@ -4683,10 +4684,19 @@ function initFileImports() {
           const targetRound = currentPromptRound + index;
           promptsByRound[targetRound] = res.prompts;
           statusesByRound[targetRound] = res.prompts.map(p => ({ text: p, status: 'Not start' }));
+          initImageGenRound(targetRound);
         });
 
-        // Re-render the active round
+        const maxRounds = getImageGenMaxRound();
+        const activeRoundsInput = document.getElementById('activeRoundsInput');
+        if (activeRoundsInput) {
+          activeRoundsInput.value = `1-${maxRounds}`;
+          localStorage.setItem('imageGenActiveRoundsInput', `1-${maxRounds}`);
+        }
+
+        // Re-render the active round and tabs
         renderImagePromptsForRound(currentPromptRound);
+        renderImageGenTabs();
         await saveImagePrompts(true);
 
         showToast(`นำเข้าพรอพต์สำเร็จทั้งหมด ${results.length} รอบ!`, 'success');
@@ -4733,10 +4743,21 @@ function initFileImports() {
           const targetRound = currentVideoPromptRound + index;
           videoPromptsByRound[targetRound] = res.prompts;
           videoStatusesByRound[targetRound] = res.prompts.map(() => 'Idle');
+          initVideoGenRound(targetRound);
         });
 
-        // Re-render the active round
+        // Update video active rounds input & dropdown selection
+        const maxVideoRounds = getVideoGenMaxRound();
+        const videoActiveRoundsInput = document.getElementById('videoActiveRoundsInput');
+        if (videoActiveRoundsInput) {
+          videoActiveRoundsInput.value = `1-${maxVideoRounds}`;
+          localStorage.setItem('videoGenActiveRoundsInput', `1-${maxVideoRounds}`);
+        }
+
+        // Re-render the active round and tabs
         renderVideoPromptsForRound(currentVideoPromptRound);
+        renderVideoGenTabs();
+        renderVideoActiveRoundsDropdown();
         await saveVideoPrompts(true);
 
         showToast(`นำเข้าพรอพต์สำเร็จทั้งหมด ${results.length} รอบ!`, 'success');
@@ -6297,6 +6318,25 @@ function initAllTooltips() {
   console.log('Attached', count, 'tooltips.');
 }
 
+async function loadFlowImageModels() {
+  try {
+    const res = await jsonFetch('/api/flow/image-models');
+    const datalist = document.getElementById('flowImageModelList');
+    if (res && res.models && datalist) {
+      datalist.innerHTML = '';
+      res.models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.value;
+        opt.textContent = m.label;
+        datalist.appendChild(opt);
+      });
+      console.log('Successfully loaded flow image models:', res.models);
+    }
+  } catch (err) {
+    console.error('Failed to load flow image models:', err);
+  }
+}
+
 // Initial setup on load
 async function initApp() {
   initAllTooltips();
@@ -6311,6 +6351,9 @@ async function initApp() {
   initVideoGenListeners();
   initSeedanceGenListeners();
   setupLogStream();
+
+  // Load flow image models dynamically
+  await loadFlowImageModels();
 
   try {
     await loadProfiles();
@@ -6678,6 +6721,7 @@ function initFlowKitUploaderListeners() {
 }
 
 async function loadFlowKitProjects() {
+  loadFlowImageModels();
   try {
     const res = await jsonFetch('/api/batch-uploader/flow-projects');
     const dropdown = document.getElementById('cfg_flow_project_dropdown');
@@ -6696,7 +6740,9 @@ async function loadFlowKitProjects() {
         });
         
         let targetProjId = '';
-        if (!isPo) {
+        if (dd.id === 'cfg_flow_image_project_dropdown') {
+          targetProjId = localStorage.getItem('flowkit_image_project_id') || '';
+        } else if (!isPo) {
           const lastPreset = localStorage.getItem('flowVideoLastPreset') || '';
           targetProjId = (lastPreset && globalFlowVideoPresets[lastPreset]) ? (globalFlowVideoPresets[lastPreset].project_id || '') : '';
         }
@@ -6716,7 +6762,16 @@ async function loadFlowKitProjects() {
       populate(dropdown, false);
       populate(poDropdown, true);
       const imgDd = document.getElementById('cfg_flow_image_project_dropdown');
-      if (imgDd) populate(imgDd, true);
+      if (imgDd) {
+        populate(imgDd, true);
+        if (!imgDd.dataset.changeHandlerAttached) {
+          imgDd.dataset.changeHandlerAttached = 'true';
+          imgDd.addEventListener('change', (e) => {
+            localStorage.setItem('flowkit_image_project_id', e.target.value);
+            console.log('Saved selected image project ID to localStorage:', e.target.value);
+          });
+        }
+      }
       await updateProjectStats();
     }
   } catch (err) {

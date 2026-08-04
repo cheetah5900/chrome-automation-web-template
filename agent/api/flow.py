@@ -368,3 +368,74 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
                     logger.error("Failed to download image from %s: %s", url, e)
 
     return {"success": True, "media": downloaded_media}
+
+
+@router.get("/image-models")
+async def get_flow_image_models():
+    """Returns detected Google Flow image models parsed from TRPC intercepts, or defaults."""
+    import os
+    import json
+    
+    # Default fallback models
+    default_models = [
+        {"value": "GEM_PIX_2", "label": "Imagen 3 (GEM_PIX_2)"},
+        {"value": "NARWHAL", "label": "Imagen 2 (NARWHAL)"}
+    ]
+    
+    intercept_path = "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/web/flow_models_intercept.json"
+    if not os.path.exists(intercept_path):
+        return {"models": default_models}
+        
+    try:
+        with open(intercept_path, "r", encoding="utf-8") as f:
+            intercept_data = json.load(f)
+            raw_data = intercept_data.get("data", {})
+            
+            # Use our recursive parser to extract any available image models
+            extracted = parse_models_from_json(raw_data)
+            
+            if extracted:
+                # Merge defaults and extracted models, ensuring unique by value
+                all_models = {m["value"]: m for m in default_models}
+                for m in extracted:
+                    all_models[m["value"]] = m
+                return {"models": list(all_models.values())}
+    except Exception as e:
+        logger.warning("Failed to parse flow_models_intercept.json: %s", e)
+        
+    return {"models": default_models}
+
+def parse_models_from_json(data):
+    models = []
+    seen_keys = set()
+    
+    def traverse(node):
+        if isinstance(node, dict):
+            model_key = None
+            display_name = None
+            for k in ["modelId", "modelName", "modelKey", "model", "id"]:
+                if k in node and isinstance(node[k], str):
+                    val = node[k].strip()
+                    # Filter out general keys, check if uppercase and looks like a model key
+                    if val.isupper() and len(val) > 3 and not val.startswith("VIDEO_") and not val.startswith("VEO_") and not val.startswith("UPSCALE_"):
+                        model_key = val
+                        break
+            
+            if model_key:
+                for k in ["displayName", "name", "label", "title"]:
+                    if k in node and isinstance(node[k], str):
+                        display_name = node[k].strip()
+                        break
+                if model_key not in seen_keys:
+                    seen_keys.add(model_key)
+                    label = f"{display_name} ({model_key})" if display_name else model_key
+                    models.append({"value": model_key, "label": label})
+            
+            for v in node.values():
+                traverse(v)
+        elif isinstance(node, list):
+            for item in node:
+                traverse(item)
+                
+    traverse(data)
+    return models

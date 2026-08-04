@@ -99,6 +99,10 @@ class FlowClient:
             asyncio.create_task(self._save_trpc_intercept(data.get("url"), data.get("body")))
             return
 
+        if data.get("type") == "trpc_models_intercept":
+            asyncio.create_task(self._save_models_intercept(data.get("url"), data.get("body")))
+            return
+
         if data.get("type") == "pong":
             return
 
@@ -214,6 +218,16 @@ class FlowClient:
             logger.info("Saved raw TRPC response intercept to web/trpc_intercept.json")
         except Exception as e:
             logger.warning("Failed to save TRPC intercept: %s", e)
+
+    async def _save_models_intercept(self, url: str, body: str):
+        try:
+            import json as _json
+            data = _json.loads(body)
+            with open("/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/web/flow_models_intercept.json", "w", encoding="utf-8") as f:
+                _json.dump({"url": url, "data": data}, f, indent=2)
+            logger.info("Saved raw models TRPC response intercept to web/flow_models_intercept.json")
+        except Exception as e:
+            logger.warning("Failed to save models TRPC intercept: %s", e)
 
     async def refresh_project_urls(self, project_id: str) -> dict:
         """Refresh media URLs for a project.

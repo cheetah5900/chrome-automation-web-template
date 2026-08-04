@@ -657,6 +657,18 @@ chrome.runtime.onMessage.addListener((msg, _, reply) => {
     return true;
   }
 
+  if (msg.type === 'TRPC_MODELS_INTERCEPT') {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'trpc_models_intercept',
+        url: msg.trpcUrl,
+        body: msg.body
+      }));
+    }
+    reply({ ok: true });
+    return true;
+  }
+
   return true;
 });
 

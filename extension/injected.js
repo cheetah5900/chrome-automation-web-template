@@ -22,6 +22,11 @@ window.fetch = async function (...args) {
             detail: { url, body: text },
           }));
         }
+        if (text.includes('GEM_PIX_2') || text.includes('NARWHAL') || url.includes('flow.projectInitialData') || url.includes('project.getProject')) {
+          window.dispatchEvent(new CustomEvent('TRPC_MODELS_INTERCEPT', {
+            detail: { url, body: text },
+          }));
+        }
       }).catch(() => {});
     }
   } catch {}
