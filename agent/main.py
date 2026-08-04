@@ -122,7 +122,7 @@ async def lifespan(app: FastAPI):
         from agent.db.schema import get_db, _db_lock
         db = await get_db()
         async with _db_lock:
-            await db.execute("UPDATE request SET status='FAILED', error='Stale task aborted on server start' WHERE status IN ('PENDING', 'PROCESSING')")
+            await db.execute("UPDATE request SET status='FAILED', error_message='Stale task aborted on server start' WHERE status IN ('PENDING', 'PROCESSING')")
             await db.commit()
             logger.info("Aborted stale pending/processing requests on startup")
     except Exception as e:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 # ─── Paths ───────────────────────────────────────────────────
 BASE_DIR = Path(os.environ.get("FLOW_AGENT_DIR", Path(__file__).parent.parent))
-DB_PATH = BASE_DIR / "flow_agent.db"
+DB_PATH = BASE_DIR / os.environ.get("FLOW_AGENT_DB_NAME", "flow_agent.db")
 
 # ─── API Server ──────────────────────────────────────────────
 API_HOST = os.environ.get("API_HOST", "127.0.0.1")
