@@ -3924,21 +3924,43 @@ function initWorkflowActionListeners() {
     const useProjectImagesDirBtn = document.getElementById('useProjectImagesDirBtn');
     if (useProjectImagesDirBtn) {
       useProjectImagesDirBtn.addEventListener('click', () => {
-        const lakornPath = document.getElementById('cfg_lakorn_path')?.value || '';
-        const lakornTon = document.getElementById('cfg_lakorn_ton')?.value || '1';
-        const lakornEp = document.getElementById('cfg_lakorn_ep')?.value || '1';
-        if (!lakornPath) {
-          showToast('กรุณาระบุ Lakorn Path ก่อน', 'warning');
+        const projectImagesPath = document.getElementById('cfg_project_images_path')?.value.trim() || '';
+        if (!projectImagesPath) {
+          showToast('กรุณาระบุ Project Images Path ก่อน', 'warning');
           return;
         }
-        const dirPath = `${lakornPath}/ton_${lakornTon}_ep_${lakornEp}/Images`;
         if (cfgRefImagesDirInput) {
-          cfgRefImagesDirInput.value = dirPath;
-          refImagesDirByRound[currentPromptRound] = dirPath;
-          scanDirectoryForImages(dirPath);
+          cfgRefImagesDirInput.value = projectImagesPath;
+          refImagesDirByRound[currentPromptRound] = projectImagesPath;
+          scanDirectoryForImages(projectImagesPath);
           saveImagePrompts(true);
           showToast('ตั้งค่าโฟลเดอร์รูปภาพของโปรเจกต์เสร็จสิ้น!', 'success');
         }
+      });
+    }
+
+    // Project Images Path settings bindings
+    const browseProjectImagesPathBtn = document.getElementById('browseProjectImagesPathBtn');
+    const cfgProjectImagesPathInput = document.getElementById('cfg_project_images_path');
+    if (browseProjectImagesPathBtn && cfgProjectImagesPathInput) {
+      // Load saved value from localStorage on load
+      cfgProjectImagesPathInput.value = localStorage.getItem('flowkit_project_images_path') || '';
+
+      browseProjectImagesPathBtn.addEventListener('click', async () => {
+        try {
+          const res = await jsonFetch('/api/utils/browse-directory');
+          if (res.ok && res.path) {
+            cfgProjectImagesPathInput.value = res.path;
+            localStorage.setItem('flowkit_project_images_path', res.path);
+            showToast('บันทึกที่อยู่รูปภาพของโปรเจกต์เรียบร้อย!', 'success');
+          }
+        } catch (e) {
+          showToast(`Failed to browse directory: ${e.message}`, 'error');
+        }
+      });
+
+      cfgProjectImagesPathInput.addEventListener('input', (e) => {
+        localStorage.setItem('flowkit_project_images_path', e.target.value.trim());
       });
     }
 
