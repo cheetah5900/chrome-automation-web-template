@@ -1211,6 +1211,7 @@ async function scanDirectoryForImages(dirPath, isRenderingRound = false) {
   
   if (!dirPath) {
     lastScannedImagesList = [];
+    filterSelectedImagesByScanned();
     renderDropdownOptions();
     return;
   }
@@ -1227,9 +1228,38 @@ async function scanDirectoryForImages(dirPath, isRenderingRound = false) {
     } else {
       lastScannedImagesList = [];
     }
+    filterSelectedImagesByScanned();
     renderDropdownOptions();
   } catch (e) {
     dropdown.innerHTML = '<option value="">-- เกิดข้อผิดพลาดในการสแกนโฟลเดอร์ --</option>';
+  }
+}
+
+function filterSelectedImagesByScanned() {
+  const activeMode = localStorage.getItem('flowkit_ref_mode') || 'local';
+  const currentRefs = refImagesByRound[currentPromptRound] || ["", "", "", "", "", "", ""];
+  
+  const validPaths = new Set();
+  lastScannedImagesList.forEach(img => {
+    if (activeMode === 'local' || (activeMode === 'project' && img.media_id)) {
+      validPaths.add(img.path);
+    }
+  });
+
+  let changed = false;
+  const updatedRefs = currentRefs.map(path => {
+    if (!path) return "";
+    if (validPaths.has(path)) {
+      return path;
+    }
+    changed = true;
+    return "";
+  });
+  
+  if (changed) {
+    refImagesByRound[currentPromptRound] = updatedRefs;
+    renderSelectedRefImagesList();
+    saveImagePrompts(true);
   }
 }
 
