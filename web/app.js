@@ -1380,13 +1380,16 @@ function renderRefImagesForRound(round) {
   const projInput = document.getElementById('cfg_project_images_path');
   const activeMode = localStorage.getItem('flowkit_ref_mode') || 'local';
 
-  if (dirInput) {
-    dirInput.value = refImagesDirByRound[round] || '';
+  if (activeMode === 'project') {
+    const projPath = localStorage.getItem('flowkit_project_images_path') || '';
+    if (dirInput) dirInput.value = projPath;
+    if (projInput) projInput.value = projPath;
+    refImagesDirByRound[round] = projPath;
+    scanDirectoryForImages(projPath, true);
+  } else {
+    if (dirInput) dirInput.value = refImagesDirByRound[round] || '';
+    scanDirectoryForImages(refImagesDirByRound[round] || '', true);
   }
-  if (projInput && activeMode === 'project') {
-    projInput.value = refImagesDirByRound[round] || '';
-  }
-  scanDirectoryForImages(refImagesDirByRound[round] || '', true);
   renderSelectedRefImagesList();
 }
 
