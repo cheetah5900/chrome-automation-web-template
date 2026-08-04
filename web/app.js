@@ -4513,6 +4513,7 @@ function initWorkflowActionListeners() {
             reference_images: refs,
             local_path: document.getElementById('cfg_lakorn_path')?.value || '',
             folder_name: `ton_${document.getElementById('cfg_lakorn_ton')?.value || '1'}_ep_${document.getElementById('cfg_lakorn_ep')?.value || '1'}`,
+            target_directory: document.getElementById('cfg_ref_images_dir')?.value || '',
             round_num: r,
             prompt_index: i + 1
           };

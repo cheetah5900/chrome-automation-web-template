@@ -25,6 +25,7 @@ class GenerateImageBatchRequest(BaseModel):
     quantity: int = 1
     local_path: Optional[str] = ""
     folder_name: Optional[str] = ""
+    target_directory: Optional[str] = ""
     round_num: int = 1
     prompt_index: int = 1
 
@@ -240,10 +241,16 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
 
     character_media_ids = []
     # If folder settings are provided, resolve reference images
-    if body.reference_images and body.local_path and body.folder_name:
-        images_dir = os.path.join(body.local_path, body.folder_name, "Images")
-        os.makedirs(images_dir, exist_ok=True)
-        meta_path = os.path.join(images_dir, "flow_media_ids.json")
+    if body.reference_images:
+        images_dir = ""
+        if body.target_directory:
+            images_dir = body.target_directory
+        elif body.local_path and body.folder_name:
+            images_dir = os.path.join(body.local_path, body.folder_name, "Images")
+
+        if images_dir:
+            os.makedirs(images_dir, exist_ok=True)
+            meta_path = os.path.join(images_dir, "flow_media_ids.json")
 
         for ref_img in body.reference_images:
             ref_path = ref_img
@@ -301,8 +308,13 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
         return {"success": False, "message": "No media returned from Flow API"}
 
     downloaded_media = []
-    if body.local_path and body.folder_name:
+    images_dir = ""
+    if body.target_directory:
+        images_dir = body.target_directory
+    elif body.local_path and body.folder_name:
         images_dir = os.path.join(body.local_path, body.folder_name, "Images")
+
+    if images_dir:
         os.makedirs(images_dir, exist_ok=True)
         meta_path = os.path.join(images_dir, "flow_media_ids.json")
 
