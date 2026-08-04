@@ -340,7 +340,11 @@ class FlowClient:
                         }
                     }
                 })
-            return {"success": True, "data": {"media": media}}
+            return {
+                "success": True,
+                "data": {"media": media},
+                "_mock_received_character_media_ids": character_media_ids
+            }
 
         ts = int(time.time() * 1000)
         ctx = self._client_context(project_id, user_paygate_tier)

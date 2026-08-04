@@ -3951,9 +3951,20 @@ def list_images(dir_path: str) -> dict[str, Any]:
         return {"images": []}
     
     import os
+    import json
     if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
         raise HTTPException(status_code=400, detail="Invalid directory path")
     
+    # Load media ID mapping if present
+    meta_path = os.path.join(dir_path, "flow_media_ids.json")
+    meta = {}
+    if os.path.isfile(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+        except Exception:
+            pass
+
     valid_extensions = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"]
     images = []
     try:
@@ -3962,7 +3973,8 @@ def list_images(dir_path: str) -> dict[str, Any]:
             if os.path.isfile(full_path) and any(item.lower().endswith(ext) for ext in valid_extensions):
                 images.append({
                     "name": item,
-                    "path": full_path
+                    "path": full_path,
+                    "media_id": meta.get(item)
                 })
         return {"images": images}
     except Exception as e:

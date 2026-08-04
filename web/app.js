@@ -1071,6 +1071,7 @@ let promptsByRound = { 1: [] };
 let statusesByRound = { 1: [] };
 let refImagesByRound = { 1: ["", "", "", "", "", "", ""] };
 let refImagesDirByRound = { 1: "" };
+let refImageMediaIdsMap = {};
 
 function getImageGenMaxRound() {
   const keys = Object.keys(promptsByRound).map(Number).filter(n => !isNaN(n));
@@ -1191,7 +1192,8 @@ function renderDropdownOptions() {
   
   let html = '<option value="">-- เลือกรูปภาพเพื่อเพิ่มเข้าลิสต์ (สูงสุด 7 รูป) --</option>';
   availableImages.forEach(img => {
-    html += `<option value="${img.path.replace(/"/g, '&quot;')}">${img.name}</option>`;
+    const label = img.media_id ? `${img.name} (มี Media ID)` : img.name;
+    html += `<option value="${img.path.replace(/"/g, '&quot;')}">${label}</option>`;
   });
   dropdown.innerHTML = html;
 }
@@ -1210,6 +1212,11 @@ async function scanDirectoryForImages(dirPath, isRenderingRound = false) {
     const res = await jsonFetch(`/api/utils/list-images?dir_path=${encodeURIComponent(dirPath)}`);
     if (res && Array.isArray(res.images)) {
       lastScannedImagesList = res.images;
+      res.images.forEach(img => {
+        if (img.media_id) {
+          refImageMediaIdsMap[img.path] = img.media_id;
+        }
+      });
     } else {
       lastScannedImagesList = [];
     }
@@ -1244,11 +1251,17 @@ function renderSelectedRefImagesList() {
     const pathStr = (typeof path === 'string') ? path : '';
     const filename = pathStr ? pathStr.substring(Math.max(pathStr.lastIndexOf('/'), pathStr.lastIndexOf('\\')) + 1) : '';
     
+    const mediaId = refImageMediaIdsMap[pathStr];
+    const mediaIdDisplay = mediaId ? `<div style="font-size: 0.75rem; color: #10b981; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 250px;">Media ID: ${mediaId}</div>` : '';
+
     row.innerHTML = `
       <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; flex: 1;">
         <span style="display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: #7f5cff; border-radius: 50%; font-size: 0.8rem; font-weight: bold; color: #fff;">${index + 1}</span>
         <img src="/api/utils/view-image?path=${encodeURIComponent(pathStr)}" style="width: 45px; height: 45px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);" />
-        <span style="font-size: 0.85rem; color: #f5f7ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${pathStr}">${filename}</span>
+        <div style="display: flex; flex-direction: column; overflow: hidden; flex: 1;">
+          <span style="font-size: 0.85rem; color: #f5f7ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;" title="${pathStr}">${filename}</span>
+          ${mediaIdDisplay}
+        </div>
       </div>
       <button class="remove-btn" style="background: transparent; border: none; color: rgba(255,255,255,0.5); padding: 4px 8px; font-size: 1.1rem; line-height: 1; cursor: pointer; transition: color 0.2s; box-shadow: none;">×</button>
     `;
@@ -3907,6 +3920,27 @@ function initWorkflowActionListeners() {
         showToast(`Failed to browse directory: ${e.message}`, 'error');
       }
     });
+
+    const useProjectImagesDirBtn = document.getElementById('useProjectImagesDirBtn');
+    if (useProjectImagesDirBtn) {
+      useProjectImagesDirBtn.addEventListener('click', () => {
+        const lakornPath = document.getElementById('cfg_lakorn_path')?.value || '';
+        const lakornTon = document.getElementById('cfg_lakorn_ton')?.value || '1';
+        const lakornEp = document.getElementById('cfg_lakorn_ep')?.value || '1';
+        if (!lakornPath) {
+          showToast('กรุณาระบุ Lakorn Path ก่อน', 'warning');
+          return;
+        }
+        const dirPath = `${lakornPath}/ton_${lakornTon}_ep_${lakornEp}/Images`;
+        if (cfgRefImagesDirInput) {
+          cfgRefImagesDirInput.value = dirPath;
+          refImagesDirByRound[currentPromptRound] = dirPath;
+          scanDirectoryForImages(dirPath);
+          saveImagePrompts(true);
+          showToast('ตั้งค่าโฟลเดอร์รูปภาพของโปรเจกต์เสร็จสิ้น!', 'success');
+        }
+      });
+    }
 
     const setRefImagesDirForAllBtn = document.getElementById('setRefImagesDirForAllBtn');
     if (setRefImagesDirForAllBtn) {

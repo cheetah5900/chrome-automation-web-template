@@ -367,7 +367,11 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
                 except Exception as e:
                     logger.error("Failed to download image from %s: %s", url, e)
 
-    return {"success": True, "media": downloaded_media}
+    return {
+        "success": True,
+        "media": downloaded_media,
+        "_mock_received_character_media_ids": result.get("_mock_received_character_media_ids")
+    }
 
 
 @router.get("/image-models")
