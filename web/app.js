@@ -1183,10 +1183,17 @@ function renderDropdownOptions() {
   }
   
   const currentRefs = (refImagesByRound[currentPromptRound] || []).filter(Boolean);
-  const availableImages = lastScannedImagesList.filter(img => !currentRefs.includes(img.path));
+  const activeMode = localStorage.getItem('flowkit_ref_mode') || 'local';
+  let availableImages = lastScannedImagesList.filter(img => !currentRefs.includes(img.path));
+  if (activeMode === 'project') {
+    availableImages = availableImages.filter(img => img.media_id);
+  }
   
   if (availableImages.length === 0) {
-    dropdown.innerHTML = '<option value="">-- เลือกรูปครบทุกไฟล์ในโฟลเดอร์แล้ว --</option>';
+    const noImagesMsg = activeMode === 'project'
+      ? '-- ไม่พบรูปภาพที่มี Media ID ในโฟลเดอร์นี้ --'
+      : '-- เลือกรูปครบทุกไฟล์ในโฟลเดอร์แล้ว --';
+    dropdown.innerHTML = `<option value="">${noImagesMsg}</option>`;
     return;
   }
   
@@ -4001,6 +4008,7 @@ function initWorkflowActionListeners() {
           }
         }
       }
+      renderDropdownOptions();
     }
 
     if (btnRefModeLocal) {
