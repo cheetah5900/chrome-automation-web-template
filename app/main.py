@@ -3956,8 +3956,13 @@ def list_images(dir_path: str) -> dict[str, Any]:
     
     import os
     import json
-    if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
-        raise HTTPException(status_code=400, detail="Invalid directory path")
+    if not os.path.exists(dir_path):
+        try:
+            os.makedirs(dir_path, exist_ok=True)
+        except Exception:
+            return {"images": []}
+    elif not os.path.isdir(dir_path):
+        return {"images": []}
     
     # Load media ID mapping if present
     meta_path = os.path.join(dir_path, "flow_media_ids.json")
