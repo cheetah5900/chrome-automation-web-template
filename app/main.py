@@ -185,6 +185,17 @@ async def startup_flow_kit():
         
         # 1. Init Flow Kit database
         await init_db()
+
+        # Clear stale pending/processing tasks on startup so they do not execute unwantedly
+        try:
+            from agent.db.schema import get_db, _db_lock
+            db = await get_db()
+            async with _db_lock:
+                await db.execute("UPDATE request SET status='FAILED', error_message='Stale task aborted on server start' WHERE status IN ('PENDING', 'PROCESSING')")
+                await db.commit()
+                print("Aborted stale pending/processing requests on startup")
+        except Exception as stale_err:
+            print(f"Failed to clear stale requests on startup: {stale_err}")
         
         # 2. Load custom materials
         try:
