@@ -117,6 +117,17 @@ async def lifespan(app: FastAPI):
     global _ws_task_ref, _worker_task_ref
     await init_db()
 
+    # Clear stale pending/processing tasks on startup so they do not execute unwantedly
+    try:
+        from agent.db.schema import get_db, _db_lock
+        db = await get_db()
+        async with _db_lock:
+            await db.execute("UPDATE request SET status='FAILED', error='Stale task aborted on server start' WHERE status IN ('PENDING', 'PROCESSING')")
+            await db.commit()
+            logger.info("Aborted stale pending/processing requests on startup")
+    except Exception as e:
+        logger.warning("Failed to clear stale requests: %s", e)
+
     # Load custom materials from DB into in-memory registry
     from agent.db.crud import list_materials as db_list_materials
     from agent.materials import register_material, _BUILTIN_IDS
