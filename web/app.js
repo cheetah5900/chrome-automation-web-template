@@ -3348,8 +3348,15 @@ function getActiveRounds() {
     }
     return activeRounds;
   }
-  const val = input.value.trim();
+  const val = input.value.trim().toLowerCase();
   if (!val) return activeRounds;
+  
+  if (val === 'all') {
+    for (let r = 1; r <= maxRound; r++) {
+      activeRounds.add(r);
+    }
+    return activeRounds;
+  }
   
   const parts = val.split(',');
   for (let part of parts) {
@@ -3394,7 +3401,7 @@ function saveImageGenActiveState() {
     
     let savedActiveInput = localStorage.getItem('imageGenActiveRoundsInput');
     if (savedActiveInput === null) {
-      savedActiveInput = '1-' + getImageGenMaxRound();
+      savedActiveInput = 'all';
       localStorage.setItem('imageGenActiveRoundsInput', savedActiveInput);
     }
     const activeRoundsInput = document.getElementById('activeRoundsInput');
@@ -4324,7 +4331,7 @@ function initWorkflowActionListeners() {
           for (let r = 1; r <= maxRounds; r++) {
             initImageGenRound(r);
           }
-          const defaultActiveRounds = `1-${maxRounds}`;
+          const defaultActiveRounds = 'all';
           localStorage.setItem('imageGenActiveRoundsInput', defaultActiveRounds);
           const activeRoundsInput = document.getElementById('activeRoundsInput');
           if (activeRoundsInput) {
@@ -4915,8 +4922,8 @@ function initFileImports() {
         const maxRounds = getImageGenMaxRound();
         const activeRoundsInput = document.getElementById('activeRoundsInput');
         if (activeRoundsInput) {
-          activeRoundsInput.value = `1-${maxRounds}`;
-          localStorage.setItem('imageGenActiveRoundsInput', `1-${maxRounds}`);
+          activeRoundsInput.value = 'all';
+          localStorage.setItem('imageGenActiveRoundsInput', 'all');
         }
 
         // Re-render the active round and tabs
