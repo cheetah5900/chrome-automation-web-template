@@ -277,17 +277,6 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
                         mid = upload_res.get("_mediaId")
                         if mid:
                             character_media_ids.append(mid)
-                            # Save to metadata JSON
-                            meta = {}
-                            if os.path.isfile(meta_path):
-                                try:
-                                    with open(meta_path, "r", encoding="utf-8") as f:
-                                        meta = json.load(f)
-                                except Exception:
-                                    pass
-                            meta[filename] = mid
-                            with open(meta_path, "w", encoding="utf-8") as f:
-                                json.dump(meta, f, ensure_ascii=False, indent=2)
                     except Exception as e:
                         logger.error("Failed to upload reference image %s: %s", filename, e)
 

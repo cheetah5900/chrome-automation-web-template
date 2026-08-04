@@ -37,6 +37,10 @@ def correct_legacy_paths(data):
                     data = data.replace(old_home, current_home, 1)
         if "MythicForge84 - วิว/วิว/Soundtrack" in data:
             data = data.replace("MythicForge84 - วิว/วิว/Soundtrack", "[เลิกใช้] 0 - MythicForge84 - วิว /วิว - out/Soundtrack")
+        if "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย" in data:
+            data = data.replace("Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย", "Files")
+            if not (data.startswith("http://") or data.startswith("https://") or data.startswith("ws://")):
+                data = data.replace("//", "/")
         return data
     else:
         return data
