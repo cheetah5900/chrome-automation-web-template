@@ -6323,7 +6323,9 @@ async function loadFlowImageModels() {
     const res = await jsonFetch('/api/flow/image-models');
     const select = document.getElementById('flowImageModelSelect');
     if (res && res.models && select) {
+      const savedVal = localStorage.getItem('flowkit_image_model');
       const currentVal = select.value;
+      
       select.innerHTML = '';
       res.models.forEach(m => {
         const opt = document.createElement('option');
@@ -6331,8 +6333,19 @@ async function loadFlowImageModels() {
         opt.textContent = m.label;
         select.appendChild(opt);
       });
-      if (currentVal && res.models.some(m => m.value === currentVal)) {
-        select.value = currentVal;
+      
+      let targetVal = savedVal || currentVal || 'GEM_PIX_2';
+      if (!res.models.some(m => m.value === targetVal) && res.models.length > 0) {
+        targetVal = res.models[0].value;
+      }
+      select.value = targetVal;
+      
+      if (!select.dataset.changeHandlerAttached) {
+        select.dataset.changeHandlerAttached = 'true';
+        select.addEventListener('change', (e) => {
+          localStorage.setItem('flowkit_image_model', e.target.value);
+          console.log('Saved selected image model to localStorage:', e.target.value);
+        });
       }
       console.log('Successfully loaded flow image models into select dropdown:', res.models);
     }

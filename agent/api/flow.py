@@ -378,8 +378,8 @@ async def get_flow_image_models():
     
     # Default fallback models
     default_models = [
-        {"value": "GEM_PIX_2", "label": "Imagen 3 (GEM_PIX_2)"},
-        {"value": "NARWHAL", "label": "Imagen 2 (NARWHAL)"}
+        {"value": "GEM_PIX_2", "label": "nano banana pro (GEM_PIX_2)"},
+        {"value": "NARWHAL", "label": "nano banana 2 (NARWHAL)"}
     ]
     
     intercept_path = "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/web/flow_models_intercept.json"
@@ -426,6 +426,15 @@ def parse_models_from_json(data):
                     if k in node and isinstance(node[k], str):
                         display_name = node[k].strip()
                         break
+                
+                # Normalize display name to match web UI if it matches known keys
+                if display_name == "NANO_BANANA_PRO" or model_key == "GEM_PIX_2" and (not display_name or display_name == "GEM_PIX_2"):
+                    display_name = "nano banana pro"
+                elif display_name == "NANO_BANANA_2" or model_key == "NARWHAL" and (not display_name or display_name == "NARWHAL"):
+                    display_name = "nano banana 2"
+                elif model_key.endswith("_LITE") and not display_name:
+                    display_name = "nano banana 2 lite"
+                
                 if model_key not in seen_keys:
                     seen_keys.add(model_key)
                     label = f"{display_name} ({model_key})" if display_name else model_key
