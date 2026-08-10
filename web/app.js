@@ -983,6 +983,31 @@ async function loadConfig() {
     if (lakornTonInput) lakornTonInput.value = config.lakorn_ton || '';
     const lakornEpInput = document.getElementById('cfg_lakorn_ep');
     if (lakornEpInput) lakornEpInput.value = config.lakorn_ep || '';
+
+    // Load watermark config defaults
+    const vWatermarkText = document.getElementById('videoWatermarkText');
+    if (vWatermarkText) vWatermarkText.value = config.video_watermark_text || '';
+
+    const vWatermarkFont = document.getElementById('videoWatermarkFont');
+    if (vWatermarkFont) vWatermarkFont.value = config.video_watermark_font || 'arial';
+
+    const vWatermarkPos = document.getElementById('videoWatermarkPosition');
+    if (vWatermarkPos) vWatermarkPos.value = config.video_watermark_position || 'bottom-right';
+
+    const vWatermarkOpacity = document.getElementById('videoWatermarkOpacity');
+    if (vWatermarkOpacity) vWatermarkOpacity.value = config.video_watermark_opacity || '0.5';
+
+    const vWatermarkFontSize = document.getElementById('videoWatermarkFontSize');
+    if (vWatermarkFontSize) vWatermarkFontSize.value = config.video_watermark_font_size || '72';
+
+    const vWatermarkColor = document.getElementById('videoWatermarkColor');
+    if (vWatermarkColor) vWatermarkColor.value = config.video_watermark_color || '#ffffff';
+
+    const vWatermarkColorHex = document.getElementById('videoWatermarkColorHex');
+    if (vWatermarkColorHex) vWatermarkColorHex.value = config.video_watermark_color || '#ffffff';
+
+    const vWatermarkBorderWidth = document.getElementById('videoWatermarkBorderWidth');
+    if (vWatermarkBorderWidth) vWatermarkBorderWidth.value = config.video_watermark_border_width !== undefined ? config.video_watermark_border_width : '0';
     
     applyVideoPreset('');
     
@@ -2067,6 +2092,22 @@ function applyVideoPreset(presetName) {
     if (vChanSpeed) {
       vChanSpeed.value = '1.0';
     }
+    const vWatermarkText = document.getElementById('videoWatermarkText');
+    if (vWatermarkText) vWatermarkText.value = '';
+    const vWatermarkFont = document.getElementById('videoWatermarkFont');
+    if (vWatermarkFont) vWatermarkFont.value = 'arial';
+    const vWatermarkPos = document.getElementById('videoWatermarkPosition');
+    if (vWatermarkPos) vWatermarkPos.value = 'bottom-right';
+    const vWatermarkOpacity = document.getElementById('videoWatermarkOpacity');
+    if (vWatermarkOpacity) vWatermarkOpacity.value = '0.5';
+    const vWatermarkFontSize = document.getElementById('videoWatermarkFontSize');
+    if (vWatermarkFontSize) vWatermarkFontSize.value = '72';
+    const vWatermarkColor = document.getElementById('videoWatermarkColor');
+    if (vWatermarkColor) vWatermarkColor.value = '#ffffff';
+    const vWatermarkColorHex = document.getElementById('videoWatermarkColorHex');
+    if (vWatermarkColorHex) vWatermarkColorHex.value = '#ffffff';
+    const vWatermarkBorderWidth = document.getElementById('videoWatermarkBorderWidth');
+    if (vWatermarkBorderWidth) vWatermarkBorderWidth.value = '0';
     updateCombineBatchUI();
 
     syncDurationFields(5);
@@ -2159,6 +2200,24 @@ function applyVideoPreset(presetName) {
   }
   updateCombineBatchUI();
 
+  // Load watermark from preset if present
+  const vWatermarkText = document.getElementById('videoWatermarkText');
+  if (vWatermarkText) vWatermarkText.value = preset.watermark_text !== undefined ? preset.watermark_text : '';
+  const vWatermarkFont = document.getElementById('videoWatermarkFont');
+  if (vWatermarkFont) vWatermarkFont.value = preset.watermark_font !== undefined ? preset.watermark_font : 'arial';
+  const vWatermarkPos = document.getElementById('videoWatermarkPosition');
+  if (vWatermarkPos) vWatermarkPos.value = preset.watermark_position !== undefined ? preset.watermark_position : 'bottom-right';
+  const vWatermarkOpacity = document.getElementById('videoWatermarkOpacity');
+  if (vWatermarkOpacity) vWatermarkOpacity.value = preset.watermark_opacity !== undefined ? preset.watermark_opacity : '0.5';
+  const vWatermarkFontSize = document.getElementById('videoWatermarkFontSize');
+  if (vWatermarkFontSize) vWatermarkFontSize.value = preset.watermark_font_size !== undefined ? preset.watermark_font_size : '72';
+  const vWatermarkColor = document.getElementById('videoWatermarkColor');
+  if (vWatermarkColor) vWatermarkColor.value = preset.watermark_color !== undefined ? preset.watermark_color : '#ffffff';
+  const vWatermarkColorHex = document.getElementById('videoWatermarkColorHex');
+  if (vWatermarkColorHex) vWatermarkColorHex.value = preset.watermark_color !== undefined ? preset.watermark_color : '#ffffff';
+  const vWatermarkBorderWidth = document.getElementById('videoWatermarkBorderWidth');
+  if (vWatermarkBorderWidth) vWatermarkBorderWidth.value = preset.watermark_border_width !== undefined ? preset.watermark_border_width : '0';
+
   updateDurationsSum();
   updateTooltips();
 }
@@ -2202,21 +2261,6 @@ function applyFlowVideoPreset(presetName) {
     if (outputCount) outputCount.value = '1';
     const upscale = document.getElementById('cfg_flow_upscale_auto');
     if (upscale) upscale.value = 'NONE';
-    const lakornPath = document.getElementById('cfg_flow_lakorn_path');
-    if (lakornPath) {
-      lakornPath.value = '';
-      lakornPath.dispatchEvent(new Event('input'));
-    }
-    const lakornTon = document.getElementById('cfg_flow_lakorn_ton');
-    if (lakornTon) {
-      lakornTon.value = '';
-      lakornTon.dispatchEvent(new Event('input'));
-    }
-    const lakornEp = document.getElementById('cfg_flow_lakorn_ep');
-    if (lakornEp) {
-      lakornEp.value = '';
-      lakornEp.dispatchEvent(new Event('input'));
-    }
     return;
   }
   
@@ -2496,7 +2540,14 @@ async function saveVideoPreset() {
     video_speed: document.getElementById('videoSpeedText')?.value || '1.0',
     durations: durations,
     transitions: transitions,
-    fade_durations: fadeDurations
+    fade_durations: fadeDurations,
+    watermark_text: document.getElementById('videoWatermarkText')?.value || '',
+    watermark_font: document.getElementById('videoWatermarkFont')?.value || 'arial',
+    watermark_position: document.getElementById('videoWatermarkPosition')?.value || 'bottom-right',
+    watermark_opacity: document.getElementById('videoWatermarkOpacity')?.value || '0.5',
+    watermark_font_size: document.getElementById('videoWatermarkFontSize')?.value || '72',
+    watermark_color: document.getElementById('videoWatermarkColorHex')?.value || '#ffffff',
+    watermark_border_width: document.getElementById('videoWatermarkBorderWidth')?.value || '0'
   };
   
   globalVideoPresets[cleanName] = preset;
@@ -2869,6 +2920,18 @@ async function runVideoHelper(btnElement) {
       if (set.unsharp) formData.append('unsharp', set.unsharp);
       if (set.videoSpeed) formData.append('video_speed', set.videoSpeed);
 
+      // Watermark settings from UI
+      const wmText = document.getElementById('videoWatermarkText')?.value || '';
+      if (wmText) {
+        formData.append('watermark_text', wmText);
+        formData.append('watermark_font', document.getElementById('videoWatermarkFont')?.value || 'arial');
+        formData.append('watermark_position', document.getElementById('videoWatermarkPosition')?.value || 'bottom-right');
+        formData.append('watermark_opacity', document.getElementById('videoWatermarkOpacity')?.value || '0.5');
+        formData.append('watermark_font_size', document.getElementById('videoWatermarkFontSize')?.value || '72');
+        formData.append('watermark_color', document.getElementById('videoWatermarkColorHex')?.value || '#ffffff');
+        formData.append('watermark_border_width', document.getElementById('videoWatermarkBorderWidth')?.value || '0');
+      }
+
       const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).substring(7);
       formData.append('job_id', jobId);
 
@@ -3081,6 +3144,38 @@ async function setVideoSpeedDefault() {
     alert(`Default video speed set to: ${val}`);
   } catch (e) {
     writeConsoleLine(`Failed to set default video speed: ${e.message}`, 'error', 'videoConsole');
+  }
+}
+
+async function setVideoWatermarkDefault() {
+  const text = document.getElementById('videoWatermarkText')?.value || '';
+  const font = document.getElementById('videoWatermarkFont')?.value || 'arial';
+  const pos = document.getElementById('videoWatermarkPosition')?.value || 'bottom-right';
+  const opacity = document.getElementById('videoWatermarkOpacity')?.value || '0.5';
+  const size = document.getElementById('videoWatermarkFontSize')?.value || '72';
+  const color = document.getElementById('videoWatermarkColorHex')?.value || '#ffffff';
+  const border = document.getElementById('videoWatermarkBorderWidth')?.value || '0';
+  
+  try {
+    await jsonFetch('/api/config/set-defaults', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        updates: {
+          video_watermark_text: text,
+          video_watermark_font: font,
+          video_watermark_position: pos,
+          video_watermark_opacity: opacity,
+          video_watermark_font_size: size,
+          video_watermark_color: color,
+          video_watermark_border_width: border
+        }
+      })
+    });
+    writeConsoleLine(`Video watermark defaults saved`, 'success', 'videoConsole');
+    alert(`บันทึกค่าเริ่มต้นของลายน้ำเรียบร้อยแล้ว`);
+  } catch (e) {
+    writeConsoleLine(`Failed to set default video watermark: ${e.message}`, 'error', 'videoConsole');
   }
 }
 
@@ -3818,6 +3913,24 @@ function initWorkflowActionListeners() {
 
   const setVideoSpeedBtn = document.getElementById('setVideoSpeedDefaultBtn');
   if (setVideoSpeedBtn) setVideoSpeedBtn.addEventListener('click', setVideoSpeedDefault);
+
+  const setVideoWatermarkBtn = document.getElementById('setVideoWatermarkDefaultBtn');
+  if (setVideoWatermarkBtn) setVideoWatermarkBtn.addEventListener('click', setVideoWatermarkDefault);
+
+  // Link watermark color inputs
+  const watermarkColor = document.getElementById('videoWatermarkColor');
+  const watermarkColorHex = document.getElementById('videoWatermarkColorHex');
+  if (watermarkColor && watermarkColorHex) {
+    watermarkColor.addEventListener('input', (e) => {
+      watermarkColorHex.value = e.target.value;
+    });
+    watermarkColorHex.addEventListener('input', (e) => {
+      let val = e.target.value;
+      if (val && val.startsWith('#') && val.length === 7) {
+        watermarkColor.value = val;
+      }
+    });
+  }
 
 
 
@@ -5165,35 +5278,43 @@ async function loadVideoPrompts() {
     const submitSel = document.getElementById('cfg_video_submit_selector');
     if (submitSel) submitSel.value = config.video_submit_selector || '';
 
-    const lastPresetName = localStorage.getItem('flowVideoLastPreset') || '';
-    let lakornPathVal = '';
-    let lakornTonVal = '';
-    let lakornEpVal = '';
-    if (lastPresetName && globalFlowVideoPresets[lastPresetName]) {
-      const p = globalFlowVideoPresets[lastPresetName];
-      lakornPathVal = p.lakorn_path || '';
-      lakornTonVal = p.lakorn_ton || '';
-      lakornEpVal = p.lakorn_ep || '';
+    if (!window.isFlowKitPathsInitialized) {
+      const lastPresetName = localStorage.getItem('flowVideoLastPreset') || '';
+      let lakornPathVal = '';
+      let lakornTonVal = '';
+      let lakornEpVal = '';
+      if (lastPresetName && globalFlowVideoPresets[lastPresetName]) {
+        const p = globalFlowVideoPresets[lastPresetName];
+        lakornPathVal = p.lakorn_path || '';
+        lakornTonVal = p.lakorn_ton || '';
+        lakornEpVal = p.lakorn_ep || '';
+      } else {
+        lakornPathVal = config.video_lakorn_path || config.lakorn_path || '';
+        lakornTonVal = config.video_lakorn_ton || config.lakorn_ton || '';
+        lakornEpVal = config.video_lakorn_ep || config.lakorn_ep || '';
+      }
+
+      const lakornPath = document.getElementById('cfg_video_lakorn_path');
+      if (lakornPath) lakornPath.value = lakornPathVal;
+
+      const lakornTon = document.getElementById('cfg_video_lakorn_ton');
+      if (lakornTon) lakornTon.value = lakornTonVal;
+
+      const lakornEp = document.getElementById('cfg_video_lakorn_ep');
+      if (lakornEp) lakornEp.value = lakornEpVal;
+
+      // Flow Kit parallel inputs loading
+      const flowLakornPath = document.getElementById('cfg_flow_lakorn_path');
+      if (flowLakornPath) flowLakornPath.value = lakornPathVal;
+
+      const flowLakornTon = document.getElementById('cfg_flow_lakorn_ton');
+      if (flowLakornTon) flowLakornTon.value = lakornTonVal;
+
+      const flowLakornEp = document.getElementById('cfg_flow_lakorn_ep');
+      if (flowLakornEp) flowLakornEp.value = lakornEpVal;
+
+      window.isFlowKitPathsInitialized = true;
     }
-
-    const lakornPath = document.getElementById('cfg_video_lakorn_path');
-    if (lakornPath) lakornPath.value = lakornPathVal;
-
-    const lakornTon = document.getElementById('cfg_video_lakorn_ton');
-    if (lakornTon) lakornTon.value = lakornTonVal;
-
-    const lakornEp = document.getElementById('cfg_video_lakorn_ep');
-    if (lakornEp) lakornEp.value = lakornEpVal;
-
-    // Flow Kit parallel inputs loading
-    const flowLakornPath = document.getElementById('cfg_flow_lakorn_path');
-    if (flowLakornPath) flowLakornPath.value = lakornPathVal;
-
-    const flowLakornTon = document.getElementById('cfg_flow_lakorn_ton');
-    if (flowLakornTon) flowLakornTon.value = lakornTonVal;
-
-    const flowLakornEp = document.getElementById('cfg_flow_lakorn_ep');
-    if (flowLakornEp) flowLakornEp.value = lakornEpVal;
 
     // Prompt Only parallel inputs loading
     const flowPOPromptsPath = document.getElementById('cfg_flow_po_prompts_path');
@@ -6812,6 +6933,9 @@ function initFlowKitUploaderListeners() {
   }
 
   document.getElementById('cfg_flow_select_range')?.addEventListener('change', applyFlowRangeSelection);
+  document.getElementById('cfg_flow_select_range')?.addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/[^0-9\-\,\s]/g, '');
+  });
   document.getElementById('cfg_flow_select_range')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       applyFlowRangeSelection();

@@ -35,8 +35,6 @@ def correct_legacy_paths(data):
                 old_home = match.group(0)
                 if old_home != current_home:
                     data = data.replace(old_home, current_home, 1)
-        if "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย/" in data:
-            data = data.replace("Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย/", "Files/")
         if "//" in data:
             data = data.replace("//", "/")
         if "MythicForge84 - วิว/วิว/Soundtrack" in data:
@@ -1773,6 +1771,158 @@ def set_config(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed writing config: {e}")
 
 
+FONT_MAP = {
+    "arial": "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "georgia": "/System/Library/Fonts/Supplemental/Georgia.ttf",
+    "verdana": "/System/Library/Fonts/Supplemental/Verdana.ttf",
+    "times new roman": "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+    "courier new": "/System/Library/Fonts/Supplemental/Courier New.ttf",
+    "impact": "/System/Library/Fonts/Supplemental/Impact.ttf",
+    "ayuthaya": "/System/Library/Fonts/Supplemental/Ayuthaya.ttf",
+    "thonburi": "/System/Library/Fonts/ThonburiUI.ttc",
+}
+
+def get_font_path(font_name: str) -> str | None:
+    if not font_name:
+        return None
+    f_lower = font_name.lower().strip()
+    path = FONT_MAP.get(f_lower)
+    if path and os.path.exists(path):
+        return path
+    
+    # Try directly in Supplemental
+    alt_path = f"/System/Library/Fonts/Supplemental/{font_name}.ttf"
+    if os.path.exists(alt_path):
+        return alt_path
+        
+    alt_path_tc = f"/System/Library/Fonts/Supplemental/{font_name}.ttc"
+    if os.path.exists(alt_path_tc):
+        return alt_path_tc
+
+    # Try in /System/Library/Fonts/
+    alt_path_sys = f"/System/Library/Fonts/{font_name}.ttc"
+    if os.path.exists(alt_path_sys):
+        return alt_path_sys
+        
+    alt_path_sys_ttf = f"/System/Library/Fonts/{font_name}.ttf"
+    if os.path.exists(alt_path_sys_ttf):
+        return alt_path_sys_ttf
+
+    # Fallbacks
+    for name in ["Arial.ttf", "Helvetica.ttc", "ThonburiUI.ttc", "Times New Roman.ttf"]:
+        for prefix in ["/System/Library/Fonts/Supplemental/", "/System/Library/Fonts/", "/Library/Fonts/"]:
+            check_p = os.path.join(prefix, name)
+            if os.path.exists(check_p):
+                return check_p
+                
+    return None
+
+def create_text_watermark_image(
+    text: str,
+    font_name: str,
+    font_size: int,
+    position: str,
+    opacity: float,
+    color_hex: str,
+    video_w: int,
+    video_h: int,
+    output_png_path: str,
+    watermark_border_width: int = 0
+):
+    from PIL import Image, ImageDraw, ImageFont
+    
+    # Create transparent image
+    img = Image.new("RGBA", (video_w, video_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    font_path = get_font_path(font_name)
+    try:
+        if font_path:
+            font = ImageFont.truetype(font_path, font_size)
+        else:
+            font = ImageFont.load_default()
+    except Exception:
+        font = ImageFont.load_default()
+        
+    try:
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+    except AttributeError:
+        text_w, text_h = draw.textsize(text, font=font)
+        
+    margin_x = int(video_w * 0.05)
+    margin_y = int(video_h * 0.03)
+    
+    pos_lower = position.lower().strip()
+    if pos_lower == "top-left":
+        x = margin_x
+        y = margin_y
+    elif pos_lower == "top-right":
+        x = video_w - text_w - margin_x
+        y = margin_y
+    elif pos_lower == "bottom-left":
+        x = margin_x
+        y = video_h - text_h - margin_y
+    elif pos_lower == "bottom-right":
+        x = video_w - text_w - margin_x
+        y = video_h - text_h - margin_y
+    elif pos_lower == "bottom-center":
+        x = (video_w - text_w) // 2
+        y = video_h - text_h - int(video_h * 0.10)  # 10% from bottom (subtitle height)
+    elif pos_lower == "center":
+        x = (video_w - text_w) // 2
+        y = (video_h - text_h) // 2
+    else:
+        x = video_w - text_w - margin_x
+        y = video_h - text_h - margin_y
+        
+    c_hex = color_hex.strip().lstrip("#")
+    if len(c_hex) == 6:
+        r = int(c_hex[0:2], 16)
+        g = int(c_hex[2:4], 16)
+        b = int(c_hex[4:6], 16)
+    else:
+        r, g, b = 255, 255, 255
+        
+    alpha = int(opacity * 255)
+    outline_alpha = int(opacity * 180)
+    
+    # Draw text with outline if border_width > 0
+    if watermark_border_width > 0:
+        draw.text(
+            (x, y), text, font=font, fill=(r, g, b, alpha),
+            stroke_width=watermark_border_width, stroke_fill=(0, 0, 0, outline_alpha)
+        )
+    else:
+        # Draw main text
+        draw.text((x, y), text, font=font, fill=(r, g, b, alpha))
+    img.save(output_png_path, "PNG")
+
+
+@app.post("/api/config/set-defaults")
+def set_defaults(payload: dict[str, Any]) -> dict[str, Any]:
+    updates = payload.get("updates")
+    if not updates or not isinstance(updates, dict):
+        raise HTTPException(status_code=400, detail="updates dict required")
+    try:
+        import json
+        data: dict[str, Any] = {}
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+            except Exception:
+                data = {}
+        for key, value in updates.items():
+            data[key] = value
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/config/set-default")
 def set_default(payload: dict[str, Any]) -> dict[str, Any]:
     key = str(payload.get("key") or "").strip()
@@ -2993,7 +3143,14 @@ def make_video_cover(
     unsharp: str | None = Form(None),
     video_speed: str | None = Form(None),
     overwrite: str | None = Form(None),
-    job_id: str | None = Form(None)
+    job_id: str | None = Form(None),
+    watermark_text: str | None = Form(None),
+    watermark_font: str | None = Form(None),
+    watermark_position: str | None = Form(None),
+    watermark_opacity: str | None = Form(None),
+    watermark_font_size: str | None = Form(None),
+    watermark_color: str | None = Form(None),
+    watermark_border_width: str | None = Form(None)
 ) -> dict[str, Any]:
     try:
         video_path = correct_legacy_paths(video_path)
@@ -3010,7 +3167,11 @@ def make_video_cover(
             audio_boost=audio_boost, video_audio_boost=video_audio_boost,
             contrast=contrast, saturation=saturation, brightness=brightness,
             gamma=gamma, unsharp=unsharp, video_speed=video_speed,
-            overwrite=overwrite, job_id=job_id
+            overwrite=overwrite, job_id=job_id,
+            watermark_text=watermark_text, watermark_font=watermark_font,
+            watermark_position=watermark_position, watermark_opacity=watermark_opacity,
+            watermark_font_size=watermark_font_size, watermark_color=watermark_color,
+            watermark_border_width=watermark_border_width
         )
     except HTTPException as he:
         raise he
@@ -3047,7 +3208,14 @@ def _make_video_cover_impl(
     unsharp: str | None = None,
     video_speed: str | None = None,
     overwrite: str | None = None,
-    job_id: str | None = None
+    job_id: str | None = None,
+    watermark_text: str | None = None,
+    watermark_font: str | None = None,
+    watermark_position: str | None = None,
+    watermark_opacity: str | None = None,
+    watermark_font_size: str | None = None,
+    watermark_color: str | None = None,
+    watermark_border_width: str | None = None
 ) -> dict[str, Any]:
     import subprocess
     import tempfile
@@ -3087,6 +3255,13 @@ def _make_video_cover_impl(
     video_speed = clean_form_val(video_speed)
     overwrite = clean_form_val(overwrite)
     job_id = clean_form_val(job_id)
+    watermark_text = clean_form_val(watermark_text)
+    watermark_font = clean_form_val(watermark_font)
+    watermark_position = clean_form_val(watermark_position)
+    watermark_opacity = clean_form_val(watermark_opacity)
+    watermark_font_size = clean_form_val(watermark_font_size)
+    watermark_color = clean_form_val(watermark_color)
+    watermark_border_width = clean_form_val(watermark_border_width)
 
     speed_factor = 1.0
     if video_speed and video_speed.strip():
@@ -3408,6 +3583,40 @@ def _make_video_cover_impl(
                     if not os.path.exists(ffmpeg_bin):
                         ffmpeg_bin = "ffmpeg"
                         
+                    # Generate text watermark if present
+                    watermark_temp_png = None
+                    if watermark_text and watermark_text.strip():
+                        try:
+                            wm_font_size = int(watermark_font_size) if watermark_font_size else 72
+                        except ValueError:
+                            wm_font_size = 72
+                        try:
+                            wm_opacity = float(watermark_opacity) if watermark_opacity else 0.5
+                        except ValueError:
+                            wm_opacity = 0.5
+                        try:
+                            wm_border = int(watermark_border_width) if watermark_border_width else 0
+                        except ValueError:
+                            wm_border = 0
+                        wm_font = watermark_font or "arial"
+                        wm_pos = watermark_position or "bottom-right"
+                        wm_color = watermark_color or "#ffffff"
+                        
+                        watermark_temp_png = os.path.join(tmpdir, "watermark_temp.png")
+                        create_text_watermark_image(
+                            text=watermark_text.strip(),
+                            font_name=wm_font,
+                            font_size=wm_font_size,
+                            position=wm_pos,
+                            opacity=wm_opacity,
+                            color_hex=wm_color,
+                            video_w=2160,
+                            video_h=3840,
+                            output_png_path=watermark_temp_png,
+                            watermark_border_width=wm_border
+                        )
+                        log(f"Generated text watermark temp PNG (border={wm_border}): '{watermark_temp_png}'")
+
                     list_txt = os.path.join(tmpdir, "list.txt")
                     amount_val = len(chunk_sources)
 
@@ -3419,29 +3628,57 @@ def _make_video_cover_impl(
                         log(f"Combine Mode Chunk {chunk_idx} [{idx}/{amount_val}]: Aligning '{folder_name}/{resolved_media_name}' to 9:16 vertical 4K 60fps...")
 
                         if has_video_v and has_audio_v:
-                            v_cmd = [
-                                ffmpeg_bin, "-y", "-i", v_path,
-                                "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                                "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                            ]
-                        elif has_video_v:
-                            v_cmd = [
-                                ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                                "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v]",
-                                "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                            ]
-                        elif has_audio_v:
-                            if speed_factor != 1.0:
+                            if watermark_temp_png:
                                 v_cmd = [
-                                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
-                                    "-filter_complex", f"[1:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                                    "-map", "0:v", "-map", "[a]", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                    ffmpeg_bin, "-y", "-i", v_path, "-i", watermark_temp_png,
+                                    "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][1:v]overlay=0:0[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
                                 ]
                             else:
                                 v_cmd = [
-                                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
-                                    "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                    ffmpeg_bin, "-y", "-i", v_path,
+                                    "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
                                 ]
+                        elif has_video_v:
+                            if watermark_temp_png:
+                                v_cmd = [
+                                    ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-i", watermark_temp_png,
+                                    "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][2:v]overlay=0:0[v]",
+                                    "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                ]
+                            else:
+                                v_cmd = [
+                                    ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                                    "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v]",
+                                    "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                ]
+                        elif has_audio_v:
+                            if watermark_temp_png:
+                                if speed_factor != 1.0:
+                                    v_cmd = [
+                                        ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path, "-i", watermark_temp_png,
+                                        "-filter_complex", f"[0:v][2:v]overlay=0:0[v];[1:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                        "-map", "[v]", "-map", "[a]", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                    ]
+                                else:
+                                    v_cmd = [
+                                        ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path, "-i", watermark_temp_png,
+                                        "-filter_complex", "[0:v][2:v]overlay=0:0[v]",
+                                        "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                    ]
+                            else:
+                                if speed_factor != 1.0:
+                                    v_cmd = [
+                                        ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
+                                        "-filter_complex", f"[1:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                        "-map", "0:v", "-map", "[a]", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                    ]
+                                else:
+                                    v_cmd = [
+                                        ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
+                                        "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                    ]
                         else:
                             raise RuntimeError(f"Matched file '{resolved_media_name}' has no usable audio or video stream")
 
@@ -3726,6 +3963,40 @@ def _make_video_cover_impl(
                 if not os.path.exists(ffmpeg_bin):
                     ffmpeg_bin = "ffmpeg"
                     
+                # Generate text watermark if present
+                watermark_temp_png = None
+                if watermark_text and watermark_text.strip():
+                    try:
+                        wm_font_size = int(watermark_font_size) if watermark_font_size else 72
+                    except ValueError:
+                        wm_font_size = 72
+                    try:
+                        wm_opacity = float(watermark_opacity) if watermark_opacity else 0.5
+                    except ValueError:
+                        wm_opacity = 0.5
+                    try:
+                        wm_border = int(watermark_border_width) if watermark_border_width else 0
+                    except ValueError:
+                        wm_border = 0
+                    wm_font = watermark_font or "arial"
+                    wm_pos = watermark_position or "bottom-right"
+                    wm_color = watermark_color or "#ffffff"
+                    
+                    watermark_temp_png = os.path.join(tmpdir, "watermark_temp.png")
+                    create_text_watermark_image(
+                        text=watermark_text.strip(),
+                        font_name=wm_font,
+                        font_size=wm_font_size,
+                        position=wm_pos,
+                        opacity=wm_opacity,
+                        color_hex=wm_color,
+                        video_w=2160,
+                        video_h=3840,
+                        output_png_path=watermark_temp_png,
+                        watermark_border_width=wm_border
+                    )
+                    log(f"Generated text watermark temp PNG (border={wm_border}): '{watermark_temp_png}'")
+
                 list_txt = os.path.join(tmpdir, "list.txt")
 
                 temp_video = os.path.join(tmpdir, "temp_video.mp4")
@@ -3750,17 +4021,31 @@ def _make_video_cover_impl(
                 log(f"Video Helper: Input video 1 has audio track: {has_audio}")
                 log("Video Helper [1/3]: Aligning first video to 9:16 vertical 4K 60fps...")
                 if has_audio:
-                    v_cmd = [
-                        ffmpeg_bin, "-y", "-i", temp_input_video,
-                        "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                        "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
-                    ]
+                    if watermark_temp_png:
+                        v_cmd = [
+                            ffmpeg_bin, "-y", "-i", temp_input_video, "-i", watermark_temp_png,
+                            "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][1:v]overlay=0:0[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
+                        ]
+                    else:
+                        v_cmd = [
+                            ffmpeg_bin, "-y", "-i", temp_input_video,
+                            "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
+                        ]
                 else:
-                    v_cmd = [
-                        ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                        "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v]",
-                        "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
-                    ]
+                    if watermark_temp_png:
+                        v_cmd = [
+                            ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-i", watermark_temp_png,
+                            "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][2:v]overlay=0:0[v]",
+                            "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
+                        ]
+                    else:
+                        v_cmd = [
+                            ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                            "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v]",
+                            "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
+                        ]
                     
                 res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 if res.returncode != 0:
