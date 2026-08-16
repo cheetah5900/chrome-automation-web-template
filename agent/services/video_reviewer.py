@@ -124,8 +124,26 @@ async def _download_video(url: str, dest: Path) -> None:
                     f.write(chunk)
 
 
+def _find_url_in_dict(node) -> str | None:
+    """Recursively search for a Google-hosted video/image/storage URL."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")):
+                if "google" in v or "storage" in v or "video" in v:
+                    return v
+            res = _find_url_in_dict(v)
+            if res:
+                return res
+    elif isinstance(node, list):
+        for item in node:
+            res = _find_url_in_dict(item)
+            if res:
+                return res
+    return None
+
+
 async def _download_via_get_media(media_id: str, dest: Path) -> None:
-    """Download video by fetching encoded content from get_media API."""
+    """Download video by fetching encoded content or signed URL from get_media API."""
     from agent.services.flow_client import get_flow_client
 
     client = get_flow_client()
@@ -134,7 +152,15 @@ async def _download_via_get_media(media_id: str, dest: Path) -> None:
         raise ValueError(f"get_media failed for {media_id}: {result['error']}")
 
     data = result.get("data", result)
-    # Video content is in video.encodedVideo or image.encodedImage (base64)
+    
+    # 1. Check if the response contains a signed URL we can download directly
+    url = _find_url_in_dict(data)
+    if url:
+        logger.info("Found signed URL in get_media response, downloading directly...")
+        await _download_video(url, dest)
+        return
+
+    # 2. Fallback: Video content is in video.encodedVideo or image.encodedImage (base64)
     encoded = None
     if isinstance(data, dict):
         if "video" in data and isinstance(data["video"], dict):
@@ -145,7 +171,11 @@ async def _download_via_get_media(media_id: str, dest: Path) -> None:
             encoded = data["encodedVideo"]
 
     if not encoded:
-        raise ValueError(f"No encoded content in get_media response for {media_id}")
+        import json
+        raise ValueError(
+            f"No encoded content or signed URL found in get_media response for {media_id}. "
+            f"Response: {json.dumps(data)[:500]}"
+        )
 
     video_bytes = base64.standard_b64decode(encoded)
     with open(dest, "wb") as f:
