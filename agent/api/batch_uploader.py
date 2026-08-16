@@ -567,6 +567,8 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
         image_media_to_name = {}
         for md in media:
             md_id = md.get("name")
+            if md_id and md_id.startswith("media/"):
+                md_id = md_id[6:]
             wrk_id = md.get("workflowId")
             if md_id and wrk_id and wrk_id in workflow_display_names:
                 image_media_to_name[md_id] = workflow_display_names[wrk_id]
@@ -613,7 +615,11 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
                 continue
                 
             media_id = standard_video.get("name")
+            if media_id and media_id.startswith("media/"):
+                media_id = media_id[6:]
             upscale_media_id = upscaled_video.get("name") if upscaled_video else None
+            if upscale_media_id and upscale_media_id.startswith("media/"):
+                upscale_media_id = upscale_media_id[6:]
             
             aspect = standard_video.get("video", {}).get("generatedVideo", {}).get("aspectRatio", "VIDEO_ASPECT_RATIO_PORTRAIT")
             is_vertical = "PORTRAIT" in aspect or "VERTICAL" in aspect or "vertical" in prompt.lower()
