@@ -1721,6 +1721,9 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     counters = {"vertical": 1, "horizontal": 1}
     dup_counters = {}
     not_mapped_counter = 0
+    
+    # Track details for debugging
+    debug_details = []
         
     temp_dir = Path(tempfile.mkdtemp())
     zip_path = temp_dir / f"{project_slug}_videos.zip"
@@ -1728,7 +1731,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     video_added = False
     
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        for scene in scenes:
+        for scene_idx, scene in enumerate(scenes):
             display_order = 0
             for prefix in ("vertical", "horizontal"):
                 for key in (f"{prefix}_video_media_id", f"{prefix}_upscale_media_id"):
@@ -1739,9 +1742,15 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                 if display_order:
                     break
             if not display_order:
-                display_order = scene.get("display_order", 0)
+                display_order = scene.get("display_order", 0) or (scene_idx + 1)
                 
-            scene_id = scene.get("id", "")
+            scene_id = scene.get("id", f"scene_{scene_idx}")
+            scene_debug = {
+                "scene_id": scene_id,
+                "display_order": display_order,
+                "prompt": scene.get("prompt_content", "") or scene.get("prompt", ""),
+                "videos": {}
+            }
             
             for p in ("vertical", "horizontal"):
                 url = None
@@ -1760,12 +1769,37 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     is_upscale = False
                     
                 if not url:
+                    scene_keys = [k for k, v in scene.items() if v]
+                    scene_debug["videos"][p] = {
+                        "skipped": "No URL found",
+                        "checked_keys": [f"{p}_upscale_url", f"{p}_video_url"],
+                        "available_keys_with_values": scene_keys
+                    }
                     continue
                     
+                vid_debug = {
+                    "url": url,
+                    "media_id": media_id,
+                    "is_upscale": is_upscale,
+                    "local_exists_initially": False,
+                    "get_media_attempted": False,
+                    "get_media_success": False,
+                    "get_media_error": None,
+                    "http_download_attempted": False,
+                    "http_download_success": False,
+                    "http_download_error": None,
+                    "local_path_resolved": None
+                }
+                
                 local_path = resolve_local_file(url, media_id, project_slug, display_order, scene_id, is_upscale)
                 temp_downloaded_path = None
                 
+                if local_path and local_path.exists():
+                    vid_debug["local_exists_initially"] = True
+                    vid_debug["local_path_resolved"] = str(local_path)
+                
                 if not local_path and media_id:
+                    vid_debug["get_media_attempted"] = True
                     client = get_flow_client()
                     if client.connected:
                         try:
@@ -1779,14 +1813,25 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                             await _download_via_get_media(media_id, cache_path)
                             if cache_path.exists():
                                 local_path = cache_path
+                                vid_debug["get_media_success"] = True
+                                vid_debug["local_path_resolved"] = str(cache_path)
                                 logger.info("Successfully downloaded and cached video via get_media fallback: %s", cache_path)
+                            else:
+                                vid_debug["get_media_error"] = "cache_path did not exist after download function"
                         except Exception as e:
+                            vid_debug["get_media_error"] = str(e)
                             logger.warning("Failed get_media download fallback for %s: %s", media_id[:12], e)
+                    else:
+                        vid_debug["get_media_error"] = "Extension is not connected"
                             
                 if not local_path and url.startswith("http"):
+                    vid_debug["http_download_attempted"] = True
                     try:
                         temp_downloaded_path = await download_file_to_temp(url)
                         local_path = temp_downloaded_path
+                        vid_debug["http_download_success"] = True
+                        vid_debug["local_path_resolved"] = str(temp_downloaded_path)
+                        
                         # Cache the file locally to avoid re-downloading next time
                         if media_id:
                             cache_dir = Path("output/_workflow_videos")
@@ -1796,68 +1841,89 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                             import shutil
                             try:
                                 shutil.copy2(temp_downloaded_path, cache_path)
+                                vid_debug["local_path_resolved"] = str(cache_path)
                                 logger.info("Cached downloaded video to %s", cache_path)
                             except Exception as ce:
                                 logger.warning("Failed to cache downloaded file to %s: %s", cache_path, ce)
-                            # Update local_path to point to the cached file so we delete the temp file properly
-                            # but keep the cached file
                     except Exception as e:
+                        vid_debug["http_download_error"] = str(e)
                         logger.warning("Failed to download remote file for scene %s: %s", scene_id, e)
-                        continue
                         
                 if local_path and local_path.exists():
-                    orient_suffix = "vertical" if p == "vertical" else "horizontal"
-                    upscale_suffix = "_upscaled" if is_upscale else ""
-                    
-                    img_name = None
-                    if media_id:
-                        img_name = local_image_name_map.get(media_id)
-                    if not img_name:
-                        std_m = scene.get(f"{p}_video_media_id")
-                        if std_m:
-                            img_name = local_image_name_map.get(std_m)
-                            
-                    if not img_name:
-                        img_url = scene.get(f"{p}_image_url")
-                        if img_url:
-                            if img_url.startswith("file://"):
-                                img_name = Path(img_url[7:]).stem
-                            else:
-                                img_name = Path(img_url).stem
-                        if img_name:
-                            import re
-                            if project_slug and img_name.startswith(f"{project_slug}_"):
-                                img_name = img_name[len(project_slug) + 1:]
-                            img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
-                            img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
-                            
-                    if not img_name:
-                        not_mapped_counter += 1
-                        img_name = f"not mapped_{not_mapped_counter}"
-                    
-                    dup_key = f"{p}_{img_name}"
-                    dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
-                    dup_idx = dup_counters[dup_key]
-                    
-                    suffix_str = ""
-                    if is_upscale:
-                        suffix_str += "_upscaled"
-                    if dup_idx > 1:
-                        suffix_str += f"_{dup_idx}"
-                    arcname = f"{img_name}{suffix_str}.mp4"
+                    try:
+                        orient_suffix = "vertical" if p == "vertical" else "horizontal"
+                        upscale_suffix = "_upscaled" if is_upscale else ""
                         
-                    zip_file.write(local_path, arcname=arcname)
-                    video_added = True
-                    
-                    if temp_downloaded_path and temp_downloaded_path.exists():
-                        try:
-                            temp_downloaded_path.unlink()
-                        except Exception:
-                            pass
+                        img_name = None
+                        if media_id:
+                            img_name = local_image_name_map.get(media_id)
+                        if not img_name:
+                            std_m = scene.get(f"{p}_video_media_id")
+                            if std_m:
+                                img_name = local_image_name_map.get(std_m)
+                                
+                        if not img_name:
+                            img_url = scene.get(f"{p}_image_url")
+                            if img_url:
+                                if img_url.startswith("file://"):
+                                    img_name = Path(img_url[7:]).stem
+                                else:
+                                    img_name = Path(img_url).stem
+                            if img_name:
+                                import re
+                                if project_slug and img_name.startswith(f"{project_slug}_"):
+                                    img_name = img_name[len(project_slug) + 1:]
+                                img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
+                                img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
+                                
+                        if not img_name:
+                            not_mapped_counter += 1
+                            img_name = f"not mapped_{not_mapped_counter}"
+                        
+                        dup_key = f"{p}_{img_name}"
+                        dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
+                        dup_idx = dup_counters[dup_key]
+                        
+                        suffix_str = ""
+                        if is_upscale:
+                            suffix_str += "_upscaled"
+                        if dup_idx > 1:
+                            suffix_str += f"_{dup_idx}"
+                        arcname = f"{img_name}{suffix_str}.mp4"
+                            
+                        zip_file.write(local_path, arcname=arcname)
+                        video_added = True
+                        vid_debug["added_to_zip_as"] = arcname
+                        
+                        if temp_downloaded_path and temp_downloaded_path.exists():
+                            try:
+                                temp_downloaded_path.unlink()
+                            except Exception:
+                                pass
+                    except Exception as ze:
+                        vid_debug["zip_error"] = str(ze)
+                else:
+                    vid_debug["zip_error"] = "No local file to write"
+                
+                scene_debug["videos"][p] = vid_debug
+            
+            debug_details.append(scene_debug)
                             
     if not video_added or not zip_path.exists() or zip_path.stat().st_size == 0:
         cleanup_temp_dir(temp_dir)
-        raise HTTPException(status_code=400, detail="No completed videos found in this project to download.")
+        import json as _json
+        error_payload = {
+            "error": "No completed videos found in this project to download.",
+            "is_extension_connected": get_flow_client().connected,
+            "project_id": body.project_id,
+            "project_slug": project_slug,
+            "total_scenes": len(scenes),
+            "scenes_details": debug_details
+        }
+        raise HTTPException(
+            status_code=400,
+            detail=_json.dumps(error_payload, ensure_ascii=False)
+        )
         
     background_tasks.add_task(cleanup_temp_dir, temp_dir)
     
