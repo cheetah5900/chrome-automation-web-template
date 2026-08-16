@@ -1974,6 +1974,14 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
             "total_scenes": len(scenes),
             "scenes_details": debug_details
         }
+        try:
+            err_debug_path = Path("output/download_error_details.json")
+            with open(err_debug_path, "w", encoding="utf-8") as f:
+                _json.dump(error_payload, f, ensure_ascii=False, indent=2)
+            logger.info("Saved error diagnostics to %s", err_debug_path.resolve())
+        except Exception as de:
+            logger.warning("Failed to save error diagnostics: %s", de)
+            
         raise HTTPException(
             status_code=400,
             detail=_json.dumps(error_payload, ensure_ascii=False)
