@@ -1740,190 +1740,228 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     
     # Track details for debugging
     debug_details = []
+    
+    # Phase 1: Parallel downloads of missing files
+    semaphore = asyncio.Semaphore(8) # Concurrency threshold
+    
+    async def download_video_task(url, media_id, project_slug, display_order, scene_id, is_upscale, videos_debug, p):
+        async with semaphore:
+            local_path = resolve_local_file(url, media_id, project_slug, display_order, scene_id, is_upscale)
+            if local_path and local_path.exists():
+                videos_debug[p]["local_exists_initially"] = True
+                videos_debug[p]["local_path_resolved"] = str(local_path)
+                return local_path, None
+                
+            temp_downloaded_path = None
+            if not local_path and media_id:
+                videos_debug[p]["get_media_attempted"] = True
+                client = get_flow_client()
+                if client.connected:
+                    try:
+                        cache_dir = Path("output/_workflow_videos")
+                        cache_dir.mkdir(parents=True, exist_ok=True)
+                        suffix = "_upscaled" if is_upscale else ""
+                        cache_path = cache_dir / f"{media_id}{suffix}.mp4"
+                        
+                        logger.info("Parallel download fallback: media %s missing locally. Fetching via Google Flow get_media...", media_id[:12])
+                        from agent.services.video_reviewer import _download_via_get_media
+                        await _download_via_get_media(media_id, cache_path, body.project_id)
+                        if cache_path.exists():
+                            videos_debug[p]["get_media_success"] = True
+                            videos_debug[p]["local_path_resolved"] = str(cache_path)
+                            return cache_path, None
+                        else:
+                            videos_debug[p]["get_media_error"] = "cache_path did not exist after download function"
+                    except Exception as e:
+                        videos_debug[p]["get_media_error"] = str(e)
+                        logger.warning("Failed get_media download fallback for %s: %s", media_id[:12], e)
+                else:
+                    videos_debug[p]["get_media_error"] = "Extension is not connected"
+                    
+            if not local_path and url.startswith("http"):
+                videos_debug[p]["http_download_attempted"] = True
+                try:
+                    temp_downloaded_path = await download_file_to_temp(url)
+                    local_path = temp_downloaded_path
+                    videos_debug[p]["http_download_success"] = True
+                    videos_debug[p]["local_path_resolved"] = str(temp_downloaded_path)
+                    
+                    if media_id:
+                        cache_dir = Path("output/_workflow_videos")
+                        cache_dir.mkdir(parents=True, exist_ok=True)
+                        suffix = "_upscaled" if is_upscale else ""
+                        cache_path = cache_dir / f"{media_id}{suffix}.mp4"
+                        import shutil
+                        try:
+                            # Run copy in executor
+                            await asyncio.get_event_loop().run_in_executor(None, shutil.copy2, temp_downloaded_path, cache_path)
+                            videos_debug[p]["local_path_resolved"] = str(cache_path)
+                            local_path = cache_path
+                        except Exception as ce:
+                            logger.warning("Failed to cache downloaded file to %s: %s", cache_path, ce)
+                except Exception as e:
+                    videos_debug[p]["http_download_error"] = str(e)
+                    logger.warning("Failed to download remote file for scene %s: %s", scene_id, e)
+                    
+            return local_path, temp_downloaded_path
+
+    tasks = []
+    task_metadata = []
+    
+    for scene_idx, scene in enumerate(scenes):
+        display_order = 0
+        for prefix in ("vertical", "horizontal"):
+            for key in (f"{prefix}_video_media_id", f"{prefix}_upscale_media_id"):
+                m_id = scene.get(key)
+                if m_id and m_id in local_order_map:
+                    display_order = local_order_map[m_id]
+                    break
+            if display_order:
+                break
+        if not display_order:
+            display_order = scene.get("display_order", 0) or (scene_idx + 1)
+            
+        scene_id = scene.get("id", f"scene_{scene_idx}")
+        scene_debug = {
+            "scene_id": scene_id,
+            "display_order": display_order,
+            "prompt": scene.get("prompt_content", "") or scene.get("prompt", ""),
+            "videos": {}
+        }
         
+        for p in ("vertical", "horizontal"):
+            url = None
+            media_id = None
+            is_upscale = False
+            
+            if body.upscale_resolution in ("VIDEO_RESOLUTION_1080P", "VIDEO_RESOLUTION_4K"):
+                url = scene.get(f"{p}_upscale_url")
+                media_id = scene.get(f"{p}_upscale_media_id")
+                is_upscale = True
+                
+            # Fallback to standard
+            if not url:
+                url = scene.get(f"{p}_video_url")
+                media_id = scene.get(f"{p}_video_media_id")
+                is_upscale = False
+                
+            if not url:
+                scene_keys = [k for k, v in scene.items() if v]
+                scene_debug["videos"][p] = {
+                    "skipped": "No URL found",
+                    "checked_keys": [f"{p}_upscale_url", f"{p}_video_url"],
+                    "available_keys_with_values": scene_keys
+                }
+                continue
+                
+            scene_debug["videos"][p] = {
+                "url": url,
+                "media_id": media_id,
+                "is_upscale": is_upscale,
+                "local_exists_initially": False,
+                "get_media_attempted": False,
+                "get_media_success": False,
+                "get_media_error": None,
+                "http_download_attempted": False,
+                "http_download_success": False,
+                "http_download_error": None,
+                "local_path_resolved": None,
+                "zip_error": None
+            }
+            
+            task = download_video_task(url, media_id, project_slug, display_order, scene_id, is_upscale, scene_debug["videos"], p)
+            tasks.append(task)
+            task_metadata.append({
+                "scene_idx": scene_idx,
+                "scene": scene,
+                "orientation": p,
+                "media_id": media_id,
+                "is_upscale": is_upscale,
+                "display_order": display_order,
+                "scene_id": scene_id
+            })
+            
+        debug_details.append(scene_debug)
+        
+    # Execute downloads in parallel
+    if tasks:
+        logger.info("Launching parallel downloads of %d videos...", len(tasks))
+        download_results = await asyncio.gather(*tasks)
+        logger.info("Parallel downloads completed.")
+    else:
+        download_results = []
+        
+    # Phase 2: Add files to zip sequentially (thread-safe and extremely fast)
     temp_dir = Path(tempfile.mkdtemp())
     zip_path = temp_dir / f"{project_slug}_videos.zip"
-    
     video_added = False
     
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        for scene_idx, scene in enumerate(scenes):
-            display_order = 0
-            for prefix in ("vertical", "horizontal"):
-                for key in (f"{prefix}_video_media_id", f"{prefix}_upscale_media_id"):
-                    m_id = scene.get(key)
-                    if m_id and m_id in local_order_map:
-                        display_order = local_order_map[m_id]
-                        break
-                if display_order:
-                    break
-            if not display_order:
-                display_order = scene.get("display_order", 0) or (scene_idx + 1)
-                
-            scene_id = scene.get("id", f"scene_{scene_idx}")
-            scene_debug = {
-                "scene_id": scene_id,
-                "display_order": display_order,
-                "prompt": scene.get("prompt_content", "") or scene.get("prompt", ""),
-                "videos": {}
-            }
+        for idx, (local_path, temp_path) in enumerate(download_results):
+            meta = task_metadata[idx]
+            scene = meta["scene"]
+            p = meta["orientation"]
+            media_id = meta["media_id"]
+            is_upscale = meta["is_upscale"]
+            display_order = meta["display_order"]
+            scene_id = meta["scene_id"]
+            scene_idx = meta["scene_idx"]
             
-            for p in ("vertical", "horizontal"):
-                url = None
-                media_id = None
-                is_upscale = False
-                
-                if body.upscale_resolution in ("VIDEO_RESOLUTION_1080P", "VIDEO_RESOLUTION_4K"):
-                    url = scene.get(f"{p}_upscale_url")
-                    media_id = scene.get(f"{p}_upscale_media_id")
-                    is_upscale = True
-                    
-                # Fallback to standard
-                if not url:
-                    url = scene.get(f"{p}_video_url")
-                    media_id = scene.get(f"{p}_video_media_id")
-                    is_upscale = False
-                    
-                if not url:
-                    scene_keys = [k for k, v in scene.items() if v]
-                    scene_debug["videos"][p] = {
-                        "skipped": "No URL found",
-                        "checked_keys": [f"{p}_upscale_url", f"{p}_video_url"],
-                        "available_keys_with_values": scene_keys
-                    }
-                    continue
-                    
-                vid_debug = {
-                    "url": url,
-                    "media_id": media_id,
-                    "is_upscale": is_upscale,
-                    "local_exists_initially": False,
-                    "get_media_attempted": False,
-                    "get_media_success": False,
-                    "get_media_error": None,
-                    "http_download_attempted": False,
-                    "http_download_success": False,
-                    "http_download_error": None,
-                    "local_path_resolved": None
-                }
-                
-                local_path = resolve_local_file(url, media_id, project_slug, display_order, scene_id, is_upscale)
-                temp_downloaded_path = None
-                
-                if local_path and local_path.exists():
-                    vid_debug["local_exists_initially"] = True
-                    vid_debug["local_path_resolved"] = str(local_path)
-                
-                if not local_path and media_id:
-                    vid_debug["get_media_attempted"] = True
-                    client = get_flow_client()
-                    if client.connected:
-                        try:
-                            cache_dir = Path("output/_workflow_videos")
-                            cache_dir.mkdir(parents=True, exist_ok=True)
-                            suffix = "_upscaled" if is_upscale else ""
-                            cache_path = cache_dir / f"{media_id}{suffix}.mp4"
+            scene_debug = debug_details[scene_idx]
+            vid_debug = scene_debug["videos"][p]
+            
+            if local_path and local_path.exists():
+                try:
+                    img_name = None
+                    if media_id:
+                        img_name = local_image_name_map.get(media_id)
+                    if not img_name:
+                        std_m = scene.get(f"{p}_video_media_id")
+                        if std_m:
+                            img_name = local_image_name_map.get(std_m)
                             
-                            logger.info("File for media %s missing locally. Attempting fallback download via Google Flow get_media...", media_id[:12])
-                            from agent.services.video_reviewer import _download_via_get_media
-                            await _download_via_get_media(media_id, cache_path, body.project_id)
-                            if cache_path.exists():
-                                local_path = cache_path
-                                vid_debug["get_media_success"] = True
-                                vid_debug["local_path_resolved"] = str(cache_path)
-                                logger.info("Successfully downloaded and cached video via get_media fallback: %s", cache_path)
+                    if not img_name:
+                        img_url = scene.get(f"{p}_image_url")
+                        if img_url:
+                            if img_url.startswith("file://"):
+                                img_name = Path(img_url[7:]).stem
                             else:
-                                vid_debug["get_media_error"] = "cache_path did not exist after download function"
-                        except Exception as e:
-                            vid_debug["get_media_error"] = str(e)
-                            logger.warning("Failed get_media download fallback for %s: %s", media_id[:12], e)
-                    else:
-                        vid_debug["get_media_error"] = "Extension is not connected"
+                                img_name = Path(img_url).stem
+                        if img_name:
+                            import re
+                            if project_slug and img_name.startswith(f"{project_slug}_"):
+                                img_name = img_name[len(project_slug) + 1:]
+                            img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
+                            img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
                             
-                if not local_path and url.startswith("http"):
-                    vid_debug["http_download_attempted"] = True
-                    try:
-                        temp_downloaded_path = await download_file_to_temp(url)
-                        local_path = temp_downloaded_path
-                        vid_debug["http_download_success"] = True
-                        vid_debug["local_path_resolved"] = str(temp_downloaded_path)
+                    if not img_name:
+                        not_mapped_counter += 1
+                        img_name = f"not mapped_{not_mapped_counter}"
+                    
+                    dup_key = f"{p}_{img_name}"
+                    dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
+                    dup_idx = dup_counters[dup_key]
+                    
+                    suffix_str = ""
+                    if is_upscale:
+                        suffix_str += "_upscaled"
+                    if dup_idx > 1:
+                        suffix_str += f"_{dup_idx}"
+                    arcname = f"{img_name}{suffix_str}.mp4"
                         
-                        # Cache the file locally to avoid re-downloading next time
-                        if media_id:
-                            cache_dir = Path("output/_workflow_videos")
-                            cache_dir.mkdir(parents=True, exist_ok=True)
-                            suffix = "_upscaled" if is_upscale else ""
-                            cache_path = cache_dir / f"{media_id}{suffix}.mp4"
-                            import shutil
-                            try:
-                                shutil.copy2(temp_downloaded_path, cache_path)
-                                vid_debug["local_path_resolved"] = str(cache_path)
-                                logger.info("Cached downloaded video to %s", cache_path)
-                            except Exception as ce:
-                                logger.warning("Failed to cache downloaded file to %s: %s", cache_path, ce)
-                    except Exception as e:
-                        vid_debug["http_download_error"] = str(e)
-                        logger.warning("Failed to download remote file for scene %s: %s", scene_id, e)
-                        
-                if local_path and local_path.exists():
-                    try:
-                        orient_suffix = "vertical" if p == "vertical" else "horizontal"
-                        upscale_suffix = "_upscaled" if is_upscale else ""
-                        
-                        img_name = None
-                        if media_id:
-                            img_name = local_image_name_map.get(media_id)
-                        if not img_name:
-                            std_m = scene.get(f"{p}_video_media_id")
-                            if std_m:
-                                img_name = local_image_name_map.get(std_m)
-                                
-                        if not img_name:
-                            img_url = scene.get(f"{p}_image_url")
-                            if img_url:
-                                if img_url.startswith("file://"):
-                                    img_name = Path(img_url[7:]).stem
-                                else:
-                                    img_name = Path(img_url).stem
-                            if img_name:
-                                import re
-                                if project_slug and img_name.startswith(f"{project_slug}_"):
-                                    img_name = img_name[len(project_slug) + 1:]
-                                img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
-                                img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
-                                
-                        if not img_name:
-                            not_mapped_counter += 1
-                            img_name = f"not mapped_{not_mapped_counter}"
-                        
-                        dup_key = f"{p}_{img_name}"
-                        dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
-                        dup_idx = dup_counters[dup_key]
-                        
-                        suffix_str = ""
-                        if is_upscale:
-                            suffix_str += "_upscaled"
-                        if dup_idx > 1:
-                            suffix_str += f"_{dup_idx}"
-                        arcname = f"{img_name}{suffix_str}.mp4"
-                            
-                        zip_file.write(local_path, arcname=arcname)
-                        video_added = True
-                        vid_debug["added_to_zip_as"] = arcname
-                        
-                        if temp_downloaded_path and temp_downloaded_path.exists():
-                            try:
-                                temp_downloaded_path.unlink()
-                            except Exception:
-                                pass
-                    except Exception as ze:
-                        vid_debug["zip_error"] = str(ze)
-                else:
-                    vid_debug["zip_error"] = "No local file to write"
-                
-                scene_debug["videos"][p] = vid_debug
-            
-            debug_details.append(scene_debug)
+                    zip_file.write(local_path, arcname=arcname)
+                    video_added = True
+                    vid_debug["added_to_zip_as"] = arcname
+                    
+                    if temp_path and temp_path.exists():
+                        try:
+                            temp_path.unlink()
+                        except Exception:
+                            pass
+                except Exception as ze:
+                    vid_debug["zip_error"] = str(ze)
+            else:
+                vid_debug["zip_error"] = "No local file to write to zip"
                             
     if not video_added or not zip_path.exists() or zip_path.stat().st_size == 0:
         cleanup_temp_dir(temp_dir)
