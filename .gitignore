@@ -46,3 +46,4 @@ config_mac.json
 
 # OS files
 .DS_Store
+/output

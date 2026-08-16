@@ -1960,6 +1960,8 @@ def set_default(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed writing config: {e}")
 
 
+
+
 @app.get("/logs")
 def logs() -> StreamingResponse:
     sid, q = log_bus.subscribe()

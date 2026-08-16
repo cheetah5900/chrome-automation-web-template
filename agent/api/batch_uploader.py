@@ -909,7 +909,96 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
             
         logger.info("Fallback global scan extracted %d virtual scenes from project data", len(scenes))
             
-    return scenes
+    
+async def save_synced_scenes_to_db(project_id: str, scenes: list[dict]):
+    from agent.db.schema import get_db, _db_lock
+    from agent.db.crud import _now
+    
+    # 1. Get or create project in DB
+    project = await crud.get_project(project_id)
+    if not project:
+        proj_name = f"Synced Project ({project_id[:8]})"
+        await crud.create_project(id=project_id, name=proj_name)
+        
+    # 2. Get or create video in DB
+    videos = await crud.list_videos(project_id)
+    if videos:
+        video_id = videos[0]["id"]
+    else:
+        v = await crud.create_video(project_id, title="Synced Video")
+        video_id = v["id"]
+        
+    # 3. Upsert scenes in DB
+    db = await get_db()
+    async with _db_lock:
+        for s in scenes:
+            w_id = s["id"]
+            display_order = s["display_order"]
+            prompt = s["prompt_content"]
+            
+            vertical_video_media_id = s.get("vertical_video_media_id")
+            horizontal_video_media_id = s.get("horizontal_video_media_id")
+            vertical_upscale_media_id = s.get("vertical_upscale_media_id")
+            horizontal_upscale_media_id = s.get("horizontal_upscale_media_id")
+            
+            vertical_image_media_id = s.get("vertical_image_media_id")
+            horizontal_image_media_id = s.get("horizontal_image_media_id")
+            
+            v_status = 'COMPLETED' if vertical_video_media_id else 'PENDING'
+            h_status = 'COMPLETED' if horizontal_video_media_id else 'PENDING'
+            v_up_status = 'COMPLETED' if vertical_upscale_media_id else 'PENDING'
+            h_up_status = 'COMPLETED' if horizontal_upscale_media_id else 'PENDING'
+            v_img_status = 'COMPLETED' if vertical_image_media_id else 'PENDING'
+            h_img_status = 'COMPLETED' if horizontal_image_media_id else 'PENDING'
+            
+            # Check if scene exists
+            cur = await db.execute("SELECT id FROM scene WHERE id=?", (w_id,))
+            exists = await cur.fetchone()
+            
+            now = _now()
+            if exists:
+                await db.execute(
+                    """UPDATE scene SET 
+                       display_order=?, prompt=?, 
+                       vertical_video_media_id=?, horizontal_video_media_id=?,
+                       vertical_upscale_media_id=?, horizontal_upscale_media_id=?,
+                       vertical_image_media_id=?, horizontal_image_media_id=?,
+                       vertical_video_status=?, horizontal_video_status=?,
+                       vertical_upscale_status=?, horizontal_upscale_status=?,
+                       vertical_image_status=?, horizontal_image_status=?,
+                       updated_at=?
+                       WHERE id=?""",
+                    (display_order, prompt,
+                     vertical_video_media_id, horizontal_video_media_id,
+                     vertical_upscale_media_id, horizontal_upscale_media_id,
+                     vertical_image_media_id, horizontal_image_media_id,
+                     v_status, h_status,
+                     v_up_status, h_up_status,
+                     v_img_status, h_img_status,
+                     now, w_id)
+                )
+            else:
+                await db.execute(
+                    """INSERT INTO scene (
+                       id, video_id, display_order, prompt,
+                       vertical_video_media_id, horizontal_video_media_id,
+                       vertical_upscale_media_id, horizontal_upscale_media_id,
+                       vertical_image_media_id, horizontal_image_media_id,
+                       vertical_video_status, horizontal_video_status,
+                       vertical_upscale_status, horizontal_upscale_status,
+                       vertical_image_status, horizontal_image_status,
+                       created_at, updated_at
+                       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (w_id, video_id, display_order, prompt,
+                     vertical_video_media_id, horizontal_video_media_id,
+                     vertical_upscale_media_id, horizontal_upscale_media_id,
+                     vertical_image_media_id, horizontal_image_media_id,
+                     v_status, h_status,
+                     v_up_status, h_up_status,
+                     v_img_status, h_img_status,
+                     now, now)
+                )
+        await db.commit()
 
 async def sync_project_from_flow(project_id: str, client) -> list[dict]:
     import urllib.parse
@@ -938,6 +1027,10 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
             scenes = extract_scenes_from_flow_project(res)
             if scenes:
                 logger.info("Successfully synced %d scenes via flow.projectInitialData", len(scenes))
+                try:
+                    await save_synced_scenes_to_db(project_id, scenes)
+                except Exception as dbe:
+                    logger.warning("Failed to save synced scenes to database: %s", dbe)
                 return scenes
     except Exception as e:
         logger.warning("Failed to fetch flow.projectInitialData: %s. Falling back to paginated search.", e)
@@ -1016,7 +1109,14 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
             seen_ids.add(sid)
         unique_scenes.append(s)
         
+    if unique_scenes:
+        try:
+            await save_synced_scenes_to_db(project_id, unique_scenes)
+        except Exception as dbe:
+            logger.warning("Failed to save synced scenes to database: %s", dbe)
+            
     return unique_scenes
+
 
 
 class UpscaleProjectRequest(BaseModel):
@@ -1752,32 +1852,23 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                 videos_debug[p]["local_path_resolved"] = str(local_path)
                 return local_path, None
                 
-            temp_downloaded_path = None
-            if not local_path and media_id:
-                videos_debug[p]["get_media_attempted"] = True
-                client = get_flow_client()
-                if client.connected:
-                    try:
-                        cache_dir = Path("output/_workflow_videos")
-                        cache_dir.mkdir(parents=True, exist_ok=True)
-                        suffix = "_upscaled" if is_upscale else ""
-                        cache_path = cache_dir / f"{media_id}{suffix}.mp4"
-                        
-                        logger.info("Parallel download fallback: media %s missing locally. Fetching via Google Flow get_media...", media_id[:12])
-                        from agent.services.video_reviewer import _download_via_get_media
-                        await _download_via_get_media(media_id, cache_path, body.project_id)
-                        if cache_path.exists():
-                            videos_debug[p]["get_media_success"] = True
-                            videos_debug[p]["local_path_resolved"] = str(cache_path)
-                            return cache_path, None
+            # If the file doesn't exist locally, check if we have a fresh GCS URL in local database
+            db_url = None
+            if scene_id:
+                try:
+                    db_scene = await crud.get_scene(scene_id)
+                    if db_scene:
+                        if is_upscale:
+                            db_url = db_scene.get(f"{p}_upscale_url")
                         else:
-                            videos_debug[p]["get_media_error"] = "cache_path did not exist after download function"
-                    except Exception as e:
-                        videos_debug[p]["get_media_error"] = str(e)
-                        logger.warning("Failed get_media download fallback for %s: %s", media_id[:12], e)
-                else:
-                    videos_debug[p]["get_media_error"] = "Extension is not connected"
-                    
+                            db_url = db_scene.get(f"{p}_video_url")
+                        if db_url and db_url.startswith("http"):
+                            logger.info("Found cached GCS URL in DB for scene %s: %s", scene_id, db_url[:80])
+                            url = db_url
+                except Exception as dbe:
+                    logger.warning("Failed to lookup GCS URL in DB for scene %s: %s", scene_id, dbe)
+
+            temp_downloaded_path = None
             if not local_path and url.startswith("http"):
                 videos_debug[p]["http_download_attempted"] = True
                 try:
@@ -1802,6 +1893,31 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                 except Exception as e:
                     videos_debug[p]["http_download_error"] = str(e)
                     logger.warning("Failed to download remote file for scene %s: %s", scene_id, e)
+                    
+            if (not local_path or not local_path.exists()) and media_id:
+                videos_debug[p]["get_media_attempted"] = True
+                client = get_flow_client()
+                if client.connected:
+                    try:
+                        cache_dir = Path("output/_workflow_videos")
+                        cache_dir.mkdir(parents=True, exist_ok=True)
+                        suffix = "_upscaled" if is_upscale else ""
+                        cache_path = cache_dir / f"{media_id}{suffix}.mp4"
+                        
+                        logger.info("Parallel download fallback: media %s missing locally. Fetching via Google Flow get_media...", media_id[:12])
+                        from agent.services.video_reviewer import _download_via_get_media
+                        await _download_via_get_media(media_id, cache_path, body.project_id)
+                        if cache_path.exists():
+                            videos_debug[p]["get_media_success"] = True
+                            videos_debug[p]["local_path_resolved"] = str(cache_path)
+                            return cache_path, None
+                        else:
+                            videos_debug[p]["get_media_error"] = "cache_path did not exist after download function"
+                    except Exception as e:
+                        videos_debug[p]["get_media_error"] = str(e)
+                        logger.warning("Failed get_media download fallback for %s: %s", media_id[:12], e)
+                else:
+                    videos_debug[p]["get_media_error"] = "Extension is not connected"
                     
             return local_path, temp_downloaded_path
 

@@ -148,7 +148,7 @@ class FlowClient:
             self._sync_in_progress = False
 
     _UUID_RE = __import__("re").compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-    _SAFE_URL_RE = __import__("re").compile(r'^https://(storage\.googleapis\.com|lh3\.googleusercontent\.com)/')
+    _SAFE_URL_RE = __import__("re").compile(r'^https://([a-zA-Z0-9-.]*\.googleapis\.com|[a-zA-Z0-9-.]*\.googleusercontent\.com|[a-zA-Z0-9-.]*\.google\.com|[a-zA-Z0-9-.]*\.google)/')
 
     async def _refresh_media_urls(self, urls: list[dict]):
         """Update scene/character URLs in DB from fresh TRPC-captured signed URLs.
@@ -170,9 +170,34 @@ class FlowClient:
                 logger.warning("Rejected invalid media_id: %s", media_id[:20])
                 continue
             if not self._SAFE_URL_RE.match(url):
-                logger.warning("Rejected untrusted URL domain for media %s", media_id[:12])
+                logger.warning("Rejected untrusted URL domain for media %s: %s", media_id[:12], url)
                 continue
-            if media_type not in ("image", "video"):
+            # If media_type not specified or invalid, check matching database fields directly
+            if not media_type or media_type not in ("image", "video"):
+                scenes = await crud.list_scenes_by_media_id(media_id)
+                for scene in scenes:
+                    updates = {}
+                    if scene.get("vertical_image_media_id") == media_id:
+                        updates["vertical_image_url"] = url
+                    if scene.get("horizontal_image_media_id") == media_id:
+                        updates["horizontal_image_url"] = url
+                    if scene.get("vertical_video_media_id") == media_id:
+                        updates["vertical_video_url"] = url
+                    if scene.get("horizontal_video_media_id") == media_id:
+                        updates["horizontal_video_url"] = url
+                    if scene.get("vertical_upscale_media_id") == media_id:
+                        updates["vertical_upscale_url"] = url
+                    if scene.get("horizontal_upscale_media_id") == media_id:
+                        updates["horizontal_upscale_url"] = url
+                    if updates:
+                        await crud.update_scene(scene["id"], **updates)
+                        updated += 1
+
+                chars = await crud.list_characters_by_media_id(media_id)
+                for char in chars:
+                    if char.get("media_id") == media_id:
+                        await crud.update_character(char["id"], reference_image_url=url)
+                        updated += 1
                 continue
 
             # Try matching against scenes (check both orientations)
@@ -622,9 +647,76 @@ class FlowClient:
         return isinstance(status, int) and status == 200
 
     async def get_media(self, media_id: str, project_id: str = "") -> dict:
-        """Fetch media metadata from Google Flow, trying multiple potential paths and query parameters."""
+        """Fetch media metadata from Google Flow, trying direct redirect download first, then falling back."""
         clean_id = media_id.replace("media/", "") if media_id else ""
         
+        # Try direct GCS download by checking database or triggering prefetch
+        if clean_id:
+            try:
+                # Check if we already have it in DB
+                gcs_url = None
+                from agent.db import crud
+                scenes = await crud.list_scenes_by_media_id(clean_id)
+                for scene in scenes:
+                    for p in ["vertical_video", "horizontal_video", "vertical_image", "horizontal_image", "vertical_upscale", "horizontal_upscale"]:
+                        if scene.get(f"{p}_media_id") == clean_id:
+                            val = scene.get(f"{p}_url")
+                            if val and val.startswith("http"):
+                                gcs_url = val
+                                break
+                    if gcs_url:
+                        break
+                        
+                # If not in DB, trigger prefetch through the extension and poll
+                if not gcs_url and self._extension_ws:
+                    logger.info("GCS URL not in DB for %s. Triggering extension prefetch...", clean_id[:12])
+                    await self._extension_ws.send(json.dumps({
+                        "method": "trigger_media_prefetch",
+                        "params": {"mediaId": clean_id}
+                    }))
+                    
+                    # Poll SQLite for up to 4 seconds
+                    for attempt in range(40):
+                        await asyncio.sleep(0.1)
+                        scenes = await crud.list_scenes_by_media_id(clean_id)
+                        for scene in scenes:
+                            for p in ["vertical_video", "horizontal_video", "vertical_image", "horizontal_image", "vertical_upscale", "horizontal_upscale"]:
+                                if scene.get(f"{p}_media_id") == clean_id:
+                                    val = scene.get(f"{p}_url")
+                                    if val and val.startswith("http"):
+                                        gcs_url = val
+                                        break
+                            if gcs_url:
+                                break
+                        if gcs_url:
+                            logger.info("Prefetch matched GCS URL in DB on attempt %d: %s", attempt+1, gcs_url[:80])
+                            break
+                            
+                # If we have a GCS URL, download it directly in python (it does not require cookies)
+                if gcs_url and gcs_url.startswith("http"):
+                    logger.info("Downloading direct GCS URL via python for media %s...", clean_id[:12])
+                    import aiohttp
+                    import base64
+                    connector = aiohttp.TCPConnector(ssl=False)
+                    async with aiohttp.ClientSession(connector=connector) as session:
+                        async with session.get(gcs_url) as resp:
+                            if resp.status == 200:
+                                body = await resp.read()
+                                encoded = base64.b64encode(body).decode("utf-8")
+                                logger.info("Direct GCS download succeeded for media %s (%d bytes)", clean_id[:12], len(body))
+                                return {
+                                    "video": {
+                                        "encodedVideo": encoded
+                                    },
+                                    "image": {
+                                        "encodedImage": encoded
+                                    }
+                                }
+                            else:
+                                logger.warning("Direct GCS download failed: HTTP %d", resp.status)
+            except Exception as e:
+                logger.warning("Failed direct GCS prefetch/download attempt for %s: %s", clean_id[:12], e)
+
         paths_to_try = []
         if project_id and clean_id:
             paths_to_try.append(f"/v1/projects/{project_id}/flowMedia/{clean_id}")

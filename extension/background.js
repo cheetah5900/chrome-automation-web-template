@@ -62,6 +62,31 @@ function broadcastRequestLog() {
   chrome.runtime.sendMessage({ type: 'REQUEST_LOG_UPDATE', log: requestLog }).catch(() => {});
 }
 
+chrome.webRequest.onBeforeRedirect.addListener(
+  (details) => {
+    try {
+      const originalUrl = details.url || '';
+      const redirectUrl = details.redirectUrl || '';
+      if (originalUrl.includes('/media.getMediaUrlRedirect') && redirectUrl.startsWith('https://')) {
+        const u = new URL(originalUrl);
+        const mediaId = u.searchParams.get('name');
+        if (mediaId && redirectUrl) {
+          console.log('[FlowAgent] Intercepted redirect for media:', mediaId, '->', redirectUrl.slice(0, 100));
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'media_urls_refresh',
+              urls: [{ mediaId, url: redirectUrl }]
+            }));
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[FlowAgent] onBeforeRedirect error:', e);
+    }
+  },
+  { urls: ['*://labs.google/fx/api/trpc/media.getMediaUrlRedirect*'] }
+);
+
 // ─── Startup ────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(init);
@@ -205,6 +230,14 @@ function connectToAgent() {
 
       if (msg.method === 'api_request') {
         await handleApiRequest(msg);
+      } else if (msg.method === 'trigger_media_prefetch') {
+        const { mediaId } = msg.params || {};
+        if (mediaId) {
+          console.log('[FlowAgent] Triggering prefetch for media:', mediaId);
+          fetch(`https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=${mediaId}`, {
+            credentials: 'include'
+          }).catch(() => {}); // Ignore CORS fetch errors, we only need the redirect hook
+        }
       } else if (msg.method === 'trpc_request') {
         await handleTrpcRequest(msg);
       } else if (msg.method === 'solve_captcha') {
@@ -434,7 +467,7 @@ async function handleApiRequest(msg) {
     return;
   }
 
-  if (!url.startsWith('https://aisandbox-pa.googleapis.com/')) {
+  if (!url.startsWith('https://aisandbox-pa.googleapis.com/') && !url.startsWith('https://labs.google/')) {
     sendToAgent({ id, error: 'INVALID_URL' });
     return;
   }
@@ -505,7 +538,11 @@ async function handleApiRequest(msg) {
     }
 
     const fetchHeaders = { ...(headers || {}) };
-    fetchHeaders['authorization'] = `Bearer ${activeFlowKey}`;
+    if (!url.startsWith('https://labs.google/')) {
+      fetchHeaders['authorization'] = `Bearer ${activeFlowKey}`;
+    }
+
+
 
     // Step 4: Make the API call from browser context
     const response = await fetch(url, {
