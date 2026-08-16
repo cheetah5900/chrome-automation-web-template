@@ -2224,6 +2224,8 @@ function applyVideoPreset(presetName) {
 
 let globalFlowVideoPresets = {};
 let globalFlowPoPresets = {};
+window.isApplyingFlowVideoPreset = false;
+window.isApplyingFlowPoPreset = false;
 
 function loadFlowVideoPresets(presets) {
   globalFlowVideoPresets = presets || {};
@@ -2249,66 +2251,89 @@ function renderFlowVideoPresetsSelect(selectedKey = '') {
   }
 }
 
+function clearFlowVideoPresetSelect() {
+  if (window.isApplyingFlowVideoPreset) return;
+  const select = document.getElementById('flowVideoPresetSelect');
+  if (select) {
+    select.value = '';
+  }
+  localStorage.removeItem('flowVideoLastPreset');
+}
+
+function clearFlowPoPresetSelect() {
+  if (window.isApplyingFlowPoPreset) return;
+  const select = document.getElementById('flowPoPresetSelect');
+  if (select) {
+    select.value = '';
+  }
+  localStorage.removeItem('flowPoLastPreset');
+}
+
 function applyFlowVideoPreset(presetName) {
-  if (!presetName || !globalFlowVideoPresets[presetName]) {
-    const proj = document.getElementById('cfg_flow_project_dropdown');
-    if (proj) proj.selectedIndex = 0;
-    const model = document.getElementById('cfg_flow_video_model');
-    if (model) {
-      model.value = '';
-      delete model.dataset.pendingValue;
+  window.isApplyingFlowVideoPreset = true;
+  try {
+    if (!presetName || !globalFlowVideoPresets[presetName]) {
+      const proj = document.getElementById('cfg_flow_project_dropdown');
+      if (proj) proj.selectedIndex = 0;
+      const model = document.getElementById('cfg_flow_video_model');
+      if (model) {
+        model.value = '';
+        delete model.dataset.pendingValue;
+      }
+      const orientation = document.getElementById('cfg_flow_orientation');
+      if (orientation) orientation.value = 'VERTICAL';
+      const outputCount = document.getElementById('cfg_flow_output_count');
+      if (outputCount) outputCount.value = '1';
+      const upscale = document.getElementById('cfg_flow_upscale_auto');
+      if (upscale) upscale.value = 'NONE';
+      return;
     }
+    
+    const preset = globalFlowVideoPresets[presetName];
+    
+    const proj = document.getElementById('cfg_flow_project_dropdown');
+    if (proj && preset.project_id !== undefined) {
+      proj.value = preset.project_id;
+      proj.dispatchEvent(new Event('change'));
+    }
+    
+    const model = document.getElementById('cfg_flow_video_model');
+    if (model && preset.video_model !== undefined) {
+      model.dataset.pendingValue = preset.video_model;
+      model.value = preset.video_model;
+    }
+    
     const orientation = document.getElementById('cfg_flow_orientation');
-    if (orientation) orientation.value = 'VERTICAL';
+    if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
+    
     const outputCount = document.getElementById('cfg_flow_output_count');
-    if (outputCount) outputCount.value = '1';
+    if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
+    
     const upscale = document.getElementById('cfg_flow_upscale_auto');
-    if (upscale) upscale.value = 'NONE';
-    return;
+    if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
+    
+    const lakornPath = document.getElementById('cfg_flow_lakorn_path');
+    if (lakornPath && preset.lakorn_path !== undefined) {
+      lakornPath.value = preset.lakorn_path;
+      lakornPath.dispatchEvent(new Event('input'));
+    }
+    
+    const lakornTon = document.getElementById('cfg_flow_lakorn_ton');
+    if (lakornTon && preset.lakorn_ton !== undefined) {
+      lakornTon.value = preset.lakorn_ton;
+      lakornTon.dispatchEvent(new Event('input'));
+    }
+    
+    const lakornEp = document.getElementById('cfg_flow_lakorn_ep');
+    if (lakornEp && preset.lakorn_ep !== undefined) {
+      lakornEp.value = preset.lakorn_ep;
+      lakornEp.dispatchEvent(new Event('input'));
+    }
+    
+    updateTooltips();
+  } finally {
+    window.isApplyingFlowVideoPreset = false;
   }
-  
-  const preset = globalFlowVideoPresets[presetName];
-  
-  const proj = document.getElementById('cfg_flow_project_dropdown');
-  if (proj && preset.project_id !== undefined) {
-    proj.value = preset.project_id;
-    proj.dispatchEvent(new Event('change'));
-  }
-  
-  const model = document.getElementById('cfg_flow_video_model');
-  if (model && preset.video_model !== undefined) {
-    model.dataset.pendingValue = preset.video_model;
-    model.value = preset.video_model;
-  }
-  
-  const orientation = document.getElementById('cfg_flow_orientation');
-  if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
-  
-  const outputCount = document.getElementById('cfg_flow_output_count');
-  if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
-  
-  const upscale = document.getElementById('cfg_flow_upscale_auto');
-  if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
-  
-  const lakornPath = document.getElementById('cfg_flow_lakorn_path');
-  if (lakornPath && preset.lakorn_path !== undefined) {
-    lakornPath.value = preset.lakorn_path;
-    lakornPath.dispatchEvent(new Event('input'));
-  }
-  
-  const lakornTon = document.getElementById('cfg_flow_lakorn_ton');
-  if (lakornTon && preset.lakorn_ton !== undefined) {
-    lakornTon.value = preset.lakorn_ton;
-    lakornTon.dispatchEvent(new Event('input'));
-  }
-  
-  const lakornEp = document.getElementById('cfg_flow_lakorn_ep');
-  if (lakornEp && preset.lakorn_ep !== undefined) {
-    lakornEp.value = preset.lakorn_ep;
-    lakornEp.dispatchEvent(new Event('input'));
-  }
-  
-  updateTooltips();
 }
 
 async function saveFlowVideoPreset() {
@@ -2402,52 +2427,57 @@ function renderFlowPoPresetsSelect(selectedKey = '') {
 }
 
 function applyFlowPoPreset(presetName) {
-  if (!presetName || !globalFlowPoPresets[presetName]) {
-    const proj = document.getElementById('cfg_flow_po_project_dropdown');
-    if (proj) proj.selectedIndex = 0;
-    const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
-    if (promptsPath) promptsPath.value = '';
-    const model = document.getElementById('cfg_flow_po_video_model');
-    if (model) {
-      model.value = '';
-      delete model.dataset.pendingValue;
+  window.isApplyingFlowPoPreset = true;
+  try {
+    if (!presetName || !globalFlowPoPresets[presetName]) {
+      const proj = document.getElementById('cfg_flow_po_project_dropdown');
+      if (proj) proj.selectedIndex = 0;
+      const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
+      if (promptsPath) promptsPath.value = '';
+      const model = document.getElementById('cfg_flow_po_video_model');
+      if (model) {
+        model.value = '';
+        delete model.dataset.pendingValue;
+      }
+      const orientation = document.getElementById('cfg_flow_po_orientation');
+      if (orientation) orientation.value = 'VERTICAL';
+      const outputCount = document.getElementById('cfg_flow_po_output_count');
+      if (outputCount) outputCount.value = '1';
+      const upscale = document.getElementById('cfg_flow_po_upscale_auto');
+      if (upscale) upscale.value = 'NONE';
+      return;
     }
+    
+    const preset = globalFlowPoPresets[presetName];
+    
+    const proj = document.getElementById('cfg_flow_po_project_dropdown');
+    if (proj && preset.project_id !== undefined) {
+      proj.value = preset.project_id;
+      proj.dispatchEvent(new Event('change'));
+    }
+    
+    const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
+    if (promptsPath && preset.prompts_path !== undefined) promptsPath.value = preset.prompts_path;
+    
+    const model = document.getElementById('cfg_flow_po_video_model');
+    if (model && preset.video_model !== undefined) {
+      model.dataset.pendingValue = preset.video_model;
+      model.value = preset.video_model;
+    }
+    
     const orientation = document.getElementById('cfg_flow_po_orientation');
-    if (orientation) orientation.value = 'VERTICAL';
+    if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
+    
     const outputCount = document.getElementById('cfg_flow_po_output_count');
-    if (outputCount) outputCount.value = '1';
+    if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
+    
     const upscale = document.getElementById('cfg_flow_po_upscale_auto');
-    if (upscale) upscale.value = 'NONE';
-    return;
+    if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
+    
+    updateTooltips();
+  } finally {
+    window.isApplyingFlowPoPreset = false;
   }
-  
-  const preset = globalFlowPoPresets[presetName];
-  
-  const proj = document.getElementById('cfg_flow_po_project_dropdown');
-  if (proj && preset.project_id !== undefined) {
-    proj.value = preset.project_id;
-    proj.dispatchEvent(new Event('change'));
-  }
-  
-  const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
-  if (promptsPath && preset.prompts_path !== undefined) promptsPath.value = preset.prompts_path;
-  
-  const model = document.getElementById('cfg_flow_po_video_model');
-  if (model && preset.video_model !== undefined) {
-    model.dataset.pendingValue = preset.video_model;
-    model.value = preset.video_model;
-  }
-  
-  const orientation = document.getElementById('cfg_flow_po_orientation');
-  if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
-  
-  const outputCount = document.getElementById('cfg_flow_po_output_count');
-  if (outputCount && preset.output_count !== undefined) outputCount.value = preset.output_count;
-  
-  const upscale = document.getElementById('cfg_flow_po_upscale_auto');
-  if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
-  
-  updateTooltips();
 }
 
 async function saveFlowPoPreset() {
@@ -3872,6 +3902,13 @@ function initWorkflowActionListeners() {
     });
   }
 
+  // Clear flow video preset if user modifies any settings manually
+  ['cfg_flow_project_dropdown', 'cfg_flow_video_model', 'cfg_flow_orientation', 'cfg_flow_output_count', 'cfg_flow_upscale_auto'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => {
+      clearFlowVideoPresetSelect();
+    });
+  });
+
   // Flow Prompt-Only presets
   const flowPoPresetSelect = document.getElementById('flowPoPresetSelect');
   if (flowPoPresetSelect) {
@@ -3879,6 +3916,16 @@ function initWorkflowActionListeners() {
       applyFlowPoPreset(e.target.value);
     });
   }
+
+  // Clear flow PO preset if user modifies any settings manually
+  ['cfg_flow_po_project_dropdown', 'cfg_flow_po_video_model', 'cfg_flow_po_orientation', 'cfg_flow_po_output_count', 'cfg_flow_po_upscale_auto'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => {
+      clearFlowPoPresetSelect();
+    });
+  });
+  document.getElementById('cfg_flow_po_prompts_path')?.addEventListener('input', () => {
+    clearFlowPoPresetSelect();
+  });
   const saveFlowPoPresetBtn = document.getElementById('saveFlowPoPresetBtn');
   if (saveFlowPoPresetBtn) {
     saveFlowPoPresetBtn.addEventListener('click', () => {
@@ -6142,6 +6189,7 @@ function initVideoGenListeners() {
   setupSetDefaultBtn('setVideoSettingsSelectorDefaultBtn', 'cfg_video_settings_selector', 'video_settings_selector', 'ตั้งค่า CSS Selector ปุ่มตั้งค่าเรียบร้อยแล้ว');
   setupSetDefaultBtn('setVideoSubmitSelectorDefaultBtn', 'cfg_video_submit_selector', 'video_submit_selector', 'ตั้งค่า CSS Selector ปุ่มส่งพรอพต์เรียบร้อยแล้ว');
   setupSetDefaultBtn('setVideoLakornPathDefaultBtn', 'cfg_video_lakorn_path', 'video_lakorn_path', 'ตั้งค่า ละคร Path (Video) เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+  setupSetDefaultBtn('setFlowLakornPathDefaultBtn', 'cfg_flow_lakorn_path', 'video_lakorn_path', 'ตั้งค่า ละคร Path เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
   setupSetDefaultBtn('setVideoLakornEpDefaultBtn', 'cfg_video_lakorn_ep', 'video_lakorn_ep', 'ตั้งค่า ตอนละคร (Video) เป็นค่าเริ่มต้นเรียบร้อยแล้ว');
 
   const autoRetryCheckbox = document.getElementById('cfg_auto_retry_mode');
@@ -6778,10 +6826,12 @@ function initFlowKitUploaderListeners() {
       el1.addEventListener('input', (e) => {
         el2.value = e.target.value;
         calculateFlowKitPaths();
+        clearFlowVideoPresetSelect();
       });
       el2.addEventListener('input', (e) => {
         el1.value = e.target.value;
         calculateFlowKitPaths();
+        clearFlowVideoPresetSelect();
       });
     }
   };
@@ -6805,8 +6855,14 @@ function initFlowKitUploaderListeners() {
       if (res && res.path) {
         const input = document.getElementById('cfg_flow_lakorn_path');
         const selInput = document.getElementById('cfg_video_lakorn_path');
-        if (input) input.value = res.path;
-        if (selInput) selInput.value = res.path;
+        if (input) {
+          input.value = res.path;
+          input.dispatchEvent(new Event('input'));
+        }
+        if (selInput) {
+          selInput.value = res.path;
+          selInput.dispatchEvent(new Event('input'));
+        }
         calculateFlowKitPaths();
       }
     } catch (err) {
@@ -7798,7 +7854,10 @@ document.getElementById('browseFlowPOPromptsPathBtn')?.addEventListener('click',
     const res = await jsonFetch('/api/batch-uploader/browse-folder', { method: 'POST' });
     if (res && res.path) {
       const input = document.getElementById('cfg_flow_po_prompts_path');
-      if (input) input.value = res.path;
+      if (input) {
+        input.value = res.path;
+        input.dispatchEvent(new Event('input'));
+      }
       localStorage.setItem('flowkit_po_default_prompts_path', res.path);
       saveVideoPrompts(true);
     }
