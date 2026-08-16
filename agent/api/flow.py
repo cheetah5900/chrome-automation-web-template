@@ -25,6 +25,7 @@ class GenerateImageBatchRequest(BaseModel):
     quantity: int = 1
     local_path: Optional[str] = ""
     folder_name: Optional[str] = ""
+    target_directory: Optional[str] = ""
     round_num: int = 1
     prompt_index: int = 1
 
@@ -223,6 +224,85 @@ async def upload_image(body: UploadImageRequest):
     return {"media_id": media_id, "raw": result.get("data", result)}
 
 
+def resolve_storyboard_dir(lakorn_path: str, ton: str, ep: str) -> str:
+    import os
+    import pathlib
+    import re
+    from pathlib import Path
+    
+    if not lakorn_path or not os.path.exists(lakorn_path):
+        return ""
+        
+    p = Path(lakorn_path)
+    ton_val_clean = ton.strip().lower()
+    subdirs = [d for d in p.iterdir() if d.is_dir()]
+    
+    ep_dir = None
+    # 1. Try matching folder that starts with or is exactly the ton number
+    for d in subdirs:
+        name = d.name.lower()
+        if name == ton_val_clean or name.startswith(ton_val_clean + " ") or name.startswith(ton_val_clean + "-"):
+            ep_dir = d
+            break
+            
+    # 2. Try loose match
+    if not ep_dir:
+        for d in subdirs:
+            if ton_val_clean in d.name.lower():
+                ep_dir = d
+                break
+                
+    if not ep_dir:
+        ep_dir = p / ton
+        
+    # Search for storyboard candidate folders
+    storyboard_dir = None
+    for candidate in ["6 - Storyboards", "6-Storyboards", "Storyboards", "storyboards", "3 - Storyboard", "3-Storyboard", "Storyboard", "storyboard"]:
+        cand_path = ep_dir / candidate
+        if cand_path.exists() and cand_path.is_dir():
+            storyboard_dir = cand_path
+            break
+            
+    if not storyboard_dir:
+        storyboard_dir = ep_dir / "6 - Storyboards"
+        
+    # Resolve EP subfolder
+    ep_storyboard_dir = None
+    if ep:
+        ep_val_clean = ep.strip().lower()
+        subdirs_story = [d for d in storyboard_dir.iterdir() if d.is_dir()] if storyboard_dir.exists() else []
+        try:
+            ep_num = int(ep_val_clean)
+            candidates = [f"ep{ep_num:02d}", f"ep{ep_num}", f"episode{ep_num}"]
+        except ValueError:
+            candidates = [ep_val_clean]
+            
+        for d in subdirs_story:
+            name = d.name.lower()
+            if any(c == name or name.startswith(c + " ") or name.startswith(c + "-") for c in candidates):
+                ep_storyboard_dir = d
+                break
+                
+        if not ep_storyboard_dir:
+            for d in subdirs_story:
+                if ep_val_clean in d.name.lower():
+                    ep_storyboard_dir = d
+                    break
+                    
+    if not ep_storyboard_dir:
+        try:
+            ep_num = int(ep.strip())
+            ep_folder = f"EP{ep_num:02d}"
+        except Exception:
+            if not ep.lower().startswith("ep"):
+                ep_folder = f"EP{ep}"
+            else:
+                ep_folder = ep.upper()
+        ep_storyboard_dir = storyboard_dir / ep_folder
+        
+    return str(ep_storyboard_dir)
+
+
 @router.post("/generate-image-batch")
 async def generate_image_batch(body: GenerateImageBatchRequest):
     """Generate image(s) on Google Flow via the Extension, download them locally, and store media IDs."""
@@ -232,6 +312,7 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
     import mimetypes
     import logging
     import httpx
+    import re
 
     logger = logging.getLogger(__name__)
     client = get_flow_client()
@@ -239,16 +320,23 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
         raise HTTPException(503, "Extension not connected")
 
     character_media_ids = []
-    # Filter out empty or blank strings from reference_images
-    ref_images = [img for img in (body.reference_images or []) if img and img.strip()]
+    # If folder settings are provided, resolve reference images
+    if body.reference_images:
+        images_dir = ""
+        if body.target_directory:
+            images_dir = body.target_directory
+        elif body.local_path and body.folder_name:
+            match = re.match(r"ton_(.+)_ep_(.+)", body.folder_name)
+            if match:
+                images_dir = resolve_storyboard_dir(body.local_path, match.group(1), match.group(2))
+            if not images_dir:
+                images_dir = os.path.join(body.local_path, body.folder_name, "Images")
 
-    # If folder settings are provided and there are valid reference images, resolve them
-    if ref_images and body.local_path and body.folder_name:
-        images_dir = os.path.join(body.local_path, body.folder_name, "Images")
-        os.makedirs(images_dir, exist_ok=True)
-        meta_path = os.path.join(images_dir, "flow_media_ids.json")
+        if images_dir:
+            os.makedirs(images_dir, exist_ok=True)
+            meta_path = os.path.join(images_dir, "flow_media_ids.json")
 
-        for ref_img in ref_images:
+        for ref_img in body.reference_images:
             ref_path = ref_img
             if not os.path.isabs(ref_path):
                 ref_path = os.path.join(images_dir, ref_img)
@@ -280,6 +368,7 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
                         mid = upload_res.get("_mediaId")
                         if mid:
                             character_media_ids.append(mid)
+                            logger.info("Uploaded reference image %s, got media ID: %s", filename, mid)
                     except Exception as e:
                         logger.error("Failed to upload reference image %s: %s", filename, e)
 
@@ -303,8 +392,17 @@ async def generate_image_batch(body: GenerateImageBatchRequest):
         return {"success": False, "message": "No media returned from Flow API"}
 
     downloaded_media = []
-    if body.local_path and body.folder_name:
-        images_dir = os.path.join(body.local_path, body.folder_name, "Images")
+    images_dir = ""
+    if body.target_directory:
+        images_dir = body.target_directory
+    elif body.local_path and body.folder_name:
+        match = re.match(r"ton_(.+)_ep_(.+)", body.folder_name)
+        if match:
+            images_dir = resolve_storyboard_dir(body.local_path, match.group(1), match.group(2))
+        if not images_dir:
+            images_dir = os.path.join(body.local_path, body.folder_name, "Images")
+
+    if images_dir:
         os.makedirs(images_dir, exist_ok=True)
         meta_path = os.path.join(images_dir, "flow_media_ids.json")
 

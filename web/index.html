@@ -189,7 +189,7 @@
             <div style="display: flex; gap: 12px; width: 100%; margin-bottom: 12px;">
               <div class="has-tooltip" id="activeRoundsWrapper" style="flex: 1; display: flex; flex-direction: column; gap: 4px; position: relative;">
                 <span style="font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 500;">Active Rounds:</span>
-                <input type="text" id="activeRoundsInput" value="1-10" placeholder="เช่น 1-5, 7, 9" style="padding: 6px 12px; font-size: 0.85rem; border-radius: 8px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.15); color: #fff; height: 35px; width: 100%; box-sizing: border-box; text-align: center; margin-bottom: 0;" />
+                <input type="text" id="activeRoundsInput" value="all" placeholder="เช่น 1-5, 7, 9 หรือ all" style="padding: 6px 12px; font-size: 0.85rem; border-radius: 8px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.15); color: #fff; height: 35px; width: 100%; box-sizing: border-box; text-align: center; margin-bottom: 0;" />
                 <div class="custom-tooltip" id="tooltip_activeRoundsWrapper"></div>
               </div>
               <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
@@ -227,20 +227,20 @@
             </div>
             <p class="section-subtitle" style="margin-bottom: 12px; font-size: 0.8rem;">ชี้ไปยังโฟลเดอร์เดียว แล้วเลือกรูปตามลำดับที่ต้องการแนบเข้าไปในระบบ</p>
             
-            <div class="form-group" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 12px;">
-              <!-- Mode Switcher Cards -->
-              <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-                <div id="btnRefModeLocal" class="ref-mode-card" style="flex: 1; padding: 12px; border-radius: 12px; background: rgba(0,0,0,0.2); border: 2px solid rgba(255,255,255,0.06); cursor: pointer; text-align: center; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; gap: 4px;">
-                  <span style="font-size: 1.3rem;">📂</span>
-                  <span style="font-size: 0.82rem; font-weight: 500; color: rgba(255,255,255,0.65);">รูปจากเครื่อง (Local Images)</span>
-                </div>
-                <div id="btnRefModeProject" class="ref-mode-card" style="flex: 1; padding: 12px; border-radius: 12px; background: rgba(0,0,0,0.2); border: 2px solid rgba(255,255,255,0.06); cursor: pointer; text-align: center; transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; gap: 4px;">
-                  <span style="font-size: 1.3rem;">🚀</span>
-                  <span style="font-size: 0.82rem; font-weight: 500; color: rgba(255,255,255,0.65);">รูปจาก Project (Project Images)</span>
-                </div>
+            <!-- Reference Images Mode Switcher -->
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div id="btnRefModeLocal" style="flex: 1; padding: 14px 12px; border-radius: 12px; background: rgba(141, 166, 255, 0.15); border: 1.5px solid #8da6ff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
+                <span style="font-size: 1.25rem;">📂</span>
+                <span style="font-size: 0.85rem; font-weight: bold; color: #fff;">รูปจากเครื่อง (Local Images)</span>
               </div>
-
-              <!-- Folder Path Selector (Local Mode) -->
+              <div id="btnRefModeProject" style="flex: 1; padding: 14px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.2); border: 1.5px solid rgba(255,255,255,0.06); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
+                <span style="font-size: 1.25rem;">🚀</span>
+                <span style="font-size: 0.85rem; font-weight: 500; color: rgba(255,255,255,0.65);">รูปจาก Project (Project Images)</span>
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0; display: flex; flex-direction: column; gap: 12px;">
+              <!-- Local Images Mode Folder Row -->
               <div id="rowRefModeLocal" style="display: flex; flex-direction: column; gap: 6px;">
                 <label for="cfg_ref_images_dir" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Reference Images Folder (Local)</label>
                 <div style="display: flex; gap: 8px; width: 100%;">
@@ -250,11 +250,11 @@
                 </div>
               </div>
 
-              <!-- Folder Path Selector (Project Mode) -->
+              <!-- Project Images Mode Folder Row -->
               <div id="rowRefModeProject" style="display: none; flex-direction: column; gap: 6px;">
-                <label for="cfg_project_images_path" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Project Images Folder</label>
+                <label for="cfg_project_images_path" style="font-size: 0.8rem; color: #8da6ff; margin-bottom: 0;">Project Images Folder (Project)</label>
                 <div style="display: flex; gap: 8px; width: 100%;">
-                  <input id="cfg_project_images_path" placeholder="เช่น /Users/litarcopperkaikem/Files" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex: 1;" />
+                  <input id="cfg_project_images_path" placeholder="เช่น /Users/litar/Files" style="padding: 12px; font-size: 0.95rem; border-radius: 12px; margin-bottom: 0; flex: 1;" />
                   <button id="browseProjectImagesPathBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Browse...</button>
                   <button id="setProjectImagesDirForAllBtn" class="secondary" style="padding: 12px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 12px;">Set for all</button>
                 </div>
@@ -1151,6 +1151,69 @@
                 <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
                   <span style="font-size: 0.85rem; color: rgba(255,255,255,0.8);">เวลารวมทั้งหมด:</span>
                   <span id="viewTotalDuration" style="font-weight: bold; color: #5eff5e; font-size: 1rem;">0.00 วินาที</span>
+                </div>
+              </div>
+
+              <!-- Watermark Settings -->
+              <div id="videoWatermarkGroup" class="form-group" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 20px;">
+                <label style="font-weight: bold; color: #8da6ff; margin-bottom: 8px; display: block;">ลายน้ำข้อความ (Text Watermark)</label>
+                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 10px 0; line-height: 1.4;">ใส่ลายน้ำทับบนวิดีโอ (เว้นว่างไว้หากไม่ต้องการใส่)</div>
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                  <input id="videoWatermarkText" type="text" placeholder="เช่น @MyChannel" style="margin-bottom: 0; flex-grow: 1;" />
+                  <button id="setVideoWatermarkDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                  <div>
+                    <label for="videoWatermarkFont" style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">ฟอนต์ (Font)</label>
+                    <select id="videoWatermarkFont" style="width: 100%; padding: 8px 12px; border-radius: 8px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.15); color: #fff; outline: none; height: 35px; box-sizing: border-box;">
+                      <option value="arial">Arial</option>
+                      <option value="georgia">Georgia</option>
+                      <option value="verdana">Verdana</option>
+                      <option value="times new roman">Times New Roman</option>
+                      <option value="courier new">Courier New</option>
+                      <option value="impact">Impact</option>
+                      <option value="ayuthaya">Ayuthaya (ภาษาไทย)</option>
+                      <option value="thonburi">Thonburi (ภาษาไทย)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="videoWatermarkPosition" style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">ตำแหน่ง (Position)</label>
+                    <select id="videoWatermarkPosition" style="width: 100%; padding: 8px 12px; border-radius: 8px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.15); color: #fff; outline: none; height: 35px; box-sizing: border-box;">
+                      <option value="bottom-right">ล่างขวา (Bottom-Right)</option>
+                      <option value="bottom-left">ล่างซ้าย (Bottom-Left)</option>
+                      <option value="bottom-center">ล่างกลาง (Bottom-Center / Subtitle)</option>
+                      <option value="top-right">บนขวา (Top-Right)</option>
+                      <option value="top-left">บนซ้าย (Top-Left)</option>
+                      <option value="center">ตรงกลาง (Center)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                  <div>
+                    <label for="videoWatermarkOpacity" style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">ความโปร่งใส (Opacity)</label>
+                    <input id="videoWatermarkOpacity" type="number" step="0.05" min="0.05" max="1.0" value="0.5" style="margin-bottom: 0; width: 100%; height: 35px; box-sizing: border-box;" />
+                  </div>
+                  <div>
+                    <label for="videoWatermarkFontSize" style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">ขนาดตัวอักษร (Size)</label>
+                    <input id="videoWatermarkFontSize" type="number" step="5" min="10" max="300" value="72" style="margin-bottom: 0; width: 100%; height: 35px; box-sizing: border-box;" />
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div>
+                    <label for="videoWatermarkColor" style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">สีตัวอักษร (Color)</label>
+                    <div style="display: flex; gap: 6px; align-items: center; width: 100%;">
+                      <input id="videoWatermarkColor" type="color" value="#ffffff" style="margin-bottom: 0; width: 35px; height: 35px; border-radius: 6px; padding: 2px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.15); box-sizing: border-box; cursor: pointer;" />
+                      <input id="videoWatermarkColorHex" type="text" value="#ffffff" placeholder="#ffffff" style="margin-bottom: 0; flex-grow: 1; height: 35px; font-size: 0.85rem; box-sizing: border-box;" />
+                    </div>
+                  </div>
+                  <div>
+                    <label for="videoWatermarkBorderWidth" style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">ขนาดขอบ (Border Width)</label>
+                    <input id="videoWatermarkBorderWidth" type="number" step="1" min="0" max="20" value="0" style="margin-bottom: 0; width: 100%; height: 35px; box-sizing: border-box;" />
+                  </div>
                 </div>
               </div>
 
