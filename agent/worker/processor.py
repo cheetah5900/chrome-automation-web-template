@@ -496,6 +496,23 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
 
     error_lower = str(error_msg).lower()
 
+    # Check for permanent non-retryable errors (timeouts, quota/billing limits, safety blocks, parameters issues)
+    is_permanent = False
+    if "polling timeout" in error_lower:
+        is_permanent = True
+    elif any(kw in error_lower for kw in ("billing", "credits", "quota", "paygate", "insufficient", "payment", "tier")):
+        is_permanent = True
+    elif any(kw in error_lower for kw in ("safety", "unsafe", "content filter", "unsuitable")):
+        is_permanent = True
+    elif any(kw in error_lower for kw in ("invalid", "bad request", "unknown name", "invalid_argument")):
+        is_permanent = True
+
+    if is_permanent:
+        await crud.update_request(rid, status="FAILED", error_message=str(error_msg))
+        await _mark_scene_failed(req)
+        logger.error("Request %s FAILED permanently (non-retryable): %s", rid[:8], error_msg)
+        return
+
     # WS transient errors (extension disconnect/reconnect): retry without incrementing count
     if "extension reconnected" in error_lower or "extension disconnected" in error_lower or "extension not connected" in error_lower:
         await crud.update_request(rid, status="PENDING", error_message=str(error_msg))
