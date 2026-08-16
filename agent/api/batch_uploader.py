@@ -927,6 +927,14 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
             "headers": {"accept": "*/*"}
         }, timeout=15)
         if res and isinstance(res, dict) and not res.get("error"):
+            try:
+                debug_path = Path("output/debug_project_data.json")
+                debug_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(debug_path, "w", encoding="utf-8") as f:
+                    _json.dump(res, f, ensure_ascii=False, indent=2)
+                logger.info("SAVED DEBUG PROJECT DATA TO: %s", debug_path.resolve())
+            except Exception as de:
+                logger.warning("Failed to save debug project data: %s", de)
             scenes = extract_scenes_from_flow_project(res)
             if scenes:
                 logger.info("Successfully synced %d scenes via flow.projectInitialData", len(scenes))
@@ -960,6 +968,14 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
             break
             
         all_raw_data.append(res)
+        try:
+            debug_path = Path(f"output/debug_project_page_{page_idx+1}.json")
+            debug_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(debug_path, "w", encoding="utf-8") as f:
+                _json.dump(res, f, ensure_ascii=False, indent=2)
+            logger.info("SAVED DEBUG PROJECT PAGE TO: %s", debug_path.resolve())
+        except Exception as de:
+            logger.warning("Failed to save debug project page: %s", de)
         
         # Extract nextPageToken recursively
         next_token = None
