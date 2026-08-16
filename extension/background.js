@@ -234,9 +234,19 @@ function connectToAgent() {
         const { mediaId } = msg.params || {};
         if (mediaId) {
           console.log('[FlowAgent] Triggering prefetch for media:', mediaId);
-          fetch(`https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=${mediaId}`, {
-            credentials: 'include'
-          }).catch(() => {}); // Ignore CORS fetch errors, we only need the redirect hook
+          chrome.tabs.query({ url: '*://labs.google/fx/tools/flow*' }).then((tabs) => {
+            if (tabs.length > 0) {
+              const tab = tabs[0];
+              chrome.tabs.sendMessage(tab.id, {
+                type: 'TRIGGER_FETCH',
+                url: `https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=${mediaId}`
+              }).catch(() => {});
+            } else {
+              fetch(`https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=${mediaId}`, {
+                credentials: 'include'
+              }).catch(() => {});
+            }
+          });
         }
       } else if (msg.method === 'trpc_request') {
         await handleTrpcRequest(msg);

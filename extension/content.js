@@ -35,6 +35,12 @@ chrome.runtime.onMessage.addListener((msg, _, reply) => {
     return true; // keep channel open for async reply
   }
 
+  if (msg.type === 'TRIGGER_FETCH') {
+    fetch(msg.url).catch(() => {});
+    reply({ ok: true });
+    return false;
+  }
+
   if (msg.type === 'FETCH_URL') {
     const { url, method, headers, body } = msg;
     fetch(url, {

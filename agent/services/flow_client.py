@@ -646,12 +646,12 @@ class FlowClient:
         status = result.get("status", 500)
         return isinstance(status, int) and status == 200
 
-    async def get_media(self, media_id: str, project_id: str = "") -> dict:
+    async def get_media(self, media_id: str, project_id: str = "", trigger_prefetch: bool = True) -> dict:
         """Fetch media metadata from Google Flow, trying direct redirect download first, then falling back."""
         clean_id = media_id.replace("media/", "") if media_id else ""
         
         # Try direct GCS download by checking database or triggering prefetch
-        if clean_id:
+        if trigger_prefetch and clean_id:
             try:
                 # Check if we already have it in DB
                 gcs_url = None

@@ -170,7 +170,7 @@ async def _poll_workflows(
             mid = op.get("_primary_media_id", "")
             if not mid or mid in completed:
                 continue
-            media_resp = await client.get_media(mid)
+            media_resp = await client.get_media(mid, trigger_prefetch=False)
             status = media_resp.get("status")
             if status != 200:
                 logger.debug("Workflow media %s not ready (status=%s)", mid[:8], status)
