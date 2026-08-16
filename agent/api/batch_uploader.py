@@ -1826,7 +1826,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                             
                             logger.info("File for media %s missing locally. Attempting fallback download via Google Flow get_media...", media_id[:12])
                             from agent.services.video_reviewer import _download_via_get_media
-                            await _download_via_get_media(media_id, cache_path)
+                            await _download_via_get_media(media_id, cache_path, body.project_id)
                             if cache_path.exists():
                                 local_path = cache_path
                                 vid_debug["get_media_success"] = True

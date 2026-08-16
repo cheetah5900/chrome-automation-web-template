@@ -142,12 +142,12 @@ def _find_url_in_dict(node) -> str | None:
     return None
 
 
-async def _download_via_get_media(media_id: str, dest: Path) -> None:
+async def _download_via_get_media(media_id: str, dest: Path, project_id: str = "") -> None:
     """Download video by fetching encoded content or signed URL from get_media API."""
     from agent.services.flow_client import get_flow_client
 
     client = get_flow_client()
-    result = await client.get_media(media_id)
+    result = await client.get_media(media_id, project_id)
     if result.get("error"):
         raise ValueError(f"get_media failed for {media_id}: {result['error']}")
 
@@ -421,7 +421,7 @@ async def review_scene_video(
                 raise ValueError(f"No media_id to refresh URL for scene {scene['id']}")
             logger.info("URL download failed for scene %s (%s), fetching via get_media %s",
                         scene["id"], type(e).__name__, media_id[:12])
-            await _download_via_get_media(media_id, video_path)
+            await _download_via_get_media(media_id, video_path, project_id)
 
         if ANTHROPIC_API_KEY:
             # SDK path: individual frames

@@ -621,18 +621,34 @@ class FlowClient:
         status = result.get("status", 500)
         return isinstance(status, int) and status == 200
 
-    async def get_media(self, media_id: str) -> dict:
-        """Fetch media metadata from Google Flow.
-
-        Returns the raw API response which contains a fresh signed URL
-        in data.fifeUrl or data.servingUri.
-        """
-        url = f"{GOOGLE_FLOW_API}/v1/media/{media_id}?key={GOOGLE_API_KEY}&clientContext.tool=PINHOLE"
-        return await self._send("api_request", {
-            "url": url,
-            "method": "GET",
-            "headers": random_headers(),
-        }, timeout=15)
+    async def get_media(self, media_id: str, project_id: str = "") -> dict:
+        """Fetch media metadata from Google Flow, trying multiple potential paths."""
+        paths_to_try = []
+        if project_id:
+            paths_to_try.append(f"/v1/projects/{project_id}/flowMedia/{media_id}")
+            paths_to_try.append(f"/v1/projects/{project_id}/media/{media_id}")
+        paths_to_try.append(f"/v1/media/{media_id}")
+        
+        last_err = None
+        for path in paths_to_try:
+            url = f"{GOOGLE_FLOW_API}{path}?key={GOOGLE_API_KEY}&clientContext.tool=PINHOLE"
+            logger.info("Trying get_media URL: %s", url)
+            res = await self._send("api_request", {
+                "url": url,
+                "method": "GET",
+                "headers": random_headers(),
+            }, timeout=15)
+            
+            if res and isinstance(res, dict) and not res.get("error"):
+                status = res.get("status", 200)
+                if isinstance(status, int) and status < 400:
+                    return res
+                else:
+                    last_err = res.get("data", res)
+            else:
+                last_err = res.get("error") if res else "Empty response"
+                
+        return {"error": f"All get_media attempts failed. Last error: {last_err}"}
 
     async def upload_image(self, image_base64: str, mime_type: str = "image/jpeg",
                             project_id: str = "", file_name: str = "image.jpg") -> dict:
