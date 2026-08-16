@@ -117,16 +117,18 @@ async def lifespan(app: FastAPI):
     global _ws_task_ref, _worker_task_ref
     await init_db()
 
-    # Clear stale pending/processing tasks on startup so they do not execute unwantedly
+    # Clear all generation history tables (request, scene, video) on startup to ensure a clean slate
     try:
         from agent.db.schema import get_db, _db_lock
         db = await get_db()
         async with _db_lock:
-            await db.execute("UPDATE request SET status='FAILED', error_message='Stale task aborted on server start' WHERE status IN ('PENDING', 'PROCESSING')")
+            await db.execute("DELETE FROM request")
+            await db.execute("DELETE FROM scene")
+            await db.execute("DELETE FROM video")
             await db.commit()
-            logger.info("Aborted stale pending/processing requests on startup")
+            logger.info("Cleared all generation history (requests, scenes, videos) on startup")
     except Exception as e:
-        logger.warning("Failed to clear stale requests: %s", e)
+        logger.warning("Failed to clear generation history: %s", e)
 
     # Load custom materials from DB into in-memory registry
     from agent.db.crud import list_materials as db_list_materials
