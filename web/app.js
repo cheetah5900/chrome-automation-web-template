@@ -2254,7 +2254,10 @@ function applyFlowVideoPreset(presetName) {
     const proj = document.getElementById('cfg_flow_project_dropdown');
     if (proj) proj.selectedIndex = 0;
     const model = document.getElementById('cfg_flow_video_model');
-    if (model) model.value = '';
+    if (model) {
+      model.value = '';
+      delete model.dataset.pendingValue;
+    }
     const orientation = document.getElementById('cfg_flow_orientation');
     if (orientation) orientation.value = 'VERTICAL';
     const outputCount = document.getElementById('cfg_flow_output_count');
@@ -2273,7 +2276,10 @@ function applyFlowVideoPreset(presetName) {
   }
   
   const model = document.getElementById('cfg_flow_video_model');
-  if (model && preset.video_model !== undefined) model.value = preset.video_model;
+  if (model && preset.video_model !== undefined) {
+    model.dataset.pendingValue = preset.video_model;
+    model.value = preset.video_model;
+  }
   
   const orientation = document.getElementById('cfg_flow_orientation');
   if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
@@ -2315,7 +2321,7 @@ async function saveFlowVideoPreset() {
   
   const preset = {
     project_id: document.getElementById('cfg_flow_project_dropdown')?.value || '',
-    video_model: document.getElementById('cfg_flow_video_model')?.value || '',
+    video_model: document.getElementById('cfg_flow_video_model')?.value || document.getElementById('cfg_flow_video_model')?.dataset.pendingValue || '',
     orientation: document.getElementById('cfg_flow_orientation')?.value || 'VERTICAL',
     output_count: parseInt(document.getElementById('cfg_flow_output_count')?.value || '1', 10),
     upscale_resolution: document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE',
@@ -2373,7 +2379,8 @@ async function deleteFlowVideoPreset() {
 // Prompt-Only Mode presets
 function loadFlowPoPresets(presets) {
   globalFlowPoPresets = presets || {};
-  renderFlowPoPresetsSelect();
+  const lastPreset = localStorage.getItem('flowPoLastPreset') || '';
+  renderFlowPoPresetsSelect(lastPreset);
 }
 
 function renderFlowPoPresetsSelect(selectedKey = '') {
@@ -2401,7 +2408,10 @@ function applyFlowPoPreset(presetName) {
     const promptsPath = document.getElementById('cfg_flow_po_prompts_path');
     if (promptsPath) promptsPath.value = '';
     const model = document.getElementById('cfg_flow_po_video_model');
-    if (model) model.value = '';
+    if (model) {
+      model.value = '';
+      delete model.dataset.pendingValue;
+    }
     const orientation = document.getElementById('cfg_flow_po_orientation');
     if (orientation) orientation.value = 'VERTICAL';
     const outputCount = document.getElementById('cfg_flow_po_output_count');
@@ -2423,7 +2433,10 @@ function applyFlowPoPreset(presetName) {
   if (promptsPath && preset.prompts_path !== undefined) promptsPath.value = preset.prompts_path;
   
   const model = document.getElementById('cfg_flow_po_video_model');
-  if (model && preset.video_model !== undefined) model.value = preset.video_model;
+  if (model && preset.video_model !== undefined) {
+    model.dataset.pendingValue = preset.video_model;
+    model.value = preset.video_model;
+  }
   
   const orientation = document.getElementById('cfg_flow_po_orientation');
   if (orientation && preset.orientation !== undefined) orientation.value = preset.orientation;
@@ -2448,7 +2461,7 @@ async function saveFlowPoPreset() {
   const preset = {
     project_id: document.getElementById('cfg_flow_po_project_dropdown')?.value || '',
     prompts_path: document.getElementById('cfg_flow_po_prompts_path')?.value || '',
-    video_model: document.getElementById('cfg_flow_po_video_model')?.value || '',
+    video_model: document.getElementById('cfg_flow_po_video_model')?.value || document.getElementById('cfg_flow_po_video_model')?.dataset.pendingValue || '',
     orientation: document.getElementById('cfg_flow_po_orientation')?.value || 'VERTICAL',
     output_count: parseInt(document.getElementById('cfg_flow_po_output_count')?.value || '1', 10),
     upscale_resolution: document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE'
@@ -2462,7 +2475,9 @@ async function saveFlowPoPreset() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'flow_po_presets', value: globalFlowPoPresets })
     });
+    localStorage.setItem('flowPoLastPreset', cleanName);
     renderFlowPoPresetsSelect(cleanName);
+    applyFlowPoPreset(cleanName);
     alert(`บันทึก Preset "${cleanName}" สำเร็จ`);
   } catch (e) {
     alert(`เกิดข้อผิดพลาดในการบันทึก: ${e.message}`);
@@ -5278,8 +5293,10 @@ async function loadVideoPrompts() {
     const submitSel = document.getElementById('cfg_video_submit_selector');
     if (submitSel) submitSel.value = config.video_submit_selector || '';
 
+    const lastPresetName = localStorage.getItem('flowVideoLastPreset') || '';
+    const lastPoPresetName = localStorage.getItem('flowPoLastPreset') || '';
+
     if (!window.isFlowKitPathsInitialized) {
-      const lastPresetName = localStorage.getItem('flowVideoLastPreset') || '';
       let lakornPathVal = '';
       let lakornTonVal = '';
       let lakornEpVal = '';
@@ -5342,6 +5359,7 @@ async function loadVideoPrompts() {
     
     // Apply last saved preset values to ensure all dropdowns and inputs are fully synced
     applyFlowVideoPreset(lastPresetName);
+    applyFlowPoPreset(lastPoPresetName);
   } catch (e) {
         writeConsoleLine(`Failed to load video prompts: ${e.message}`, 'error', 'videoConsole');
   }
@@ -5355,7 +5373,7 @@ function updateFlowVideoModelDropdowns(tier) {
   const poModelDd = document.getElementById('cfg_flow_po_video_model');
   
   if (modelDd) {
-    const prevVal = modelDd.value;
+    const prevVal = modelDd.value || modelDd.dataset.pendingValue || '';
     modelDd.innerHTML = '';
     const optDefault = document.createElement('option');
     optDefault.value = '';
@@ -5391,11 +5409,12 @@ function updateFlowVideoModelDropdowns(tier) {
     }
     if (prevVal && [...modelDd.options].some(o => o.value === prevVal)) {
       modelDd.value = prevVal;
+      delete modelDd.dataset.pendingValue;
     }
   }
   
   if (poModelDd) {
-    const prevVal = poModelDd.value;
+    const prevVal = poModelDd.value || poModelDd.dataset.pendingValue || '';
     poModelDd.innerHTML = '';
     const optDefault = document.createElement('option');
     optDefault.value = '';
@@ -5429,6 +5448,7 @@ function updateFlowVideoModelDropdowns(tier) {
     }
     if (prevVal && [...poModelDd.options].some(o => o.value === prevVal)) {
       poModelDd.value = prevVal;
+      delete poModelDd.dataset.pendingValue;
     }
   }
 }
