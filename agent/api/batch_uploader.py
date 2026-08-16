@@ -354,6 +354,21 @@ async def process_batch(body: ProcessRequest):
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
 
+    # Cancel any running/stuck generation tasks and clear queue
+    try:
+        from agent.worker.processor import get_worker_controller
+        controller = get_worker_controller()
+        await controller.cancel_all_active_tasks()
+        
+        from agent.db.schema import get_db, _db_lock
+        db = await get_db()
+        async with _db_lock:
+            await db.execute("UPDATE request SET status='FAILED', error_message='Aborted due to new batch start' WHERE status IN ('PENDING', 'PROCESSING')")
+            await db.commit()
+        logger.info("Successfully cancelled and aborted all previous pending/processing requests due to new batch start")
+    except Exception as clear_err:
+        logger.warning("Failed to cancel active tasks on new batch: %s", clear_err)
+
     results = []
     
     # Verify/create video

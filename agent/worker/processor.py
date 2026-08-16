@@ -92,6 +92,17 @@ class WorkerController:
         await self._cleanup_stale_processing()
         await self._run_loop()
 
+    async def cancel_all_active_tasks(self):
+        """Cancel all running tasks immediately."""
+        tasks = list(self._active_tasks.values())
+        if tasks:
+            logger.info("Worker: Cancelling %d active tasks...", len(tasks))
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._active_ids.clear()
+        self._active_tasks.clear()
+
     def request_shutdown(self):
         """Signal the worker to stop after current tasks drain."""
         self._shutdown.set()
