@@ -622,32 +622,48 @@ class FlowClient:
         return isinstance(status, int) and status == 200
 
     async def get_media(self, media_id: str, project_id: str = "") -> dict:
-        """Fetch media metadata from Google Flow, trying multiple potential paths."""
+        """Fetch media metadata from Google Flow, trying multiple potential paths and query parameters."""
+        clean_id = media_id.replace("media/", "") if media_id else ""
+        
         paths_to_try = []
+        if project_id and clean_id:
+            paths_to_try.append(f"/v1/projects/{project_id}/flowMedia/{clean_id}")
+            paths_to_try.append(f"/v1/projects/{project_id}/media/{clean_id}")
+        if clean_id:
+            paths_to_try.append(f"/v1/media/{clean_id}")
+        if media_id and media_id.startswith("media/"):
+            paths_to_try.append(f"/v1/{media_id}")
+            
+        # Build combinations of query parameters to try
+        queries_to_try = []
         if project_id:
-            paths_to_try.append(f"/v1/projects/{project_id}/flowMedia/{media_id}")
-            paths_to_try.append(f"/v1/projects/{project_id}/media/{media_id}")
-        paths_to_try.append(f"/v1/media/{media_id}")
+            queries_to_try.append(f"key={GOOGLE_API_KEY}&clientContext.toolName=PINHOLE&clientContext.projectId={project_id}")
+            queries_to_try.append(f"key={GOOGLE_API_KEY}&clientContext.tool=PINHOLE&clientContext.projectId={project_id}")
+        queries_to_try.append(f"key={GOOGLE_API_KEY}&clientContext.toolName=PINHOLE")
+        queries_to_try.append(f"key={GOOGLE_API_KEY}&clientContext.tool=PINHOLE")
+        queries_to_try.append(f"key={GOOGLE_API_KEY}")
         
         last_err = None
         for path in paths_to_try:
-            url = f"{GOOGLE_FLOW_API}{path}?key={GOOGLE_API_KEY}&clientContext.tool=PINHOLE"
-            logger.info("Trying get_media URL: %s", url)
-            res = await self._send("api_request", {
-                "url": url,
-                "method": "GET",
-                "headers": random_headers(),
-            }, timeout=15)
-            
-            if res and isinstance(res, dict) and not res.get("error"):
-                status = res.get("status", 200)
-                if isinstance(status, int) and status < 400:
-                    return res
-                else:
-                    last_err = res.get("data", res)
-            else:
-                last_err = res.get("error") if res else "Empty response"
+            for query in queries_to_try:
+                url = f"{GOOGLE_FLOW_API}{path}?{query}"
+                logger.info("Trying get_media URL: %s", url)
+                res = await self._send("api_request", {
+                    "url": url,
+                    "method": "GET",
+                    "headers": random_headers(),
+                }, timeout=15)
                 
+                if res and isinstance(res, dict) and not res.get("error"):
+                    status = res.get("status", 200)
+                    if isinstance(status, int) and status < 400:
+                        logger.info("Successfully fetched get_media using URL: %s", url)
+                        return res
+                    else:
+                        last_err = res.get("data", res)
+                else:
+                    last_err = res.get("error") if res else "Empty response"
+                    
         return {"error": f"All get_media attempts failed. Last error: {last_err}"}
 
     async def upload_image(self, image_base64: str, mime_type: str = "image/jpeg",
