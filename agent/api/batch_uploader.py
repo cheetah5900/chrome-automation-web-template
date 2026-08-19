@@ -17,6 +17,31 @@ import re
 def natural_sort_key(s: str):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
 
+
+def summarize_prompt_for_filename(prompt: str, max_words: int = 15, max_length: int = 90) -> str:
+    """Create a concise, clean, filesystem-safe filename from a prompt (10-15 words)."""
+    if not prompt or not isinstance(prompt, str):
+        return ""
+    
+    clean_text = " ".join(prompt.strip().split())
+    if not clean_text:
+        return ""
+
+    # Remove illegal filesystem characters & markdown formatting
+    clean_text = re.sub(r'[\\/*?:"<>|#`\r\n\t]', '', clean_text)
+    
+    words = clean_text.split()
+    if len(words) > max_words:
+        summary = " ".join(words[:max_words])
+    else:
+        summary = clean_text
+        
+    if len(summary) > max_length:
+        summary = summary[:max_length].rstrip()
+        
+    summary = summary.strip(" .-_,;")
+    return summary
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/batch-uploader", tags=["batch-uploader"])
 _repo = SQLiteRepository()
@@ -643,14 +668,19 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
             
             aspect = standard_video.get("video", {}).get("generatedVideo", {}).get("aspectRatio", "VIDEO_ASPECT_RATIO_PORTRAIT")
             is_vertical = "PORTRAIT" in aspect or "VERTICAL" in aspect or "vertical" in prompt.lower()
-            # Try to extract storyboard image filename from standard_video request data
+            # Try to extract storyboard image filename or prompt text from standard_video request data
             img_handle = None
             img_media_id = None
+            extracted_prompt = prompt
             try:
                 prompt_inputs = standard_video.get("mediaMetadata", {}).get("requestData", {}).get("promptInputs", [])
                 if prompt_inputs:
+                    if prompt_inputs[0].get("textPrompt"):
+                        extracted_prompt = prompt_inputs[0]["textPrompt"]
                     parts = prompt_inputs[0].get("structuredPrompt", {}).get("parts", [])
                     for part in parts:
+                        if not extracted_prompt and part.get("text"):
+                            extracted_prompt = part["text"]
                         ref_media = part.get("reference", {}).get("media", {})
                         if ref_media.get("handle"):
                             img_handle = ref_media["handle"]
@@ -683,7 +713,7 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
                 "vertical_upscale_media_id": upscale_media_id if is_vertical and upscale_media_id else None,
                 "horizontal_upscale_url": upscale_url if not is_vertical and upscale_media_id else None,
                 "horizontal_upscale_media_id": upscale_media_id if not is_vertical and upscale_media_id else None,
-                "prompt_content": prompt
+                "prompt_content": extracted_prompt or prompt
             }
             scenes.append(scene_dict)
             
@@ -1785,6 +1815,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         local_scenes = await crud.list_project_scenes(body.project_id)
         local_order_map = {}
         local_image_name_map = {}
+        local_prompt_map = {}
         for s in local_scenes:
             img_url = s.get("vertical_image_url") or s.get("horizontal_image_url")
             img_stem = None
@@ -1794,6 +1825,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                 else:
                     img_stem = Path(img_url).stem
             
+            p_text = s.get("prompt") or s.get("video_prompt") or s.get("prompt_content")
             for prefix in ("vertical", "horizontal"):
                 std_m = s.get(f"{prefix}_video_media_id")
                 ups_m = s.get(f"{prefix}_upscale_media_id")
@@ -1801,15 +1833,20 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     local_order_map[std_m] = s["display_order"]
                     if img_stem:
                         local_image_name_map[std_m] = img_stem
+                    if p_text:
+                        local_prompt_map[std_m] = p_text
                 if ups_m:
                     local_order_map[ups_m] = s["display_order"]
                     if img_stem:
                         local_image_name_map[ups_m] = img_stem
+                    if p_text:
+                        local_prompt_map[ups_m] = p_text
         logger.info("Found %d local scenes for project %s to map display order and image names by media IDs", len(local_scenes), body.project_id[:12])
     except Exception as e:
         logger.warning("Failed to fetch local project scenes: %s. Falling back to default ordering.", e)
         local_order_map = {}
         local_image_name_map = {}
+        local_prompt_map = {}
 
     def get_sort_key(s):
         img_name = None
@@ -2071,8 +2108,30 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                             img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
                             
                     if not img_name:
-                        not_mapped_counter += 1
-                        img_name = f"not mapped_{not_mapped_counter}"
+                        # Extract prompt summary for prompt-only / text-to-video (10-15 words)
+                        prompt_text = ""
+                        if media_id and media_id in local_prompt_map:
+                            prompt_text = local_prompt_map[media_id]
+                        if not prompt_text:
+                            std_m = scene.get(f"{p}_video_media_id")
+                            if std_m and std_m in local_prompt_map:
+                                prompt_text = local_prompt_map[std_m]
+                        if not prompt_text:
+                            prompt_text = scene.get("prompt_content") or scene.get("prompt") or scene.get("video_prompt") or ""
+                        if not prompt_text and scene_id:
+                            try:
+                                db_s = await crud.get_scene(scene_id)
+                                if db_s:
+                                    prompt_text = db_s.get("prompt") or db_s.get("video_prompt") or db_s.get("prompt_content") or ""
+                            except Exception:
+                                pass
+                                
+                        prompt_summary = summarize_prompt_for_filename(prompt_text, max_words=15, max_length=90)
+                        if prompt_summary:
+                            img_name = prompt_summary
+                        else:
+                            not_mapped_counter += 1
+                            img_name = f"scene_{display_order or not_mapped_counter}"
                     
                     dup_key = f"{p}_{img_name}"
                     dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
