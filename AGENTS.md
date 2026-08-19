@@ -101,7 +101,7 @@ Before outputting any final code, you MUST think step-by-step internally and str
   2. Construct a map of `imageMediaId -> workflow_displayName` by linking media items to their parent workflow's `displayName`.
   3. Extract the `startImage.mediaId` (e.g., `"e6872a15-..."`) from the video request metadata.
   4. Lookup the `startImage.mediaId` in the map to resolve the original filename (e.g., `"04"`).
-- **Fallback Naming Rule**:
-  - If a video does not have any image-to-video mapping (e.g. Prompt-Only / Text-to-Video runs), name it as `not mapped_{count}.mp4` where `count` is a 1-indexed counter incremented for each unmapped video in the project.
+- **Prompt-Only / Text-to-Video Naming Rule**:
+  - For Prompt-Only / Text-to-Video runs where no storyboard image is attached, extract the prompt text (from `local_prompt_map`, `scene.prompt_content`, or DB scene prompt) and generate a concise 10-15 word filesystem-safe summary (max ~90 characters) via `summarize_prompt_for_filename`. If prompt text is empty, fall back to `scene_{display_order}`.
 - **Sorting Rule**:
   - Zip entries must be sorted numerically by their resolved storyboard numbers (e.g., `01.mp4`, `02.mp4`...) first. Use `(0, int(parsed_digits))` for mapped ones and `(1, display_order)` for unmapped ones in `get_sort_key` to ensure correct ordering.
