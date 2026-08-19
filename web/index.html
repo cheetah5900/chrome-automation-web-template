@@ -863,6 +863,18 @@
                     <option value="VIDEO_RESOLUTION_4K">ขยายเป็น 4K</option>
                   </select>
                 </div>
+
+                <!-- Flow Kit Worker Delay Range -->
+                <div style="display: flex; gap: 16px; align-items: flex-end; width: 100%;">
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 50%;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Worker Delay Min (วินาที):</label>
+                    <input type="number" id="cfg_flow_po_worker_delay_min" value="10.0" min="1" step="0.5" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin: 0; width: 100%; box-sizing: border-box;" />
+                  </div>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 50%;">
+                    <label style="font-size: 0.8rem; color: rgba(255,255,255,0.65); font-weight: 500;">Worker Delay Max (วินาที):</label>
+                    <input type="number" id="cfg_flow_po_worker_delay_max" value="20.0" min="1" step="0.5" style="padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 0.85rem; text-align: center; margin: 0; width: 100%; box-sizing: border-box;" />
+                  </div>
+                </div>
               </div>
 
               <!-- Right Column: Folders -->

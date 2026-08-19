@@ -192,6 +192,8 @@ class ProcessRequest(BaseModel):
     duration_seconds: Optional[int] = None
     output_count: Optional[int] = 1
     upscale_resolution: Optional[str] = "NONE"
+    delay_min: Optional[float] = None
+    delay_max: Optional[float] = None
 
 
 @router.post("/scan")
@@ -359,6 +361,9 @@ async def process_batch(body: ProcessRequest):
         from agent.worker.processor import get_worker_controller
         controller = get_worker_controller()
         await controller.cancel_all_active_tasks()
+        if body.delay_min is not None and body.delay_max is not None:
+            controller.update_cooldown(float(body.delay_min), float(body.delay_max))
+            logger.info("Applied batch delay cooldown: %.1fs - %.1fs", body.delay_min, body.delay_max)
         
         from agent.db.schema import get_db, _db_lock
         db = await get_db()

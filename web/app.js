@@ -2445,6 +2445,10 @@ function applyFlowPoPreset(presetName) {
       if (outputCount) outputCount.value = '1';
       const upscale = document.getElementById('cfg_flow_po_upscale_auto');
       if (upscale) upscale.value = 'NONE';
+      const delayMin = document.getElementById('cfg_flow_po_worker_delay_min');
+      if (delayMin) delayMin.value = '10.0';
+      const delayMax = document.getElementById('cfg_flow_po_worker_delay_max');
+      if (delayMax) delayMax.value = '20.0';
       return;
     }
     
@@ -2473,6 +2477,11 @@ function applyFlowPoPreset(presetName) {
     
     const upscale = document.getElementById('cfg_flow_po_upscale_auto');
     if (upscale && preset.upscale_resolution !== undefined) upscale.value = preset.upscale_resolution;
+
+    const delayMin = document.getElementById('cfg_flow_po_worker_delay_min');
+    if (delayMin && preset.worker_delay_min !== undefined) delayMin.value = preset.worker_delay_min;
+    const delayMax = document.getElementById('cfg_flow_po_worker_delay_max');
+    if (delayMax && preset.worker_delay_max !== undefined) delayMax.value = preset.worker_delay_max;
     
     updateTooltips();
   } finally {
@@ -2494,7 +2503,9 @@ async function saveFlowPoPreset() {
     video_model: document.getElementById('cfg_flow_po_video_model')?.value || document.getElementById('cfg_flow_po_video_model')?.dataset.pendingValue || '',
     orientation: document.getElementById('cfg_flow_po_orientation')?.value || 'VERTICAL',
     output_count: parseInt(document.getElementById('cfg_flow_po_output_count')?.value || '1', 10),
-    upscale_resolution: document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE'
+    upscale_resolution: document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE',
+    worker_delay_min: parseFloat(document.getElementById('cfg_flow_po_worker_delay_min')?.value) || 10.0,
+    worker_delay_max: parseFloat(document.getElementById('cfg_flow_po_worker_delay_max')?.value) || 20.0
   };
   
   globalFlowPoPresets[cleanName] = preset;
@@ -3902,8 +3913,8 @@ function initWorkflowActionListeners() {
     });
   }
 
-  // Clear flow video preset if user modifies any settings manually
-  ['cfg_flow_project_dropdown', 'cfg_flow_video_model', 'cfg_flow_orientation', 'cfg_flow_output_count', 'cfg_flow_upscale_auto'].forEach(id => {
+  // Clear flow video preset if user modifies any settings manually (excluding project dropdown)
+  ['cfg_flow_video_model', 'cfg_flow_orientation', 'cfg_flow_output_count', 'cfg_flow_upscale_auto', 'cfg_flowkit_worker_delay_min', 'cfg_flowkit_worker_delay_max'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
       clearFlowVideoPresetSelect();
     });
@@ -3917,8 +3928,8 @@ function initWorkflowActionListeners() {
     });
   }
 
-  // Clear flow PO preset if user modifies any settings manually
-  ['cfg_flow_po_project_dropdown', 'cfg_flow_po_video_model', 'cfg_flow_po_orientation', 'cfg_flow_po_output_count', 'cfg_flow_po_upscale_auto'].forEach(id => {
+  // Clear flow PO preset if user modifies any settings manually (excluding project dropdown)
+  ['cfg_flow_po_video_model', 'cfg_flow_po_orientation', 'cfg_flow_po_output_count', 'cfg_flow_po_upscale_auto', 'cfg_flow_po_worker_delay_min', 'cfg_flow_po_worker_delay_max'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
       clearFlowPoPresetSelect();
     });
@@ -5393,6 +5404,12 @@ async function loadVideoPrompts() {
     const workerDelayMax = document.getElementById('cfg_flowkit_worker_delay_max');
     if (workerDelayMax) workerDelayMax.value = config.flowkit_worker_delay_max !== undefined ? config.flowkit_worker_delay_max : '20.0';
 
+    const poWorkerDelayMin = document.getElementById('cfg_flow_po_worker_delay_min');
+    if (poWorkerDelayMin) poWorkerDelayMin.value = config.flowkit_worker_delay_min !== undefined ? config.flowkit_worker_delay_min : '10.0';
+
+    const poWorkerDelayMax = document.getElementById('cfg_flow_po_worker_delay_max');
+    if (poWorkerDelayMax) poWorkerDelayMax.value = config.flowkit_worker_delay_max !== undefined ? config.flowkit_worker_delay_max : '20.0';
+
     const videoGenMode = document.getElementById('cfg_video_gen_mode');
     if (videoGenMode) {
       videoGenMode.value = config.video_gen_mode || 'selenium';
@@ -5744,8 +5761,8 @@ async function saveVideoPrompts(silent = false) {
       video_settings_selector: document.getElementById('cfg_video_settings_selector')?.value.trim() || '',
       video_submit_selector: document.getElementById('cfg_video_submit_selector')?.value.trim() || '',
       video_gen_mode: document.getElementById('cfg_video_gen_mode')?.value || 'selenium',
-      flowkit_worker_delay_min: parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0,
-      flowkit_worker_delay_max: parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0,
+      flowkit_worker_delay_min: parseFloat(document.getElementById('cfg_flow_po_worker_delay_min')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0,
+      flowkit_worker_delay_max: parseFloat(document.getElementById('cfg_flow_po_worker_delay_max')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0,
     };
     
     for (const k in payload) {
@@ -6209,6 +6226,24 @@ function initVideoGenListeners() {
   const workerDelayMaxInput = document.getElementById('cfg_flowkit_worker_delay_max');
   if (workerDelayMaxInput) {
     workerDelayMaxInput.addEventListener('change', () => {
+      saveVideoPrompts(true);
+    });
+  }
+
+  const poWorkerDelayMinInput = document.getElementById('cfg_flow_po_worker_delay_min');
+  if (poWorkerDelayMinInput) {
+    poWorkerDelayMinInput.addEventListener('change', () => {
+      const standardInput = document.getElementById('cfg_flowkit_worker_delay_min');
+      if (standardInput) standardInput.value = poWorkerDelayMinInput.value;
+      saveVideoPrompts(true);
+    });
+  }
+
+  const poWorkerDelayMaxInput = document.getElementById('cfg_flow_po_worker_delay_max');
+  if (poWorkerDelayMaxInput) {
+    poWorkerDelayMaxInput.addEventListener('change', () => {
+      const standardInput = document.getElementById('cfg_flowkit_worker_delay_max');
+      if (standardInput) standardInput.value = poWorkerDelayMaxInput.value;
       saveVideoPrompts(true);
     });
   }
@@ -7083,7 +7118,9 @@ function initFlowKitUploaderListeners() {
         video_model: videoModel,
         output_count: outputCount,
         duration_seconds: durationSeconds,
-        upscale_resolution: upscaleResolution
+        upscale_resolution: upscaleResolution,
+        delay_min: parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0,
+        delay_max: parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0
       };
       
       logToConsole(`Submitting batch of ${validPairs.length} scenes to Project ID: ${project}...`);
@@ -7926,11 +7963,24 @@ document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () 
   const prPath = document.getElementById('cfg_flow_po_prompts_path')?.value.trim();
   
   const msg = document.getElementById('flowKitPOMsg');
+  const videoConsole = document.getElementById('videoConsole');
+  if (videoConsole) {
+    videoConsole.innerHTML = '<div class="console-line system">Verifying files and scanning prompts...</div>';
+  }
+  const logToConsole = (text, type = 'info') => {
+    if (!videoConsole) return;
+    const div = document.createElement('div');
+    div.className = `console-line ${type}`;
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    videoConsole.appendChild(div);
+    videoConsole.scrollTop = videoConsole.scrollHeight;
+  };
+
   if (msg) {
     msg.style.display = 'block';
     msg.className = 'msg';
     msg.style.color = '#8da6ff';
-    msg.textContent = 'Scanning directories...';
+    msg.textContent = 'กำลังสแกนและตรวจสอบไฟล์พรอพต์...';
   }
   
   if (!prPath) {
@@ -7939,10 +7989,12 @@ document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () 
       msg.style.color = '#f56565';
       msg.textContent = 'กรุณาเลือกโฟลเดอร์เก็บพรอพต์ก่อนทำการสแกน';
     }
+    logToConsole('Scan error: Prompts folder path is empty.', 'error');
     return;
   }
   
   try {
+    logToConsole(`Scanning directory: ${prPath}...`);
     const res = await jsonFetch('/api/batch-uploader/scan', {
       method: 'POST',
       body: JSON.stringify({
@@ -7958,17 +8010,24 @@ document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () 
       const sect = document.getElementById('scannedPairsSection');
       if (sect) sect.style.display = 'block';
       
+      const total = res.pairs.length;
+      res.pairs.forEach((p, idx) => {
+        logToConsole(`[${idx + 1}/${total}] Verified file: ${p.prompt_name || `Prompt ${idx + 1}`}`, 'info');
+      });
+
       if (msg) {
         msg.className = 'msg';
         msg.style.color = '#10b981';
-        msg.textContent = `สแกนสำเร็จ พบทั้งหมด ${res.pairs.length} พรอพต์ (ข้ามการแนบรูปภาพ)`;
+        msg.textContent = `สแกนสำเร็จ พบทั้งหมด ${total} ไฟล์ (ดึงข้อมูลครบ ${total}/${total} ไฟล์)`;
       }
+      logToConsole(`Scan completed: Verified and loaded ${total}/${total} prompt files successfully.`, 'success');
     } else {
       if (msg) {
         msg.className = 'msg error';
         msg.style.color = '#f56565';
         msg.textContent = 'ไม่พบข้อมูลจากการสแกน';
       }
+      logToConsole('Scan completed: No prompt files found.', 'error');
     }
   } catch (err) {
     console.error(err);
@@ -7977,6 +8036,7 @@ document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () 
       msg.style.color = '#f56565';
       msg.textContent = `สแกนล้มเหลว: ${err.message || err}`;
     }
+    logToConsole(`Scan failed: ${err.message || err}`, 'error');
   }
 });
 
@@ -8042,7 +8102,9 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
       video_model: videoModel,
       output_count: outputCount,
       duration_seconds: durationSeconds,
-      upscale_resolution: upscaleResolution
+      upscale_resolution: upscaleResolution,
+      delay_min: parseFloat(document.getElementById('cfg_flow_po_worker_delay_min')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0,
+      delay_max: parseFloat(document.getElementById('cfg_flow_po_worker_delay_max')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0
     };
     
     logToConsole(`Submitting prompt-only batch of ${validPairs.length} scenes to Project ID: ${project}...`);
