@@ -3913,13 +3913,6 @@ function initWorkflowActionListeners() {
     });
   }
 
-  // Clear flow video preset if user modifies any settings manually (excluding project dropdown)
-  ['cfg_flow_video_model', 'cfg_flow_orientation', 'cfg_flow_output_count', 'cfg_flow_upscale_auto', 'cfg_flowkit_worker_delay_min', 'cfg_flowkit_worker_delay_max'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', () => {
-      clearFlowVideoPresetSelect();
-    });
-  });
-
   // Flow Prompt-Only presets
   const flowPoPresetSelect = document.getElementById('flowPoPresetSelect');
   if (flowPoPresetSelect) {
@@ -3927,16 +3920,6 @@ function initWorkflowActionListeners() {
       applyFlowPoPreset(e.target.value);
     });
   }
-
-  // Clear flow PO preset if user modifies any settings manually (excluding project dropdown)
-  ['cfg_flow_po_video_model', 'cfg_flow_po_orientation', 'cfg_flow_po_output_count', 'cfg_flow_po_upscale_auto', 'cfg_flow_po_worker_delay_min', 'cfg_flow_po_worker_delay_max'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', () => {
-      clearFlowPoPresetSelect();
-    });
-  });
-  document.getElementById('cfg_flow_po_prompts_path')?.addEventListener('input', () => {
-    clearFlowPoPresetSelect();
-  });
   const saveFlowPoPresetBtn = document.getElementById('saveFlowPoPresetBtn');
   if (saveFlowPoPresetBtn) {
     saveFlowPoPresetBtn.addEventListener('click', () => {
@@ -6861,12 +6844,10 @@ function initFlowKitUploaderListeners() {
       el1.addEventListener('input', (e) => {
         el2.value = e.target.value;
         calculateFlowKitPaths();
-        clearFlowVideoPresetSelect();
       });
       el2.addEventListener('input', (e) => {
         el1.value = e.target.value;
         calculateFlowKitPaths();
-        clearFlowVideoPresetSelect();
       });
     }
   };
