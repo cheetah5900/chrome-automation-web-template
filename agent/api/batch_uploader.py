@@ -1758,28 +1758,36 @@ class DownloadProjectVideosRequest(BaseModel):
     project_id: str
     upscale_resolution: str  # NONE, VIDEO_RESOLUTION_1080P, VIDEO_RESOLUTION_4K
 
+def _is_jpeg_file(path: Path) -> bool:
+    """Check if a file is actually a JPEG image (thumbnail) disguised as .mp4."""
+    try:
+        with open(path, "rb") as f:
+            return f.read(2) == b'\xff\xd8'
+    except Exception:
+        return False
+
 def resolve_local_file(url: str, media_id: str, project_slug: str, display_order: int, scene_id: str, is_upscale: bool) -> Path | None:
     # 1. If url starts with file://, check if that path exists
     if url and url.startswith("file://"):
         p = Path(url[7:])
-        if p.exists():
+        if p.exists() and not _is_jpeg_file(p):
             return p
     # 2. Check canonical paths
     from agent.utils.paths import scene_video_path, scene_4k_path
     if is_upscale:
         p4k = scene_4k_path(project_slug, display_order, scene_id)
-        if p4k.exists():
+        if p4k.exists() and not _is_jpeg_file(p4k):
             return p4k
     else:
         pscene = scene_video_path(project_slug, display_order, scene_id)
-        if pscene.exists():
+        if pscene.exists() and not _is_jpeg_file(pscene):
             return pscene
     
     # 3. Check workflow videos folder
     if media_id:
         suffix = "_upscaled" if is_upscale else ""
         pworkflow = Path("output/_workflow_videos") / f"{media_id}{suffix}.mp4"
-        if pworkflow.exists():
+        if pworkflow.exists() and not _is_jpeg_file(pworkflow):
             return pworkflow
             
     return None
@@ -1789,9 +1797,13 @@ async def download_file_to_temp(url: str) -> Path:
     async with aiohttp.ClientSession(connector=connector) as session:
         async with session.get(url) as resp:
             if resp.status == 200:
+                content = await resp.read()
+                # Reject JPEG thumbnails disguised as video
+                if content[:2] == b'\xff\xd8':
+                    raise Exception(f"URL returned JPEG thumbnail (not video): {url[:120]}")
                 temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
                 temp_path = Path(temp_file.name)
-                temp_path.write_bytes(await resp.read())
+                temp_path.write_bytes(content)
                 return temp_path
             else:
                 raise Exception(f"Failed to download URL {url}: HTTP {resp.status}")

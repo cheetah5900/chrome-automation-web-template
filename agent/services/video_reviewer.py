@@ -143,24 +143,92 @@ def _find_url_in_dict(node) -> str | None:
 
 
 async def _download_via_get_media(media_id: str, dest: Path, project_id: str = "") -> None:
-    """Download video by fetching encoded content or signed URL from get_media API."""
+    """Download video by fetching via tRPC getMediaUrlRedirect or encoded content from get_media API."""
     from agent.services.flow_client import get_flow_client
+    import aiohttp
 
     client = get_flow_client()
+    clean_id = media_id.replace("media/", "") if media_id else ""
+    
+    # Strategy 1: Use tRPC getMediaUrlRedirect to get the real video URL
+    if client.connected and clean_id:
+        try:
+            trpc_url = f"https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name={clean_id}"
+            logger.info("Trying tRPC getMediaUrlRedirect for %s...", clean_id[:12])
+            trpc_result = await client._send("trpc_request", {
+                "url": trpc_url,
+                "method": "GET",
+                "headers": {"accept": "*/*"},
+            }, timeout=15)
+            
+            if trpc_result and isinstance(trpc_result, dict) and not trpc_result.get("error"):
+                # Extract redirect URL from tRPC response
+                trpc_data = trpc_result.get("data", trpc_result)
+                redirect_url = None
+                
+                # tRPC response may contain the URL in various forms
+                if isinstance(trpc_data, dict):
+                    # Check result.data.json.url or similar
+                    for key_path in [
+                        lambda d: d.get("result", {}).get("data", {}).get("json", {}).get("url"),
+                        lambda d: d.get("result", {}).get("data", {}).get("url"),
+                        lambda d: d.get("json", {}).get("url"),
+                        lambda d: d.get("url"),
+                    ]:
+                        try:
+                            val = key_path(trpc_data)
+                            if val and isinstance(val, str) and val.startswith("http"):
+                                redirect_url = val
+                                break
+                        except Exception:
+                            continue
+                    
+                    # Fallback: scan recursively for any video URL
+                    if not redirect_url:
+                        redirect_url = _find_url_in_dict(trpc_data)
+                
+                if redirect_url:
+                    logger.info("Got redirect URL from tRPC: %s", redirect_url[:120])
+                    await _download_video(redirect_url, dest)
+                    # Validate content is actually video
+                    if dest.exists():
+                        with open(dest, "rb") as f:
+                            header = f.read(12)
+                        if header[:2] == b'\xff\xd8':
+                            logger.warning("tRPC redirect URL returned JPEG thumbnail, not video. Removing.")
+                            dest.unlink()
+                        else:
+                            logger.info("Successfully downloaded real video via tRPC redirect (%d bytes)", dest.stat().st_size)
+                            return
+                else:
+                    logger.warning("tRPC getMediaUrlRedirect returned no URL. Response keys: %s", 
+                                   list(trpc_data.keys()) if isinstance(trpc_data, dict) else type(trpc_data).__name__)
+        except Exception as e:
+            logger.warning("tRPC getMediaUrlRedirect failed for %s: %s", clean_id[:12], e)
+
+    # Strategy 2: REST API get_media (original approach)
     result = await client.get_media(media_id, project_id)
     if result.get("error"):
         raise ValueError(f"get_media failed for {media_id}: {result['error']}")
 
     data = result.get("data", result)
     
-    # 1. Check if the response contains a signed URL we can download directly
+    # 2a. Check if the response contains a signed URL we can download directly
     url = _find_url_in_dict(data)
     if url:
         logger.info("Found signed URL in get_media response, downloading directly...")
         await _download_video(url, dest)
-        return
+        # Validate content is actually video
+        if dest.exists():
+            with open(dest, "rb") as f:
+                header = f.read(12)
+            if header[:2] == b'\xff\xd8':
+                logger.warning("get_media signed URL returned JPEG thumbnail, not video. Removing.")
+                dest.unlink()
+            else:
+                return
 
-    # 2. Fallback: Video content is in video.encodedVideo or image.encodedImage (base64)
+    # 2b. Fallback: Video content is in video.encodedVideo or image.encodedImage (base64)
     encoded = None
     if isinstance(data, dict):
         if "video" in data and isinstance(data["video"], dict):
@@ -178,6 +246,11 @@ async def _download_via_get_media(media_id: str, dest: Path, project_id: str = "
         )
 
     video_bytes = base64.standard_b64decode(encoded)
+    
+    # Validate decoded content is not JPEG
+    if video_bytes[:2] == b'\xff\xd8':
+        raise ValueError(f"Decoded content for {media_id} is JPEG thumbnail, not video data.")
+    
     with open(dest, "wb") as f:
         f.write(video_bytes)
     logger.info("Downloaded %s via get_media (%d bytes)", media_id[:12], len(video_bytes))
