@@ -3560,7 +3560,7 @@ def _make_video_cover_impl(
 
     if is_combine_mode:
         if combine_folders:
-            out_dir = os.path.join(base_dir, combine_folders[0])
+            out_dir = resolve_subfolder_by_prefix(base_dir, combine_folders[0])
         else:
             out_dir = base_dir
 
