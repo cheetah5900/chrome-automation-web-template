@@ -3304,6 +3304,40 @@ def _make_video_cover_impl(
     combine_media_exts = video_exts + [".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"]
     suffix_val = (suffix or "").strip()
 
+    def resolve_subfolder_by_prefix(base_dir: str, folder_id: str) -> str:
+        """Resolve a subfolder by its leading number prefix.
+        
+        If folder_id is a number (e.g. '15'), look for a directory whose name
+        starts with that number followed by a non-digit separator (e.g. '15 - xxxx',
+        '15_something'). Falls back to exact name match.
+        """
+        import re as _re
+        exact_path = os.path.join(base_dir, folder_id)
+        if os.path.isdir(exact_path):
+            return exact_path
+        
+        # Only attempt prefix matching if folder_id is purely numeric
+        if folder_id.isdigit() and os.path.isdir(base_dir):
+            candidates = []
+            for entry in os.listdir(base_dir):
+                entry_path = os.path.join(base_dir, entry)
+                if not os.path.isdir(entry_path):
+                    continue
+                # Extract leading number from directory name
+                m = _re.match(r'^(\d+)', entry)
+                if m and m.group(1) == folder_id:
+                    candidates.append(entry)
+            
+            if len(candidates) == 1:
+                return os.path.join(base_dir, candidates[0])
+            elif len(candidates) > 1:
+                # If multiple matches, prefer shortest name (most exact match)
+                candidates.sort(key=len)
+                return os.path.join(base_dir, candidates[0])
+        
+        # Return exact path (caller will handle "does not exist" error)
+        return exact_path
+
     def resolve_named_media_file(directory: str, folder_name: str, allowed_exts: list[str]) -> str | None:
         if not os.path.isdir(directory):
             return None
@@ -3378,7 +3412,7 @@ def _make_video_cover_impl(
         
         base_dir = output_path.strip()
         sub_no = no.strip()
-        subfolder = os.path.join(base_dir, sub_no)
+        subfolder = resolve_subfolder_by_prefix(base_dir, sub_no)
         if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
             raise HTTPException(status_code=400, detail=f"Set {sub_no}: Subfolder '{subfolder}' does not exist")
             
@@ -3448,7 +3482,7 @@ def _make_video_cover_impl(
         prefix_str = prefix.strip() if prefix else ""
 
         for folder_name in combine_folders:
-            subfolder = os.path.join(base_dir, folder_name)
+            subfolder = resolve_subfolder_by_prefix(base_dir, folder_name)
                 
             if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
                 raise HTTPException(status_code=400, detail=f"Set {folder_name}: Subfolder '{subfolder}' does not exist")
