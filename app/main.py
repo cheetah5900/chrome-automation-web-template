@@ -3990,6 +3990,14 @@ def _make_video_cover_impl(
 
     else:
         # Cover Mode: Video 1 + 2s Black + 3s Image
+        # Export to the same subfolder where the source video was pulled from
+        if prefix_str:
+            cover_out_name = f"{prefix_str}{sub_no}.mp4"
+        else:
+            cover_out_name = video_filename
+        final_output_path = os.path.join(subfolder, cover_out_name)
+        log(f"Cover Mode Output Target: '{final_output_path}'")
+
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 temp_input_video = src_video_path
