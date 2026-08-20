@@ -695,8 +695,36 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
             except Exception:
                 pass
 
-            video_url = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{media_id}.mp4"
-            upscale_url = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{media_id}_upscaled.mp4" if upscale_media_id else None
+            # Extract actual video CDN URL from media object (e.g. storage.googleapis.com)
+            def _extract_cdn_url(media_obj):
+                """Extract CDN/GCS signed URL from a Google Flow media object."""
+                if not media_obj or not isinstance(media_obj, dict):
+                    return None
+                # Search for storage.googleapis.com URLs in the media object
+                def _scan(node):
+                    if isinstance(node, dict):
+                        for k, v in node.items():
+                            if isinstance(v, str) and v.startswith("https://") and ("storage.googleapis.com" in v or "video-cdn" in v or "cdn.video" in v):
+                                return v.replace("\\u0026", "&").replace("\\", "")
+                            found = _scan(v)
+                            if found:
+                                return found
+                    elif isinstance(node, list):
+                        for item in node:
+                            found = _scan(item)
+                            if found:
+                                return found
+                    return None
+                return _scan(media_obj)
+            
+            cdn_video_url = _extract_cdn_url(standard_video)
+            cdn_upscale_url = _extract_cdn_url(upscaled_video) if upscaled_video else None
+            
+            local_cache_path = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{media_id}.mp4"
+            local_upscale_cache = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{upscale_media_id}_upscaled.mp4" if upscale_media_id else None
+            
+            video_url = cdn_video_url or local_cache_path
+            upscale_url = (cdn_upscale_url or local_upscale_cache) if upscale_media_id else None
             
             scene_dict = {
                 "display_order": idx + 1,
