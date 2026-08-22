@@ -2136,12 +2136,17 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     if not img_name:
                         img_url = scene.get(f"{p}_image_url")
                         if img_url:
-                            if img_url.startswith("file://"):
-                                img_name = Path(img_url[7:]).stem
-                            else:
-                                img_name = Path(img_url).stem
-                        if img_name:
+                            # Strip query params from CDN URLs before extracting stem
                             import re
+                            clean_url = img_url.split("?")[0] if "?" in img_url else img_url
+                            if clean_url.startswith("file://"):
+                                img_name = Path(clean_url[7:]).stem
+                            else:
+                                img_name = Path(clean_url).stem
+                            # Skip UUID-like names (e.g. 3783d63d-4268-46c3-bbe1-513736d2fc43) — they're not meaningful
+                            if img_name and re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', img_name, re.IGNORECASE):
+                                img_name = None
+                        if img_name:
                             if project_slug and img_name.startswith(f"{project_slug}_"):
                                 img_name = img_name[len(project_slug) + 1:]
                             img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
@@ -2168,10 +2173,11 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                                 
                         prompt_summary = summarize_prompt_for_filename(prompt_text, max_words=15, max_length=90)
                         if prompt_summary:
-                            img_name = prompt_summary
+                            img_name = f"{display_order:02d} - {prompt_summary}"
                         else:
                             not_mapped_counter += 1
-                            img_name = f"scene_{display_order or not_mapped_counter}"
+                            order_num = display_order or not_mapped_counter
+                            img_name = f"{order_num:02d} - Scene {order_num:02d}"
                     
                     dup_key = f"{p}_{img_name}"
                     dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
