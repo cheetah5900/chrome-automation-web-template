@@ -42,6 +42,51 @@ def summarize_prompt_for_filename(prompt: str, max_words: int = 15, max_length: 
     summary = summary.strip(" .-_,;")
     return summary
 
+
+def clean_image_or_scene_name(val: str | None) -> str | None:
+    """Extract and sanitize clean filename stem from a URL or filename string.
+    Strips query parameters, URL encodings, hashes/UUIDs, and path prefixes.
+    Returns None if the result is a UUID, hash, contains CDN query params, or is empty."""
+    if not val or not isinstance(val, str):
+        return None
+    val = val.strip()
+    if not val:
+        return None
+    # Strip URL query parameters and fragments
+    clean_val = val.split("?")[0].split("#")[0].strip()
+    if clean_val.startswith("file:///"):
+        inner = clean_val[7:]
+        if inner.startswith("http://") or inner.startswith("https://"):
+            return clean_image_or_scene_name(inner)
+        name = Path(inner).stem
+    elif clean_val.startswith("file://"):
+        inner = clean_val[7:]
+        if inner.startswith("http://") or inner.startswith("https://"):
+            return clean_image_or_scene_name(inner)
+        name = Path(inner).stem
+    elif "://" in clean_val or "/" in clean_val or "\\" in clean_val:
+        name = Path(clean_val).stem
+    else:
+        name = Path(clean_val).stem
+    
+    name = name.strip()
+    if not name:
+        return None
+        
+    # Skip raw UUIDs (e.g. 948bd705-3171-4c71-8fa9-581b13459d9f)
+    if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', name, re.IGNORECASE):
+        return None
+        
+    # Skip any string that still contains query parameter leftovers (e.g. contains Expires= or KeyName= or Signature=)
+    if "Expires=" in name or "KeyName=" in name or "Signature=" in name or "?" in name or "&" in name:
+        return None
+
+    # Skip 32-64 char hex hashes (e.g. md5/sha256)
+    if re.match(r'^[0-9a-f]{32,64}$', name, re.IGNORECASE):
+        return None
+
+    return name
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/batch-uploader", tags=["batch-uploader"])
 _repo = SQLiteRepository()
@@ -1858,12 +1903,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         local_prompt_map = {}
         for s in local_scenes:
             img_url = s.get("vertical_image_url") or s.get("horizontal_image_url")
-            img_stem = None
-            if img_url:
-                if img_url.startswith("file://"):
-                    img_stem = Path(img_url[7:]).stem
-                else:
-                    img_stem = Path(img_url).stem
+            img_stem = clean_image_or_scene_name(img_url)
             
             p_text = s.get("prompt") or s.get("video_prompt") or s.get("prompt_content")
             for prefix in ("vertical", "horizontal"):
@@ -1894,7 +1934,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
             for key in (f"{prefix}_video_media_id", f"{prefix}_upscale_media_id"):
                 m_id = s.get(key)
                 if m_id:
-                    img_name = local_image_name_map.get(m_id)
+                    img_name = clean_image_or_scene_name(local_image_name_map.get(m_id))
                     if img_name:
                         break
             if img_name:
@@ -1903,19 +1943,16 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         if not img_name:
             for prefix in ("vertical", "horizontal"):
                 img_url = s.get(f"{prefix}_image_url")
-                if img_url:
-                    if img_url.startswith("file://"):
-                        img_name = Path(img_url[7:]).stem
-                    else:
-                        img_name = Path(img_url).stem
-                    if img_name:
-                        break
-            if img_name:
-                import re
-                if project_slug and img_name.startswith(f"{project_slug}_"):
-                    img_name = img_name[len(project_slug) + 1:]
-                img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
-                img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
+                img_name = clean_image_or_scene_name(img_url)
+                if img_name:
+                    break
+        if img_name:
+            import re
+            if project_slug and img_name.startswith(f"{project_slug}_"):
+                img_name = img_name[len(project_slug) + 1:]
+            img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
+            img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
+            img_name = clean_image_or_scene_name(img_name)
 
         if img_name:
             import re
@@ -2127,30 +2164,23 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                 try:
                     img_name = None
                     if media_id:
-                        img_name = local_image_name_map.get(media_id)
+                        img_name = clean_image_or_scene_name(local_image_name_map.get(media_id))
                     if not img_name:
                         std_m = scene.get(f"{p}_video_media_id")
                         if std_m:
-                            img_name = local_image_name_map.get(std_m)
+                            img_name = clean_image_or_scene_name(local_image_name_map.get(std_m))
                             
                     if not img_name:
                         img_url = scene.get(f"{p}_image_url")
-                        if img_url:
-                            # Strip query params from CDN URLs before extracting stem
-                            import re
-                            clean_url = img_url.split("?")[0] if "?" in img_url else img_url
-                            if clean_url.startswith("file://"):
-                                img_name = Path(clean_url[7:]).stem
-                            else:
-                                img_name = Path(clean_url).stem
-                            # Skip UUID-like names (e.g. 3783d63d-4268-46c3-bbe1-513736d2fc43) — they're not meaningful
-                            if img_name and re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', img_name, re.IGNORECASE):
-                                img_name = None
-                        if img_name:
-                            if project_slug and img_name.startswith(f"{project_slug}_"):
-                                img_name = img_name[len(project_slug) + 1:]
-                            img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
-                            img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
+                        img_name = clean_image_or_scene_name(img_url)
+
+                    if img_name:
+                        import re
+                        if project_slug and img_name.startswith(f"{project_slug}_"):
+                            img_name = img_name[len(project_slug) + 1:]
+                        img_name = re.sub(r"^synced_project_[a-f0-9]+_", "", img_name, flags=re.IGNORECASE)
+                        img_name = re.sub(r"_(vertical|horizontal)$", "", img_name, flags=re.IGNORECASE)
+                        img_name = clean_image_or_scene_name(img_name)
                             
                     if not img_name:
                         # Extract prompt summary for prompt-only / text-to-video (10-15 words)
@@ -2178,6 +2208,12 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                             not_mapped_counter += 1
                             order_num = display_order or not_mapped_counter
                             img_name = f"{order_num:02d} - Scene {order_num:02d}"
+                    
+                    # Final safety fallback to prevent any raw UUID or query string from becoming a filename
+                    if not img_name or "?" in img_name or "&" in img_name or "Expires=" in img_name or "Signature=" in img_name:
+                        not_mapped_counter += 1
+                        order_num = display_order or not_mapped_counter
+                        img_name = f"{order_num:02d} - Scene {order_num:02d}"
                     
                     dup_key = f"{p}_{img_name}"
                     dup_counters[dup_key] = dup_counters.get(dup_key, 0) + 1
