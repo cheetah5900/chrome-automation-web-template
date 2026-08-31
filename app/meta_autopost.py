@@ -65,24 +65,27 @@ def activate_browser_window(driver=None, port: int = 9222) -> None:
         pass
 
 def upload_macos_file_dialog_fast(file_path: str) -> bool:
-    """Optimized, fast macOS file dialog path selection."""
+    """Strictly follows AGENTS.md macOS File Dialog rules without app switching interference."""
     if sys.platform != "darwin":
         return False
     escaped_path = file_path.replace('"', '\\"')
     script = f"""
     set the clipboard to "{escaped_path}"
     tell application "System Events"
-        -- Cmd + Shift + G
-        key code 5 using {{command down, shift down}}
-        delay 0.35
+        -- Wait 1.0s for macOS file sheet to render completely
+        delay 1.0
         
-        -- Cmd + V
-        key code 9 using {{command down}}
-        delay 0.25
+        -- Press Cmd + Shift + G (key code 5 is 'g' on US layout)
+        key code 5 using {{command down, shift down}}
+        delay 1.0
+        
+        -- Press Cmd + V to paste filepath into sheet
+        keystroke "v" using {{command down}}
+        delay 1.0
         
         -- Enter to confirm path
         keystroke return
-        delay 0.45
+        delay 1.2
         
         -- Enter to confirm file selection
         keystroke return
@@ -160,8 +163,11 @@ def post_single_reel(
             raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
 
     # 2. Click 'Add video'
-    activate_browser_window(driver)
-    time.sleep(0.2)
+    try:
+        driver.execute_cdp_cmd('Page.bringToFront', {})
+    except Exception:
+        pass
+    time.sleep(0.3)
 
     all_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')
     target_btn = None
