@@ -4316,26 +4316,50 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
             # 6. Click 'Next' (Step 1 Create -> Step 2 Edit)
             log(f"[Meta Auto Post] Moving to Step 2 (Edit)...")
             driver.execute_script('''
-                const nextBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Next' && el.getBoundingClientRect().y > 700);
+                const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+                const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
                 if (nextBtn) nextBtn.click();
             ''')
-            time.sleep(2.0)
+            # Wait for Step 2 to be active
+            for _ in range(15):
+                time.sleep(1.0)
+                on_step2 = driver.execute_script('''
+                    return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Audio' || el.innerText.trim() === 'Crop'));
+                ''')
+                if on_step2:
+                    break
+
+            time.sleep(1.0)
 
             # 7. Click 'Next' (Step 2 Edit -> Step 3 Share)
             log(f"[Meta Auto Post] Moving to Step 3 (Share)...")
             driver.execute_script('''
-                const nextBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Next' && el.getBoundingClientRect().y > 700);
+                const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+                const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
                 if (nextBtn) nextBtn.click();
             ''')
-            time.sleep(2.0)
+            # Wait for Step 3 to be active
+            for _ in range(15):
+                time.sleep(1.0)
+                on_step3 = driver.execute_script('''
+                    return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
+                ''')
+                if on_step3:
+                    break
+
+            time.sleep(1.2)
 
             # 8. Under Share tab, select 'Schedule' option
             log(f"[Meta Auto Post] Selecting 'Schedule' option...")
             driver.execute_script('''
-                const schedOpt = Array.from(document.querySelectorAll('div, span, [role="button"]')).find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().y < 300);
-                if (schedOpt) schedOpt.click();
+                const allBtns = Array.from(document.querySelectorAll('div[role="button"], button, [role="radio"]'));
+                const schedTab = allBtns.find(b => b.innerText && b.innerText.trim() === 'Schedule' && b.getBoundingClientRect().y < 300);
+                if (schedTab) {
+                    const clickable = schedTab.closest('[role="button"], [role="radio"]') || schedTab;
+                    clickable.click();
+                }
             ''')
-            time.sleep(1.2)
+            time.sleep(1.5)
 
             # 9. Set Date & Time
             if scheduled_dt_str:
@@ -4349,42 +4373,39 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
 
                     # Date input
                     try:
-                        date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
-                        if date_inputs:
-                            d_el = date_inputs[0]
-                            d_el.click()
+                        d_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+                        if d_inputs:
+                            d_inputs[0].click()
                             time.sleep(0.2)
-                            d_el.send_keys(Keys.COMMAND, 'a')
-                            d_el.send_keys(date_str)
-                            time.sleep(0.3)
+                            d_inputs[0].send_keys(Keys.COMMAND, 'a')
+                            d_inputs[0].send_keys(date_str)
+                            time.sleep(0.5)
                     except Exception as e_date:
                         log(f"[Meta Auto Post] Date input set note: {e_date}")
 
                     # Hours input
                     try:
-                        hour_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
-                        if hour_inputs:
-                            h_el = hour_inputs[0]
-                            h_el.click()
+                        h_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
+                        if h_inputs:
+                            h_inputs[0].click()
                             time.sleep(0.2)
-                            h_el.send_keys(Keys.BACKSPACE)
+                            h_inputs[0].send_keys(Keys.BACKSPACE)
                             for ch in hour_str:
-                                h_el.send_keys(ch)
-                            time.sleep(0.2)
+                                h_inputs[0].send_keys(ch)
+                            time.sleep(0.5)
                     except Exception as e_h:
                         log(f"[Meta Auto Post] Hour input set note: {e_h}")
 
                     # Minutes input
                     try:
-                        min_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
-                        if min_inputs:
-                            m_el = min_inputs[0]
-                            m_el.click()
+                        m_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
+                        if m_inputs:
+                            m_inputs[0].click()
                             time.sleep(0.2)
-                            m_el.send_keys(Keys.BACKSPACE)
+                            m_inputs[0].send_keys(Keys.BACKSPACE)
                             for ch in min_str:
-                                m_el.send_keys(ch)
-                            time.sleep(0.2)
+                                m_inputs[0].send_keys(ch)
+                            time.sleep(0.5)
                     except Exception as e_m:
                         log(f"[Meta Auto Post] Minute input set note: {e_m}")
 
@@ -4393,15 +4414,26 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
 
             time.sleep(1.5)
 
-            # 10. Click final 'Schedule' button at bottom right
+            # 10. Click final 'Schedule' / 'Share' submit button at bottom right
             log(f"[Meta Auto Post] Clicking final Schedule button...")
             driver.execute_script('''
-                const schedBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().y > 700);
-                if (schedBtn) schedBtn.click();
+                const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+                const finalBtn = allBtns.find(b => b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900);
+                if (finalBtn) finalBtn.click();
             ''')
 
-            # Wait for scheduling completion / redirect
-            time.sleep(6.0)
+            # Wait for modal close / redirection / submission confirmation
+            log(f"[Meta Auto Post] Waiting for submission confirmation...")
+            for _ in range(30):
+                time.sleep(1.0)
+                done = driver.execute_script('''
+                    const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
+                    const modalClosed = !document.querySelector('div[role="textbox"][contenteditable="true"]') && !Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && el.innerText.trim() === 'Scheduling options');
+                    return onPlanner || modalClosed;
+                ''')
+                if done:
+                    break
+
             log(f"[Meta Auto Post] Finished post {idx+1}/{total} successfully!")
 
         global_meta_progress["status"] = "completed"
