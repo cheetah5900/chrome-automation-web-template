@@ -1,0 +1,416 @@
+import os
+import sys
+import time
+import subprocess
+import argparse
+from datetime import datetime
+from typing import Any, Callable, Optional
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
+
+from app.browser import browser_manager
+
+def log(msg: str) -> None:
+    print(msg)
+    try:
+        from app.main import log_bus
+        log_bus.publish(msg)
+    except Exception:
+        pass
+
+def _get_active_browser_app_name() -> str:
+    from app.browser import DEFAULTS_FILE, PROFILES_FILE
+    import json
+    try:
+        if DEFAULTS_FILE.exists() and PROFILES_FILE.exists():
+            defaults = json.loads(DEFAULTS_FILE.read_text())
+            selected_name = defaults.get("selected_profile", "")
+            if selected_name:
+                profiles_data = json.loads(PROFILES_FILE.read_text())
+                profiles = profiles_data.get("profiles", [])
+                profile = next((p for p in profiles if p.get("name") == selected_name), None)
+                if profile and profile.get("browser_type", "").lower() == "brave":
+                    return "Brave Browser"
+    except Exception:
+        pass
+    return "Google Chrome"
+
+def activate_browser_window() -> None:
+    """Bring browser window to frontmost."""
+    if sys.platform != "darwin":
+        return
+    app_name = _get_active_browser_app_name()
+    script = f'''
+    tell application "{app_name}" to activate
+    tell application "System Events"
+        tell process "{app_name}"
+            set frontmost to true
+        end tell
+    end tell
+    '''
+    try:
+        subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+def upload_macos_file_dialog_fast(file_path: str) -> bool:
+    """Optimized, fast macOS file dialog path selection."""
+    if sys.platform != "darwin":
+        return False
+    escaped_path = file_path.replace('"', '\\"')
+    script = f"""
+    set the clipboard to "{escaped_path}"
+    tell application "System Events"
+        -- Cmd + Shift + G
+        key code 5 using {{command down, shift down}}
+        delay 0.35
+        
+        -- Cmd + V
+        key code 9 using {{command down}}
+        delay 0.25
+        
+        -- Enter to confirm path
+        keystroke return
+        delay 0.45
+        
+        -- Enter to confirm file selection
+        keystroke return
+    end tell
+    """
+    try:
+        subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception as e:
+        log(f"[Meta Auto Post Dialog Error] {e}")
+        return False
+
+def fast_poll(driver, js_expr: str, timeout: float = 20.0, poll_interval: float = 0.15) -> Any:
+    """Polls JavaScript expression every 150ms until truthy or timeout."""
+    start_t = time.time()
+    while time.time() - start_t < timeout:
+        try:
+            res = driver.execute_script(js_expr)
+            if res:
+                return res
+        except Exception:
+            pass
+        time.sleep(poll_interval)
+    return None
+
+def post_single_reel(
+    driver,
+    item: dict[str, Any],
+    composer_url: str,
+    item_idx: int = 1,
+    total_items: int = 1,
+    progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
+) -> bool:
+    """
+    Executes an ultra-fast, snappy single reel post sequence:
+    1. Ensure on composer page
+    2. Click 'Add video' (ActionChains)
+    3. Fast macOS dialog path submission
+    4. Fast poll for video upload completion (100%)
+    5. Instant caption insertion
+    6. Step 1 (Create) -> Step 2 (Edit) transition
+    7. Step 2 (Edit) -> Step 3 (Share) transition
+    8. Schedule radio option selection
+    9. Date & Time input configuration
+    10. Final Schedule submission button click
+    """
+    subfolder_name = item.get("subfolder_name", "")
+    video_name = item.get("video_name", "")
+    video_path = item.get("video_path", "")
+    caption = item.get("caption", "")
+    scheduled_dt_str = item.get("scheduled_datetime", "")
+
+    msg = f"[{item_idx}/{total_items}] กำลังโพสต์: {subfolder_name or video_name}"
+    log(f"[Meta Auto Post Script] {msg} (Target: {scheduled_dt_str})")
+    if progress_callback:
+        progress_callback({
+            "current": item_idx,
+            "total": total_items,
+            "percent": int(((item_idx - 1) / max(total_items, 1)) * 100),
+            "message": msg
+        })
+
+    # 1. Ensure on composer
+    is_ready = driver.execute_script('''
+        return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
+    ''')
+    if not is_ready:
+        log(f"[Meta Auto Post Script] Navigating to composer: {composer_url}")
+        driver.get(composer_url)
+        # Fast poll until Add video appears
+        ready = fast_poll(driver, '''
+            return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
+        ''', timeout=20.0, poll_interval=0.2)
+        if not ready:
+            raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
+
+    # 2. Click 'Add video'
+    activate_browser_window()
+    time.sleep(0.2)
+
+    all_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')
+    target_btn = None
+    for b in all_btns:
+        try:
+            if b.text and 'Add video' in b.text:
+                target_btn = b
+                break
+        except Exception:
+            pass
+
+    if not target_btn:
+        target_btn = driver.execute_script('''
+            const textEl = Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video' && el.children.length === 0);
+            return textEl ? (textEl.closest('[role="button"]') || textEl) : null;
+        ''')
+
+    if target_btn:
+        try:
+            ActionChains(driver).move_to_element(target_btn).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", target_btn)
+        log("[Meta Auto Post Script] Clicked 'Add video' button")
+    else:
+        raise RuntimeError("ไม่สามารถคลิกปุ่ม Add video ได้")
+
+    time.sleep(0.5)
+
+    # 3. macOS File Dialog
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"ไม่พบไฟล์วิดีโอ: {video_path}")
+
+    log(f"[Meta Auto Post Script] Uploading video via dialog: {video_path}")
+    upload_macos_file_dialog_fast(video_path)
+
+    # 4. Fast poll for upload completion
+    log("[Meta Auto Post Script] Waiting for upload completion...")
+    upload_done = fast_poll(driver, '''
+        const text = document.body.innerText || '';
+        if (text.includes('100%') || text.includes('Your video is safe') || text.includes('Delete')) {
+            const nextBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Next' && el.getBoundingClientRect().y > 700);
+            if (nextBtn) return true;
+        }
+        return false;
+    ''', timeout=90.0, poll_interval=0.2)
+
+    if not upload_done:
+        log("[Meta Auto Post Script] Warning: Upload timeout check, attempting to proceed...")
+
+    time.sleep(0.4)
+
+    # 5. Insert Caption
+    if caption:
+        log(f"[Meta Auto Post Script] Inserting caption ({len(caption)} chars)...")
+        driver.execute_script('''
+            const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
+            if (tb) {
+                tb.focus();
+                document.execCommand('selectAll', false, null);
+                document.execCommand('delete', false, null);
+                document.execCommand('insertText', false, arguments[0]);
+            }
+        ''', caption)
+        time.sleep(0.3)
+
+    # 6. Step 1 -> Step 2 (Edit)
+    log("[Meta Auto Post Script] Transitioning to Step 2 (Edit)...")
+    driver.execute_script('''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
+        if (nextBtn) nextBtn.click();
+    ''')
+
+    # Fast poll for Step 2 active
+    fast_poll(driver, '''
+        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Audio' || el.innerText.trim() === 'Crop'));
+    ''', timeout=15.0, poll_interval=0.15)
+
+    time.sleep(0.4)
+
+    # 7. Step 2 -> Step 3 (Share)
+    log("[Meta Auto Post Script] Transitioning to Step 3 (Share)...")
+    driver.execute_script('''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
+        if (nextBtn) nextBtn.click();
+    ''')
+
+    # Fast poll for Step 3 active
+    fast_poll(driver, '''
+        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
+    ''', timeout=15.0, poll_interval=0.15)
+
+    time.sleep(0.5)
+
+    # 8. Select 'Schedule' Option Tab
+    log("[Meta Auto Post Script] Selecting 'Schedule' radio tab...")
+    driver.execute_script('''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button, [role="radio"]'));
+        const schedTab = allBtns.find(b => b.innerText && b.innerText.trim() === 'Schedule' && b.getBoundingClientRect().y < 300);
+        if (schedTab) {
+            const clickable = schedTab.closest('[role="button"], [role="radio"]') || schedTab;
+            clickable.click();
+        }
+    ''')
+    time.sleep(0.6)
+
+    # 9. Set Date & Time
+    if scheduled_dt_str:
+        try:
+            dt = datetime.fromisoformat(scheduled_dt_str)
+            date_str = dt.strftime("%d/%m/%Y")
+            hour_str = f"{dt.hour:02d}"
+            min_str = f"{dt.minute:02d}"
+
+            log(f"[Meta Auto Post Script] Setting Schedule Date: {date_str}, Time: {hour_str}:{min_str}")
+
+            # Date input
+            try:
+                d_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+                if d_inputs:
+                    d_inputs[0].click()
+                    time.sleep(0.1)
+                    d_inputs[0].send_keys(Keys.COMMAND, 'a')
+                    d_inputs[0].send_keys(date_str)
+                    time.sleep(0.2)
+            except Exception as e_date:
+                log(f"[Meta Auto Post Script] Date input notice: {e_date}")
+
+            # Hours input
+            try:
+                h_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
+                if h_inputs:
+                    h_inputs[0].click()
+                    time.sleep(0.1)
+                    h_inputs[0].send_keys(Keys.BACKSPACE)
+                    for ch in hour_str:
+                        h_inputs[0].send_keys(ch)
+                    time.sleep(0.2)
+            except Exception as e_h:
+                log(f"[Meta Auto Post Script] Hour input notice: {e_h}")
+
+            # Minutes input
+            try:
+                m_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
+                if m_inputs:
+                    m_inputs[0].click()
+                    time.sleep(0.1)
+                    m_inputs[0].send_keys(Keys.BACKSPACE)
+                    for ch in min_str:
+                        m_inputs[0].send_keys(ch)
+                    time.sleep(0.2)
+            except Exception as e_m:
+                log(f"[Meta Auto Post Script] Minute input notice: {e_m}")
+
+        except Exception as ex_dt:
+            log(f"[Meta Auto Post Script] Parse datetime error '{scheduled_dt_str}': {ex_dt}")
+
+    time.sleep(0.6)
+
+    # 10. Click final 'Schedule' button at bottom right
+    log("[Meta Auto Post Script] Clicking final Schedule submit button...")
+    driver.execute_script('''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        const finalBtn = allBtns.find(b => b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900);
+        if (finalBtn) finalBtn.click();
+    ''')
+
+    # 11. Fast poll for modal closure / submission confirmation
+    log("[Meta Auto Post Script] Waiting for submission confirmation...")
+    submitted = fast_poll(driver, '''
+        const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
+        const modalClosed = !document.querySelector('div[role="textbox"][contenteditable="true"]') && !Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && el.innerText.trim() === 'Scheduling options');
+        return onPlanner || modalClosed;
+    ''', timeout=30.0, poll_interval=0.3)
+
+    log(f"[Meta Auto Post Script] Post {item_idx}/{total_items} finished successfully!")
+    return True
+
+def run_meta_autopost_batch(
+    posts: list[dict[str, Any]],
+    target_url: str = "",
+    progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
+) -> dict[str, Any]:
+    """Runs a batch of scheduled posts through the fast script engine."""
+    bot = browser_manager.get()
+    driver = bot.driver
+    total = len(posts)
+
+    default_composer_url = "https://business.facebook.com/latest/reels_composer/?asset_id=1306362672555632&business_id=509334133244636&ir_qe_exposed=1&ref=biz_web_content_manager_published_posts&context_ref=POSTS"
+    composer_url = target_url.strip() or default_composer_url
+
+    errors = []
+    success_count = 0
+
+    log(f"[Meta Auto Post Script Engine] Starting batch of {total} posts...")
+
+    for idx, post in enumerate(posts):
+        try:
+            ok = post_single_reel(
+                driver=driver,
+                item=post,
+                composer_url=composer_url,
+                item_idx=idx + 1,
+                total_items=total,
+                progress_callback=progress_callback
+            )
+            if ok:
+                success_count += 1
+        except Exception as e:
+            err_msg = f"[{idx+1}/{total}] {post.get('subfolder_name', 'Item')}: {str(e)}"
+            log(f"[Meta Auto Post Script Item Error] {err_msg}")
+            errors.append(err_msg)
+
+    if progress_callback:
+        progress_callback({
+            "current": total,
+            "total": total,
+            "percent": 100,
+            "status": "completed" if not errors else "completed_with_errors",
+            "message": f"✅ โพสต์ตามคิวสำเร็จ {success_count}/{total} รายการ" if not errors else f"เสร็จสิ้น {success_count}/{total} (พบข้อผิดพลาด {len(errors)} รายการ)",
+            "errors": errors
+        })
+
+    return {
+        "ok": len(errors) == 0,
+        "total": total,
+        "success_count": success_count,
+        "errors": errors
+    }
+
+def main():
+    parser = argparse.ArgumentParser(description="Meta Reels Fast Auto Post Script")
+    parser.add_argument("--main-folder", required=True, help="Main folder containing asset subfolders")
+    parser.add_argument("--subfolders", default="", help="Subfolder selector (e.g. 1-10 or 1,2,3)")
+    parser.add_argument("--prefix", default="combined", help="Video prefix matching (default: combined)")
+    parser.add_argument("--start-date", default=datetime.now().strftime("%Y-%m-%d"), help="Start date (YYYY-MM-DD)")
+    parser.add_argument("--start-hour", type=int, default=18, help="Start hour 0-23 (default: 18)")
+    parser.add_argument("--target-url", default="", help="Target Meta Composer / Page URL")
+    args = parser.parse_args()
+
+    # Import scan helper
+    from app.main import scan_meta_autopost, MetaScanRequest
+    scan_req = MetaScanRequest(
+        main_folder=args.main_folder,
+        subfolders_str=args.subfolders,
+        video_prefix=args.prefix,
+        start_date=args.start_date,
+        start_hour=args.start_hour
+    )
+    scan_res = scan_meta_autopost(scan_req)
+    items = scan_res.get("items", [])
+    if not items:
+        print(f"❌ ไม่พบรายการวิดีโอที่ตรงกับเงื่อนไขใน: {args.main_folder}")
+        sys.exit(1)
+
+    print(f"🚀 พบ {len(items)} รายการ กำลังเริ่มรัน Auto Post Script Engine...")
+    res = run_meta_autopost_batch(items, target_url=args.target_url)
+    print("✨ ผลการทำงาน:", res)
+
+if __name__ == "__main__":
+    main()
