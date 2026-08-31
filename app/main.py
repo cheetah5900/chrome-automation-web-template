@@ -1307,6 +1307,7 @@ def _default_config() -> dict[str, Any]:
             "flowkit_worker_delay_max": 20.0,
             "flow_video_presets": {},
             "flow_po_presets": {},
+            "meta_page_url": "",
             "meta_main_folder": "",
             "meta_subfolders": "",
             "meta_start_date": "",
@@ -1382,6 +1383,7 @@ def _default_config() -> dict[str, Any]:
             "flowkit_worker_delay_max": 20.0,
             "flow_video_presets": {},
             "flow_po_presets": {},
+            "meta_page_url": "",
             "meta_main_folder": "",
             "meta_subfolders": "",
             "meta_start_date": "",
@@ -4343,6 +4345,41 @@ def run_meta_autopost(req: MetaRunRequest) -> dict[str, Any]:
 def get_meta_autopost_progress() -> dict[str, Any]:
     global global_meta_progress
     return global_meta_progress
+
+class MetaOpenUrlRequest(BaseModel):
+    url: str
+
+@app.post("/api/meta-autopost/open-url")
+def open_meta_channel_url(req: MetaOpenUrlRequest) -> dict[str, Any]:
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="URL cannot be empty")
+    
+    # Try selenium driver first if Chrome is attached
+    try:
+        bot = browser_manager.get()
+        if bot and bot.driver:
+            driver = bot.driver
+            _activate_chrome()
+            driver.get(url)
+            log(f"[Meta Auto Post] Navigated Chrome to: {url}")
+            return {"ok": True, "message": f"เปิดหน้าเว็บ {url} บนเบราว์เซอร์สำเร็จ"}
+    except Exception as e:
+        log(f"[Meta Auto Post] Selenium navigate error: {e}")
+    
+    # Fallback to system browser opening
+    import subprocess
+    import sys
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", url])
+        else:
+            import webbrowser
+            webbrowser.open(url)
+        return {"ok": True, "message": f"เปิดหน้าเว็บ {url} สำเร็จ"}
+    except Exception as err:
+        log(f"[Meta Auto Post] Open URL error: {err}")
+        return {"ok": False, "message": str(err)}
 
 @app.get("/api/utils/view-image")
 def view_image(path: str) -> FileResponse:

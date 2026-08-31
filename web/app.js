@@ -782,6 +782,7 @@ const inputsToListen = [
   'videoCombineSubFoldersText',
   'videoPrefixText',
   'viewChannelFolderText',
+  'cfg_meta_page_url',
   'cfg_meta_main_folder',
   'cfg_meta_subfolders',
   'cfg_meta_start_date',
@@ -1026,6 +1027,9 @@ async function loadConfig() {
     applyVideoPreset('');
 
     // Meta Auto Post Defaults
+    const metaPageUrl = document.getElementById('cfg_meta_page_url');
+    if (metaPageUrl) metaPageUrl.value = config.meta_page_url || '';
+
     const metaMainFolder = document.getElementById('cfg_meta_main_folder');
     if (metaMainFolder) metaMainFolder.value = config.meta_main_folder || '';
 
@@ -6503,6 +6507,7 @@ async function saveMetaPreset() {
   const presets = currentConfig.meta_presets || {};
 
   presets[trimmedName] = {
+    page_url: document.getElementById('cfg_meta_page_url')?.value || '',
     main_folder: document.getElementById('cfg_meta_main_folder')?.value || '',
     subfolders: document.getElementById('cfg_meta_subfolders')?.value || '',
     start_time: document.getElementById('cfg_meta_start_time')?.value || '18:00',
@@ -6562,6 +6567,7 @@ async function applyMetaPreset() {
   const preset = (currentConfig.meta_presets || {})[currentName];
   if (!preset) return;
 
+  if (document.getElementById('cfg_meta_page_url')) document.getElementById('cfg_meta_page_url').value = preset.page_url || preset.channel_url || '';
   if (document.getElementById('cfg_meta_main_folder')) document.getElementById('cfg_meta_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_meta_subfolders')) document.getElementById('cfg_meta_subfolders').value = preset.subfolders || '';
   if (document.getElementById('cfg_meta_start_time')) document.getElementById('cfg_meta_start_time').value = preset.start_time || '18:00';
@@ -6569,8 +6575,32 @@ async function applyMetaPreset() {
   if (document.getElementById('cfg_meta_interval_type')) document.getElementById('cfg_meta_interval_type').value = preset.interval_type || 'days';
   if (document.getElementById('cfg_meta_caption_template')) document.getElementById('cfg_meta_caption_template').value = preset.caption_template || '';
 
-  writeConsoleLine(`โหลด Preset "${currentName}" สำเร็จ`, 'info', 'metaConsole');
+  const urlDisplay = preset.page_url || preset.channel_url || 'ไม่ได้ระบุ';
+  writeConsoleLine(`โหลด Preset "${currentName}" สำเร็จ (URL: ${urlDisplay})`, 'info', 'metaConsole');
   updateTooltips();
+}
+
+async function openMetaPageUrl() {
+  const url = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
+  if (!url) {
+    alert('กรุณาระบุลิงก์หน้าเพจ / ช่อง Meta ก่อน');
+    return;
+  }
+  writeConsoleLine(`Meta Auto Post: กำลังเปิดหน้าเว็บ "${url}"...`, 'system', 'metaConsole');
+  try {
+    const res = await jsonFetch('/api/meta-autopost/open-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    if (res.ok) {
+      writeConsoleLine(`[Meta Auto Post] ${res.message || 'เปิดหน้าเว็บสำเร็จ'}`, 'success', 'metaConsole');
+    } else {
+      writeConsoleLine(`[Meta Auto Post Error] ${res.detail || res.message}`, 'error', 'metaConsole');
+    }
+  } catch (err) {
+    writeConsoleLine(`[Meta Auto Post Error] ${err.message}`, 'error', 'metaConsole');
+  }
 }
 
 async function scanMetaBatch() {
@@ -6912,6 +6942,27 @@ async function runMetaAutoPost(btnElement) {
 }
 
 function initMetaAutoPostListeners() {
+  const openUrlBtn = document.getElementById('btnOpenMetaPageUrl');
+  if (openUrlBtn) openUrlBtn.addEventListener('click', openMetaPageUrl);
+
+  const setDefaultUrlBtn = document.getElementById('setMetaPageUrlDefaultBtn');
+  if (setDefaultUrlBtn) {
+    setDefaultUrlBtn.addEventListener('click', async () => {
+      const val = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
+      try {
+        await jsonFetch('/api/config/set-default', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'meta_page_url', value: val })
+        });
+        writeConsoleLine(`บันทึก URL เริ่มต้นสำหรับ Meta Auto Post: ${val || 'None'}`, 'success', 'metaConsole');
+        alert(`บันทึกค่าเริ่มต้นเรียบร้อยแล้ว: ${val || 'None'}`);
+      } catch (e) {
+        writeConsoleLine(`เกิดข้อผิดพลาดในการบันทึกค่าเริ่มต้น: ${e.message}`, 'error', 'metaConsole');
+      }
+    });
+  }
+
   const browseMainBtn = document.getElementById('browseMetaMainFolderBtn');
   if (browseMainBtn) {
     browseMainBtn.addEventListener('click', async () => {
@@ -7068,9 +7119,11 @@ const staticTooltips = {
   "clearSeedanceConsoleBtn": "🧹 ล้าง Log (Clear)",
 
   // Meta Auto Post
+  "btnOpenMetaPageUrl": "🌐 ไปที่หน้าเพจนี้ (Open / Redirect):<br>- เปิด Chrome ไปยัง URL ของช่อง/เพจนี้ทันที",
+  "setMetaPageUrlDefaultBtn": "📌 ตั้ง URL เพจเป็นค่าเริ่มต้น (Set Default)",
   "browseMetaMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่มีโฟลเดอร์ย่อยบรรจุวิดีโอและ Caption",
   "setMetaMainFolderDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set default):<br>- บันทึกโฟลเดอร์นี้เป็นค่าเริ่มต้น",
-  "saveMetaPresetBtn": "💾 บันทึก Preset Meta Auto Post:<br>- บันทึกค่าการตั้งค่าและ Caption template เก็บไว้",
+  "saveMetaPresetBtn": "💾 บันทึก Preset Meta Auto Post:<br>- บันทึกค่าการตั้งค่า, ลิงก์เพจ และ Caption template เก็บไว้",
   "deleteMetaPresetBtn": "🗑️ ลบ Preset ที่เลือก",
   "btnScanMetaBatch": "🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair):<br>- สแกนไฟล์วิดีโอ (.mp4), แคปชั่น (.txt), และคำนวณวัน-เวลาโพสต์ตามช่วงที่ระบุ",
   "btnClearMetaBatch": "🗑️ ล้างรายการโพสต์ที่จับคู่ไว้ทั้งหมดในตาราง",

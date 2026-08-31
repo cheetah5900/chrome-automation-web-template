@@ -1322,6 +1322,17 @@
                   </div>
                 </div>
 
+                <!-- Meta Channel / Page URL -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_meta_page_url" style="font-weight: bold; color: #8da6ff;">ลิงก์หน้าเพจ / ช่อง Meta (Channel URL / Composer URL)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">ระบุ URL หน้าเพจหรือ Meta Business Suite สำหรับโพสต์ของ Preset นี้ (เช่น ลิงก์ตรงของช่อง/เพจ)</div>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <input id="cfg_meta_page_url" placeholder="เช่น https://business.facebook.com/latest/composer?asset_id=..." style="margin-bottom: 0; flex-grow: 1;" />
+                    <button id="btnOpenMetaPageUrl" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: rgba(24, 119, 242, 0.15); border-color: rgba(24, 119, 242, 0.3); color: #8da6ff;">🌐 ไปที่หน้านี้ (Redirect)</button>
+                    <button id="setMetaPageUrlDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                  </div>
+                </div>
+
                 <!-- Main Folder -->
                 <div class="form-group" style="margin-bottom: 18px;">
                   <label for="cfg_meta_main_folder" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์หลักสำหรับดึงข้อมูล (Main Target Folder)</label>
@@ -1522,6 +1533,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=9"></script>
+  <script src="/web/app.js?v=10"></script>
 </body>
 </html>
