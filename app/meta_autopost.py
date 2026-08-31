@@ -36,21 +36,31 @@ def _get_active_browser_app_name() -> str:
         pass
     return "Google Chrome"
 
-def activate_browser_window() -> None:
-    """Bring browser window to frontmost."""
+def activate_browser_window(driver=None, port: int = 9222) -> None:
+    """Bring the exact 9222 debug browser window to frontmost without activating default Chrome."""
+    if driver:
+        try:
+            driver.execute_cdp_cmd('Page.bringToFront', {})
+        except Exception:
+            pass
+
     if sys.platform != "darwin":
         return
-    app_name = _get_active_browser_app_name()
-    script = f'''
-    tell application "{app_name}" to activate
-    tell application "System Events"
-        tell process "{app_name}"
-            set frontmost to true
-        end tell
-    end tell
-    '''
+
     try:
-        subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        pid_res = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, check=False)
+        pids = [p.strip() for p in pid_res.stdout.strip().split() if p.strip()]
+        if pids:
+            target_pid = pids[0]
+            script = f'''
+            tell application "System Events"
+                try
+                    set p to first process whose unix id is {target_pid}
+                    set frontmost of p to true
+                end try
+            end tell
+            '''
+            subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
@@ -150,7 +160,7 @@ def post_single_reel(
             raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
 
     # 2. Click 'Add video'
-    activate_browser_window()
+    activate_browser_window(driver)
     time.sleep(0.2)
 
     all_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')

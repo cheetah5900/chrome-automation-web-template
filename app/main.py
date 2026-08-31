@@ -494,25 +494,32 @@ def _get_active_browser_app_name(browser_type: str = None) -> str:
     return "Google Chrome"
 
 
-def _activate_chrome():
-    app_name = _get_active_browser_app_name()
-    script = f"""
-    tell application "{app_name}"
-        activate
-        repeat with w in windows
-            if minimized of w is true then
-                set minimized of w to false
-            end if
-        end repeat
-    end tell
-    """
-    try:
-        subprocess.run(["osascript", "-e", script], check=False)
-    except Exception:
+def _activate_chrome(driver=None, port: int = 9222):
+    if driver:
         try:
-            subprocess.run(["open", "-a", app_name], check=False)
+            driver.execute_cdp_cmd('Page.bringToFront', {})
         except Exception:
             pass
+
+    if sys.platform != "darwin":
+        return
+
+    try:
+        pid_res = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, check=False)
+        pids = [p.strip() for p in pid_res.stdout.strip().split() if p.strip()]
+        if pids:
+            target_pid = pids[0]
+            script = f'''
+            tell application "System Events"
+                try
+                    set p to first process whose unix id is {target_pid}
+                    set frontmost of p to true
+                end try
+            end tell
+            '''
+            subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
 
 
 def is_driver_alive(driver) -> bool:
