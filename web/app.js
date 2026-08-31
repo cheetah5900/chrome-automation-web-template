@@ -6957,22 +6957,13 @@ function initFlowKitUploaderListeners() {
     
     const selectedIndices = parseRangeString(val);
     console.log("applyFlowRangeSelection parsed indices:", Array.from(selectedIndices));
-    
-    const getPairFileNumber = (p) => {
-      const name = p.image_name || p.prompt_name || '';
-      const match = name.match(/^(\d+)/);
-      return match ? parseInt(match[1], 10) : Number(p.index);
-    };
 
     const isPromptOnly = flowScannedPairs.every(p => !p.image_path);
     if (!isPromptOnly) {
       const missingImageIndices = [];
       selectedIndices.forEach(idxNum => {
-        const pair = flowScannedPairs.find(p => {
-          const fileNum = getPairFileNumber(p);
-          return fileNum === idxNum || Number(p.index) === idxNum;
-        });
-        if (!pair || !pair.image_path || !pair.image_name) {
+        const pair = flowScannedPairs[idxNum - 1];
+        if (pair && (!pair.image_path || !pair.image_name)) {
           missingImageIndices.push(idxNum);
         }
       });
@@ -6982,11 +6973,10 @@ function initFlowKitUploaderListeners() {
       }
     }
     
-    flowScannedPairs.forEach(p => {
-      const fileNum = getPairFileNumber(p);
-      const idxNum = Number(p.index);
-      p.checked = selectedIndices.has(fileNum) || selectedIndices.has(idxNum);
-      console.log(`Pair index ${p.index} (fileNum: ${fileNum}, numeric: ${idxNum}) matches selection: ${p.checked}`);
+    flowScannedPairs.forEach((p, idx) => {
+      const orderIdx = idx + 1;
+      p.checked = selectedIndices.has(orderIdx);
+      console.log(`Pair order ${orderIdx} (name: ${p.image_name || p.prompt_name}) matches selection: ${p.checked}`);
     });
     
     renderScannedPairs();
