@@ -159,20 +159,16 @@ def post_single_reel(
 
     # 1. Focus 9222 window right at the start by Cocoa NSRunningApplication PID
     focus_9222_browser_tab(driver, port=9222)
-    time.sleep(0.4)
+    time.sleep(0.3)
 
-    # 2. Ensure on composer
-    is_ready = driver.execute_script('''
+    # 2. ALWAYS redirect to fresh composer URL (never reuse whatever page is open)
+    log(f"[Meta Auto Post Script] Redirecting to fresh composer URL: {composer_url}")
+    driver.get(composer_url)
+    ready = fast_poll(driver, '''
         return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
-    ''')
-    if not is_ready:
-        log(f"[Meta Auto Post Script] Navigating to composer: {composer_url}")
-        driver.get(composer_url)
-        ready = fast_poll(driver, '''
-            return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
-        ''', timeout=20.0, poll_interval=0.2)
-        if not ready:
-            raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
+    ''', timeout=25.0, poll_interval=0.2)
+    if not ready:
+        raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
 
     # 3. Click 'Add video' on 9222
     focus_9222_browser_tab(driver, port=9222)

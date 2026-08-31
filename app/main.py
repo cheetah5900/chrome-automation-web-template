@@ -4205,10 +4205,9 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
 
         driver = bot.driver
 
-        # Determine composer URL
-        composer_url = target_url.strip() if target_url and "facebook.com" in target_url else driver.current_url
-        if not composer_url or "facebook.com" not in composer_url:
-            composer_url = "https://business.facebook.com/latest/reels_composer/"
+        # Determine composer URL - ALWAYS use fresh configured URL, never reuse whatever page is open
+        default_composer_url = "https://business.facebook.com/latest/reels_composer/?asset_id=1306362672555632&business_id=509334133244636&ir_qe_exposed=1&ref=biz_web_content_manager_published_posts&context_ref=POSTS"
+        composer_url = target_url.strip() if target_url and "facebook.com" in target_url else default_composer_url
 
         from app.meta_autopost import run_meta_autopost_batch
 
