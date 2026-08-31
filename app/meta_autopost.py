@@ -233,37 +233,63 @@ def post_single_reel(
         ''', caption)
         time.sleep(0.3)
 
-    # 6. Step 1 -> Step 2 (Edit)
-    log("[Meta Auto Post Script] Transitioning to Step 2 (Edit)...")
-    driver.execute_script('''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
-        if (nextBtn) nextBtn.click();
-    ''')
+    # 6. Instant transition directly to Step 3 (Share)
+    log("[Meta Auto Post Script] Navigating directly to Step 3 (Share)...")
+    
+    # Try direct top 'Share' tab click first (instant bypass of Step 2)
+    jumped_to_share = False
+    for _ in range(10):
+        res = driver.execute_script('''
+            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+            
+            // 1. Try top 'Share' header tab
+            const shareTab = allBtns.find(b => b.innerText && b.innerText.trim() === 'Share' && b.getBoundingClientRect().y < 120);
+            if (shareTab && shareTab.getAttribute('aria-disabled') !== 'true') {
+                shareTab.click();
+                return 'clicked_tab';
+            }
+            
+            // 2. Or click bottom 'Next' button if enabled
+            const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
+            if (nextBtn && nextBtn.getAttribute('aria-disabled') !== 'true') {
+                nextBtn.click();
+                return 'clicked_next';
+            }
+            
+            return false;
+        ''')
+        
+        # Check if Step 3 is reached
+        on_step3 = driver.execute_script('''
+            return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
+        ''')
+        if on_step3:
+            jumped_to_share = True
+            break
+        time.sleep(0.2)
 
-    # Fast poll for Step 2 active
-    fast_poll(driver, '''
-        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Audio' || el.innerText.trim() === 'Crop'));
-    ''', timeout=15.0, poll_interval=0.15)
+    # If still not on Step 3, do fast poll
+    if not jumped_to_share:
+        fast_poll(driver, '''
+            // Check if on Step 3
+            const onStep3 = !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
+            if (onStep3) return true;
+            
+            // Click top Share or bottom Next
+            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+            const shareTab = allBtns.find(b => b.innerText && b.innerText.trim() === 'Share' && b.getBoundingClientRect().y < 120);
+            if (shareTab && shareTab.getAttribute('aria-disabled') !== 'true') {
+                shareTab.click();
+                return false;
+            }
+            const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
+            if (nextBtn && nextBtn.getAttribute('aria-disabled') !== 'true') {
+                nextBtn.click();
+            }
+            return false;
+        ''', timeout=10.0, poll_interval=0.15)
 
-    time.sleep(0.4)
-
-    # 7. Step 2 -> Step 3 (Share)
-    log("[Meta Auto Post Script] Transitioning to Step 3 (Share)...")
-    driver.execute_script('''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
-        if (nextBtn) nextBtn.click();
-    ''')
-
-    # Fast poll for Step 3 active
-    fast_poll(driver, '''
-        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
-    ''', timeout=15.0, poll_interval=0.15)
-
-    time.sleep(0.5)
-
-    # 8. Select 'Schedule' Option Tab
+    # 7. Select 'Schedule' Option Tab
     log("[Meta Auto Post Script] Selecting 'Schedule' radio tab...")
     driver.execute_script('''
         const allBtns = Array.from(document.querySelectorAll('div[role="button"], button, [role="radio"]'));
@@ -273,7 +299,7 @@ def post_single_reel(
             clickable.click();
         }
     ''')
-    time.sleep(0.6)
+    time.sleep(0.4)
 
     # 9. Set Date & Time
     if scheduled_dt_str:
