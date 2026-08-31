@@ -567,6 +567,37 @@ def _macos_file_exists(file_path):
         return False
 
 
+def upload_macos_file_dialog(file_path: str) -> bool:
+    import subprocess
+    escaped_path = file_path.replace('"', '\\"')
+    app_name = _get_active_browser_app_name()
+    script = f"""
+    set the clipboard to "{escaped_path}"
+    tell application "System Events"
+        -- Press Cmd + Shift + G to open path dialog
+        key code 5 using {{command down, shift down}}
+        delay 0.75
+        
+        -- Press Cmd + V to paste
+        key code 9 using {{command down}}
+        delay 0.75
+        
+        -- Enter to confirm path
+        keystroke return
+        delay 1.25
+        
+        -- Enter to confirm file selection
+        keystroke return
+    end tell
+    """
+    try:
+        subprocess.run(["osascript", "-e", script], check=False)
+        return True
+    except Exception as e:
+        log(f"[Upload Dialog Error] {e}")
+        return False
+
+
 @app.get("/api/defaults")
 def get_defaults():
     return _read_json(DEFAULTS_FILE)
@@ -4145,7 +4176,248 @@ class MetaScanRequest(BaseModel):
 
 class MetaRunRequest(BaseModel):
     posts: list[dict[str, Any]]
+    target_url: str = ""
     job_id: str | None = None
+
+def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
+    global global_meta_progress
+    import os
+    import sys
+    import time
+    from datetime import datetime
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.common.by import By
+
+    try:
+        bot = browser_manager.get()
+        if not bot or not bot.driver:
+            global_meta_progress["status"] = "error"
+            global_meta_progress["message"] = "เบราว์เซอร์ Chrome ไม่ได้เชื่อมต่อ (กรุณากด Launch Browser ก่อน)"
+            log("[Meta Auto Post] Error: Chrome driver is not attached")
+            return
+
+        driver = bot.driver
+        _activate_chrome()
+
+        # Determine composer URL
+        composer_url = target_url.strip() if target_url and "facebook.com" in target_url else driver.current_url
+        if not composer_url or "facebook.com" not in composer_url:
+            composer_url = "https://business.facebook.com/latest/reels_composer/"
+
+        total = len(posts)
+        log(f"[Meta Auto Post] Starting automation worker for {total} posts...")
+
+        for idx, post in enumerate(posts):
+            if not post.get("checked", True):
+                continue
+
+            video_path = post.get("video_path", "").strip()
+            caption = post.get("caption", "")
+            scheduled_dt_str = post.get("scheduled_datetime", "")
+            subfolder_name = post.get("subfolder_name", f"Item {idx+1}")
+            video_name = post.get("video_name", os.path.basename(video_path))
+
+            global_meta_progress["current"] = idx + 1
+            global_meta_progress["percent"] = int(((idx) / total) * 100)
+            global_meta_progress["message"] = f"[{idx+1}/{total}] กำลังโพสต์: {subfolder_name} ({video_name})"
+            log(f"[Meta Auto Post] [{idx+1}/{total}] Processing: {video_path} (Schedule: {scheduled_dt_str})")
+
+            # 1. Ensure on composer page
+            if "reels_composer" not in driver.current_url:
+                log(f"[Meta Auto Post] Navigating to composer: {composer_url}")
+                driver.get(composer_url)
+                time.sleep(3.0)
+            else:
+                add_btn_exists = driver.execute_script('''
+                    return !!Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
+                ''')
+                if not add_btn_exists:
+                    driver.get(composer_url)
+                    time.sleep(3.0)
+
+            # Wait for 'Add video' button to be visible
+            for _ in range(15):
+                ready = driver.execute_script('''
+                    return !!Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
+                ''')
+                if ready:
+                    break
+                time.sleep(1.0)
+
+            # 2. Click 'Add video' button
+            click_res = driver.execute_script('''
+                const btn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
+                if (btn) {
+                    btn.click();
+                    return true;
+                }
+                return false;
+            ''')
+            if not click_res:
+                log(f"[Meta Auto Post] Error: Add video button not found for item {idx+1}")
+                global_meta_progress["errors"].append(f"[{idx+1}] ไม่พบปุ่ม Add video")
+                continue
+
+            time.sleep(1.2)
+
+            # 3. macOS File Dialog upload
+            if sys.platform == "darwin" and video_path and os.path.exists(video_path):
+                log(f"[Meta Auto Post] Selecting file in macOS dialog: {video_path}")
+                upload_macos_file_dialog(video_path)
+            else:
+                log(f"[Meta Auto Post] Video file not found: {video_path}")
+
+            # 4. Wait for upload completion (check 100% or Next button visible)
+            log(f"[Meta Auto Post] Waiting for video upload to finish...")
+            for _ in range(60):
+                time.sleep(1.0)
+                is_done = driver.execute_script('''
+                    const text = document.body.innerText || '';
+                    if (text.includes('100%') || text.includes('Your video is safe') || text.includes('Delete')) {
+                        const nextBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Next' && el.getBoundingClientRect().y > 700);
+                        if (nextBtn) return true;
+                    }
+                    return false;
+                ''')
+                if is_done:
+                    break
+
+            time.sleep(1.5)
+
+            # 5. Insert Caption / Description in Step 1
+            if caption:
+                log(f"[Meta Auto Post] Entering caption ({len(caption)} chars)...")
+                driver.execute_script('''
+                    const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
+                    if (tb) {
+                        tb.focus();
+                        document.execCommand('selectAll', false, null);
+                        document.execCommand('delete', false, null);
+                        document.execCommand('insertText', false, arguments[0]);
+                    }
+                ''', caption)
+                time.sleep(1.0)
+
+            # 6. Click 'Next' (Step 1 Create -> Step 2 Edit)
+            log(f"[Meta Auto Post] Moving to Step 2 (Edit)...")
+            driver.execute_script('''
+                const nextBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Next' && el.getBoundingClientRect().y > 700);
+                if (nextBtn) nextBtn.click();
+            ''')
+            time.sleep(2.0)
+
+            # 7. Click 'Next' (Step 2 Edit -> Step 3 Share)
+            log(f"[Meta Auto Post] Moving to Step 3 (Share)...")
+            driver.execute_script('''
+                const nextBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Next' && el.getBoundingClientRect().y > 700);
+                if (nextBtn) nextBtn.click();
+            ''')
+            time.sleep(2.0)
+
+            # 8. Under Share tab, select 'Schedule' option
+            log(f"[Meta Auto Post] Selecting 'Schedule' option...")
+            driver.execute_script('''
+                const schedOpt = Array.from(document.querySelectorAll('div, span, [role="button"]')).find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().y < 300);
+                if (schedOpt) schedOpt.click();
+            ''')
+            time.sleep(1.2)
+
+            # 9. Set Date & Time
+            if scheduled_dt_str:
+                try:
+                    dt = datetime.fromisoformat(scheduled_dt_str)
+                    date_str = dt.strftime("%d/%m/%Y")
+                    hour_str = f"{dt.hour:02d}"
+                    min_str = f"{dt.minute:02d}"
+
+                    log(f"[Meta Auto Post] Setting Schedule Date: {date_str}, Time: {hour_str}:{min_str}")
+
+                    # Date input
+                    date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+                    if date_inputs:
+                        d_el = date_inputs[0]
+                        d_el.click()
+                        time.sleep(0.2)
+                        d_el.send_keys(Keys.COMMAND, 'a')
+                        d_el.send_keys(date_str)
+                        time.sleep(0.3)
+
+                    # Hours input
+                    hour_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
+                    if hour_inputs:
+                        h_el = hour_inputs[0]
+                        h_el.click()
+                        time.sleep(0.2)
+                        h_el.send_keys(Keys.BACKSPACE)
+                        for ch in hour_str:
+                            h_el.send_keys(ch)
+                        time.sleep(0.2)
+
+                    # Minutes input
+                    min_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
+                    if min_inputs:
+                        m_el = min_inputs[0]
+                        m_el.click()
+                        time.sleep(0.2)
+                        m_el.send_keys(Keys.BACKSPACE)
+                        for ch in min_str:
+                            m_el.send_keys(ch)
+                        time.sleep(0.2)
+
+                except Exception as ex_dt:
+                    log(f"[Meta Auto Post] Error parsing scheduled datetime '{scheduled_dt_str}': {ex_dt}")
+
+            time.sleep(1.5)
+
+            # 10. Click final 'Schedule' button at bottom right
+            log(f"[Meta Auto Post] Clicking final Schedule button...")
+            driver.execute_script('''
+                const schedBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().y > 700);
+                if (schedBtn) schedBtn.click();
+            ''')
+
+            # Wait for scheduling completion / redirect
+            time.sleep(6.0)
+            log(f"[Meta Auto Post] Finished post {idx+1}/{total} successfully!")
+
+        global_meta_progress["status"] = "completed"
+        global_meta_progress["percent"] = 100
+        global_meta_progress["current"] = total
+        global_meta_progress["message"] = f"✅ โพสต์ตามคิวสำเร็จครบทั้งหมด {total} รายการ"
+        log(f"[Meta Auto Post] All {total} items scheduled successfully!")
+
+    except Exception as e:
+        log(f"[Meta Auto Post Error] {e}")
+        global_meta_progress["status"] = "error"
+        global_meta_progress["message"] = f"เกิดข้อผิดพลาด: {str(e)}"
+
+@app.post("/api/meta-autopost/run")
+def run_meta_autopost(req: MetaRunRequest) -> dict[str, Any]:
+    global global_meta_progress
+    posts = req.posts
+    if not posts:
+        raise HTTPException(status_code=400, detail="ไม่มีรายการโพสต์ให้ดำเนินการ")
+
+    global_meta_progress = {
+        "status": "running",
+        "total": len(posts),
+        "current": 0,
+        "percent": 0,
+        "message": f"เตรียมรันโพสต์ {len(posts)} รายการ...",
+        "errors": []
+    }
+    
+    log(f"[Meta Auto Post] Received batch run request for {len(posts)} items")
+    
+    import threading
+    t = threading.Thread(target=_meta_autopost_worker, args=(posts, req.target_url), daemon=True)
+    t.start()
+
+    return {
+        "ok": True,
+        "message": f"เริ่มกระบวนการ Auto Post {len(posts)} รายการ",
+        "total": len(posts)
+    }
 
 @app.post("/api/meta-autopost/scan")
 def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
@@ -4311,29 +4583,6 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
         "ok": True,
         "items": items,
         "count": len(items)
-    }
-
-@app.post("/api/meta-autopost/run")
-def run_meta_autopost(req: MetaRunRequest) -> dict[str, Any]:
-    global global_meta_progress
-    posts = req.posts
-    if not posts:
-        raise HTTPException(status_code=400, detail="ไม่มีรายการโพสต์ให้ดำเนินการ")
-
-    global_meta_progress = {
-        "status": "running",
-        "total": len(posts),
-        "current": 0,
-        "percent": 0,
-        "message": f"เตรียมรันโพสต์ {len(posts)} รายการ...",
-        "errors": []
-    }
-    
-    log(f"[Meta Auto Post] Received batch run request for {len(posts)} items")
-    return {
-        "ok": True,
-        "message": f"เริ่มกระบวนการ Auto Post {len(posts)} รายการ",
-        "total": len(posts)
     }
 
 @app.get("/api/meta-autopost/progress")

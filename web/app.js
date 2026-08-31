@@ -6895,17 +6895,46 @@ async function runMetaAutoPost(btnElement) {
   writeConsoleLine(`🚀 เริ่มส่งคำสั่งรัน Meta Auto Post สำหรับ ${selectedPosts.length} รายการที่เลือก...`, 'system', 'metaConsole');
 
   try {
+    const targetUrl = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
     const res = await jsonFetch('/api/meta-autopost/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        posts: selectedPosts
+        posts: selectedPosts,
+        target_url: targetUrl
       })
     });
 
     if (res.ok) {
-      writeConsoleLine(`[Meta Auto Post] ${res.message || 'ส่งคำสั่งสำเร็จ'}`, 'success', 'metaConsole');
-      writeConsoleLine(`[Meta Auto Post] ระบบพร้อมรับการทำงานร่วมกับขั้นตอน Automation/Scraping ของคุณ`, 'info', 'metaConsole');
+      writeConsoleLine(`[Meta Auto Post] ${res.message || 'เริ่มการทำงาน Auto Post เรียบร้อยแล้ว'}`, 'success', 'metaConsole');
+      
+      // Start Real-time Progress Polling
+      let isDone = false;
+      let lastMsg = '';
+      while (!isDone) {
+        await new Promise(r => setTimeout(r, 1200));
+        try {
+          const prog = await jsonFetch('/api/meta-autopost/progress');
+          if (prog) {
+            if (progressBar) progressBar.style.width = `${prog.percent || 0}%`;
+            if (progressText) progressText.textContent = `${prog.percent || 0}% (${prog.current || 0}/${prog.total || selectedPosts.length})`;
+            if (prog.message && prog.message !== lastMsg) {
+              writeConsoleLine(`[Meta Auto Post] ${prog.message}`, prog.status === 'error' ? 'error' : 'info', 'metaConsole');
+              lastMsg = prog.message;
+            }
+            if (prog.status === 'completed' || prog.status === 'error') {
+              isDone = true;
+              if (prog.status === 'completed') {
+                writeConsoleLine(`🎉 Auto Post ดำเนินการเสร็จสมบูรณ์ทุกรายการ!`, 'success', 'metaConsole');
+              } else if (prog.status === 'error') {
+                writeConsoleLine(`❌ Auto Post เกิดข้อผิดพลาด: ${prog.message}`, 'error', 'metaConsole');
+              }
+            }
+          }
+        } catch (pollErr) {
+          console.warn('Poll progress error:', pollErr);
+        }
+      }
     } else {
       writeConsoleLine(`[Meta Auto Post Error] ${res.detail || res.message}`, 'error', 'metaConsole');
     }
