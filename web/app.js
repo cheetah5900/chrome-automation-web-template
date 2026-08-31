@@ -6659,23 +6659,6 @@ async function scanMetaBatch() {
   }
 }
 
-function applyMetaRangeSelection() {
-  const rangeInput = document.getElementById('cfg_meta_select_range');
-  if (!rangeInput) return;
-  const val = rangeInput.value.trim();
-  if (!val) return;
-
-  const selectedIndices = parseRangeString(val);
-  console.log("applyMetaRangeSelection parsed indices:", Array.from(selectedIndices));
-
-  metaPostQueue.forEach((p, idx) => {
-    const orderIdx = idx + 1;
-    p.checked = selectedIndices.has(orderIdx);
-  });
-
-  renderMetaPostQueue();
-}
-
 function updateMetaSelectAllButtonText() {
   const toggleBtn = document.getElementById('toggleAllMetaPostsBtn');
   if (!toggleBtn) return;
@@ -7020,22 +7003,6 @@ function initMetaAutoPostListeners() {
       renderMetaPostQueue();
     });
   }
-
-  const rangeInput = document.getElementById('cfg_meta_select_range');
-  if (rangeInput) {
-    rangeInput.addEventListener('change', applyMetaRangeSelection);
-    rangeInput.addEventListener('input', (e) => {
-      e.target.value = e.target.value.replace(/[^0-9\\-\\,\\s]/g, '');
-    });
-    rangeInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        applyMetaRangeSelection();
-      }
-    });
-  }
-
-  const applyRangeBtn = document.getElementById('btnApplyMetaRange');
-  if (applyRangeBtn) applyRangeBtn.addEventListener('click', applyMetaRangeSelection);
 
   const runBtn = document.getElementById('runMetaAutoPostBtn');
   if (runBtn) runBtn.addEventListener('click', (e) => runMetaAutoPost(e.currentTarget));
