@@ -4240,58 +4240,47 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
                     break
                 time.sleep(1.0)
 
-            # 2. Setup hook to capture file input and trigger upload
-            driver.execute_script('''
-                window._metaFileInput = null;
-                const oldInput = document.getElementById('meta_auto_file_input');
-                if (oldInput) oldInput.remove();
-                
-                const origClick = HTMLInputElement.prototype.click;
-                HTMLInputElement.prototype.click = function() {
-                    if (this.type === 'file') {
-                        this.id = 'meta_auto_file_input';
-                        this.style.position = 'fixed';
-                        this.style.top = '0px';
-                        this.style.left = '0px';
-                        this.style.zIndex = '999999';
-                        this.style.display = 'block';
-                        this.style.visibility = 'visible';
-                        document.body.appendChild(this);
-                        window._metaFileInput = this;
-                    } else {
-                        origClick.apply(this, arguments);
-                    }
-                };
-            ''')
+            # 2. Click 'Add video' button using native ActionChains
+            _activate_chrome()
+            time.sleep(0.5)
 
-            # Click 'Add video' button to instantiate file input
-            click_res = driver.execute_script('''
-                const textEl = Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video' && el.children.length === 0);
-                if (textEl) {
-                    const btn = textEl.closest('[role="button"]') || textEl;
-                    btn.click();
-                    return true;
-                }
-                return false;
-            ''')
-            if not click_res:
+            all_role_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')
+            target_btn = None
+            for b in all_role_btns:
+                try:
+                    if b.text and 'Add video' in b.text:
+                        target_btn = b
+                        break
+                except Exception:
+                    pass
+
+            if not target_btn:
+                # Fallback search by text in DOM
+                target_btn = driver.execute_script('''
+                    const textEl = Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video' && el.children.length === 0);
+                    return textEl ? (textEl.closest('[role="button"]') || textEl) : null;
+                ''')
+
+            if target_btn:
+                from selenium.webdriver.common.action_chains import ActionChains
+                try:
+                    ActionChains(driver).move_to_element(target_btn).pause(0.2).click().perform()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", target_btn)
+                log(f"[Meta Auto Post] Clicked 'Add video' button")
+            else:
                 log(f"[Meta Auto Post] Error: Add video button not found for item {idx+1}")
                 global_meta_progress["errors"].append(f"[{idx+1}] ไม่พบปุ่ม Add video")
                 continue
 
-            time.sleep(0.6)
+            time.sleep(1.2)
 
-            # 3. Direct upload via Selenium send_keys (instant & 100% reliable)
-            if video_path and os.path.exists(video_path):
-                log(f"[Meta Auto Post] Uploading video file: {video_path}")
-                try:
-                    file_input = driver.find_element(By.ID, 'meta_auto_file_input')
-                    file_input.send_keys(video_path)
-                except Exception as ex_upload:
-                    log(f"[Meta Auto Post] Fallback to macOS dialog: {ex_upload}")
-                    upload_macos_file_dialog(video_path)
+            # 3. macOS File Dialog upload
+            if sys.platform == "darwin" and video_path and os.path.exists(video_path):
+                log(f"[Meta Auto Post] Selecting file in macOS dialog: {video_path}")
+                upload_macos_file_dialog(video_path)
             else:
-                log(f"[Meta Auto Post] Video file not found: {video_path}")
+                log(f"[Meta Auto Post] Video file not found or not on macOS: {video_path}")
 
             # 4. Wait for upload completion (check 100% or Next button visible)
             log(f"[Meta Auto Post] Waiting for video upload to finish...")
