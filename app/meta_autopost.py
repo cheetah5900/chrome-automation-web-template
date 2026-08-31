@@ -130,16 +130,15 @@ def post_single_reel(
     """
     Executes a high-speed, bulletproof single reel post sequence:
     1. Focus Chrome 9222 window at start by Cocoa NSRunningApplication PID
-    2. Ensure on composer page
+    2. Fresh redirect to target composer URL
     3. Click 'Add video' (ActionChains)
     4. macOS dialog path submission
     5. Fast poll for video upload completion (100%)
     6. Insert caption into Lexical editor with DataTransfer + Event dispatch
-    7. Continuous 30s poll until top 'Share' tab is enabled (aria-disabled != 'true')
-    8. Click top 'Share' tab to jump straight to Step 3
-    9. Select Schedule radio option
-    10. Date & Time input configuration (with TAB commit)
-    11. Final Schedule submit button click (ActionChains) & confirmation
+    7. Fast advance Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share) via main footer Next buttons
+    8. Select Schedule radio option
+    9. Date & Time input configuration (with TAB commit)
+    10. Final Schedule submit button click (ActionChains) & confirmation
     """
     subfolder_name = item.get("subfolder_name", "")
     video_name = item.get("video_name", "")
@@ -161,7 +160,7 @@ def post_single_reel(
     focus_9222_browser_tab(driver, port=9222)
     time.sleep(0.3)
 
-    # 2. ALWAYS redirect to fresh composer URL (never reuse whatever page is open)
+    # 2. ALWAYS redirect to fresh composer URL
     log(f"[Meta Auto Post Script] Redirecting to fresh composer URL: {composer_url}")
     driver.get(composer_url)
     ready = fast_poll(driver, '''
@@ -252,7 +251,7 @@ def post_single_reel(
         ''', caption)
         time.sleep(0.5)
 
-    # 7. Advance Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share) via main footer Next buttons
+    # 7. Advance Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share)
     log("[Meta Auto Post Script] Advancing Step 1 (Create) -> Step 2 (Edit)...")
     step1_next = fast_poll(driver, '''
         const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
@@ -284,7 +283,7 @@ def post_single_reel(
 
     time.sleep(0.5)
 
-    # 9. Select 'Schedule' Option Tab
+    # 8. Select 'Schedule' Option Tab
     log("[Meta Auto Post Script] Selecting 'Schedule' radio tab...")
     sched_tab = driver.execute_script('''
         const allEls = Array.from(document.querySelectorAll('div, span, button, [role="radio"]'));
@@ -298,7 +297,7 @@ def post_single_reel(
             driver.execute_script("arguments[0].click();", sched_tab)
     time.sleep(0.6)
 
-    # 10. Set Date & Time
+    # 9. Set Date & Time
     if scheduled_dt_str:
         try:
             dt = datetime.fromisoformat(scheduled_dt_str)
@@ -345,7 +344,7 @@ def post_single_reel(
     ''')
     time.sleep(0.4)
 
-    # 11. Click final 'Schedule' submit button with ActionChains
+    # 10. Click final 'Schedule' submit button with ActionChains
     log("[Meta Auto Post Script] Clicking final Schedule submit button...")
     sched_submit_el = driver.execute_script('''
         const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
@@ -364,7 +363,7 @@ def post_single_reel(
             if (schedBtn) schedBtn.click();
         ''')
 
-    # 12. Fast poll for modal closure / submission confirmation
+    # 11. Fast poll for modal closure / submission confirmation
     log("[Meta Auto Post Script] Waiting for submission confirmation...")
     submitted = fast_poll(driver, '''
         const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
