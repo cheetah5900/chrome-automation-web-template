@@ -1249,7 +1249,6 @@ def _default_config() -> dict[str, Any]:
             "reference_image": "",
             "reference_image_2": "",
             "reference_image_3": "",
-            "video_prefix_cover": "",
             "video_prefix_combine": "",
             "lakorn_path": "",
             "lakorn_ep": "",
@@ -1317,7 +1316,6 @@ def _default_config() -> dict[str, Any]:
             "reference_image": "",
             "reference_image_2": "",
             "reference_image_3": "",
-            "video_prefix_cover": "",
             "video_prefix_combine": "",
             "lakorn_path": "",
             "lakorn_ep": "",
@@ -3296,9 +3294,7 @@ def _make_video_cover_impl(
             
     update_progress(0, "Initializing...")
     
-    is_combine_mode = (mode == "combine")
-    mode_label = "Combine Mode" if is_combine_mode else "Cover Mode"
-    log(f"Video Helper: Starting {mode_label} conversion...")
+    log("Video Helper: Starting Combine Mode conversion...")
 
     video_exts = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"]
     combine_media_exts = video_exts + [".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"]
@@ -3404,145 +3400,99 @@ def _make_video_cover_impl(
     combine_sources: list[tuple[str, str, str]] = []
     combine_label = ""
     
-    if not is_combine_mode:
-        if not output_path or not output_path.strip():
-            raise HTTPException(status_code=400, detail="Path (output_path) is required in Cover Mode")
-        if not no or not no.strip():
-            raise HTTPException(status_code=400, detail="Sub folder (no) is required in Cover Mode")
-        
-        base_dir = output_path.strip()
-        sub_no = no.strip()
-        subfolder = resolve_subfolder_by_prefix(base_dir, sub_no)
-        if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Subfolder '{subfolder}' does not exist")
+
+    if not output_path or not output_path.strip():
+        raise HTTPException(status_code=400, detail="Path (output_path) is required in Combine Mode")
+
+    base_dir = output_path.strip()
+
+    combine_folders: list[str] = []
+    if folders_json and folders_json.strip():
+        try:
+            parsed_folders = json.loads(folders_json)
+            if isinstance(parsed_folders, list):
+                combine_folders = [str(item).strip() for item in parsed_folders if str(item).strip()]
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid combine folder list: {e}")
+    elif no and no.strip():
+        combine_folders = [part.strip() for part in no.split(",") if part.strip()]
+
+    if not combine_folders:
+        raise HTTPException(status_code=400, detail="At least one sub folder is required in Combine Mode")
+
+    combine_label = build_folder_label(combine_folders)
+
+    durations = []
+    if sub_mode == "view_channel" and durations_json:
+        try:
+            dur_list = json.loads(durations_json)
+            durations = [float(d) for d in dur_list if str(d).strip()]
+        except Exception as e:
+            log(f"Combine Mode Warning: Failed to parse durations_json: {e}")
+    prefix_str = prefix.strip() if prefix else ""
+
+    for folder_name in combine_folders:
+        subfolder = resolve_subfolder_by_prefix(base_dir, folder_name)
             
-        video_files = []
+        if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
+            raise HTTPException(status_code=400, detail=f"Set {folder_name}: Subfolder '{subfolder}' does not exist")
+
+        media_files = []
         for f in os.listdir(subfolder):
             f_lower = f.lower()
-            if any(f_lower.endswith(ext) for ext in video_exts) and os.path.isfile(os.path.join(subfolder, f)):
-                video_files.append(f)
-                
-        if len(video_files) == 0:
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: No video file found in subfolder '{subfolder}'")
-        elif len(video_files) > 1:
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Multiple video files found in subfolder '{subfolder}'. Only 1 video is allowed (Found: {len(video_files)})")
             
-        resolved_video_name = video_files[0]
-        src_video_path = os.path.join(subfolder, resolved_video_name)
-        video_filename = resolved_video_name
-        log(f"Cover Mode: Auto-pulled source video '{src_video_path}'")
-        
-        cover_dir = os.path.join(subfolder, "cover")
-        if not os.path.exists(cover_dir) or not os.path.isdir(cover_dir):
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Cover folder '{cover_dir}' does not exist")
-            
-        image_files = []
-        for f in os.listdir(cover_dir):
-            f_lower = f.lower()
-            if any(f_lower.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp"]):
-                image_files.append(f)
-                
-        if len(image_files) == 0:
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: No cover image found inside '{cover_dir}' folder")
-        elif len(image_files) > 1:
-            raise HTTPException(status_code=400, detail=f"Set {sub_no}: Multiple cover images found inside '{cover_dir}' folder. Only 1 image is allowed (Found: {len(image_files)})")
-            
-        src_second_path = os.path.join(cover_dir, image_files[0])
-        second_filename = image_files[0]
-        log(f"Cover Mode: Auto-pulled cover image '{src_second_path}'")
-    else:
-        if not output_path or not output_path.strip():
-            raise HTTPException(status_code=400, detail="Path (output_path) is required in Combine Mode")
-
-        base_dir = output_path.strip()
-
-        combine_folders: list[str] = []
-        if folders_json and folders_json.strip():
-            try:
-                parsed_folders = json.loads(folders_json)
-                if isinstance(parsed_folders, list):
-                    combine_folders = [str(item).strip() for item in parsed_folders if str(item).strip()]
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Invalid combine folder list: {e}")
-        elif no and no.strip():
-            combine_folders = [part.strip() for part in no.split(",") if part.strip()]
-
-        if not combine_folders:
-            raise HTTPException(status_code=400, detail="At least one sub folder is required in Combine Mode")
-
-        combine_label = build_folder_label(combine_folders)
-
-        durations = []
-        if sub_mode == "view_channel" and durations_json:
-            try:
-                dur_list = json.loads(durations_json)
-                durations = [float(d) for d in dur_list if str(d).strip()]
-            except Exception as e:
-                log(f"Combine Mode Warning: Failed to parse durations_json: {e}")
-        prefix_str = prefix.strip() if prefix else ""
-
-        for folder_name in combine_folders:
-            subfolder = resolve_subfolder_by_prefix(base_dir, folder_name)
-                
-            if not os.path.exists(subfolder) or not os.path.isdir(subfolder):
-                raise HTTPException(status_code=400, detail=f"Set {folder_name}: Subfolder '{subfolder}' does not exist")
-
-            media_files = []
-            for f in os.listdir(subfolder):
-                f_lower = f.lower()
-                
-                # Exclude output files from list of input media files
-                is_output = False
-                if "_combined" in f_lower:
+            # Exclude output files from list of input media files
+            is_output = False
+            if "_combined" in f_lower:
+                is_output = True
+            elif prefix_str:
+                import re
+                p_esc = re.escape(prefix_str)
+                c_esc = re.escape(combine_label)
+                pattern1 = f"^{p_esc}{c_esc}\\.mp4$"
+                pattern2 = f"^{p_esc}\\.mp4$"
+                pattern3 = f"^{p_esc}{c_esc}_\\d+\\.mp4$"
+                pattern4 = f"^{p_esc}_\\d+\\.mp4$"
+                if (re.match(pattern1, f, re.IGNORECASE) or 
+                    re.match(pattern2, f, re.IGNORECASE) or 
+                    re.match(pattern3, f, re.IGNORECASE) or 
+                    re.match(pattern4, f, re.IGNORECASE)):
                     is_output = True
-                elif prefix_str:
-                    import re
-                    p_esc = re.escape(prefix_str)
-                    c_esc = re.escape(combine_label)
-                    pattern1 = f"^{p_esc}{c_esc}\\.mp4$"
-                    pattern2 = f"^{p_esc}\\.mp4$"
-                    pattern3 = f"^{p_esc}{c_esc}_\\d+\\.mp4$"
-                    pattern4 = f"^{p_esc}_\\d+\\.mp4$"
-                    if (re.match(pattern1, f, re.IGNORECASE) or 
-                        re.match(pattern2, f, re.IGNORECASE) or 
-                        re.match(pattern3, f, re.IGNORECASE) or 
-                        re.match(pattern4, f, re.IGNORECASE)):
-                        is_output = True
-                
-                if is_output:
-                    continue
-
-                if any(f_lower.endswith(ext) for ext in combine_media_exts) and os.path.isfile(os.path.join(subfolder, f)):
-                    media_files.append(f)
-                    
-            import re
-            def atoi(text): return int(text) if text.isdigit() else text
-            def natural_keys(text): return [atoi(c) for c in re.split(r'(\d+)', text)]
-            media_files.sort(key=natural_keys)
-                    
-            if len(media_files) == 0:
-                raise HTTPException(status_code=400, detail=f"Set {folder_name}: No video file found in subfolder '{subfolder}'")
             
-            for resolved_media_name in media_files:
-                resolved_media_path = os.path.join(subfolder, resolved_media_name)
-                combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
+            if is_output:
+                continue
 
-        if sub_mode == "view_channel":
-            total_videos = len(combine_sources)
-            K = len(durations)
-            if K == 0:
-                raise HTTPException(status_code=400, detail="กรุณาระบุความยาววิดีโออย่างน้อย 1 ช่อง")
-            if total_videos % K != 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"จำนวนวิดีโอในโฟลเดอร์ต้องหารด้วย {K} ลงตัว (พบทั้งหมด {total_videos} ไฟล์)"
-                )
+            if any(f_lower.endswith(ext) for ext in combine_media_exts) and os.path.isfile(os.path.join(subfolder, f)):
+                media_files.append(f)
+                
+        import re
+        def atoi(text): return int(text) if text.isdigit() else text
+        def natural_keys(text): return [atoi(c) for c in re.split(r'(\d+)', text)]
+        media_files.sort(key=natural_keys)
+                
+        if len(media_files) == 0:
+            raise HTTPException(status_code=400, detail=f"Set {folder_name}: No video file found in subfolder '{subfolder}'")
+        
+        for resolved_media_name in media_files:
+            resolved_media_path = os.path.join(subfolder, resolved_media_name)
+            combine_sources.append((folder_name, resolved_media_path, resolved_media_name))
 
-        src_video_path = combine_sources[0][1]
-        video_filename = combine_sources[0][2]
-        src_second_path = combine_sources[0][1]
-        second_filename = combine_sources[0][2]
-        log(f"Combine Mode: Auto-pulled {len(combine_sources)} matching files for folders '{combine_label}'")
+    if sub_mode == "view_channel":
+        total_videos = len(combine_sources)
+        K = len(durations)
+        if K == 0:
+            raise HTTPException(status_code=400, detail="กรุณาระบุความยาววิดีโออย่างน้อย 1 ช่อง")
+        if total_videos % K != 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"จำนวนวิดีโอในโฟลเดอร์ต้องหารด้วย {K} ลงตัว (พบทั้งหมด {total_videos} ไฟล์)"
+            )
+
+    src_video_path = combine_sources[0][1]
+    video_filename = combine_sources[0][2]
+    src_second_path = combine_sources[0][1]
+    second_filename = combine_sources[0][2]
+    log(f"Combine Mode: Auto-pulled {len(combine_sources)} matching files for folders '{combine_label}'")
 
     out_dir = ""
     if output_path and output_path.strip():
@@ -3558,451 +3508,62 @@ def _make_video_cover_impl(
 
     prefix_str = prefix.strip() if prefix else ""
 
-    if is_combine_mode:
-        if combine_folders:
-            out_dir = resolve_subfolder_by_prefix(base_dir, combine_folders[0])
-        else:
-            out_dir = base_dir
-
-        os.makedirs(out_dir, exist_ok=True)
-
-        if sub_mode == "view_channel":
-            K = len(durations)
-            chunks = [combine_sources[i:i+K] for i in range(0, len(combine_sources), K)]
-        else:
-            chunks = [combine_sources]
-
-        num_chunks = len(chunks)
-        processed_outputs = []
-
-        for chunk_idx, chunk_sources in enumerate(chunks, 1):
-            if prefix_str:
-                if num_chunks == 1:
-                    if prefix_str.endswith("-") or prefix_str.endswith("_"):
-                        video_filename = f"{prefix_str}{combine_label}.mp4"
-                    else:
-                        video_filename = f"{prefix_str}.mp4"
-                else:
-                    if prefix_str.endswith("-") or prefix_str.endswith("_"):
-                        video_filename = f"{prefix_str}{combine_label}_{chunk_idx}.mp4"
-                    else:
-                        video_filename = f"{prefix_str}_{chunk_idx}.mp4"
-            else:
-                if num_chunks == 1:
-                    video_filename = f"{combine_label}_combined.mp4"
-                else:
-                    video_filename = f"{combine_label}_combined_{chunk_idx}.mp4"
-            
-            final_output_path = os.path.join(out_dir, video_filename)
-            log(f"Combine Mode Output Target [Chunk {chunk_idx}/{num_chunks}]: '{final_output_path}'")
-
-            if os.path.exists(final_output_path):
-                if str(overwrite).lower() == "true":
-                    log(f"Chunk {chunk_idx}: Destination file already exists: '{final_output_path}'. Overwrite requested.")
-                else:
-                    log(f"Chunk {chunk_idx}: Destination file already exists: '{final_output_path}'. Skipping processing.")
-                    processed_outputs.append(final_output_path)
-                    continue
-
-            def update_chunk_progress(percent: int, status: str):
-                if job_id:
-                    chunk_base = (chunk_idx - 1) / num_chunks * 100
-                    scaled_percent = int(chunk_base + (percent / 100 * (100 / num_chunks)))
-                    global_video_progress[job_id] = {
-                        "percent": scaled_percent,
-                        "status": f"[Chunk {chunk_idx}/{num_chunks}] {status}"
-                    }
-
-            try:
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    ffmpeg_bin = "/opt/homebrew/bin/ffmpeg"
-                    if not os.path.exists(ffmpeg_bin):
-                        ffmpeg_bin = "ffmpeg"
-                        
-                    # Generate text watermark if present
-                    watermark_temp_png = None
-                    if watermark_text and watermark_text.strip():
-                        try:
-                            wm_font_size = int(watermark_font_size) if watermark_font_size else 72
-                        except ValueError:
-                            wm_font_size = 72
-                        try:
-                            wm_opacity = float(watermark_opacity) if watermark_opacity else 0.5
-                        except ValueError:
-                            wm_opacity = 0.5
-                        try:
-                            wm_border = int(watermark_border_width) if watermark_border_width else 0
-                        except ValueError:
-                            wm_border = 0
-                        wm_font = watermark_font or "arial"
-                        wm_pos = watermark_position or "bottom-right"
-                        wm_color = watermark_color or "#ffffff"
-                        
-                        watermark_temp_png = os.path.join(tmpdir, "watermark_temp.png")
-                        create_text_watermark_image(
-                            text=watermark_text.strip(),
-                            font_name=wm_font,
-                            font_size=wm_font_size,
-                            position=wm_pos,
-                            opacity=wm_opacity,
-                            color_hex=wm_color,
-                            video_w=2160,
-                            video_h=3840,
-                            output_png_path=watermark_temp_png,
-                            watermark_border_width=wm_border
-                        )
-                        log(f"Generated text watermark temp PNG (border={wm_border}): '{watermark_temp_png}'")
-
-                    list_txt = os.path.join(tmpdir, "list.txt")
-                    amount_val = len(chunk_sources)
-
-                    aligned_paths = []
-                    for idx, (folder_name, v_path, resolved_media_name) in enumerate(chunk_sources, 1):
-                        update_chunk_progress(int((idx - 1) / amount_val * 70), f"Processing video {idx} of {amount_val}...")
-                        has_video_v, has_audio_v = probe_media_streams(v_path)
-                        out_aligned = os.path.join(tmpdir, f"aligned_{idx}.mp4")
-                        log(f"Combine Mode Chunk {chunk_idx} [{idx}/{amount_val}]: Aligning '{folder_name}/{resolved_media_name}' to 9:16 vertical 4K 60fps...")
-
-                        if has_video_v and has_audio_v:
-                            if watermark_temp_png:
-                                v_cmd = [
-                                    ffmpeg_bin, "-y", "-i", v_path, "-i", watermark_temp_png,
-                                    "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][1:v]overlay=0:0[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                                    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                                ]
-                            else:
-                                v_cmd = [
-                                    ffmpeg_bin, "-y", "-i", v_path,
-                                    "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                                    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                                ]
-                        elif has_video_v:
-                            if watermark_temp_png:
-                                v_cmd = [
-                                    ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-i", watermark_temp_png,
-                                    "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][2:v]overlay=0:0[v]",
-                                    "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                                ]
-                            else:
-                                v_cmd = [
-                                    ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                                    "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v]",
-                                    "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                                ]
-                        elif has_audio_v:
-                            if watermark_temp_png:
-                                if speed_factor != 1.0:
-                                    v_cmd = [
-                                        ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path, "-i", watermark_temp_png,
-                                        "-filter_complex", f"[0:v][2:v]overlay=0:0[v];[1:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                                        "-map", "[v]", "-map", "[a]", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                                    ]
-                                else:
-                                    v_cmd = [
-                                        ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path, "-i", watermark_temp_png,
-                                        "-filter_complex", "[0:v][2:v]overlay=0:0[v]",
-                                        "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                                    ]
-                            else:
-                                if speed_factor != 1.0:
-                                    v_cmd = [
-                                        ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
-                                        "-filter_complex", f"[1:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                                        "-map", "0:v", "-map", "[a]", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                                    ]
-                                else:
-                                    v_cmd = [
-                                        ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
-                                        "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
-                                    ]
-                        else:
-                            raise RuntimeError(f"Matched file '{resolved_media_name}' has no usable audio or video stream")
-
-                        if sub_mode == "view_channel" and len(durations) >= idx:
-                            dur = durations[idx - 1]
-                            v_cmd.extend(["-t", str(dur)])
-                        
-                        v_cmd.append(out_aligned)
-
-                        res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                        if res.returncode != 0:
-                            raise RuntimeError(f"FFmpeg failed aligning video {idx}: {res.stderr}")
-                        aligned_paths.append(out_aligned)
-                        
-                    log(f"Combine Mode Chunk {chunk_idx}: Concatenating {amount_val} clips...")
-                    update_chunk_progress(75, "Concatenating videos...")
-                    with open(list_txt, "w", encoding="utf-8") as f:
-                        for ap in aligned_paths:
-                            f.write(f"file '{ap}'\n")
-
-                    clean_audio_path = audio_path.strip().strip('"').strip("'") if audio_path else ""
-                    
-                    eq_parts = []
-                    if contrast and contrast.strip(): eq_parts.append(f"contrast={contrast.strip()}")
-                    if saturation and saturation.strip(): eq_parts.append(f"saturation={saturation.strip()}")
-                    if brightness and brightness.strip(): eq_parts.append(f"brightness={brightness.strip()}")
-                    if gamma and gamma.strip(): eq_parts.append(f"gamma={gamma.strip()}")
-                    
-                    video_filter_str = ""
-                    if eq_parts:
-                        video_filter_str = "eq=" + ":".join(eq_parts)
-                    if unsharp and unsharp.strip():
-                        if video_filter_str:
-                            video_filter_str += f",unsharp={unsharp.strip()}"
-                        else:
-                            video_filter_str = f"unsharp={unsharp.strip()}"
-
-                    # Parse transitions and fade durations if provided
-                    transitions = []
-                    if transitions_json:
-                        try:
-                            transitions = json.loads(transitions_json)
-                        except Exception as e:
-                            log(f"Warning: Failed to parse transitions_json: {e}")
-                    
-                    fade_durations = []
-                    if fade_durations_json:
-                        try:
-                            fade_durations = [float(fd) for fd in json.loads(fade_durations_json)]
-                        except Exception as e:
-                            log(f"Warning: Failed to parse fade_durations_json: {e}")
-
-                    has_fade_transitions = any(t == "fade" for t in transitions)
-                    clean_audio_path = audio_path.strip().strip('"').strip("'") if audio_path else ""
-
-                    if has_fade_transitions and len(aligned_paths) >= 2:
-                        log(f"View Channel Mode Chunk {chunk_idx}: Crossfade transitions detected. Concatenating {amount_val} clips using filter_complex...")
-                        update_chunk_progress(75, "Applying transitions and mixing...")
-                        
-                        final_cmd = [ffmpeg_bin, "-y"]
-                        for ap in aligned_paths:
-                            final_cmd.extend(["-i", ap])
-                        
-                        has_bgm = sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path)
-                        if has_bgm:
-                            final_cmd.extend(["-i", clean_audio_path])
-                            
-                        filter_parts = []
-                        v_cur = "[0:v]"
-                        a_cur = "[0:a]"
-                        t_cur = durations[0] if (sub_mode == "view_channel" and len(durations) >= 1) else 5.0
-                        
-                        P = len(aligned_paths)
-                        for idx in range(1, P):
-                            next_v = f"[{idx}:v]"
-                            next_a = f"[{idx}:a]"
-                            next_dur = durations[idx] if (sub_mode == "view_channel" and len(durations) >= idx + 1) else 5.0
-                            
-                            trans = transitions[idx] if idx < len(transitions) else "cut"
-                            fade_dur = fade_durations[idx] if idx < len(fade_durations) else 0.0
-                            
-                            if trans == "fade" and fade_dur > 0.0:
-                                prev_dur = durations[idx - 1] if (sub_mode == "view_channel" and len(durations) >= idx) else 5.0
-                                fade_dur = min(fade_dur, next_dur, prev_dur)
-                                offset = t_cur - fade_dur
-                                v_next = f"[v_trans_{idx}]"
-                                a_next = f"[a_trans_{idx}]"
-                                filter_parts.append(f"{v_cur}{next_v}xfade=transition=fade:duration={fade_dur}:offset={offset}{v_next}")
-                                filter_parts.append(f"{a_cur}{next_a}acrossfade=d={fade_dur}{a_next}")
-                                v_cur = v_next
-                                a_cur = a_next
-                                t_cur = t_cur + next_dur - fade_dur
-                            else:
-                                v_next = f"[v_concat_{idx}]"
-                                a_next = f"[a_concat_{idx}]"
-                                filter_parts.append(f"{v_cur}{next_v}concat=n=2:v=1:a=0{v_next}")
-                                filter_parts.append(f"{a_cur}{next_a}concat=n=2:v=0:a=1{a_next}")
-                                v_cur = v_next
-                                a_cur = a_next
-                                t_cur = t_cur + next_dur
-                                
-                        if video_filter_str:
-                            filter_parts.append(f"{v_cur}{video_filter_str}[vout]")
-                            v_map = "[vout]"
-                        else:
-                            v_map = v_cur
-                            
-                        volume_filter = ""
-                        if audio_boost and audio_boost.strip():
-                            try:
-                                boost_val = float(audio_boost.strip())
-                                volume_filter = f"volume={boost_val}dB,"
-                            except ValueError:
-                                pass
-                                
-                        video_volume_filter = ""
-                        if video_audio_boost and video_audio_boost.strip():
-                            try:
-                                v_boost_val = float(video_audio_boost.strip())
-                                video_volume_filter = f"volume={v_boost_val}dB"
-                            except ValueError:
-                                pass
-                                
-                        if has_bgm:
-                            BGM_idx = P
-                            if video_volume_filter:
-                                filter_parts.append(f"{a_cur}{video_volume_filter}[fg]")
-                            else:
-                                filter_parts.append(f"{a_cur}anull[fg]")
-                            filter_parts.append(f"[{BGM_idx}:a]{volume_filter}apad[bgm]")
-                            filter_parts.append(f"[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]")
-                            a_map = "[aout]"
-                        else:
-                            if video_volume_filter:
-                                filter_parts.append(f"{a_cur}{video_volume_filter}[aout]")
-                                a_map = "[aout]"
-                            else:
-                                a_map = a_cur
-                                
-                        filter_complex_str = ";".join(filter_parts)
-                        final_cmd.extend(["-filter_complex", filter_complex_str])
-                        final_cmd.extend(["-map", v_map, "-map", a_map])
-                        
-                        final_cmd.extend([
-                            "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60",
-                            "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
-                        ])
-                        
-                        if has_bgm:
-                            bgm_dur = None
-                            try:
-                                probe_cmd = [
-                                    "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe",
-                                    "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path
-                                ]
-                                dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
-                                if dur_str:
-                                    bgm_dur = float(dur_str)
-                            except Exception as e:
-                                log(f"Warning: Could not probe background music duration: {e}")
-                            if bgm_dur is not None:
-                                final_cmd.extend(["-t", str(bgm_dur)])
-                                
-                        final_cmd.extend([
-                            "-disposition:a:0", "default", final_output_path
-                        ])
-                        
-                        log(f"Executing Crossfade FFmpeg complex: {' '.join(final_cmd)}")
-                        res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                        if res.returncode != 0:
-                            raise RuntimeError(f"FFmpeg crossfade concatenation failed: {res.stderr}")
-                    else:
-                        if sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path):
-                            concat_out = os.path.join(tmpdir, "concat_temp.mp4")
-                            concat_cmd = [
-                                ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                                "-c", "copy", concat_out
-                            ]
-                            res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                            if res.returncode != 0:
-                                raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
-
-                            log(f"View Channel Mode Chunk {chunk_idx}: Mixing original audio with background music... ({clean_audio_path})")
-                            update_chunk_progress(90, "Mixing background music...")
-
-                            bgm_dur = None
-                            try:
-                                probe_cmd = [
-                                    "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe",
-                                    "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path
-                                ]
-                                dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
-                                if dur_str:
-                                    bgm_dur = float(dur_str)
-                            except Exception as e:
-                                log(f"Warning: Could not probe background music duration: {e}")
-
-                            volume_filter = ""
-                            if audio_boost and audio_boost.strip():
-                                try:
-                                    boost_val = float(audio_boost.strip())
-                                    volume_filter = f"volume={boost_val}dB,"
-                                except ValueError:
-                                    pass
-                                    
-                            video_volume_filter = ""
-                            if video_audio_boost and video_audio_boost.strip():
-                                try:
-                                    v_boost_val = float(video_audio_boost.strip())
-                                    video_volume_filter = f"volume={v_boost_val}dB"
-                                except ValueError:
-                                    pass
-
-                            if video_volume_filter:
-                                filter_complex_str = f"[0:a:0]{video_volume_filter}[fg];[1:a:0]{volume_filter}apad[bgm];[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
-                            else:
-                                filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
-                            
-                            v_map = "0:v:0"
-                            v_codec = "copy"
-                            v_enc_args = []
-                            
-                            if video_filter_str:
-                                filter_complex_str += f";[0:v:0]{video_filter_str}[vout]"
-                                v_map = "[vout]"
-                                v_codec = "libx264"
-                                v_enc_args = ["-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
-                                    
-                            final_cmd = [
-                                ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
-                                "-filter_complex", filter_complex_str,
-                                "-map", v_map, "-map", "[aout]", "-c:v", v_codec
-                            ] + v_enc_args + [
-                                "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
-                            ]
-
-                            if bgm_dur is not None:
-                                final_cmd.extend(["-t", str(bgm_dur)])
-                            
-                            final_cmd.extend([
-                                "-disposition:a:0", "default", final_output_path
-                            ])
-                            res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                            if res.returncode != 0:
-                                raise RuntimeError(f"FFmpeg failed audio replacement: {res.stderr}")
-                        else:
-                            if video_filter_str:
-                                concat_cmd = [
-                                    ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                                    "-vf", video_filter_str, "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
-                                    "-c:a", "copy", final_output_path
-                                ]
-                            else:
-                                concat_cmd = [
-                                    ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                                    "-c", "copy", final_output_path
-                                ]
-                            res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                            if res.returncode != 0:
-                                raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
-
-                processed_outputs.append(final_output_path)
-                update_chunk_progress(100, "Completed!")
-            except Exception as e:
-                log(f"Error processing chunk {chunk_idx}: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed processing chunk {chunk_idx}: {e}")
-
-        return {
-            "ok": True,
-            "output_paths": processed_outputs,
-            "output_path": processed_outputs[0] if processed_outputs else ""
-        }
-
+    if combine_folders:
+        out_dir = resolve_subfolder_by_prefix(base_dir, combine_folders[0])
     else:
-        # Cover Mode: Video 1 + 2s Black + 3s Image
-        # Export to the same subfolder where the source video was pulled from
+        out_dir = base_dir
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    if sub_mode == "view_channel":
+        K = len(durations)
+        chunks = [combine_sources[i:i+K] for i in range(0, len(combine_sources), K)]
+    else:
+        chunks = [combine_sources]
+
+    num_chunks = len(chunks)
+    processed_outputs = []
+
+    for chunk_idx, chunk_sources in enumerate(chunks, 1):
         if prefix_str:
-            cover_out_name = f"{prefix_str}{sub_no}.mp4"
+            if num_chunks == 1:
+                if prefix_str.endswith("-") or prefix_str.endswith("_"):
+                    video_filename = f"{prefix_str}{combine_label}.mp4"
+                else:
+                    video_filename = f"{prefix_str}.mp4"
+            else:
+                if prefix_str.endswith("-") or prefix_str.endswith("_"):
+                    video_filename = f"{prefix_str}{combine_label}_{chunk_idx}.mp4"
+                else:
+                    video_filename = f"{prefix_str}_{chunk_idx}.mp4"
         else:
-            cover_out_name = video_filename
-        final_output_path = os.path.join(subfolder, cover_out_name)
-        log(f"Cover Mode Output Target: '{final_output_path}'")
+            if num_chunks == 1:
+                video_filename = f"{combine_label}_combined.mp4"
+            else:
+                video_filename = f"{combine_label}_combined_{chunk_idx}.mp4"
+        
+        final_output_path = os.path.join(out_dir, video_filename)
+        log(f"Combine Mode Output Target [Chunk {chunk_idx}/{num_chunks}]: '{final_output_path}'")
+
+        if os.path.exists(final_output_path):
+            if str(overwrite).lower() == "true":
+                log(f"Chunk {chunk_idx}: Destination file already exists: '{final_output_path}'. Overwrite requested.")
+            else:
+                log(f"Chunk {chunk_idx}: Destination file already exists: '{final_output_path}'. Skipping processing.")
+                processed_outputs.append(final_output_path)
+                continue
+
+        def update_chunk_progress(percent: int, status: str):
+            if job_id:
+                chunk_base = (chunk_idx - 1) / num_chunks * 100
+                scaled_percent = int(chunk_base + (percent / 100 * (100 / num_chunks)))
+                global_video_progress[job_id] = {
+                    "percent": scaled_percent,
+                    "status": f"[Chunk {chunk_idx}/{num_chunks}] {status}"
+                }
 
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
-                temp_input_video = src_video_path
-                temp_input_second = src_second_path
-                
                 ffmpeg_bin = "/opt/homebrew/bin/ffmpeg"
                 if not os.path.exists(ffmpeg_bin):
                     ffmpeg_bin = "ffmpeg"
@@ -4042,104 +3603,340 @@ def _make_video_cover_impl(
                     log(f"Generated text watermark temp PNG (border={wm_border}): '{watermark_temp_png}'")
 
                 list_txt = os.path.join(tmpdir, "list.txt")
+                amount_val = len(chunk_sources)
 
-                temp_video = os.path.join(tmpdir, "temp_video.mp4")
-                temp_black = os.path.join(tmpdir, "temp_black.mp4")
-                temp_second = os.path.join(tmpdir, "temp_second.mp4")
-                
-                has_audio = False
-                try:
-                    probe_cmd = [
-                        "/opt/homebrew/bin/ffprobe", "-v", "error", "-select_streams", "a",
-                        "-show_entries", "stream=codec_type", "-of", "json", temp_input_video
-                    ]
-                    if not os.path.exists(probe_cmd[0]):
-                        probe_cmd[0] = "ffprobe"
-                    result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    probe_data = json.loads(result.stdout)
-                    has_audio = len(probe_data.get("streams", [])) > 0
-                except Exception as e:
-                    log(f"Video Helper Check Audio Warning: {e}")
-                    has_audio = False
-                    
-                log(f"Video Helper: Input video 1 has audio track: {has_audio}")
-                log("Video Helper [1/3]: Aligning first video to 9:16 vertical 4K 60fps...")
-                if has_audio:
-                    if watermark_temp_png:
-                        v_cmd = [
-                            ffmpeg_bin, "-y", "-i", temp_input_video, "-i", watermark_temp_png,
-                            "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][1:v]overlay=0:0[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
-                        ]
+                aligned_paths = []
+                for idx, (folder_name, v_path, resolved_media_name) in enumerate(chunk_sources, 1):
+                    update_chunk_progress(int((idx - 1) / amount_val * 70), f"Processing video {idx} of {amount_val}...")
+                    has_video_v, has_audio_v = probe_media_streams(v_path)
+                    out_aligned = os.path.join(tmpdir, f"aligned_{idx}.mp4")
+                    log(f"Combine Mode Chunk {chunk_idx} [{idx}/{amount_val}]: Aligning '{folder_name}/{resolved_media_name}' to 9:16 vertical 4K 60fps...")
+
+                    if has_video_v and has_audio_v:
+                        if watermark_temp_png:
+                            v_cmd = [
+                                ffmpeg_bin, "-y", "-i", v_path, "-i", watermark_temp_png,
+                                "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][1:v]overlay=0:0[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                            ]
+                        else:
+                            v_cmd = [
+                                ffmpeg_bin, "-y", "-i", v_path,
+                                "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                            ]
+                    elif has_video_v:
+                        if watermark_temp_png:
+                            v_cmd = [
+                                ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-i", watermark_temp_png,
+                                "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][2:v]overlay=0:0[v]",
+                                "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                            ]
+                        else:
+                            v_cmd = [
+                                ffmpeg_bin, "-y", "-i", v_path, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                                "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v]",
+                                "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                            ]
+                    elif has_audio_v:
+                        if watermark_temp_png:
+                            if speed_factor != 1.0:
+                                v_cmd = [
+                                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path, "-i", watermark_temp_png,
+                                    "-filter_complex", f"[0:v][2:v]overlay=0:0[v];[1:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                    "-map", "[v]", "-map", "[a]", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                ]
+                            else:
+                                v_cmd = [
+                                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path, "-i", watermark_temp_png,
+                                    "-filter_complex", "[0:v][2:v]overlay=0:0[v]",
+                                    "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                ]
+                        else:
+                            if speed_factor != 1.0:
+                                v_cmd = [
+                                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
+                                    "-filter_complex", f"[1:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
+                                    "-map", "0:v", "-map", "[a]", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                ]
+                            else:
+                                v_cmd = [
+                                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60", "-i", v_path,
+                                    "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac"
+                                ]
                     else:
-                        v_cmd = [
-                            ffmpeg_bin, "-y", "-i", temp_input_video,
-                            "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v];[0:a]aresample=async=1{audio_speed_filter},aformat=sample_rates=48000:channel_layouts=stereo[a]",
-                            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
-                        ]
-                else:
-                    if watermark_temp_png:
-                        v_cmd = [
-                            ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-i", watermark_temp_png,
-                            "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[scaled];[scaled][2:v]overlay=0:0[v]",
-                            "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
-                        ]
-                    else:
-                        v_cmd = [
-                            ffmpeg_bin, "-y", "-i", temp_input_video, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                            "-filter_complex", f"[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60{video_speed_filter}[v]",
-                            "-map", "[v]", "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_video
-                        ]
+                        raise RuntimeError(f"Matched file '{resolved_media_name}' has no usable audio or video stream")
+
+                    if sub_mode == "view_channel" and len(durations) >= idx:
+                        dur = durations[idx - 1]
+                        v_cmd.extend(["-t", str(dur)])
                     
-                res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                if res.returncode != 0:
-                    raise RuntimeError(f"FFmpeg failed processing first video: {res.stderr}")
+                    v_cmd.append(out_aligned)
+
+                    res = subprocess.run(v_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if res.returncode != 0:
+                        raise RuntimeError(f"FFmpeg failed aligning video {idx}: {res.stderr}")
+                    aligned_paths.append(out_aligned)
                     
-                log("Video Helper [2/3]: Generating 2 seconds black screen...")
-                b_cmd = [
-                    ffmpeg_bin, "-y", "-f", "lavfi", "-i", "color=c=black:s=2160x3840:r=60:d=2",
-                    "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=2",
-                    "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_black
-                ]
-                res = subprocess.run(b_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                if res.returncode != 0:
-                    raise RuntimeError(f"FFmpeg failed generating black screen: {res.stderr}")
-                    
-                log("Video Helper [3/3]: Rendering cover image for 3 seconds...")
-                i_cmd = [
-                    ffmpeg_bin, "-y", "-loop", "1", "-i", temp_input_second,
-                    "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=3",
-                    "-filter_complex", "[0:v]scale=2160:3840:force_original_aspect_ratio=decrease,pad=2160:3840:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=60[v]",
-                    "-map", "[v]", "-map", "1:a", "-t", "3", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60", "-c:a", "aac", temp_second
-                ]
-                res = subprocess.run(i_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                if res.returncode != 0:
-                    raise RuntimeError(f"FFmpeg failed rendering image: {res.stderr}")
-                    
-                log("Video Helper [4/4]: Concatenating clips into final 9:16 60fps MP4 video...")
+                log(f"Combine Mode Chunk {chunk_idx}: Concatenating {amount_val} clips...")
+                update_chunk_progress(75, "Concatenating videos...")
                 with open(list_txt, "w", encoding="utf-8") as f:
-                    f.write(f"file '{temp_video}'\n")
-                    f.write(f"file '{temp_black}'\n")
-                    f.write(f"file '{temp_second}'\n")
+                    for ap in aligned_paths:
+                        f.write(f"file '{ap}'\n")
+
+                clean_audio_path = audio_path.strip().strip('"').strip("'") if audio_path else ""
+                
+                eq_parts = []
+                if contrast and contrast.strip(): eq_parts.append(f"contrast={contrast.strip()}")
+                if saturation and saturation.strip(): eq_parts.append(f"saturation={saturation.strip()}")
+                if brightness and brightness.strip(): eq_parts.append(f"brightness={brightness.strip()}")
+                if gamma and gamma.strip(): eq_parts.append(f"gamma={gamma.strip()}")
+                
+                video_filter_str = ""
+                if eq_parts:
+                    video_filter_str = "eq=" + ":".join(eq_parts)
+                if unsharp and unsharp.strip():
+                    if video_filter_str:
+                        video_filter_str += f",unsharp={unsharp.strip()}"
+                    else:
+                        video_filter_str = f"unsharp={unsharp.strip()}"
+
+                # Parse transitions and fade durations if provided
+                transitions = []
+                if transitions_json:
+                    try:
+                        transitions = json.loads(transitions_json)
+                    except Exception as e:
+                        log(f"Warning: Failed to parse transitions_json: {e}")
+                
+                fade_durations = []
+                if fade_durations_json:
+                    try:
+                        fade_durations = [float(fd) for fd in json.loads(fade_durations_json)]
+                    except Exception as e:
+                        log(f"Warning: Failed to parse fade_durations_json: {e}")
+
+                has_fade_transitions = any(t == "fade" for t in transitions)
+                clean_audio_path = audio_path.strip().strip('"').strip("'") if audio_path else ""
+
+                if has_fade_transitions and len(aligned_paths) >= 2:
+                    log(f"View Channel Mode Chunk {chunk_idx}: Crossfade transitions detected. Concatenating {amount_val} clips using filter_complex...")
+                    update_chunk_progress(75, "Applying transitions and mixing...")
                     
-                concat_cmd = [
-                    ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
-                    "-c", "copy", final_output_path
-                ]
-                res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                if res.returncode != 0:
-                    raise RuntimeError(f"FFmpeg failed concatenating video: {res.stderr}")
-                
-                log(f"Video Helper Success: Saved final video to '{final_output_path}'")
-                update_progress(100, "Done")
-                
-            return {
-                "ok": True,
-                "output_path": final_output_path
-            }
+                    final_cmd = [ffmpeg_bin, "-y"]
+                    for ap in aligned_paths:
+                        final_cmd.extend(["-i", ap])
+                    
+                    has_bgm = sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path)
+                    if has_bgm:
+                        final_cmd.extend(["-i", clean_audio_path])
+                        
+                    filter_parts = []
+                    v_cur = "[0:v]"
+                    a_cur = "[0:a]"
+                    t_cur = durations[0] if (sub_mode == "view_channel" and len(durations) >= 1) else 5.0
+                    
+                    P = len(aligned_paths)
+                    for idx in range(1, P):
+                        next_v = f"[{idx}:v]"
+                        next_a = f"[{idx}:a]"
+                        next_dur = durations[idx] if (sub_mode == "view_channel" and len(durations) >= idx + 1) else 5.0
+                        
+                        trans = transitions[idx] if idx < len(transitions) else "cut"
+                        fade_dur = fade_durations[idx] if idx < len(fade_durations) else 0.0
+                        
+                        if trans == "fade" and fade_dur > 0.0:
+                            prev_dur = durations[idx - 1] if (sub_mode == "view_channel" and len(durations) >= idx) else 5.0
+                            fade_dur = min(fade_dur, next_dur, prev_dur)
+                            offset = t_cur - fade_dur
+                            v_next = f"[v_trans_{idx}]"
+                            a_next = f"[a_trans_{idx}]"
+                            filter_parts.append(f"{v_cur}{next_v}xfade=transition=fade:duration={fade_dur}:offset={offset}{v_next}")
+                            filter_parts.append(f"{a_cur}{next_a}acrossfade=d={fade_dur}{a_next}")
+                            v_cur = v_next
+                            a_cur = a_next
+                            t_cur = t_cur + next_dur - fade_dur
+                        else:
+                            v_next = f"[v_concat_{idx}]"
+                            a_next = f"[a_concat_{idx}]"
+                            filter_parts.append(f"{v_cur}{next_v}concat=n=2:v=1:a=0{v_next}")
+                            filter_parts.append(f"{a_cur}{next_a}concat=n=2:v=0:a=1{a_next}")
+                            v_cur = v_next
+                            a_cur = a_next
+                            t_cur = t_cur + next_dur
+                            
+                    if video_filter_str:
+                        filter_parts.append(f"{v_cur}{video_filter_str}[vout]")
+                        v_map = "[vout]"
+                    else:
+                        v_map = v_cur
+                        
+                    volume_filter = ""
+                    if audio_boost and audio_boost.strip():
+                        try:
+                            boost_val = float(audio_boost.strip())
+                            volume_filter = f"volume={boost_val}dB,"
+                        except ValueError:
+                            pass
+                            
+                    video_volume_filter = ""
+                    if video_audio_boost and video_audio_boost.strip():
+                        try:
+                            v_boost_val = float(video_audio_boost.strip())
+                            video_volume_filter = f"volume={v_boost_val}dB"
+                        except ValueError:
+                            pass
+                            
+                    if has_bgm:
+                        BGM_idx = P
+                        if video_volume_filter:
+                            filter_parts.append(f"{a_cur}{video_volume_filter}[fg]")
+                        else:
+                            filter_parts.append(f"{a_cur}anull[fg]")
+                        filter_parts.append(f"[{BGM_idx}:a]{volume_filter}apad[bgm]")
+                        filter_parts.append(f"[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]")
+                        a_map = "[aout]"
+                    else:
+                        if video_volume_filter:
+                            filter_parts.append(f"{a_cur}{video_volume_filter}[aout]")
+                            a_map = "[aout]"
+                        else:
+                            a_map = a_cur
+                            
+                    filter_complex_str = ";".join(filter_parts)
+                    final_cmd.extend(["-filter_complex", filter_complex_str])
+                    final_cmd.extend(["-map", v_map, "-map", a_map])
+                    
+                    final_cmd.extend([
+                        "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "60",
+                        "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
+                    ])
+                    
+                    if has_bgm:
+                        bgm_dur = None
+                        try:
+                            probe_cmd = [
+                                "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe",
+                                "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path
+                            ]
+                            dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
+                            if dur_str:
+                                bgm_dur = float(dur_str)
+                        except Exception as e:
+                            log(f"Warning: Could not probe background music duration: {e}")
+                        if bgm_dur is not None:
+                            final_cmd.extend(["-t", str(bgm_dur)])
+                            
+                    final_cmd.extend([
+                        "-disposition:a:0", "default", final_output_path
+                    ])
+                    
+                    log(f"Executing Crossfade FFmpeg complex: {' '.join(final_cmd)}")
+                    res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if res.returncode != 0:
+                        raise RuntimeError(f"FFmpeg crossfade concatenation failed: {res.stderr}")
+                else:
+                    if sub_mode == "view_channel" and clean_audio_path and os.path.isfile(clean_audio_path):
+                        concat_out = os.path.join(tmpdir, "concat_temp.mp4")
+                        concat_cmd = [
+                            ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                            "-c", "copy", concat_out
+                        ]
+                        res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        if res.returncode != 0:
+                            raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
+
+                        log(f"View Channel Mode Chunk {chunk_idx}: Mixing original audio with background music... ({clean_audio_path})")
+                        update_chunk_progress(90, "Mixing background music...")
+
+                        bgm_dur = None
+                        try:
+                            probe_cmd = [
+                                "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe",
+                                "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_audio_path
+                            ]
+                            dur_str = subprocess.run(probe_cmd, capture_output=True, text=True).stdout.strip()
+                            if dur_str:
+                                bgm_dur = float(dur_str)
+                        except Exception as e:
+                            log(f"Warning: Could not probe background music duration: {e}")
+
+                        volume_filter = ""
+                        if audio_boost and audio_boost.strip():
+                            try:
+                                boost_val = float(audio_boost.strip())
+                                volume_filter = f"volume={boost_val}dB,"
+                            except ValueError:
+                                pass
+                                
+                        video_volume_filter = ""
+                        if video_audio_boost and video_audio_boost.strip():
+                            try:
+                                v_boost_val = float(video_audio_boost.strip())
+                                video_volume_filter = f"volume={v_boost_val}dB"
+                            except ValueError:
+                                pass
+
+                        if video_volume_filter:
+                            filter_complex_str = f"[0:a:0]{video_volume_filter}[fg];[1:a:0]{volume_filter}apad[bgm];[fg][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                        else:
+                            filter_complex_str = f"[1:a:0]{volume_filter}apad[bgm];[0:a:0][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+                        
+                        v_map = "0:v:0"
+                        v_codec = "copy"
+                        v_enc_args = []
+                        
+                        if video_filter_str:
+                            filter_complex_str += f";[0:v:0]{video_filter_str}[vout]"
+                            v_map = "[vout]"
+                            v_codec = "libx264"
+                            v_enc_args = ["-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
+                                
+                        final_cmd = [
+                            ffmpeg_bin, "-y", "-i", concat_out, "-i", clean_audio_path,
+                            "-filter_complex", filter_complex_str,
+                            "-map", v_map, "-map", "[aout]", "-c:v", v_codec
+                        ] + v_enc_args + [
+                            "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000"
+                        ]
+
+                        if bgm_dur is not None:
+                            final_cmd.extend(["-t", str(bgm_dur)])
+                        
+                        final_cmd.extend([
+                            "-disposition:a:0", "default", final_output_path
+                        ])
+                        res = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        if res.returncode != 0:
+                            raise RuntimeError(f"FFmpeg failed audio replacement: {res.stderr}")
+                    else:
+                        if video_filter_str:
+                            concat_cmd = [
+                                ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                                "-vf", video_filter_str, "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
+                                "-c:a", "copy", final_output_path
+                            ]
+                        else:
+                            concat_cmd = [
+                                ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_txt,
+                                "-c", "copy", final_output_path
+                            ]
+                        res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        if res.returncode != 0:
+                            raise RuntimeError(f"FFmpeg failed concatenation: {res.stderr}")
+
+            processed_outputs.append(final_output_path)
+            update_chunk_progress(100, "Completed!")
         except Exception as e:
-            log(f"Video Helper Error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            log(f"Error processing chunk {chunk_idx}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed processing chunk {chunk_idx}: {e}")
+
+    return {
+        "ok": True,
+        "output_paths": processed_outputs,
+        "output_path": processed_outputs[0] if processed_outputs else ""
+    }
+
 
 @app.get("/api/utils/browse-directory")
 def browse_directory() -> dict[str, Any]:

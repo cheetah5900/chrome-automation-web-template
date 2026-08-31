@@ -218,48 +218,35 @@ ${modeDescription}
 
   const tooltipRunVideoHelperBtn = document.getElementById('tooltip_runVideoHelperBtn');
   if (tooltipRunVideoHelperBtn) {
-    const videoMode = document.querySelector('input[name="videoHelperMode"]:checked');
-    const modeVal = videoMode ? videoMode.value : 'cover';
-    const outputPathVal = document.getElementById('videoOutputPathText')?.value.trim() || 'ไม่ได้กำหนด';
     const prefixVal = document.getElementById('videoPrefixText')?.value.trim() || 'ไม่มี';
     const speedVal = document.getElementById('videoSpeedText')?.value.trim() || '1.0';
     const speedText = speedVal !== '1.0' && speedVal !== '' ? ` (เร่งความเร็ว ${speedVal} เท่า)` : '';
     
-    if (modeVal === 'cover') {
-      const foldersVal = document.getElementById('videoCoverFoldersText')?.value.trim() || 'ไม่ได้กำหนด';
-      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Cover Mode:
-1. ระบบตรวจสอบ Path หลักที่ตั้งค่าไว้ (${outputPathVal})
-2. ดึงรายชื่อโฟลเดอร์ย่อยที่จะเข้าไปทำงาน (${foldersVal})
-3. เริ่มวนลูปเข้าโฟลเดอร์ทีละอัน: ค้นหาไฟล์วิดีโอ (.mp4/.mov) 1 ไฟล์${speedText} และรูปภาพปกที่อยู่ในโฟลเดอร์ย่อย 'cover/'
-4. ส่งคำสั่งให้ระบบหลังบ้าน (API) ประมวลผลวิดีโอ
-5. ระบบจะแทรกภาพหน้าจอดำ (Black Screen) เป็นเวลา 2.0 วินาที เพื่อคั่นระหว่างจุดจบของวิดีโอกับภาพปก
-6. บันทึกผลลัพธ์เป็นไฟล์วิดีโอใหม่โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
-    } else {
-      const useBGM = document.getElementById('viewChannelUseBGM')?.checked !== false;
-      const viewFolderVal = document.getElementById('viewChannelFolderText')?.value || 'ไม่ได้กำหนด';
-      const durationInputs = Array.from(document.getElementById('viewDurationsContainer')?.querySelectorAll('input[id^="viewDur"]') || []);
-      const durationVals = durationInputs.map(input => input.value || '-').join(', ');
-      
-      const container = document.getElementById('viewDurationsContainer');
-      let transitionNote = 'แบบไร้รอยต่อ (Cut)';
-      if (container) {
-        const transSelects = Array.from(container.querySelectorAll('select[id^="viewTrans"]'));
-        const hasFade = transSelects.some(sel => sel.value === 'fade');
-        if (hasFade) {
-          transitionNote = 'โดยมีคลิปที่ตั้งค่าเฟดรอยต่อ (Crossfade)';
-        }
+    const useBGM = document.getElementById('viewChannelUseBGM')?.checked !== false;
+    const viewFolderVal = document.getElementById('viewChannelFolderText')?.value || 'ไม่ได้กำหนด';
+    const durationInputs = Array.from(document.getElementById('viewDurationsContainer')?.querySelectorAll('input[id^="viewDur"]') || []);
+    const durationVals = durationInputs.map(input => input.value || '-').join(', ');
+    
+    const container = document.getElementById('viewDurationsContainer');
+    let transitionNote = 'แบบไร้รอยต่อ (Cut)';
+    if (container) {
+      const transSelects = Array.from(container.querySelectorAll('select[id^="viewTrans"]'));
+      const hasFade = transSelects.some(sel => sel.value === 'fade');
+      if (hasFade) {
+        transitionNote = 'โดยมีคลิปที่ตั้งค่าเฟดรอยต่อ (Crossfade)';
       }
-      
-      let step5 = '5. คงเสียงเดิมของวิดีโอทั้งหมดไว้';
-      if (useBGM) {
-        const audioPathVal = document.getElementById('viewChannelAudioPath')?.value || 'ไม่ได้กำหนด';
-        step5 = `5. ผสมเสียงเดิมเข้ากับเพลงจากไฟล์: ${audioPathVal}`;
-      }
-      
-      const isBatch = document.getElementById('videoCombineBatchMode')?.checked;
-      if (isBatch) {
-        const subFoldersVal = document.getElementById('videoCombineSubFoldersText')?.value || 'ไม่ได้กำหนด';
-        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Combine (Batch Mode):
+    }
+    
+    let step5 = '5. คงเสียงเดิมของวิดีโอทั้งหมดไว้';
+    if (useBGM) {
+      const audioPathVal = document.getElementById('viewChannelAudioPath')?.value || 'ไม่ได้กำหนด';
+      step5 = `5. ผสมเสียงเดิมเข้ากับเพลงจากไฟล์: ${audioPathVal}`;
+    }
+    
+    const isBatch = document.getElementById('videoCombineBatchMode')?.checked;
+    if (isBatch) {
+      const subFoldersVal = document.getElementById('videoCombineSubFoldersText')?.value || 'ไม่ได้กำหนด';
+      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ Combine (Batch Mode):
 1. ระบบตรวจสอบโฟลเดอร์หลักที่ตั้งค่าไว้ (${viewFolderVal})
 2. ดึงรายชื่อโฟลเดอร์ย่อยที่จะประมวลผล (${subFoldersVal})
 3. สำหรับแต่ละโฟลเดอร์ย่อย:
@@ -267,15 +254,14 @@ ${modeDescription}
    - นำวิดีโอที่ตัดแล้วมารวมกัน${transitionNote}
    - ${useBGM ? 'ผสมเสียงเข้ากับเพลงพื้นหลัง' : 'คงเสียงเดิมไว้'}
    - บันทึกไฟล์รวมวิดีโอผลลัพธ์เป็น '{โฟลเดอร์ย่อย}_combined.mp4' ไว้ในโฟลเดอร์ย่อยนั้น`;
-      } else {
-        tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ วิดีโอ + เพลง:
+    } else {
+      tooltipRunVideoHelperBtn.textContent = `📥 ขั้นตอนการทำงานของ วิดีโอ + เพลง:
 1. ระบบตรวจสอบโฟลเดอร์ที่ตั้งค่าไว้ (${viewFolderVal})
 2. อ่านข้อมูลวิดีโอจากโฟลเดอร์นั้นตามลำดับ
 3. ระบบจะตัดวิดีโอแต่ละตัวตามความยาวที่ระบุ: [${durationVals}] วินาที${speedText}
 4. นำวิดีโอที่ตัดแล้วมาต่อกัน${transitionNote}
 ${step5}
 6. บันทึกไฟล์วิดีโอรวม (Output) กลับลงในโฟลเดอร์ โดยตั้งชื่อตาม Prefix: "${prefixVal}"`;
-      }
     }
   }
 
@@ -770,8 +756,7 @@ const inputsToListen = [
   'cfg_video_wait_seconds',
   'chatgptUrlInput',
   'chatgptChatModeSelect',
-  'videoCoverFoldersText',
-  'videoOutputPathText',
+  'videoCombineSubFoldersText',
   'videoPrefixText',
   'viewChannelFolderText',
   'startupUrl1',
@@ -909,19 +894,12 @@ async function loadConfig() {
     const remoteInput = document.getElementById('cfg_remote_path');
     if (remoteInput) remoteInput.value = config.remote_path || '';
     
-    videoPrefixCover = config.video_prefix_cover !== undefined ? config.video_prefix_cover : (config.video_prefix || '');
     videoPrefixCombine = config.video_prefix_combine !== undefined ? config.video_prefix_combine : (config.video_prefix || '');
-    
-    const activeRadio = document.querySelector('input[name="videoHelperMode"]:checked');
-    activeVideoMode = activeRadio ? activeRadio.value : 'cover';
     
     const vPref = document.getElementById('videoPrefixText');
     if (vPref) {
-      vPref.value = activeVideoMode === 'cover' ? videoPrefixCover : videoPrefixCombine;
+      vPref.value = videoPrefixCombine;
     }
-    
-    const vOut = document.getElementById('videoOutputPathText');
-    if (vOut) vOut.value = config.video_output_path || '';
     
     const vSpeed = document.getElementById('videoSpeedText');
     if (vSpeed) vSpeed.value = config.video_speed || '1.0';
@@ -1175,9 +1153,7 @@ function stopFrontendCooldown() {
   const tracker = document.getElementById('cooldownTracker');
   if (tracker) tracker.style.display = 'none';
 }
-let videoPrefixCover = '';
 let videoPrefixCombine = '';
-let activeVideoMode = 'cover';
 
 function getDirectoryOfFile(filePath) {
   if (!filePath || typeof filePath !== 'string') return '';
@@ -1689,111 +1665,7 @@ function updateVideoSetStatus(index, text, color, errorMsg = '') {
 }
 
 function renderVideoHelperBatchRows() {
-  const tabsContainer = document.getElementById('videoHelperSetTabs');
-  const container = document.getElementById('videoHelperBatchRows');
-  if (!container || !tabsContainer) return;
-  tabsContainer.innerHTML = '';
-  container.innerHTML = '';
-
-  for (let i = 1; i <= 20; i++) {
-    // 1. Create Tab Button
-    const tabBtn = document.createElement('button');
-    tabBtn.type = 'button';
-    tabBtn.id = `videoSetTabBtn_${i}`;
-    tabBtn.style.cssText = 'padding: 8px 14px; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.6); cursor: pointer; white-space: nowrap; font-weight: 500; transition: all 0.2s ease;';
-    tabBtn.innerHTML = `Set ${i}<span id="videoTabBadge_${i}" style="margin-left: 3px; font-size: 0.75rem; font-weight: bold;"></span>`;
-    
-    if (i === 1) {
-      tabBtn.style.background = 'rgba(141, 166, 255, 0.15)';
-      tabBtn.style.color = '#fff';
-      tabBtn.style.borderColor = '#8da6ff';
-    }
-    
-    tabBtn.addEventListener('click', () => {
-      for (let j = 1; j <= 20; j++) {
-        const r = document.getElementById(`videoSetRow_${j}`);
-        if (r) r.style.display = j === i ? 'flex' : 'none';
-        
-        const b = document.getElementById(`videoSetTabBtn_${j}`);
-        if (b) {
-          if (j === i) {
-            b.style.background = 'rgba(141, 166, 255, 0.15)';
-            b.style.color = '#fff';
-            b.style.borderColor = '#8da6ff';
-          } else {
-            b.style.background = 'transparent';
-            b.style.color = 'rgba(255,255,255,0.6)';
-            b.style.borderColor = 'rgba(255,255,255,0.1)';
-          }
-        }
-      }
-    });
-    
-    tabsContainer.appendChild(tabBtn);
-
-    const modeVal = document.querySelector('input[name="videoHelperMode"]:checked')?.value || 'cover';
-    const isCombine = modeVal === 'combine';
-
-    // 2. Create Row Content Box
-    const row = document.createElement('div');
-    row.id = `videoSetRow_${i}`;
-    row.className = 'batch-row-pair';
-    row.style.cssText = `border: 1px solid rgba(255,255,255,0.08); padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); display: ${i === 1 ? 'flex' : 'none'}; flex-direction: column; gap: 10px;`;
-    row.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 5px;">
-        <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">🎬 Set ${i}</span>
-        <span class="status-badge" id="videoSetStatus_${i}" style="font-size: 0.75rem; color: rgba(255,255,255,0.5);">Idle</span>
-      </div>
-      <div id="videoSetError_${i}" style="font-size: 0.8rem; color: #ff4a4a; display: none; margin-bottom: 8px; line-height: 1.4; border-bottom: 1px dashed rgba(255, 74, 74, 0.2); padding-bottom: 6px;"></div>
-      <div id="gridRow_${i}" style="display: grid; grid-template-columns: ${isCombine ? '110px 1fr 1fr' : '110px'}; gap: 15px;">
-        <!-- Sub folder Column -->
-        <div style="display: flex; flex-direction: column; gap: 5px;">
-          <label style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Sub folder</label>
-          <input type="text" id="videoNo_${i}" placeholder="${String(i).padStart(2, '0')}" style="font-size: 0.85rem; margin-bottom: 0; text-align: center;" />
-        </div>
-        <!-- Video Column -->
-        <div id="videoCol_${i}" style="display: ${isCombine ? 'flex' : 'none'}; flex-direction: column; gap: 5px;">
-          <label id="videoLabel_${i}" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Source Video (ไฟล์วีดีโอต้นฉบับ)</label>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="videoInputPathText_${i}" placeholder="เลือกไฟล์วีดีโอหรือระบุพาท..." style="font-size: 0.85rem; margin-grow: 1; margin-bottom: 0; flex-grow: 1;" />
-            <input type="file" id="videoInputPathFile_${i}" accept="video/*" style="display: none;" />
-            <button id="browseVideoBtn_${i}" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; margin-bottom: 0; border-radius: 8px; white-space: nowrap;">Browse</button>
-          </div>
-        </div>
-        <!-- Image Column -->
-        <div id="imageCol_${i}" style="display: ${isCombine ? 'flex' : 'none'}; flex-direction: column; gap: 5px;">
-          <label id="imageLabel_${i}" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Cover Image (รูปภาพหน้าปก)</label>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="imageInputPathText_${i}" placeholder="เลือกรูปภาพหรือระบุพาท..." style="font-size: 0.85rem; margin-bottom: 0; flex-grow: 1;" />
-            <input type="file" id="imageInputPathFile_${i}" accept="image/*" style="display: none;" />
-            <button id="browseImageBtn_${i}" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; margin-bottom: 0; border-radius: 8px; white-space: nowrap;">Browse</button>
-          </div>
-        </div>
-      </div>
-    `;
-    container.appendChild(row);
-
-    // Event listeners
-    const fileVideo = row.querySelector(`#videoInputPathFile_${i}`);
-    const textVideo = row.querySelector(`#videoInputPathText_${i}`);
-    const btnVideo = row.querySelector(`#browseVideoBtn_${i}`);
-    btnVideo.addEventListener('click', () => fileVideo.click());
-    fileVideo.addEventListener('change', () => {
-      if (fileVideo.files.length > 0) {
-        textVideo.value = fileVideo.files[0].name;
-      }
-    });
-
-    const fileImage = row.querySelector(`#imageInputPathFile_${i}`);
-    const textImage = row.querySelector(`#imageInputPathText_${i}`);
-    const btnImage = row.querySelector(`#browseImageBtn_${i}`);
-    btnImage.addEventListener('click', () => fileImage.click());
-    fileImage.addEventListener('change', () => {
-      if (fileImage.files.length > 0) {
-        textImage.value = fileImage.files[0].name;
-      }
-    });
-  }
+  // Deprecated: 20-tab manual layout was removed in favor of Combine UI
 }
 
 function parseFolderRanges(inputStr) {
@@ -2687,209 +2559,150 @@ function updateVideoCombineEndNumber() {
 }
 
 async function runVideoHelper(btnElement) {
-  const videoMode = document.querySelector('input[name="videoHelperMode"]:checked');
-  const modeVal = videoMode ? videoMode.value : 'cover';
+  const modeVal = 'combine';
   const videoPrefix = document.getElementById('videoPrefixText');
   const prefixVal = videoPrefix ? videoPrefix.value.trim() : '';
-  const videoOutputPath = document.getElementById('videoOutputPathText');
   const consoleBox = document.getElementById('videoConsole');
-  let outputPathVal = videoOutputPath ? videoOutputPath.value.trim() : '';
+  let outputPathVal = '';
 
   const videoSpeedInput = document.getElementById('videoSpeedText');
   const speedVal = videoSpeedInput ? videoSpeedInput.value.trim() : '1.0';
 
   // Collect active sets
   const activeSets = [];
-  if (modeVal === 'cover') {
-    if (!outputPathVal) {
-      alert('Please configure the Path at the top.');
+  const subModeVal = 'view_channel';
+  
+  let combineSets = [];
+  let durations = [];
+  let transitions = [];
+  let fadeDurations = [];
+  let viewChannelData = null;
+  
+  const folderInput = document.getElementById('viewChannelFolderText');
+  const folderVal = folderInput ? folderInput.value.trim() : '';
+  if (!folderVal) {
+    alert('Please select a target folder.');
+    return;
+  }
+  
+  const isBatch = document.getElementById('videoCombineBatchMode')?.checked;
+  if (isBatch) {
+    const subFoldersInput = document.getElementById('videoCombineSubFoldersText');
+    const subFoldersVal = subFoldersInput ? subFoldersInput.value.trim() : '';
+    if (!subFoldersVal) {
+      alert('Please enter sub folders (e.g. 1,2,3 or 1-3) to process.');
       return;
     }
-    const foldersInput = document.getElementById('videoCoverFoldersText');
-    const foldersVal = foldersInput ? foldersInput.value.trim() : '';
-    if (!foldersVal) {
-      alert('Please enter sub folders (e.g. 1,2,3-10 or 1-3) to process.');
+    const folderList = parseFolderRanges(subFoldersVal);
+    if (folderList.length === 0) {
+      alert('No valid sub folders parsed.');
       return;
     }
-    const folderList = parseFolderRanges(foldersVal);
+    outputPathVal = folderVal;
+    combineSets = folderList.map(f => [f]);
+  }
+  
+  const container = document.getElementById('viewDurationsContainer');
+  if (container) {
+    const durInputs = container.querySelectorAll('input[id^="viewDur"]');
+    durInputs.forEach(input => {
+      const val = input.value.trim();
+      if (val) durations.push(val);
+    });
+    
+    const children = container.children;
+    for (let i = 1; i <= children.length; i++) {
+      if (i === 1) {
+        transitions.push('cut');
+        fadeDurations.push(0);
+      } else {
+        const transSelect = document.getElementById(`viewTrans${i}`);
+        const transVal = transSelect ? transSelect.value : 'cut';
+        transitions.push(transVal);
+        
+        const fadeInput = document.getElementById(`viewFadeDur${i}`);
+        const fadeVal = (transVal === 'fade' && fadeInput) ? parseFloat(fadeInput.value) || 0 : 0;
+        fadeDurations.push(fadeVal);
+      }
+    }
+  }
+  if (durations.length === 0) {
+    alert('Please enter at least one duration.');
+    return;
+  }
+  const useBGM = document.getElementById('viewChannelUseBGM')?.checked !== false;
+  viewChannelData = {
+    audioPath: useBGM ? (document.getElementById('viewChannelAudioPath')?.value || '') : '',
+    audioBoost: useBGM ? (document.getElementById('viewChannelAudioBoost')?.value || '') : '',
+    videoAudioBoost: document.getElementById('viewChannelVideoAudioBoost')?.value || '',
+    contrast: document.getElementById('viewChannelContrast')?.value || '',
+    saturation: document.getElementById('viewChannelSaturation')?.value || '',
+    brightness: document.getElementById('viewChannelBrightness')?.value || '',
+    gamma: document.getElementById('viewChannelGamma')?.value || '',
+    unsharp: document.getElementById('viewChannelUnsharp')?.value || ''
+  };
 
-    for (const folder of folderList) {
-      activeSets.push({
-        index: folder,
+  if (isBatch) {
+    combineSets.forEach((folders, idx) => {
+      const setObj = {
+        index: `view_channel_combine_${idx + 1}`,
+        label: `Set ${idx + 1}`,
         videoFile: null,
         imageFile: null,
         videoPathVal: '',
         imagePathVal: '',
-        no: folder,
-        amount: '2',
-        foldersJson: '',
-        videoSpeed: speedVal
-      });
-    }
-  } else {
-    const subModeVal = 'view_channel';
-    
-    let combineSets = [];
-    let durations = [];
-    let transitions = [];
-    let fadeDurations = [];
-    let viewChannelData = null;
-    
-    const folderInput = document.getElementById('viewChannelFolderText');
-    const folderVal = folderInput ? folderInput.value.trim() : '';
-    if (!folderVal) {
-      alert('Please select a target folder.');
-      return;
-    }
-    
-    const isBatch = document.getElementById('videoCombineBatchMode')?.checked;
-    if (isBatch) {
-      const subFoldersInput = document.getElementById('videoCombineSubFoldersText');
-      const subFoldersVal = subFoldersInput ? subFoldersInput.value.trim() : '';
-      if (!subFoldersVal) {
-        alert('Please enter sub folders (e.g. 1,2,3 or 1-3) to process.');
-        return;
-      }
-      const folderList = parseFolderRanges(subFoldersVal);
-      if (folderList.length === 0) {
-        alert('No valid sub folders parsed.');
-        return;
-      }
-      outputPathVal = folderVal;
-      combineSets = folderList.map(f => [f]);
-    }
-    
-    if (subModeVal === 'view_channel') {
-      const container = document.getElementById('viewDurationsContainer');
-      if (container) {
-        const durInputs = container.querySelectorAll('input[id^="viewDur"]');
-        durInputs.forEach(input => {
-          const val = input.value.trim();
-          if (val) durations.push(val);
-        });
-        
-        const children = container.children;
-        for (let i = 1; i <= children.length; i++) {
-          if (i === 1) {
-            transitions.push('cut');
-            fadeDurations.push(0);
-          } else {
-            const transSelect = document.getElementById(`viewTrans${i}`);
-            const transVal = transSelect ? transSelect.value : 'cut';
-            transitions.push(transVal);
-            
-            const fadeInput = document.getElementById(`viewFadeDur${i}`);
-            const fadeVal = (transVal === 'fade' && fadeInput) ? parseFloat(fadeInput.value) || 0 : 0;
-            fadeDurations.push(fadeVal);
-          }
-        }
-      }
-      if (durations.length === 0) {
-        alert('Please enter at least one duration.');
-        return;
-      }
-      const useBGM = document.getElementById('viewChannelUseBGM')?.checked !== false;
-      viewChannelData = {
-        audioPath: useBGM ? (document.getElementById('viewChannelAudioPath')?.value || '') : '',
-        audioBoost: useBGM ? (document.getElementById('viewChannelAudioBoost')?.value || '') : '',
-        videoAudioBoost: document.getElementById('viewChannelVideoAudioBoost')?.value || '',
-        contrast: document.getElementById('viewChannelContrast')?.value || '',
-        saturation: document.getElementById('viewChannelSaturation')?.value || '',
-        brightness: document.getElementById('viewChannelBrightness')?.value || '',
-        gamma: document.getElementById('viewChannelGamma')?.value || '',
-        unsharp: document.getElementById('viewChannelUnsharp')?.value || ''
+        no: folders[0] || '',
+        amount: String(folders.length || 1),
+        foldersJson: JSON.stringify(folders),
+        videoSpeed: speedVal,
+        subMode: 'view_channel',
+        durationsJson: JSON.stringify(durations),
+        transitionsJson: JSON.stringify(transitions),
+        fadeDurationsJson: JSON.stringify(fadeDurations),
+        audioPath: viewChannelData.audioPath,
+        audioBoost: viewChannelData.audioBoost,
+        videoAudioBoost: viewChannelData.videoAudioBoost,
+        contrast: viewChannelData.contrast,
+        saturation: viewChannelData.saturation,
+        brightness: viewChannelData.brightness,
+        gamma: viewChannelData.gamma,
+        unsharp: viewChannelData.unsharp
       };
-    }
-
-    if (isBatch) {
-      combineSets.forEach((folders, idx) => {
-        const setObj = {
-          index: subModeVal === 'view_channel' ? `view_channel_combine_${idx + 1}` : `combine_${idx + 1}`,
-          label: `Set ${idx + 1}`,
-          videoFile: null,
-          imageFile: null,
-          videoPathVal: '',
-          imagePathVal: '',
-          no: folders[0] || '',
-          amount: String(folders.length || 1),
-          foldersJson: JSON.stringify(folders),
-          videoSpeed: speedVal
-        };
-        
-        if (subModeVal === 'view_channel' && viewChannelData) {
-          setObj.subMode = 'view_channel';
-          setObj.durationsJson = JSON.stringify(durations);
-          setObj.transitionsJson = JSON.stringify(transitions);
-          setObj.fadeDurationsJson = JSON.stringify(fadeDurations);
-          setObj.audioPath = viewChannelData.audioPath;
-          setObj.audioBoost = viewChannelData.audioBoost;
-          setObj.videoAudioBoost = viewChannelData.videoAudioBoost;
-          setObj.contrast = viewChannelData.contrast;
-          setObj.saturation = viewChannelData.saturation;
-          setObj.brightness = viewChannelData.brightness;
-          setObj.gamma = viewChannelData.gamma;
-          setObj.unsharp = viewChannelData.unsharp;
-        }
-        
-        activeSets.push(setObj);
-      });
-    } else {
-      // Manual Mode: Collect configured sets from the 20 tabs!
-      for (let i = 1; i <= 20; i++) {
-        const noInput = document.getElementById(`videoNo_${i}`);
-        const noVal = noInput ? noInput.value.trim() : '';
-        const videoInput = document.getElementById(`videoInputPathText_${i}`);
-        const videoVal = videoInput ? videoInput.value.trim() : '';
-        const videoFileInput = document.getElementById(`videoInputPathFile_${i}`);
-        const videoFileObj = videoFileInput && videoFileInput.files.length > 0 ? videoFileInput.files[0] : null;
-        
-        const imageInput = document.getElementById(`imageInputPathText_${i}`);
-        const imageVal = imageInput ? imageInput.value.trim() : '';
-        const imageFileInput = document.getElementById(`imageInputPathFile_${i}`);
-        const imageFileObj = imageFileInput && imageFileInput.files.length > 0 ? imageFileInput.files[0] : null;
-        
-        // We consider a set active if the user specified a subfolder number AND (a video path or video file)
-        if (noVal && (videoVal || videoFileObj)) {
-          const setObj = {
-            index: i,
-            label: `Set ${i}`,
-            videoFile: videoFileObj,
-            imageFile: imageFileObj,
-            videoPathVal: videoVal,
-            imagePathVal: imageVal,
-            no: noVal,
-            amount: '1',
-            foldersJson: '',
-            videoSpeed: speedVal
-          };
-          
-          if (subModeVal === 'view_channel' && viewChannelData) {
-            setObj.subMode = 'view_channel';
-            setObj.durationsJson = JSON.stringify(durations);
-            setObj.transitionsJson = JSON.stringify(transitions);
-            setObj.fadeDurationsJson = JSON.stringify(fadeDurations);
-            setObj.audioPath = viewChannelData.audioPath;
-            setObj.audioBoost = viewChannelData.audioBoost;
-            setObj.videoAudioBoost = viewChannelData.videoAudioBoost;
-            setObj.contrast = viewChannelData.contrast;
-            setObj.saturation = viewChannelData.saturation;
-            setObj.brightness = viewChannelData.brightness;
-            setObj.gamma = viewChannelData.gamma;
-            setObj.unsharp = viewChannelData.unsharp;
-          }
-          activeSets.push(setObj);
-        }
-      }
-      outputPathVal = folderVal;
-    }
+      
+      activeSets.push(setObj);
+    });
+  } else {
+    // Single folder mode (target folder itself)
+    const setObj = {
+      index: 'combine_1',
+      label: 'Combine',
+      videoFile: null,
+      imageFile: null,
+      videoPathVal: '',
+      imagePathVal: '',
+      no: '',
+      amount: '1',
+      foldersJson: JSON.stringify([folderVal]),
+      videoSpeed: speedVal,
+      subMode: 'view_channel',
+      durationsJson: JSON.stringify(durations),
+      transitionsJson: JSON.stringify(transitions),
+      fadeDurationsJson: JSON.stringify(fadeDurations),
+      audioPath: viewChannelData.audioPath,
+      audioBoost: viewChannelData.audioBoost,
+      videoAudioBoost: viewChannelData.videoAudioBoost,
+      contrast: viewChannelData.contrast,
+      saturation: viewChannelData.saturation,
+      brightness: viewChannelData.brightness,
+      gamma: viewChannelData.gamma,
+      unsharp: viewChannelData.unsharp
+    };
+    activeSets.push(setObj);
+    outputPathVal = folderVal;
   }
 
   if (activeSets.length === 0) {
-    if (modeVal === 'cover') {
-      alert('Please enter at least one Sub folder name/range to process in Cover Mode.');
-    } else {
-      alert('Please enter at least one Sub folder name/range to process in Combine.');
-    }
+    alert('Please enter at least one Sub folder name/range to process in Combine.');
     return;
   }
 
@@ -3168,20 +2981,15 @@ async function setVideoOutputDefault() {
 async function setVideoPrefixDefault() {
   const input = document.getElementById('videoPrefixText');
   const val = input ? input.value.trim() : '';
-  const key = activeVideoMode === 'cover' ? 'video_prefix_cover' : 'video_prefix_combine';
-  if (activeVideoMode === 'cover') {
-    videoPrefixCover = val;
-  } else {
-    videoPrefixCombine = val;
-  }
+  videoPrefixCombine = val;
   try {
     await jsonFetch('/api/config/set-default', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: key, value: val })
+      body: JSON.stringify({ key: 'video_prefix_combine', value: val })
     });
-    writeConsoleLine(`Video prefix default (${activeVideoMode}) saved: ${val || 'None'}`, 'success', 'videoConsole');
-    alert(`Default video prefix for ${activeVideoMode} mode set to: ${val || 'None'}`);
+    writeConsoleLine(`Video prefix default saved: ${val || 'None'}`, 'success', 'videoConsole');
+    alert(`Default video prefix set to: ${val || 'None'}`);
   } catch (e) {
     writeConsoleLine(`Failed to set default video prefix: ${e.message}`, 'error', 'videoConsole');
   }
@@ -3774,70 +3582,7 @@ function initWorkflowActionListeners() {
     runVideoBtn.addEventListener('click', (e) => runVideoHelper(e.currentTarget));
   }
 
-  document.querySelectorAll('input[name="videoHelperMode"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-      const mode = e.target.value;
-      localStorage.setItem('videoHelperMode', mode);
-      const isCombine = mode === 'combine';
-      
-      // Save current input value to the previous mode
-      const currentInputVal = document.getElementById('videoPrefixText')?.value || '';
-      if (activeVideoMode === 'cover') {
-        videoPrefixCover = currentInputVal;
-      } else {
-        videoPrefixCombine = currentInputVal;
-      }
-      
-      activeVideoMode = mode;
-      
-      // Update prefix input text value to the new mode's value
-      const vPref = document.getElementById('videoPrefixText');
-      if (vPref) {
-        vPref.value = mode === 'cover' ? videoPrefixCover : videoPrefixCombine;
-      }
-      
-      const pathLabel = document.getElementById('videoOutputPathLabel');
-      const pathDesc = document.getElementById('videoOutputPathDesc');
-      const pathInput = document.getElementById('videoOutputPathText');
-      if (pathLabel) {
-        pathLabel.textContent = 'Path';
-      }
-      if (pathDesc) {
-        pathDesc.textContent = 'This is input and output path. The system will select subfolder here for input and output.';
-        pathDesc.style.display = 'block';
-      }
-      if (pathInput) {
-        pathInput.placeholder = 'เช่น /Users/litar/Downloads/my_project_folder';
-      }
-      toggleVideoCombineBatchUI(isCombine);
-      
-      const coverDesc = document.getElementById('videoHelperCoverDesc');
-      const combineDesc = document.getElementById('videoHelperCombineDesc');
-      if (coverDesc) {
-        if (mode === 'cover') coverDesc.classList.remove('hidden');
-        else coverDesc.classList.add('hidden');
-      }
-      if (combineDesc) {
-        if (mode === 'combine') combineDesc.classList.remove('hidden');
-        else combineDesc.classList.add('hidden');
-      }
 
-      const runBtn = document.getElementById('runVideoHelperBtn');
-      if (runBtn) {
-        runBtn.textContent = 'Run';
-      }
-      updateTooltips();
-    });
-  });
-
-  // Restore modes from local storage
-  const savedHelperMode = localStorage.getItem('videoHelperMode');
-  if (savedHelperMode) {
-    const radioToSelect = document.querySelector(`input[name="videoHelperMode"][value="${savedHelperMode}"]`);
-    if (radioToSelect) {
-      radioToSelect.checked = true;
-    }
-  }
 
 
 
@@ -3944,12 +3689,9 @@ function initWorkflowActionListeners() {
     });
   }
 
-  // Trigger initial change event to sync with the checked option on load
+  // Trigger initial UI update on load
   setTimeout(() => {
-    const activeRadio = document.querySelector('input[name="videoHelperMode"]:checked');
-    if (activeRadio) {
-      activeRadio.dispatchEvent(new Event('change'));
-    }
+    updateCombineBatchUI();
     updateDurationsSum();
   }, 100);
 
@@ -6676,7 +6418,7 @@ const staticTooltips = {
   // Tabs
   "tabImageGenBtn": "🖼️ แถบสร้างภาพ (Image Generation):<br>- รันเจเนอเรตภาพจาก Gemini หรือ ChatGPT",
   "tabVideoGenBtn": "🎬 แถบสร้างวิดีโอ (Video Generation):<br>- รันเจเนอเรตวิดีโอบน Google Flow",
-  "tabVideoHelperBtn": "🎥 แถบช่วยเหลือวิดีโอ (Video Helper):<br>- ใส่ภาพปก (Cover Mode) หรือต่อคลิปวิดีโอ (Combine Mode)",
+  "tabVideoHelperBtn": "🎥 แถบช่วยเหลือวิดีโอ (Video Helper):<br>- รวมคลิปวิดีโอเข้าด้วยกัน (Combine Mode)",
   "tabSeedanceGenBtn": "💃 แถบ Seedance Gen:<br>- สร้างคลิปเต้น (สำหรับอนาคต)",
 
   // Image Gen
