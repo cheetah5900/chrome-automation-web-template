@@ -135,10 +135,10 @@ def post_single_reel(
     4. macOS dialog path submission
     5. Fast poll for video upload completion (100%)
     6. Insert caption into Lexical editor with event dispatch
-    7. Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share)
+    7. Direct jump to Step 3 (Share) via top header tab click
     8. Schedule radio option selection
     9. Date & Time input configuration (with TAB commit)
-    10. Final Schedule submit button click & confirmation
+    10. Final Schedule submit button click (ActionChains) & confirmation
     """
     subfolder_name = item.get("subfolder_name", "")
     video_name = item.get("video_name", "")
@@ -236,44 +236,49 @@ def post_single_reel(
         ''', caption)
         time.sleep(0.4)
 
-    # 7. Step 1 (Create) -> Step 2 (Edit)
-    log("[Meta Auto Post Script] Advancing Step 1 (Create -> Edit)...")
-    driver.execute_script('''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700 && b.getAttribute('aria-disabled') !== 'true');
-        if (nextBtn) nextBtn.click();
-    ''')
+    # 7. Direct jump to Step 3 (Share) via top header tab click
+    log("[Meta Auto Post Script] Jumping directly to Step 3 (Share) via top header tab...")
+    for _ in range(5):
+        share_tab = driver.execute_script('''
+            const allEls = Array.from(document.querySelectorAll('div, span, button'));
+            return allEls.find(el => el.innerText && el.innerText.trim() === 'Share' && el.getBoundingClientRect().y < 120);
+        ''')
+        if share_tab:
+            try:
+                ActionChains(driver).move_to_element(share_tab).pause(0.1).click().perform()
+            except Exception:
+                driver.execute_script("arguments[0].click();", share_tab)
+            time.sleep(0.5)
 
-    # Wait for Step 2 active
-    fast_poll(driver, '''
-        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Audio' || el.innerText.trim() === 'Crop'));
-    ''', timeout=10.0, poll_interval=0.15)
-    time.sleep(0.4)
+        # Check if on Step 3
+        on_step3 = driver.execute_script('''
+            return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
+        ''')
+        if on_step3:
+            break
+        time.sleep(0.2)
 
-    # 8. Step 2 (Edit) -> Step 3 (Share)
-    log("[Meta Auto Post Script] Advancing Step 2 (Edit -> Share)...")
-    driver.execute_script('''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700 && b.getAttribute('aria-disabled') !== 'true');
-        if (nextBtn) nextBtn.click();
-    ''')
-
-    # Wait for Step 3 active
+    # Fallback to Step 3 fast poll if needed
     fast_poll(driver, '''
         return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
     ''', timeout=10.0, poll_interval=0.15)
     time.sleep(0.5)
 
-    # 9. Select 'Schedule' Option Tab
+    # 8. Select 'Schedule' Option Tab
     log("[Meta Auto Post Script] Selecting 'Schedule' radio tab...")
-    driver.execute_script('''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button, [role="radio"]'));
-        const schedTab = allBtns.find(b => b.innerText && b.innerText.trim() === 'Schedule' && b.getBoundingClientRect().y < 300);
-        if (schedTab) (schedTab.closest('[role="button"], [role="radio"]') || schedTab).click();
+    sched_tab = driver.execute_script('''
+        const allEls = Array.from(document.querySelectorAll('div, span, button, [role="radio"]'));
+        const tab = allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().y < 350 && el.getBoundingClientRect().y > 100);
+        return tab ? (tab.closest('[role="button"], [role="radio"]') || tab) : null;
     ''')
-    time.sleep(0.5)
+    if sched_tab:
+        try:
+            ActionChains(driver).move_to_element(sched_tab).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", sched_tab)
+    time.sleep(0.6)
 
-    # 10. Set Date & Time
+    # 9. Set Date & Time
     if scheduled_dt_str:
         try:
             dt = datetime.fromisoformat(scheduled_dt_str)
@@ -320,30 +325,26 @@ def post_single_reel(
     ''')
     time.sleep(0.4)
 
-    # 11. Click final 'Schedule' submit button
+    # 10. Click final 'Schedule' submit button
     log("[Meta Auto Post Script] Clicking final Schedule submit button...")
-    final_clicked = fast_poll(driver, '''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const schedBtn = allBtns.find(b => {
-            const t = (b.innerText || '').trim();
-            return (t === 'Schedule' || t === 'Schedule Post' || t === 'Share') && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700 && b.getAttribute('aria-disabled') !== 'true';
-        });
-        if (schedBtn) {
-            schedBtn.click();
-            return true;
-        }
-        return false;
-    ''', timeout=15.0, poll_interval=0.2)
-
-    if not final_clicked:
-        log("[Meta Auto Post Script] Warning: Schedule button poll timeout, attempting fallback click...")
+    sched_submit_el = driver.execute_script('''
+        const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
+        return allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().x > 1400 && el.getBoundingClientRect().y > 700);
+    ''')
+    if sched_submit_el:
+        try:
+            ActionChains(driver).move_to_element(sched_submit_el).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", sched_submit_el)
+    else:
+        # Fallback click
         driver.execute_script('''
             const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
             const schedBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Schedule' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700);
             if (schedBtn) schedBtn.click();
         ''')
 
-    # 12. Fast poll for modal closure / submission confirmation
+    # 11. Fast poll for modal closure / submission confirmation
     log("[Meta Auto Post Script] Waiting for submission confirmation...")
     submitted = fast_poll(driver, '''
         const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
