@@ -4222,32 +4222,53 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
             global_meta_progress["message"] = f"[{idx+1}/{total}] กำลังโพสต์: {subfolder_name} ({video_name})"
             log(f"[Meta Auto Post] [{idx+1}/{total}] Processing: {video_path} (Schedule: {scheduled_dt_str})")
 
-            # 1. Ensure on composer page
-            if "reels_composer" not in driver.current_url:
-                log(f"[Meta Auto Post] Navigating to composer: {composer_url}")
+            # 1. Ensure on composer page and composer is loaded
+            is_composer_ready = driver.execute_script('''
+                return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
+            ''')
+            if not is_composer_ready:
+                log(f"[Meta Auto Post] Opening composer URL: {composer_url}")
                 driver.get(composer_url)
-                time.sleep(3.0)
-            else:
-                add_btn_exists = driver.execute_script('''
-                    return !!Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
-                ''')
-                if not add_btn_exists:
-                    driver.get(composer_url)
-                    time.sleep(3.0)
+                time.sleep(2.5)
 
-            # Wait for 'Add video' button to be visible
-            for _ in range(15):
+            # Wait for 'Add video' button to appear (up to 20s)
+            for _ in range(20):
                 ready = driver.execute_script('''
-                    return !!Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
+                    return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
                 ''')
                 if ready:
                     break
                 time.sleep(1.0)
 
-            # 2. Click 'Add video' button
+            # 2. Setup hook to capture file input and trigger upload
+            driver.execute_script('''
+                window._metaFileInput = null;
+                const oldInput = document.getElementById('meta_auto_file_input');
+                if (oldInput) oldInput.remove();
+                
+                const origClick = HTMLInputElement.prototype.click;
+                HTMLInputElement.prototype.click = function() {
+                    if (this.type === 'file') {
+                        this.id = 'meta_auto_file_input';
+                        this.style.position = 'fixed';
+                        this.style.top = '0px';
+                        this.style.left = '0px';
+                        this.style.zIndex = '999999';
+                        this.style.display = 'block';
+                        this.style.visibility = 'visible';
+                        document.body.appendChild(this);
+                        window._metaFileInput = this;
+                    } else {
+                        origClick.apply(this, arguments);
+                    }
+                };
+            ''')
+
+            # Click 'Add video' button to instantiate file input
             click_res = driver.execute_script('''
-                const btn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
-                if (btn) {
+                const textEl = Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video' && el.children.length === 0);
+                if (textEl) {
+                    const btn = textEl.closest('[role="button"]') || textEl;
                     btn.click();
                     return true;
                 }
@@ -4258,12 +4279,17 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
                 global_meta_progress["errors"].append(f"[{idx+1}] ไม่พบปุ่ม Add video")
                 continue
 
-            time.sleep(1.2)
+            time.sleep(0.6)
 
-            # 3. macOS File Dialog upload
-            if sys.platform == "darwin" and video_path and os.path.exists(video_path):
-                log(f"[Meta Auto Post] Selecting file in macOS dialog: {video_path}")
-                upload_macos_file_dialog(video_path)
+            # 3. Direct upload via Selenium send_keys (instant & 100% reliable)
+            if video_path and os.path.exists(video_path):
+                log(f"[Meta Auto Post] Uploading video file: {video_path}")
+                try:
+                    file_input = driver.find_element(By.ID, 'meta_auto_file_input')
+                    file_input.send_keys(video_path)
+                except Exception as ex_upload:
+                    log(f"[Meta Auto Post] Fallback to macOS dialog: {ex_upload}")
+                    upload_macos_file_dialog(video_path)
             else:
                 log(f"[Meta Auto Post] Video file not found: {video_path}")
 
@@ -4333,36 +4359,45 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
                     log(f"[Meta Auto Post] Setting Schedule Date: {date_str}, Time: {hour_str}:{min_str}")
 
                     # Date input
-                    date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
-                    if date_inputs:
-                        d_el = date_inputs[0]
-                        d_el.click()
-                        time.sleep(0.2)
-                        d_el.send_keys(Keys.COMMAND, 'a')
-                        d_el.send_keys(date_str)
-                        time.sleep(0.3)
+                    try:
+                        date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+                        if date_inputs:
+                            d_el = date_inputs[0]
+                            d_el.click()
+                            time.sleep(0.2)
+                            d_el.send_keys(Keys.COMMAND, 'a')
+                            d_el.send_keys(date_str)
+                            time.sleep(0.3)
+                    except Exception as e_date:
+                        log(f"[Meta Auto Post] Date input set note: {e_date}")
 
                     # Hours input
-                    hour_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
-                    if hour_inputs:
-                        h_el = hour_inputs[0]
-                        h_el.click()
-                        time.sleep(0.2)
-                        h_el.send_keys(Keys.BACKSPACE)
-                        for ch in hour_str:
-                            h_el.send_keys(ch)
-                        time.sleep(0.2)
+                    try:
+                        hour_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
+                        if hour_inputs:
+                            h_el = hour_inputs[0]
+                            h_el.click()
+                            time.sleep(0.2)
+                            h_el.send_keys(Keys.BACKSPACE)
+                            for ch in hour_str:
+                                h_el.send_keys(ch)
+                            time.sleep(0.2)
+                    except Exception as e_h:
+                        log(f"[Meta Auto Post] Hour input set note: {e_h}")
 
                     # Minutes input
-                    min_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
-                    if min_inputs:
-                        m_el = min_inputs[0]
-                        m_el.click()
-                        time.sleep(0.2)
-                        m_el.send_keys(Keys.BACKSPACE)
-                        for ch in min_str:
-                            m_el.send_keys(ch)
-                        time.sleep(0.2)
+                    try:
+                        min_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
+                        if min_inputs:
+                            m_el = min_inputs[0]
+                            m_el.click()
+                            time.sleep(0.2)
+                            m_el.send_keys(Keys.BACKSPACE)
+                            for ch in min_str:
+                                m_el.send_keys(ch)
+                            time.sleep(0.2)
+                    except Exception as e_m:
+                        log(f"[Meta Auto Post] Minute input set note: {e_m}")
 
                 except Exception as ex_dt:
                     log(f"[Meta Auto Post] Error parsing scheduled datetime '{scheduled_dt_str}': {ex_dt}")
