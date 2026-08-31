@@ -19,6 +19,33 @@ def log(msg: str) -> None:
     except Exception:
         pass
 
+def cleanup_browser_tabs(driver) -> None:
+    """Closes all extraneous tabs/windows, keeping only the active single working tab."""
+    try:
+        handles = driver.window_handles
+        if len(handles) > 1:
+            main_handle = None
+            for h in handles:
+                try:
+                    driver.switch_to.window(h)
+                    if "business.facebook.com" in driver.current_url:
+                        main_handle = h
+                        break
+                except Exception:
+                    pass
+            if not main_handle:
+                main_handle = handles[0]
+            for h in handles:
+                if h != main_handle:
+                    try:
+                        driver.switch_to.window(h)
+                        driver.close()
+                    except Exception:
+                        pass
+            driver.switch_to.window(main_handle)
+    except Exception:
+        pass
+
 def get_browser_window_pid(port: int = 9222) -> Optional[int]:
     """Finds the exact Chrome process PID with an open window on the debug port."""
     try:
@@ -145,7 +172,8 @@ def _post_single_reel_core(
             "message": msg
         })
 
-    # 1. Focus 9222 window right at the start by Cocoa NSRunningApplication PID
+    # 1. Close extra tabs, focus 9222 window
+    cleanup_browser_tabs(driver)
     focus_9222_browser_tab(driver, port=9222)
     time.sleep(0.3)
 
@@ -228,36 +256,23 @@ def _post_single_reel_core(
         ''', caption)
         time.sleep(0.4)
 
-    # 6. Wait for Video Upload & Processing Completion with 100s Timeout
-    log("[Meta Auto Post Script] Waiting for video upload & Next readiness (timeout 100s)...")
-    step1_next = fast_poll(driver, '''
-        const text = document.body.innerText || '';
-        const is100 = text.includes('100%') || text.includes('Your video is safe') || text.includes('Delete');
-        const nextBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900 && b.getAttribute('aria-disabled') !== 'true');
-        return (is100 && nextBtn) ? nextBtn : null;
+    # 6. Wait for top 'Share' tab readiness with 100s Timeout
+    log("[Meta Auto Post Script] Waiting for top 'Share' tab to be enabled (timeout 100s)...")
+    top_share_btn = fast_poll(driver, '''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        const shareBtn = allBtns.find(b => b.innerText && b.innerText.trim().startsWith('Share') && b.getBoundingClientRect().y < 120 && b.getAttribute('aria-disabled') !== 'true');
+        return shareBtn;
     ''', timeout=100.0, poll_interval=0.3)
 
-    if not step1_next:
-        raise TimeoutError("วิดีโออัปโหลดไม่เสร็จสิ้น หรือปุ่ม Next ไม่เปิดใช้งานภายใน 100 วินาที")
+    if not top_share_btn:
+        raise TimeoutError("แท็บ Share ไม่เปิดใช้งานภายใน 100 วินาที")
 
-    # 7. Advance Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share)
-    log("[Meta Auto Post Script] Advancing Step 1 (Create) -> Step 2 (Edit)...")
+    # 7. Click top 'Share' tab directly to jump straight to Step 3
+    log("[Meta Auto Post Script] Top 'Share' tab is enabled! Clicking to jump directly to Step 3...")
     try:
-        ActionChains(driver).move_to_element(step1_next).pause(0.1).click().perform()
+        ActionChains(driver).move_to_element(top_share_btn).pause(0.1).click().perform()
     except Exception:
-        driver.execute_script("arguments[0].click();", step1_next)
-
-    log("[Meta Auto Post Script] Advancing Step 2 (Edit) -> Step 3 (Share)...")
-    step2_next = fast_poll(driver, '''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        return allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900 && b.getAttribute('aria-disabled') !== 'true');
-    ''', timeout=15.0, poll_interval=0.2)
-
-    if step2_next:
-        try:
-            ActionChains(driver).move_to_element(step2_next).pause(0.1).click().perform()
-        except Exception:
-            driver.execute_script("arguments[0].click();", step2_next)
+        driver.execute_script("arguments[0].click();", top_share_btn)
 
     # Fast poll for Step 3 active (Scheduling options or Share now)
     on_step3 = fast_poll(driver, '''
@@ -333,7 +348,7 @@ def _post_single_reel_core(
     log("[Meta Auto Post Script] Clicking final Schedule submit button...")
     sched_submit_el = driver.execute_script('''
         const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
-        return allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700);
+        return allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().x > 1400 && el.getBoundingClientRect().y > 700);
     ''')
     if sched_submit_el:
         try:
@@ -385,6 +400,7 @@ def post_single_reel(
             if attempt < max_retries:
                 log(f"[Meta Auto Post Script] 🔄 Refreshing composer page and restarting flow in 2s...")
                 try:
+                    cleanup_browser_tabs(driver)
                     driver.get(composer_url)
                     time.sleep(2.0)
                 except Exception:
