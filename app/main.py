@@ -28,6 +28,20 @@ def correct_legacy_paths(data):
     elif isinstance(data, list):
         return [correct_legacy_paths(item) for item in data]
     elif isinstance(data, str):
+        # Auto-heal URLs that were corrupted by the legacy double-slash stripper (e.g. https:/example.com -> https://example.com)
+        if data.startswith("https:/") and not data.startswith("https://"):
+            data = "https://" + data[7:]
+        elif data.startswith("http:/") and not data.startswith("http://"):
+            data = "http://" + data[6:]
+        elif data.startswith("ws:/") and not data.startswith("ws://"):
+            data = "ws://" + data[4:]
+        elif data.startswith("wss:/") and not data.startswith("wss://"):
+            data = "wss://" + data[5:]
+
+        # If it is a full URL, do not strip double slashes
+        if data.startswith("http://") or data.startswith("https://") or data.startswith("ws://") or data.startswith("wss://"):
+            return data
+
         if data.startswith("/Users/"):
             current_home = os.path.expanduser("~")
             match = re.match(r"^/Users/[^/]+", data)
@@ -35,8 +49,9 @@ def correct_legacy_paths(data):
                 old_home = match.group(0)
                 if old_home != current_home:
                     data = data.replace(old_home, current_home, 1)
-        if "//" in data:
-            data = data.replace("//", "/")
+        if "//" in data and not ("://" in data):
+            while "//" in data:
+                data = data.replace("//", "/")
         if "MythicForge84 - วิว/วิว/Soundtrack" in data:
             data = data.replace("MythicForge84 - วิว/วิว/Soundtrack", "[เลิกใช้] 0 - MythicForge84 - วิว /วิว - out/Soundtrack")
         return data
