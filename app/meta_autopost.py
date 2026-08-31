@@ -106,8 +106,8 @@ def upload_macos_file_dialog_fast(file_path: str, port: int = 9222) -> bool:
         log(f"[Meta Auto Post Dialog Error] {e}")
         return False
 
-def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float = 0.15) -> Any:
-    """Polls JavaScript expression every 150ms until truthy or timeout."""
+def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float = 0.2) -> Any:
+    """Polls JavaScript expression until truthy or timeout."""
     start_t = time.time()
     while time.time() - start_t < timeout:
         try:
@@ -119,34 +119,23 @@ def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float 
         time.sleep(poll_interval)
     return None
 
-def post_single_reel(
+def _post_single_reel_core(
     driver,
     item: dict[str, Any],
     composer_url: str,
     item_idx: int = 1,
     total_items: int = 1,
-    progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
+    progress_callback: Optional[Callable[[dict[str, Any]], None]] = None,
+    attempt: int = 1
 ) -> bool:
-    """
-    Executes a high-speed, bulletproof single reel post sequence:
-    1. Focus Chrome 9222 window at start by Cocoa NSRunningApplication PID
-    2. Fresh redirect to target composer URL
-    3. Click 'Add video' (ActionChains)
-    4. macOS dialog path submission
-    5. Fast poll for video upload completion (100%)
-    6. Insert caption into Lexical editor with DataTransfer + Event dispatch
-    7. Fast advance Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share) via main footer Next buttons
-    8. Select Schedule radio option
-    9. Date & Time input configuration (with TAB commit)
-    10. Final Schedule submit button click (ActionChains) & confirmation
-    """
     subfolder_name = item.get("subfolder_name", "")
     video_name = item.get("video_name", "")
     video_path = item.get("video_path", "")
     caption = item.get("caption", "")
     scheduled_dt_str = item.get("scheduled_datetime", "")
 
-    msg = f"[{item_idx}/{total_items}] กำลังโพสต์: {subfolder_name or video_name}"
+    attempt_str = f" (รอบที่ {attempt})" if attempt > 1 else ""
+    msg = f"[{item_idx}/{total_items}] กำลังโพสต์: {subfolder_name or video_name}{attempt_str}"
     log(f"[Meta Auto Post Script] {msg} (Target: {scheduled_dt_str})")
     if progress_callback:
         progress_callback({
@@ -200,19 +189,7 @@ def post_single_reel(
     log(f"[Meta Auto Post Script] Uploading video via dialog: {video_path}")
     upload_macos_file_dialog_fast(video_path, port=9222)
 
-    # 5. Fast poll for upload completion (100% or Delete button present)
-    log("[Meta Auto Post Script] Waiting for upload completion...")
-    upload_done = fast_poll(driver, '''
-        const text = document.body.innerText || '';
-        return text.includes('100%') || text.includes('Your video is safe') || text.includes('Delete');
-    ''', timeout=90.0, poll_interval=0.2)
-
-    if not upload_done:
-        log("[Meta Auto Post Script] Warning: Upload timeout check, attempting to proceed...")
-
-    time.sleep(0.5)
-
-    # 6. Insert Caption into Lexical / DraftJS textbox using DataTransfer ClipboardEvent + Event dispatch
+    # 5. Insert Caption into Lexical / DraftJS textbox using DataTransfer ClipboardEvent + Event dispatch
     if caption:
         log(f"[Meta Auto Post Script] Inserting caption ({len(caption)} chars)...")
         driver.execute_script('''
@@ -249,25 +226,33 @@ def post_single_reel(
                 tb.blur();
             }
         ''', caption)
-        time.sleep(0.5)
+        time.sleep(0.4)
+
+    # 6. Wait for Video Upload & Processing Completion with 100s Timeout
+    log("[Meta Auto Post Script] Waiting for video upload & Next readiness (timeout 100s)...")
+    step1_next = fast_poll(driver, '''
+        const text = document.body.innerText || '';
+        const is100 = text.includes('100%') || text.includes('Your video is safe') || text.includes('Delete');
+        const nextBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900 && b.getAttribute('aria-disabled') !== 'true');
+        return (is100 && nextBtn) ? nextBtn : null;
+    ''', timeout=100.0, poll_interval=0.3)
+
+    if not step1_next:
+        raise TimeoutError("วิดีโออัปโหลดไม่เสร็จสิ้น หรือปุ่ม Next ไม่เปิดใช้งานภายใน 100 วินาที")
 
     # 7. Advance Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share)
     log("[Meta Auto Post Script] Advancing Step 1 (Create) -> Step 2 (Edit)...")
-    step1_next = fast_poll(driver, '''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        return allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900 && b.getAttribute('aria-disabled') !== 'true');
-    ''', timeout=20.0, poll_interval=0.2)
-    if step1_next:
-        try:
-            ActionChains(driver).move_to_element(step1_next).pause(0.1).click().perform()
-        except Exception:
-            driver.execute_script("arguments[0].click();", step1_next)
+    try:
+        ActionChains(driver).move_to_element(step1_next).pause(0.1).click().perform()
+    except Exception:
+        driver.execute_script("arguments[0].click();", step1_next)
 
     log("[Meta Auto Post Script] Advancing Step 2 (Edit) -> Step 3 (Share)...")
     step2_next = fast_poll(driver, '''
         const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
         return allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900 && b.getAttribute('aria-disabled') !== 'true');
-    ''', timeout=15.0, poll_interval=0.15)
+    ''', timeout=15.0, poll_interval=0.2)
+
     if step2_next:
         try:
             ActionChains(driver).move_to_element(step2_next).pause(0.1).click().perform()
@@ -277,7 +262,7 @@ def post_single_reel(
     # Fast poll for Step 3 active (Scheduling options or Share now)
     on_step3 = fast_poll(driver, '''
         return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
-    ''', timeout=15.0, poll_interval=0.15)
+    ''', timeout=15.0, poll_interval=0.2)
     if not on_step3:
         raise RuntimeError("ไม่สามารถเข้าสู่ Step 3 (Share) ได้ภายในเวลาที่กำหนด")
 
@@ -348,7 +333,7 @@ def post_single_reel(
     log("[Meta Auto Post Script] Clicking final Schedule submit button...")
     sched_submit_el = driver.execute_script('''
         const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
-        return allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().x > 1400 && el.getBoundingClientRect().y > 700);
+        return allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700);
     ''')
     if sched_submit_el:
         try:
@@ -373,6 +358,40 @@ def post_single_reel(
 
     log(f"[Meta Auto Post Script] Post {item_idx}/{total_items} finished successfully!")
     return True
+
+def post_single_reel(
+    driver,
+    item: dict[str, Any],
+    composer_url: str,
+    item_idx: int = 1,
+    total_items: int = 1,
+    progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
+) -> bool:
+    """Executes single reel post sequence with 100s timeout & auto-refresh retry on failure."""
+    max_retries = 2
+    for attempt in range(1, max_retries + 1):
+        try:
+            return _post_single_reel_core(
+                driver=driver,
+                item=item,
+                composer_url=composer_url,
+                item_idx=item_idx,
+                total_items=total_items,
+                progress_callback=progress_callback,
+                attempt=attempt
+            )
+        except Exception as ex:
+            log(f"[Meta Auto Post Script] ⚠️ Error on attempt {attempt}/{max_retries}: {ex}")
+            if attempt < max_retries:
+                log(f"[Meta Auto Post Script] 🔄 Refreshing composer page and restarting flow in 2s...")
+                try:
+                    driver.get(composer_url)
+                    time.sleep(2.0)
+                except Exception:
+                    pass
+            else:
+                raise ex
+    return False
 
 def run_meta_autopost_batch(
     posts: list[dict[str, Any]],
