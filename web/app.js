@@ -6499,7 +6499,8 @@ function loadMetaPresets(presets) {
 }
 
 async function saveMetaPreset() {
-  const name = prompt('ตั้งชื่อ Preset สำหรับ Meta Auto Post:');
+  const currentKey = document.getElementById('metaPresetSelect')?.value || '';
+  const name = prompt('ระบุชื่อ Preset หรือระบุชื่อเดิมเพื่อบันทึกทับ:', currentKey);
   if (!name || !name.trim()) return;
   const trimmedName = name.trim();
 
