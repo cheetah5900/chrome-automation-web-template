@@ -1325,6 +1325,7 @@ def _default_config() -> dict[str, Any]:
             "meta_page_url": "",
             "meta_main_folder": "",
             "meta_subfolders": "",
+            "meta_video_prefix": "combined",
             "meta_start_date": "",
             "meta_start_hour": 18,
             "meta_presets": {}
@@ -1398,6 +1399,7 @@ def _default_config() -> dict[str, Any]:
             "meta_page_url": "",
             "meta_main_folder": "",
             "meta_subfolders": "",
+            "meta_video_prefix": "combined",
             "meta_start_date": "",
             "meta_start_hour": 18,
             "meta_presets": {}
@@ -4137,6 +4139,7 @@ global_meta_progress: dict[str, Any] = {
 class MetaScanRequest(BaseModel):
     main_folder: str
     subfolders_str: str = ""
+    video_prefix: str = "combined"
     start_date: str = ""
     start_hour: int | str = 18
 
@@ -4216,6 +4219,10 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
     else:
         base_day = (datetime.now() + timedelta(days=1)).date()
 
+    prefix_clean = (req.video_prefix or "").strip().lower()
+    if not prefix_clean:
+        prefix_clean = "combined"
+
     items: list[dict[str, Any]] = []
     video_exts = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"]
 
@@ -4238,14 +4245,14 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
         video_files = [f for f in sub_files if any(f.lower().endswith(ext) for ext in video_exts) and os.path.isfile(os.path.join(folder_path, f))]
         video_files.sort(key=natural_sort_key)
         
-        # Prioritize files starting with 'combined' (e.g. combined.mp4, combined_ep1.mp4, combined-1.mp4)
-        starts_combined = [v for v in video_files if v.lower().startswith("combined")]
-        contains_combined = [v for v in video_files if "combined" in v.lower()]
+        # Prioritize files starting with / containing the configured prefix
+        starts_prefix = [v for v in video_files if v.lower().startswith(prefix_clean)]
+        contains_prefix = [v for v in video_files if prefix_clean in v.lower()]
         
-        if starts_combined:
-            selected_video = starts_combined[0]
-        elif contains_combined:
-            selected_video = contains_combined[0]
+        if starts_prefix:
+            selected_video = starts_prefix[0]
+        elif contains_prefix:
+            selected_video = contains_prefix[0]
         elif video_files:
             selected_video = video_files[0]
         else:

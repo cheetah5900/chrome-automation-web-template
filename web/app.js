@@ -785,6 +785,7 @@ const inputsToListen = [
   'cfg_meta_page_url',
   'cfg_meta_main_folder',
   'cfg_meta_subfolders',
+  'cfg_meta_video_prefix',
   'cfg_meta_start_date',
   'cfg_meta_start_hour',
   'startupUrl1',
@@ -1032,6 +1033,9 @@ async function loadConfig() {
 
     const metaSubfolders = document.getElementById('cfg_meta_subfolders');
     if (metaSubfolders) metaSubfolders.value = config.meta_subfolders || '';
+
+    const metaVideoPrefix = document.getElementById('cfg_meta_video_prefix');
+    if (metaVideoPrefix) metaVideoPrefix.value = config.meta_video_prefix || 'combined';
 
     const metaStartDate = document.getElementById('cfg_meta_start_date');
     if (metaStartDate) {
@@ -6508,6 +6512,7 @@ async function saveMetaPreset() {
     page_url: document.getElementById('cfg_meta_page_url')?.value || '',
     main_folder: document.getElementById('cfg_meta_main_folder')?.value || '',
     subfolders: document.getElementById('cfg_meta_subfolders')?.value || '',
+    video_prefix: document.getElementById('cfg_meta_video_prefix')?.value || 'combined',
     start_hour: parseInt(document.getElementById('cfg_meta_start_hour')?.value, 10) || 18
   };
 
@@ -6565,6 +6570,7 @@ async function applyMetaPreset() {
   if (document.getElementById('cfg_meta_page_url')) document.getElementById('cfg_meta_page_url').value = preset.page_url || preset.channel_url || '';
   if (document.getElementById('cfg_meta_main_folder')) document.getElementById('cfg_meta_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_meta_subfolders')) document.getElementById('cfg_meta_subfolders').value = preset.subfolders || '';
+  if (document.getElementById('cfg_meta_video_prefix')) document.getElementById('cfg_meta_video_prefix').value = preset.video_prefix || 'combined';
   if (document.getElementById('cfg_meta_start_hour')) {
     const h = preset.start_hour !== undefined ? preset.start_hour : (preset.start_time ? parseInt(preset.start_time.split(':')[0], 10) : 18);
     document.getElementById('cfg_meta_start_hour').value = isNaN(h) ? 18 : h;
@@ -6605,6 +6611,7 @@ async function scanMetaBatch() {
     return;
   }
   const subfoldersStr = document.getElementById('cfg_meta_subfolders')?.value.trim() || '';
+  const videoPrefix = document.getElementById('cfg_meta_video_prefix')?.value.trim() || 'combined';
   const startDate = document.getElementById('cfg_meta_start_date')?.value.trim() || '';
   const startHour = parseInt(document.getElementById('cfg_meta_start_hour')?.value, 10) || 18;
 
@@ -6616,7 +6623,7 @@ async function scanMetaBatch() {
     if (textSpan) textSpan.textContent = 'กำลังสแกน...';
   }
 
-  writeConsoleLine(`Meta Auto Post: เริ่มสแกนโฟลเดอร์ "${mainFolder}" (เวลา: ${startHour}:xx สุ่มนาที 00-59, วันละ 1 โพสต์)...`, 'system', 'metaConsole');
+  writeConsoleLine(`Meta Auto Post: เริ่มสแกนโฟลเดอร์ "${mainFolder}" (Prefix: "${videoPrefix}", เวลา: ${startHour}:xx สุ่มนาที, วันละ 1 โพสต์)...`, 'system', 'metaConsole');
 
   try {
     const res = await jsonFetch('/api/meta-autopost/scan', {
@@ -6625,6 +6632,7 @@ async function scanMetaBatch() {
       body: JSON.stringify({
         main_folder: mainFolder,
         subfolders_str: subfoldersStr,
+        video_prefix: videoPrefix,
         start_date: startDate,
         start_hour: startHour
       })
