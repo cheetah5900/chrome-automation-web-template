@@ -786,10 +786,7 @@ const inputsToListen = [
   'cfg_meta_main_folder',
   'cfg_meta_subfolders',
   'cfg_meta_start_date',
-  'cfg_meta_start_time',
-  'cfg_meta_interval_val',
-  'cfg_meta_interval_type',
-  'cfg_meta_caption_template',
+  'cfg_meta_start_hour',
   'startupUrl1',
   'startupUrl2',
   'startupUrl3'
@@ -1046,17 +1043,17 @@ async function loadConfig() {
       }
     }
 
-    const metaStartTime = document.getElementById('cfg_meta_start_time');
-    if (metaStartTime) metaStartTime.value = config.meta_start_time || '18:00';
-
-    const metaIntervalVal = document.getElementById('cfg_meta_interval_val');
-    if (metaIntervalVal) metaIntervalVal.value = config.meta_interval_val !== undefined ? config.meta_interval_val : 1;
-
-    const metaIntervalType = document.getElementById('cfg_meta_interval_type');
-    if (metaIntervalType) metaIntervalType.value = config.meta_interval_type || 'days';
-
-    const metaCaptionTemplate = document.getElementById('cfg_meta_caption_template');
-    if (metaCaptionTemplate) metaCaptionTemplate.value = config.meta_caption_template || '';
+    const metaStartHour = document.getElementById('cfg_meta_start_hour');
+    if (metaStartHour) {
+      if (config.meta_start_hour !== undefined) {
+        metaStartHour.value = config.meta_start_hour;
+      } else if (config.meta_start_time) {
+        const h = parseInt(config.meta_start_time.split(':')[0], 10);
+        metaStartHour.value = isNaN(h) ? 18 : h;
+      } else {
+        metaStartHour.value = 18;
+      }
+    }
 
     loadMetaPresets(config.meta_presets);
     
@@ -6511,10 +6508,7 @@ async function saveMetaPreset() {
     page_url: document.getElementById('cfg_meta_page_url')?.value || '',
     main_folder: document.getElementById('cfg_meta_main_folder')?.value || '',
     subfolders: document.getElementById('cfg_meta_subfolders')?.value || '',
-    start_time: document.getElementById('cfg_meta_start_time')?.value || '18:00',
-    interval_val: parseFloat(document.getElementById('cfg_meta_interval_val')?.value) || 1,
-    interval_type: document.getElementById('cfg_meta_interval_type')?.value || 'days',
-    caption_template: document.getElementById('cfg_meta_caption_template')?.value || ''
+    start_hour: parseInt(document.getElementById('cfg_meta_start_hour')?.value, 10) || 18
   };
 
   try {
@@ -6571,10 +6565,10 @@ async function applyMetaPreset() {
   if (document.getElementById('cfg_meta_page_url')) document.getElementById('cfg_meta_page_url').value = preset.page_url || preset.channel_url || '';
   if (document.getElementById('cfg_meta_main_folder')) document.getElementById('cfg_meta_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_meta_subfolders')) document.getElementById('cfg_meta_subfolders').value = preset.subfolders || '';
-  if (document.getElementById('cfg_meta_start_time')) document.getElementById('cfg_meta_start_time').value = preset.start_time || '18:00';
-  if (document.getElementById('cfg_meta_interval_val')) document.getElementById('cfg_meta_interval_val').value = preset.interval_val !== undefined ? preset.interval_val : 1;
-  if (document.getElementById('cfg_meta_interval_type')) document.getElementById('cfg_meta_interval_type').value = preset.interval_type || 'days';
-  if (document.getElementById('cfg_meta_caption_template')) document.getElementById('cfg_meta_caption_template').value = preset.caption_template || '';
+  if (document.getElementById('cfg_meta_start_hour')) {
+    const h = preset.start_hour !== undefined ? preset.start_hour : (preset.start_time ? parseInt(preset.start_time.split(':')[0], 10) : 18);
+    document.getElementById('cfg_meta_start_hour').value = isNaN(h) ? 18 : h;
+  }
 
   const urlDisplay = preset.page_url || preset.channel_url || 'ไม่ได้ระบุ';
   writeConsoleLine(`โหลด Preset "${currentName}" สำเร็จ (URL: ${urlDisplay})`, 'info', 'metaConsole');
@@ -6612,10 +6606,7 @@ async function scanMetaBatch() {
   }
   const subfoldersStr = document.getElementById('cfg_meta_subfolders')?.value.trim() || '';
   const startDate = document.getElementById('cfg_meta_start_date')?.value.trim() || '';
-  const startTime = document.getElementById('cfg_meta_start_time')?.value.trim() || '18:00';
-  const intervalVal = parseFloat(document.getElementById('cfg_meta_interval_val')?.value) || 1;
-  const intervalType = document.getElementById('cfg_meta_interval_type')?.value || 'days';
-  const captionTemplate = document.getElementById('cfg_meta_caption_template')?.value || '';
+  const startHour = parseInt(document.getElementById('cfg_meta_start_hour')?.value, 10) || 18;
 
   const btn = document.getElementById('btnScanMetaBatch');
   if (btn) {
@@ -6625,7 +6616,7 @@ async function scanMetaBatch() {
     if (textSpan) textSpan.textContent = 'กำลังสแกน...';
   }
 
-  writeConsoleLine(`Meta Auto Post: เริ่มสแกนโฟลเดอร์ "${mainFolder}"...`, 'system', 'metaConsole');
+  writeConsoleLine(`Meta Auto Post: เริ่มสแกนโฟลเดอร์ "${mainFolder}" (เวลา: ${startHour}:xx สุ่มนาที 00-59, วันละ 1 โพสต์)...`, 'system', 'metaConsole');
 
   try {
     const res = await jsonFetch('/api/meta-autopost/scan', {
@@ -6635,10 +6626,7 @@ async function scanMetaBatch() {
         main_folder: mainFolder,
         subfolders_str: subfoldersStr,
         start_date: startDate,
-        start_time: startTime,
-        interval_type: intervalType,
-        interval_value: intervalVal,
-        caption_template: captionTemplate
+        start_hour: startHour
       })
     });
 
@@ -7124,9 +7112,9 @@ const staticTooltips = {
   "setMetaPageUrlDefaultBtn": "📌 ตั้ง URL เพจเป็นค่าเริ่มต้น (Set Default)",
   "browseMetaMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่มีโฟลเดอร์ย่อยบรรจุวิดีโอและ Caption",
   "setMetaMainFolderDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set default):<br>- บันทึกโฟลเดอร์นี้เป็นค่าเริ่มต้น",
-  "saveMetaPresetBtn": "💾 บันทึก Preset Meta Auto Post:<br>- บันทึกค่าการตั้งค่า, ลิงก์เพจ และ Caption template เก็บไว้",
+  "saveMetaPresetBtn": "💾 บันทึก Preset Meta Auto Post:<br>- บันทึกค่าการตั้งค่า, ลิงก์เพจ และชั่วโมงที่เริ่มโพสต์เก็บไว้",
   "deleteMetaPresetBtn": "🗑️ ลบ Preset ที่เลือก",
-  "btnScanMetaBatch": "🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair):<br>- สแกนไฟล์วิดีโอ (.mp4), แคปชั่น (.txt), และคำนวณวัน-เวลาโพสต์ตามช่วงที่ระบุ",
+  "btnScanMetaBatch": "🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair):<br>- สแกนไฟล์วิดีโอ (combined*), แคปชั่น (caption.md), และจัดคิวโพสต์วันละ 1 โพสต์ตามชั่วโมงที่ระบุ (สุ่มนาที 00-59)",
   "btnClearMetaBatch": "🗑️ ล้างรายการโพสต์ที่จับคู่ไว้ทั้งหมดในตาราง",
   "btnAddManualMetaPost": "➕ เพิ่มรายการโพสต์ด้วยตนเอง (Manual Post)",
   "runMetaAutoPostBtn": "🚀 รัน Auto Post ตามคิว:<br>- เริ่มส่งโพสต์ตามรายการที่เตรียมไว้ทั้งหมดไปยัง Facebook/Meta",

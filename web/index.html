@@ -1344,47 +1344,28 @@
                   </div>
                 </div>
 
-                <!-- Sub folders range & Scheduling Grid -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
-                  <!-- Sub folders input -->
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label for="cfg_meta_subfolders" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
-                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)</div>
-                    <input id="cfg_meta_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
-                  </div>
-
-                  <!-- Interval Config -->
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-weight: bold; color: #8da6ff;">ระยะห่างแต่ละโพสต์ (Post Interval)</label>
-                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ระยะเวลาที่จะขยับวัน/เวลาในแต่ละคลิป</div>
-                    <div style="display: flex; gap: 8px;">
-                      <input type="number" id="cfg_meta_interval_val" value="1" min="1" step="1" style="width: 80px; margin-bottom: 0; text-align: center;" />
-                      <select id="cfg_meta_interval_type" style="flex-grow: 1; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none; margin-bottom: 0;">
-                        <option value="days" selected>วัน (Days) — เช่น วันละ 1 คลิป</option>
-                        <option value="hours">ชั่วโมง (Hours) — เช่น ทุกๆ N ชม.</option>
-                        <option value="minutes">นาที (Minutes)</option>
-                      </select>
-                    </div>
-                  </div>
+                <!-- Sub folders input -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_meta_subfolders" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
+                  <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์ — ระบบดึงวิดีโอ combined* และไฟล์ caption.md อัตโนมัติ)</div>
+                  <input id="cfg_meta_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
                 </div>
 
                 <!-- Date and Time Scheduling Row -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
                   <div class="form-group" style="margin-bottom: 0;">
                     <label for="cfg_meta_start_date" style="font-weight: bold; color: #8da6ff;">วันที่เริ่มต้นโพสต์ (Start Date)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ระบบจะโพสต์วันละ 1 คลิปตามลำดับวันที่</div>
                     <input type="date" id="cfg_meta_start_date" style="margin-bottom: 0; width: 100%; padding: 10px;" />
                   </div>
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label for="cfg_meta_start_time" style="font-weight: bold; color: #8da6ff;">เวลาที่เริ่มโพสต์ (Start Time)</label>
-                    <input type="time" id="cfg_meta_start_time" value="18:00" style="margin-bottom: 0; width: 100%; padding: 10px;" />
+                    <label for="cfg_meta_start_hour" style="font-weight: bold; color: #8da6ff;">ชั่วโมงที่เริ่มโพสต์ (Start Hour: 0-23)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">นาทีระบบจะสุ่ม 00-59 ให้ในแต่ละวันโดยอัตโนมัติ</div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <input type="number" id="cfg_meta_start_hour" min="0" max="23" value="18" placeholder="18" style="margin-bottom: 0; width: 90px; text-align: center; padding: 10px;" />
+                      <span style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">: (สุ่มนาที 00-59)</span>
+                    </div>
                   </div>
-                </div>
-
-                <!-- Caption Template / Fallback -->
-                <div class="form-group" style="margin-bottom: 20px;">
-                  <label for="cfg_meta_caption_template" style="font-weight: bold; color: #8da6ff;">Caption สำรอง / Template (เมื่อไม่มีไฟล์ข้อความ)</label>
-                  <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ระบบจะอ่านไฟล์ <code>caption.txt</code> หรือ <code>.txt</code> ในโฟลเดอร์ก่อน หากไม่มีจะใช้ข้อความนี้แทน (ใช้ {subfolder}, {date}, {time} ได้)</div>
-                  <textarea id="cfg_meta_caption_template" rows="2" placeholder="เช่น ไฮไลท์คลิปประจำวัน {subfolder} วันที่ {date} #reel #shorts #viral" style="width: 100%; border-radius: 8px; margin-bottom: 0;"></textarea>
                 </div>
 
                 <!-- Scan Button -->
@@ -1533,6 +1514,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=11"></script>
+  <script src="/web/app.js?v=12"></script>
 </body>
 </html>

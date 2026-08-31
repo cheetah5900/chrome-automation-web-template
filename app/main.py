@@ -1326,10 +1326,7 @@ def _default_config() -> dict[str, Any]:
             "meta_main_folder": "",
             "meta_subfolders": "",
             "meta_start_date": "",
-            "meta_start_time": "18:00",
-            "meta_interval_type": "days",
-            "meta_interval_val": 1,
-            "meta_caption_template": "",
+            "meta_start_hour": 18,
             "meta_presets": {}
         }
     else:
@@ -1402,10 +1399,7 @@ def _default_config() -> dict[str, Any]:
             "meta_main_folder": "",
             "meta_subfolders": "",
             "meta_start_date": "",
-            "meta_start_time": "18:00",
-            "meta_interval_type": "days",
-            "meta_interval_val": 1,
-            "meta_caption_template": "",
+            "meta_start_hour": 18,
             "meta_presets": {}
         }
 
@@ -4144,10 +4138,7 @@ class MetaScanRequest(BaseModel):
     main_folder: str
     subfolders_str: str = ""
     start_date: str = ""
-    start_time: str = "18:00"
-    interval_type: str = "days"
-    interval_value: float = 1.0
-    caption_template: str = ""
+    start_hour: int | str = 18
 
 class MetaRunRequest(BaseModel):
     posts: list[dict[str, Any]]
@@ -4157,6 +4148,7 @@ class MetaRunRequest(BaseModel):
 def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
     import os
     import re
+    import random
     from datetime import datetime, timedelta
 
     main_folder = req.main_folder.strip().strip('"').strip("'")
@@ -4208,36 +4200,32 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
     if not target_subfolders:
         return {"ok": True, "items": [], "count": 0, "message": "ไม่พบโฟลเดอร์ย่อยตามเงื่อนไข"}
 
-    # 2. Setup base datetime
-    base_dt = None
+    # 2. Setup base date & target hour (Daily frequency, target hour, random minute 00-59)
+    try:
+        target_hour = int(req.start_hour)
+        if target_hour < 0 or target_hour > 23:
+            target_hour = 18
+    except Exception:
+        target_hour = 18
+
     if req.start_date and req.start_date.strip():
-        date_str = req.start_date.strip()
-        time_str = req.start_time.strip() if req.start_time else "18:00"
         try:
-            base_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+            base_day = datetime.strptime(req.start_date.strip(), "%Y-%m-%d").date()
         except Exception:
-            try:
-                base_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
-            except Exception:
-                base_dt = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
+            base_day = (datetime.now() + timedelta(days=1)).date()
     else:
-        base_dt = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
+        base_day = (datetime.now() + timedelta(days=1)).date()
 
     items: list[dict[str, Any]] = []
     video_exts = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"]
-    caption_priors = ["caption.txt", "caption.md", "content.txt", "prompt.txt", "post.txt", "desc.txt"]
 
     for idx, folder_path in enumerate(target_subfolders):
         folder_name = os.path.basename(folder_path)
         
-        # Calculate scheduled datetime
-        if req.interval_type == "hours":
-            item_dt = base_dt + timedelta(hours=idx * req.interval_value)
-        elif req.interval_type == "minutes":
-            item_dt = base_dt + timedelta(minutes=idx * req.interval_value)
-        else: # "days"
-            item_dt = base_dt + timedelta(days=idx * req.interval_value)
-
+        # Post once per day at target hour with a randomized minute (0-59)
+        post_day = base_day + timedelta(days=idx)
+        random_minute = random.randint(0, 59)
+        item_dt = datetime(post_day.year, post_day.month, post_day.day, target_hour, random_minute)
         scheduled_iso = item_dt.strftime("%Y-%m-%dT%H:%M")
 
         # Find video file
@@ -4265,31 +4253,19 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
 
         video_path = os.path.join(folder_path, selected_video) if selected_video else ""
 
-        # Find caption file (prioritizing Caption.md / caption.md)
+        # Find caption file (prioritizing caption.md / Caption.md)
         caption_text = ""
         caption_filename = ""
         found_caption_file = None
 
-        # 1. Exact/case-insensitive match for Caption.md
+        # 1. Exact/case-insensitive match for caption.md
         for f in sub_files:
             if f.lower() == "caption.md" and os.path.isfile(os.path.join(folder_path, f)):
                 found_caption_file = os.path.join(folder_path, f)
                 caption_filename = f
                 break
 
-        # 2. Check other priority names
-        if not found_caption_file:
-            caption_priors = ["caption.txt", "content.md", "content.txt", "prompt.txt", "post.txt", "desc.txt"]
-            for pname in caption_priors:
-                for f in sub_files:
-                    if f.lower() == pname.lower() and os.path.isfile(os.path.join(folder_path, f)):
-                        found_caption_file = os.path.join(folder_path, f)
-                        caption_filename = f
-                        break
-                if found_caption_file:
-                    break
-
-        # 3. Check any .md or .txt file
+        # 2. Check other .md or .txt files if caption.md not directly present
         if not found_caption_file:
             for f in sorted(sub_files, key=natural_sort_key):
                 if any(f.lower().endswith(ext) for ext in [".md", ".txt"]) and os.path.isfile(os.path.join(folder_path, f)):
@@ -4308,9 +4284,6 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
                 except Exception:
                     with open(found_caption_file, "r", encoding="latin-1", errors="ignore") as cf:
                         caption_text = cf.read().strip()
-
-        if not caption_text and req.caption_template:
-            caption_text = req.caption_template.replace("{subfolder}", folder_name).replace("{date}", item_dt.strftime("%Y-%m-%d")).replace("{time}", item_dt.strftime("%H:%M"))
 
         items.append({
             "id": idx + 1,
