@@ -6469,6 +6469,10 @@ function initSeedanceGenListeners() {
 
       reader.readAsText(file);
       importInput.value = '';
+    });
+  }
+}
+
 // --- Meta Auto Post Logic ---
 let metaPostQueue = [];
 
