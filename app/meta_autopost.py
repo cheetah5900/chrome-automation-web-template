@@ -19,11 +19,25 @@ def log(msg: str) -> None:
     except Exception:
         pass
 
-def get_port_pid(port: int = 9222) -> Optional[str]:
-    """Retrieves the exact process PID listening on the specified debugging port."""
+def get_browser_window_pid(port: int = 9222) -> Optional[str]:
+    """Finds the exact Chrome process with an open window on the debug port."""
     try:
         res = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, check=False)
         pids = [p.strip() for p in res.stdout.strip().split() if p.strip()]
+        for pid in pids:
+            check_script = f'''
+            tell application "System Events"
+                try
+                    set p to first process whose unix id is {pid}
+                    if (count of windows of p) > 0 then
+                        return "FOUND"
+                    end if
+                end try
+            end tell
+            '''
+            r = subprocess.run(["osascript", "-e", check_script], capture_output=True, text=True, check=False)
+            if "FOUND" in r.stdout:
+                return pid
         return pids[0] if pids else None
     except Exception:
         return None
@@ -39,7 +53,7 @@ def focus_meta_window_at_start(driver=None, port: int = 9222) -> None:
     if sys.platform != "darwin":
         return
 
-    pid = get_port_pid(port)
+    pid = get_browser_window_pid(port)
     if pid:
         script = f'''
         tell application "System Events"
@@ -48,7 +62,6 @@ def focus_meta_window_at_start(driver=None, port: int = 9222) -> None:
                 set frontmost of targetProc to true
                 tell targetProc
                     perform action "AXRaise" of window 1
-                    set index of window 1 to 1
                 end tell
             end try
         end tell
@@ -63,7 +76,7 @@ def upload_macos_file_dialog_fast(file_path: str, port: int = 9222) -> bool:
     if sys.platform != "darwin":
         return False
     escaped_path = file_path.replace('"', '\\"')
-    pid = get_port_pid(port)
+    pid = get_browser_window_pid(port)
     pid_clause = f"set targetProc to (first process whose unix id is {pid})\nset frontmost of targetProc to true" if pid else ""
 
     script = f"""
@@ -118,7 +131,7 @@ def post_single_reel(
 ) -> bool:
     """
     Executes a high-speed, bulletproof single reel post sequence:
-    1. Focus Chrome 9222 window at start by PID
+    1. Focus Chrome 9222 window at start strictly by PID
     2. Ensure on composer page
     3. Click 'Add video' (ActionChains)
     4. Fast macOS dialog path submission
@@ -145,7 +158,7 @@ def post_single_reel(
             "message": msg
         })
 
-    # 1. Focus Chrome 9222 window right at the start by PID
+    # 1. Focus Chrome 9222 window right at the start strictly by PID
     focus_meta_window_at_start(driver, port=9222)
     time.sleep(0.3)
 
