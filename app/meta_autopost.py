@@ -111,6 +111,33 @@ def fast_poll(driver, js_expr: str, timeout: float = 20.0, poll_interval: float 
         time.sleep(poll_interval)
     return None
 
+def focus_meta_window_at_start(driver=None) -> None:
+    """Brings Chrome 9222 window to the front at the start of the automation."""
+    if driver:
+        try:
+            driver.execute_cdp_cmd('Page.bringToFront', {})
+        except Exception:
+            pass
+    if sys.platform == "darwin":
+        script = '''
+        tell application "Google Chrome"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    if URL of t contains "facebook.com" or URL of t contains "reels_composer" then
+                        set index of w to 1
+                        activate
+                        return true
+                    end if
+                end repeat
+            end repeat
+            activate
+        end tell
+        '''
+        try:
+            subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
 def post_single_reel(
     driver,
     item: dict[str, Any],
@@ -120,17 +147,17 @@ def post_single_reel(
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> bool:
     """
-    Executes an ultra-fast, snappy single reel post sequence:
-    1. Ensure on composer page
-    2. Click 'Add video' (ActionChains)
-    3. Fast macOS dialog path submission
-    4. Fast poll for video upload completion (100%)
-    5. Instant caption insertion
-    6. Step 1 (Create) -> Step 2 (Edit) transition
-    7. Step 2 (Edit) -> Step 3 (Share) transition
+    Executes a high-speed, bulletproof single reel post sequence:
+    1. Focus Chrome 9222 window at start
+    2. Ensure on composer page
+    3. Click 'Add video' (ActionChains)
+    4. Fast macOS dialog path submission
+    5. Fast poll for video upload completion (100%)
+    6. Insert caption
+    7. Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share)
     8. Schedule radio option selection
-    9. Date & Time input configuration
-    10. Final Schedule submission button click
+    9. Date & Time input configuration (with TAB commit)
+    10. Final Schedule submit button click & confirmation
     """
     subfolder_name = item.get("subfolder_name", "")
     video_name = item.get("video_name", "")
@@ -148,36 +175,26 @@ def post_single_reel(
             "message": msg
         })
 
-    # 1. Ensure on composer
+    # 1. Focus Chrome 9222 window right at the start
+    focus_meta_window_at_start(driver)
+    time.sleep(0.3)
+
+    # 2. Ensure on composer
     is_ready = driver.execute_script('''
         return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
     ''')
     if not is_ready:
         log(f"[Meta Auto Post Script] Navigating to composer: {composer_url}")
         driver.get(composer_url)
-        # Fast poll until Add video appears
         ready = fast_poll(driver, '''
             return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
         ''', timeout=20.0, poll_interval=0.2)
         if not ready:
             raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
 
-    # 2. Click 'Add video'
-    try:
-        driver.execute_cdp_cmd('Page.bringToFront', {})
-    except Exception:
-        pass
-    time.sleep(0.3)
-
+    # 3. Click 'Add video'
     all_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')
-    target_btn = None
-    for b in all_btns:
-        try:
-            if b.text and 'Add video' in b.text:
-                target_btn = b
-                break
-        except Exception:
-            pass
+    target_btn = next((b for b in all_btns if b.text and 'Add video' in b.text), None)
 
     if not target_btn:
         target_btn = driver.execute_script('''
@@ -196,22 +213,18 @@ def post_single_reel(
 
     time.sleep(0.5)
 
-    # 3. macOS File Dialog
+    # 4. macOS File Dialog
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"ไม่พบไฟล์วิดีโอ: {video_path}")
 
     log(f"[Meta Auto Post Script] Uploading video via dialog: {video_path}")
     upload_macos_file_dialog_fast(video_path)
 
-    # 4. Fast poll for upload completion
+    # 5. Fast poll for upload completion
     log("[Meta Auto Post Script] Waiting for upload completion...")
     upload_done = fast_poll(driver, '''
         const text = document.body.innerText || '';
-        if (text.includes('100%') || text.includes('Your video is safe') || text.includes('Delete')) {
-            const nextBtn = Array.from(document.querySelectorAll('div[role="button"], button')).find(el => el.innerText && el.innerText.trim() === 'Next' && el.getBoundingClientRect().y > 700);
-            if (nextBtn) return true;
-        }
-        return false;
+        return text.includes('100%') || text.includes('Your video is safe') || text.includes('Delete');
     ''', timeout=90.0, poll_interval=0.2)
 
     if not upload_done:
@@ -219,7 +232,7 @@ def post_single_reel(
 
     time.sleep(0.4)
 
-    # 5. Insert Caption
+    # 6. Insert Caption
     if caption:
         log(f"[Meta Auto Post Script] Inserting caption ({len(caption)} chars)...")
         driver.execute_script('''
@@ -233,75 +246,44 @@ def post_single_reel(
         ''', caption)
         time.sleep(0.3)
 
-    # 6. Instant transition directly to Step 3 (Share)
-    log("[Meta Auto Post Script] Navigating directly to Step 3 (Share)...")
-    
-    # Try direct top 'Share' tab click first (instant bypass of Step 2)
-    jumped_to_share = False
-    for _ in range(10):
-        res = driver.execute_script('''
-            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-            
-            // 1. Try top 'Share' header tab
-            const shareTab = allBtns.find(b => b.innerText && b.innerText.trim() === 'Share' && b.getBoundingClientRect().y < 120);
-            if (shareTab && shareTab.getAttribute('aria-disabled') !== 'true') {
-                shareTab.click();
-                return 'clicked_tab';
-            }
-            
-            // 2. Or click bottom 'Next' button if enabled
-            const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
-            if (nextBtn && nextBtn.getAttribute('aria-disabled') !== 'true') {
-                nextBtn.click();
-                return 'clicked_next';
-            }
-            
-            return false;
-        ''')
-        
-        # Check if Step 3 is reached
-        on_step3 = driver.execute_script('''
-            return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
-        ''')
-        if on_step3:
-            jumped_to_share = True
-            break
-        time.sleep(0.2)
+    # 7. Step 1 (Create) -> Step 2 (Edit)
+    log("[Meta Auto Post Script] Advancing Step 1 (Create -> Edit)...")
+    driver.execute_script('''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700 && b.getAttribute('aria-disabled') !== 'true');
+        if (nextBtn) nextBtn.click();
+    ''')
 
-    # If still not on Step 3, do fast poll
-    if not jumped_to_share:
-        fast_poll(driver, '''
-            // Check if on Step 3
-            const onStep3 = !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
-            if (onStep3) return true;
-            
-            // Click top Share or bottom Next
-            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-            const shareTab = allBtns.find(b => b.innerText && b.innerText.trim() === 'Share' && b.getBoundingClientRect().y < 120);
-            if (shareTab && shareTab.getAttribute('aria-disabled') !== 'true') {
-                shareTab.click();
-                return false;
-            }
-            const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1500 && b.getBoundingClientRect().y > 700);
-            if (nextBtn && nextBtn.getAttribute('aria-disabled') !== 'true') {
-                nextBtn.click();
-            }
-            return false;
-        ''', timeout=10.0, poll_interval=0.15)
+    # Wait for Step 2 active
+    fast_poll(driver, '''
+        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Audio' || el.innerText.trim() === 'Crop'));
+    ''', timeout=10.0, poll_interval=0.15)
+    time.sleep(0.4)
 
-    # 7. Select 'Schedule' Option Tab
+    # 8. Step 2 (Edit) -> Step 3 (Share)
+    log("[Meta Auto Post Script] Advancing Step 2 (Edit -> Share)...")
+    driver.execute_script('''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700 && b.getAttribute('aria-disabled') !== 'true');
+        if (nextBtn) nextBtn.click();
+    ''')
+
+    # Wait for Step 3 active
+    fast_poll(driver, '''
+        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
+    ''', timeout=10.0, poll_interval=0.15)
+    time.sleep(0.5)
+
+    # 9. Select 'Schedule' Option Tab
     log("[Meta Auto Post Script] Selecting 'Schedule' radio tab...")
     driver.execute_script('''
         const allBtns = Array.from(document.querySelectorAll('div[role="button"], button, [role="radio"]'));
         const schedTab = allBtns.find(b => b.innerText && b.innerText.trim() === 'Schedule' && b.getBoundingClientRect().y < 300);
-        if (schedTab) {
-            const clickable = schedTab.closest('[role="button"], [role="radio"]') || schedTab;
-            clickable.click();
-        }
+        if (schedTab) (schedTab.closest('[role="button"], [role="radio"]') || schedTab).click();
     ''')
-    time.sleep(0.4)
+    time.sleep(0.5)
 
-    # 9. Set Date & Time
+    # 10. Set Date & Time
     if scheduled_dt_str:
         try:
             dt = datetime.fromisoformat(scheduled_dt_str)
@@ -311,58 +293,67 @@ def post_single_reel(
 
             log(f"[Meta Auto Post Script] Setting Schedule Date: {date_str}, Time: {hour_str}:{min_str}")
 
-            # Date input
-            try:
-                d_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
-                if d_inputs:
-                    d_inputs[0].click()
-                    time.sleep(0.1)
-                    d_inputs[0].send_keys(Keys.COMMAND, 'a')
-                    d_inputs[0].send_keys(date_str)
-                    time.sleep(0.2)
-            except Exception as e_date:
-                log(f"[Meta Auto Post Script] Date input notice: {e_date}")
+            def safe_input(selector: str, val: str, is_time: bool = False):
+                try:
+                    inputs = driver.find_elements(By.CSS_SELECTOR, selector)
+                    if inputs:
+                        inputs[0].click()
+                        time.sleep(0.1)
+                        if is_time:
+                            inputs[0].send_keys(Keys.BACKSPACE)
+                            for ch in val:
+                                inputs[0].send_keys(ch)
+                        else:
+                            inputs[0].send_keys(Keys.COMMAND, 'a')
+                            inputs[0].send_keys(val)
+                        time.sleep(0.1)
+                        fresh = driver.find_elements(By.CSS_SELECTOR, selector)
+                        if fresh:
+                            fresh[0].send_keys(Keys.TAB)
+                except Exception as ex_in:
+                    log(f"[Meta Auto Post Script] Input note ({selector}): {ex_in}")
 
-            # Hours input
-            try:
-                h_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
-                if h_inputs:
-                    h_inputs[0].click()
-                    time.sleep(0.1)
-                    h_inputs[0].send_keys(Keys.BACKSPACE)
-                    for ch in hour_str:
-                        h_inputs[0].send_keys(ch)
-                    time.sleep(0.2)
-            except Exception as e_h:
-                log(f"[Meta Auto Post Script] Hour input notice: {e_h}")
-
-            # Minutes input
-            try:
-                m_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
-                if m_inputs:
-                    m_inputs[0].click()
-                    time.sleep(0.1)
-                    m_inputs[0].send_keys(Keys.BACKSPACE)
-                    for ch in min_str:
-                        m_inputs[0].send_keys(ch)
-                    time.sleep(0.2)
-            except Exception as e_m:
-                log(f"[Meta Auto Post Script] Minute input notice: {e_m}")
+            safe_input('input[placeholder="dd/mm/yyyy"]', date_str)
+            time.sleep(0.2)
+            safe_input('input[aria-label="hours"]', hour_str, is_time=True)
+            time.sleep(0.2)
+            safe_input('input[aria-label="minutes"]', min_str, is_time=True)
+            time.sleep(0.4)
 
         except Exception as ex_dt:
             log(f"[Meta Auto Post Script] Parse datetime error '{scheduled_dt_str}': {ex_dt}")
 
-    time.sleep(0.6)
-
-    # 10. Click final 'Schedule' button at bottom right
-    log("[Meta Auto Post Script] Clicking final Schedule submit button...")
+    # Commit React state
     driver.execute_script('''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const finalBtn = allBtns.find(b => b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900);
-        if (finalBtn) finalBtn.click();
+        const bg = document.querySelector('div[role="dialog"], body');
+        if (bg) bg.click();
     ''')
+    time.sleep(0.4)
 
-    # 11. Fast poll for modal closure / submission confirmation
+    # 11. Click final 'Schedule' submit button
+    log("[Meta Auto Post Script] Clicking final Schedule submit button...")
+    final_clicked = fast_poll(driver, '''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        const schedBtn = allBtns.find(b => {
+            const t = (b.innerText || '').trim();
+            return (t === 'Schedule' || t === 'Schedule Post' || t === 'Share') && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700 && b.getAttribute('aria-disabled') !== 'true';
+        });
+        if (schedBtn) {
+            schedBtn.click();
+            return true;
+        }
+        return false;
+    ''', timeout=15.0, poll_interval=0.2)
+
+    if not final_clicked:
+        log("[Meta Auto Post Script] Warning: Schedule button poll timeout, attempting fallback click...")
+        driver.execute_script('''
+            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+            const schedBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Schedule' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700);
+            if (schedBtn) schedBtn.click();
+        ''')
+
+    # 12. Fast poll for modal closure / submission confirmation
     log("[Meta Auto Post Script] Waiting for submission confirmation...")
     submitted = fast_poll(driver, '''
         const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
