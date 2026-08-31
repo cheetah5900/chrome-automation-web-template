@@ -4204,7 +4204,6 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
             return
 
         driver = bot.driver
-        _activate_chrome()
 
         # Determine composer URL
         composer_url = target_url.strip() if target_url and "facebook.com" in target_url else driver.current_url

@@ -19,70 +19,26 @@ def log(msg: str) -> None:
     except Exception:
         pass
 
-def get_browser_window_pid(port: int = 9222) -> Optional[str]:
-    """Finds the exact Chrome process with an open window on the debug port."""
-    try:
-        res = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, check=False)
-        pids = [p.strip() for p in res.stdout.strip().split() if p.strip()]
-        for pid in pids:
-            check_script = f'''
-            tell application "System Events"
-                try
-                    set p to first process whose unix id is {pid}
-                    if (count of windows of p) > 0 then
-                        return "FOUND"
-                    end if
-                end try
-            end tell
-            '''
-            r = subprocess.run(["osascript", "-e", check_script], capture_output=True, text=True, check=False)
-            if "FOUND" in r.stdout:
-                return pid
-        return pids[0] if pids else None
-    except Exception:
-        return None
-
-def focus_meta_window_at_start(driver=None, port: int = 9222) -> None:
-    """Brings ONLY the specific 9222 debug browser window to front by PID and CDP."""
-    if driver:
-        try:
-            driver.execute_cdp_cmd('Page.bringToFront', {})
-        except Exception:
-            pass
-
-    if sys.platform != "darwin":
+def focus_9222_browser_tab(driver) -> None:
+    """Focuses the port 9222 tab directly through Chrome DevTools Protocol without OS app switching."""
+    if not driver:
         return
+    try:
+        driver.switch_to.window(driver.current_window_handle)
+        driver.execute_script("window.focus();")
+        driver.execute_cdp_cmd('Page.bringToFront', {})
+    except Exception:
+        pass
 
-    pid = get_browser_window_pid(port)
-    if pid:
-        script = f'''
-        tell application "System Events"
-            try
-                set targetProc to (first process whose unix id is {pid})
-                set frontmost of targetProc to true
-                tell targetProc
-                    perform action "AXRaise" of window 1
-                end tell
-            end try
-        end tell
-        '''
-        try:
-            subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception:
-            pass
-
-def upload_macos_file_dialog_fast(file_path: str, port: int = 9222) -> bool:
-    """Strictly targets the 9222 file dialog sheet without application switching interference."""
+def upload_macos_file_dialog_fast(file_path: str) -> bool:
+    """Sends keystrokes to the open macOS file sheet without activating any other application."""
     if sys.platform != "darwin":
         return False
     escaped_path = file_path.replace('"', '\\"')
-    pid = get_browser_window_pid(port)
-    pid_clause = f"set targetProc to (first process whose unix id is {pid})\nset frontmost of targetProc to true" if pid else ""
 
     script = f"""
     set the clipboard to "{escaped_path}"
     tell application "System Events"
-        {pid_clause}
         delay 1.0
         
         -- Press Cmd + Shift + G
@@ -131,10 +87,10 @@ def post_single_reel(
 ) -> bool:
     """
     Executes a high-speed, bulletproof single reel post sequence:
-    1. Focus Chrome 9222 window at start strictly by PID
+    1. Focus Chrome 9222 tab directly via CDP (No OS app switching)
     2. Ensure on composer page
     3. Click 'Add video' (ActionChains)
-    4. Fast macOS dialog path submission
+    4. macOS dialog path submission
     5. Fast poll for video upload completion (100%)
     6. Insert caption into Lexical editor with event dispatch
     7. Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share)
@@ -158,8 +114,8 @@ def post_single_reel(
             "message": msg
         })
 
-    # 1. Focus Chrome 9222 window right at the start strictly by PID
-    focus_meta_window_at_start(driver, port=9222)
+    # 1. Focus 9222 tab purely via CDP
+    focus_9222_browser_tab(driver)
     time.sleep(0.3)
 
     # 2. Ensure on composer
@@ -175,10 +131,7 @@ def post_single_reel(
         if not ready:
             raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
 
-    # 3. Click 'Add video'
-    focus_meta_window_at_start(driver, port=9222)
-    time.sleep(0.2)
-
+    # 3. Click 'Add video' on 9222
     all_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')
     target_btn = next((b for b in all_btns if b.text and 'Add video' in b.text), None)
 
@@ -193,7 +146,7 @@ def post_single_reel(
             ActionChains(driver).move_to_element(target_btn).pause(0.1).click().perform()
         except Exception:
             driver.execute_script("arguments[0].click();", target_btn)
-        log("[Meta Auto Post Script] Clicked 'Add video' button")
+        log("[Meta Auto Post Script] Clicked 'Add video' button on 9222")
     else:
         raise RuntimeError("ไม่สามารถคลิกปุ่ม Add video ได้")
 
@@ -204,7 +157,7 @@ def post_single_reel(
         raise FileNotFoundError(f"ไม่พบไฟล์วิดีโอ: {video_path}")
 
     log(f"[Meta Auto Post Script] Uploading video via dialog: {video_path}")
-    upload_macos_file_dialog_fast(video_path, port=9222)
+    upload_macos_file_dialog_fast(video_path)
 
     # 5. Fast poll for upload completion
     log("[Meta Auto Post Script] Waiting for upload completion...")
@@ -372,7 +325,7 @@ def run_meta_autopost_batch(
     errors = []
     success_count = 0
 
-    log(f"[Meta Auto Post Script Engine] Starting batch of {total} posts...")
+    log(f"[Meta Auto Post Script Engine] Starting batch of {total} posts on 9222...")
 
     for idx, post in enumerate(posts):
         try:
