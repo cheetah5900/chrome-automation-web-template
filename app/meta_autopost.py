@@ -252,46 +252,35 @@ def post_single_reel(
         ''', caption)
         time.sleep(0.5)
 
-    # 7. Advance to Step 3 (Share) - Primary top 'Share' tab click with bottom 'Next' fallback
-    log("[Meta Auto Post Script] Navigating to Step 3 (Share) with 30s validation poll...")
-    start_share_poll = time.time()
-    on_step3 = False
-    while time.time() - start_share_poll < 30.0:
-        # Check if already on Step 3
-        is_step3 = driver.execute_script('''
-            return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
-        ''')
-        if is_step3:
-            on_step3 = True
-            break
+    # 7. Advance Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share) via main footer Next buttons
+    log("[Meta Auto Post Script] Advancing Step 1 (Create) -> Step 2 (Edit)...")
+    step1_next = fast_poll(driver, '''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        return allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900 && b.getAttribute('aria-disabled') !== 'true');
+    ''', timeout=20.0, poll_interval=0.2)
+    if step1_next:
+        try:
+            ActionChains(driver).move_to_element(step1_next).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", step1_next)
 
-        # Try clicking the top 'Share' tab (outermost clickable parent)
-        clicked_share = driver.execute_script('''
-            const allEls = Array.from(document.querySelectorAll('div, span, button'));
-            const textEl = allEls.find(el => el.innerText && el.innerText.trim() === 'Share' && el.getBoundingClientRect().y < 120);
-            if (textEl) {
-                const clickable = textEl.closest('[role="tab"], [role="button"], [tabindex]') || textEl;
-                const isDisabled = clickable.getAttribute('aria-disabled') === 'true' || clickable.classList.contains('disabled') || window.getComputedStyle(clickable).pointerEvents === 'none';
-                if (!isDisabled) {
-                    clickable.click();
-                    return true;
-                }
-            }
-            return false;
-        ''')
+    log("[Meta Auto Post Script] Advancing Step 2 (Edit) -> Step 3 (Share)...")
+    step2_next = fast_poll(driver, '''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        return allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900 && b.getAttribute('aria-disabled') !== 'true');
+    ''', timeout=15.0, poll_interval=0.15)
+    if step2_next:
+        try:
+            ActionChains(driver).move_to_element(step2_next).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", step2_next)
 
-        # If direct top Share click did not trigger yet, also try clicking the bottom 'Next' button if enabled
-        if not clicked_share:
-            driver.execute_script('''
-                const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-                const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700 && b.getAttribute('aria-disabled') !== 'true');
-                if (nextBtn) nextBtn.click();
-            ''')
-
-        time.sleep(0.3)
-
+    # Fast poll for Step 3 active (Scheduling options or Share now)
+    on_step3 = fast_poll(driver, '''
+        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
+    ''', timeout=15.0, poll_interval=0.15)
     if not on_step3:
-        raise RuntimeError("ไม่สามารถเข้าสู่ Step 3 (Share) ได้ภายใน 30 วินาที")
+        raise RuntimeError("ไม่สามารถเข้าสู่ Step 3 (Share) ได้ภายในเวลาที่กำหนด")
 
     time.sleep(0.5)
 
