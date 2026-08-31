@@ -19,22 +19,64 @@ def log(msg: str) -> None:
     except Exception:
         pass
 
-def focus_9222_browser_tab(driver) -> None:
-    """Focuses the port 9222 tab directly through Chrome DevTools Protocol without OS app switching."""
-    if not driver:
-        return
+def get_browser_window_pid(port: int = 9222) -> Optional[int]:
+    """Finds the exact Chrome process PID with an open window on the debug port."""
     try:
-        driver.switch_to.window(driver.current_window_handle)
-        driver.execute_script("window.focus();")
-        driver.execute_cdp_cmd('Page.bringToFront', {})
+        res = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, check=False)
+        pids = [p.strip() for p in res.stdout.strip().split() if p.strip()]
+        for pid in pids:
+            check_script = f'''
+            tell application "System Events"
+                try
+                    set p to first process whose unix id is {pid}
+                    if (count of windows of p) > 0 then
+                        return "FOUND"
+                    end if
+                end try
+            end tell
+            '''
+            r = subprocess.run(["osascript", "-e", check_script], capture_output=True, text=True, check=False)
+            if "FOUND" in r.stdout:
+                return int(pid)
+        return int(pids[0]) if pids else None
     except Exception:
-        pass
+        return None
 
-def upload_macos_file_dialog_fast(file_path: str) -> bool:
-    """Sends keystrokes to the open macOS file sheet without activating any other application."""
+def focus_9222_browser_tab(driver, port: int = 9222) -> None:
+    """Focuses the port 9222 tab directly through CDP and native macOS NSRunningApplication by PID."""
+    if driver:
+        try:
+            driver.switch_to.window(driver.current_window_handle)
+            driver.execute_script("window.focus();")
+            driver.execute_cdp_cmd('Page.bringToFront', {})
+        except Exception:
+            pass
+
+    if sys.platform != "darwin":
+        return
+
+    pid = get_browser_window_pid(port)
+    if pid:
+        jxa_script = f'''
+        ObjC.import('AppKit');
+        var app = $.NSRunningApplication.runningApplicationWithProcessIdentifier({pid});
+        if (app) {{
+            app.activateWithOptions($.NSApplicationActivateAllWindows | $.NSApplicationActivateIgnoringOtherApps);
+        }}
+        '''
+        try:
+            subprocess.run(["osascript", "-l", "JavaScript", "-e", jxa_script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
+def upload_macos_file_dialog_fast(file_path: str, port: int = 9222) -> bool:
+    """Sends keystrokes to the open macOS file sheet for the 9222 window."""
     if sys.platform != "darwin":
         return False
     escaped_path = file_path.replace('"', '\\"')
+
+    # Ensure 9222 is active right before keystrokes
+    focus_9222_browser_tab(None, port=port)
 
     script = f"""
     set the clipboard to "{escaped_path}"
@@ -87,7 +129,7 @@ def post_single_reel(
 ) -> bool:
     """
     Executes a high-speed, bulletproof single reel post sequence:
-    1. Focus Chrome 9222 tab directly via CDP (No OS app switching)
+    1. Focus Chrome 9222 window at start by Cocoa NSRunningApplication PID
     2. Ensure on composer page
     3. Click 'Add video' (ActionChains)
     4. macOS dialog path submission
@@ -114,9 +156,9 @@ def post_single_reel(
             "message": msg
         })
 
-    # 1. Focus 9222 tab purely via CDP
-    focus_9222_browser_tab(driver)
-    time.sleep(0.3)
+    # 1. Focus 9222 window right at the start by Cocoa NSRunningApplication PID
+    focus_9222_browser_tab(driver, port=9222)
+    time.sleep(0.4)
 
     # 2. Ensure on composer
     is_ready = driver.execute_script('''
@@ -132,6 +174,9 @@ def post_single_reel(
             raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
 
     # 3. Click 'Add video' on 9222
+    focus_9222_browser_tab(driver, port=9222)
+    time.sleep(0.2)
+
     all_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')
     target_btn = next((b for b in all_btns if b.text and 'Add video' in b.text), None)
 
@@ -157,7 +202,7 @@ def post_single_reel(
         raise FileNotFoundError(f"ไม่พบไฟล์วิดีโอ: {video_path}")
 
     log(f"[Meta Auto Post Script] Uploading video via dialog: {video_path}")
-    upload_macos_file_dialog_fast(video_path)
+    upload_macos_file_dialog_fast(video_path, port=9222)
 
     # 5. Fast poll for upload completion
     log("[Meta Auto Post Script] Waiting for upload completion...")
