@@ -67,6 +67,11 @@
           <span class="nav-text">Seedance Gen</span>
           <span class="nav-lock">🔒</span>
         </button>
+        <button id="tabMetaAutoPostBtn" class="sidebar-nav-btn locked" disabled>
+          <span class="nav-icon">📢</span>
+          <span class="nav-text">Meta Auto Post</span>
+          <span class="nav-lock">🔒</span>
+        </button>
       </nav>
       
       <!-- Collapsed mini indicator -->
@@ -1285,6 +1290,155 @@
               </div>
               <div id="seedanceConsole" class="console-box">
                 <div class="console-line system">Waiting for process to start...</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 6: META / FACEBOOK AUTO POST -->
+      <div id="metaAutoPostView" class="tab-view hidden">
+        <div class="layout-grid workflow-grid" style="grid-template-columns: 7fr 3fr;">
+          <!-- Left Column: Settings, Batch Scanner & Paired Items Preview -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Configuration & Batch Scanner Card -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
+                <h2 class="section-title" style="margin-bottom: 0;">📢 Meta Auto Post (Facebook Automation)</h2>
+                <span id="metaBatchCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Posts Ready</span>
+              </div>
+              <p class="section-subtitle">สแกนดึงข้อมูลโฟลเดอร์ จับคู่วิดีโอ + Caption และกำหนดวัน-เวลาโพสต์อัตโนมัติ</p>
+
+              <div class="settings-form" style="margin-top: 15px;">
+                <!-- Preset Manager -->
+                <div id="metaPresetsGroup" class="form-group" style="margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px;">
+                  <label style="font-weight: bold; color: #ffb86c; margin-bottom: 8px; display: block;">Preset การตั้งค่า</label>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <select id="metaPresetSelect" style="flex-grow: 1; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
+                      <option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>
+                    </select>
+                    <button id="saveMetaPresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap;">💾 บันทึก Preset</button>
+                    <button id="deleteMetaPresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap; color: #ff6b6b; border-color: rgba(255,107,107,0.3);">🗑️ ลบ</button>
+                  </div>
+                </div>
+
+                <!-- Main Folder -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_meta_main_folder" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์หลักสำหรับดึงข้อมูล (Main Target Folder)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์หลักที่มีโฟลเดอร์ย่อยบรรจุคลิปวิดีโอและไฟล์ข้อความ Caption</div>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <input id="cfg_meta_main_folder" placeholder="เช่น /Users/litar/Downloads/facebook_videos_batch" style="margin-bottom: 0; flex-grow: 1;" />
+                    <button id="browseMetaMainFolderBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                    <button id="setMetaMainFolderDefaultBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Set Default</button>
+                  </div>
+                </div>
+
+                <!-- Sub folders range & Scheduling Grid -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
+                  <!-- Sub folders input -->
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_meta_subfolders" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)</div>
+                    <input id="cfg_meta_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+
+                  <!-- Interval Config -->
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-weight: bold; color: #8da6ff;">ระยะห่างแต่ละโพสต์ (Post Interval)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ระยะเวลาที่จะขยับวัน/เวลาในแต่ละคลิป</div>
+                    <div style="display: flex; gap: 8px;">
+                      <input type="number" id="cfg_meta_interval_val" value="1" min="1" step="1" style="width: 80px; margin-bottom: 0; text-align: center;" />
+                      <select id="cfg_meta_interval_type" style="flex-grow: 1; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none; margin-bottom: 0;">
+                        <option value="days" selected>วัน (Days) — เช่น วันละ 1 คลิป</option>
+                        <option value="hours">ชั่วโมง (Hours) — เช่น ทุกๆ N ชม.</option>
+                        <option value="minutes">นาที (Minutes)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Date and Time Scheduling Row -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_meta_start_date" style="font-weight: bold; color: #8da6ff;">วันที่เริ่มต้นโพสต์ (Start Date)</label>
+                    <input type="date" id="cfg_meta_start_date" style="margin-bottom: 0; width: 100%; padding: 10px;" />
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_meta_start_time" style="font-weight: bold; color: #8da6ff;">เวลาที่เริ่มโพสต์ (Start Time)</label>
+                    <input type="time" id="cfg_meta_start_time" value="18:00" style="margin-bottom: 0; width: 100%; padding: 10px;" />
+                  </div>
+                </div>
+
+                <!-- Caption Template / Fallback -->
+                <div class="form-group" style="margin-bottom: 20px;">
+                  <label for="cfg_meta_caption_template" style="font-weight: bold; color: #8da6ff;">Caption สำรอง / Template (เมื่อไม่มีไฟล์ข้อความ)</label>
+                  <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ระบบจะอ่านไฟล์ <code>caption.txt</code> หรือ <code>.txt</code> ในโฟลเดอร์ก่อน หากไม่มีจะใช้ข้อความนี้แทน (ใช้ {subfolder}, {date}, {time} ได้)</div>
+                  <textarea id="cfg_meta_caption_template" rows="2" placeholder="เช่น ไฮไลท์คลิปประจำวัน {subfolder} วันที่ {date} #reel #shorts #viral" style="width: 100%; border-radius: 8px; margin-bottom: 0;"></textarea>
+                </div>
+
+                <!-- Scan Button -->
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <button id="btnScanMetaBatch" class="primary has-tooltip" style="padding: 12px 24px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #1877f2, #0052cc); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(24, 119, 242, 0.3);">
+                    <span class="btn-text">🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair)</span>
+                    <div class="custom-tooltip" id="tooltip_btnScanMetaBatch"></div>
+                  </button>
+                  <button id="btnClearMetaBatch" class="secondary" style="padding: 12px 18px; font-size: 0.85rem; border-radius: 12px; margin-bottom: 0;">🗑️ ล้างรายการ</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Scanned & Paired Posts Preview List -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #8da6ff;">📋 รายการโพสต์ที่จับคู่แล้ว (Paired Posts Queue)</h3>
+                <div style="display: flex; gap: 8px;">
+                  <button id="btnAddManualMetaPost" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 8px;">+ เพิ่มรายการแบบ Manual</button>
+                </div>
+              </div>
+              <p class="section-subtitle" style="margin-bottom: 16px;">ตรวจสอบหรือแก้ไข Caption และวัน-เวลาที่กำหนดโพสต์ของแต่ละคลิปได้โดยตรง</p>
+
+              <!-- Queue Container -->
+              <div id="metaPostQueueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 650px; overflow-y: auto; padding-right: 4px;">
+                <div id="metaEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
+                  ยังไม่มีข้อมูลโพสต์ — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนและจับคู่ข้อมูล"</strong>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Right Column: Status, Run Controls & Console -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <section class="card" style="height: 100%; display: flex; flex-direction: column;">
+              <h2 class="section-title">🚀 Auto Post Execution</h2>
+              <p class="section-subtitle">สถานะและบันทึกการส่งโพสต์ไปยัง Facebook / Meta</p>
+
+              <div style="margin: 15px 0 20px 0;">
+                <button id="runMetaAutoPostBtn" class="primary has-tooltip" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">
+                  <span class="btn-text">🚀 เริ่มรัน Auto Post ตามคิว</span>
+                  <div class="custom-tooltip" id="tooltip_runMetaAutoPostBtn"></div>
+                </button>
+              </div>
+
+              <!-- Progress Bar -->
+              <div id="metaProgressContainer" class="hidden" style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; color: #8da6ff;">
+                  <span>ความคืบหน้า</span>
+                  <span id="metaProgressText">0% (0/0)</span>
+                </div>
+                <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.08); border-radius: 5px; overflow: hidden;">
+                  <div id="metaProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #1877f2, #10b981); transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+
+              <!-- Console Header -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label style="font-weight: bold; color: rgba(255,255,255,0.7); font-size: 0.85rem;">Live Console Output</label>
+                <button id="clearMetaConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; margin: 0;">Clear</button>
+              </div>
+
+              <!-- Console Box -->
+              <div id="metaConsole" class="console-box" style="flex-grow: 1; min-height: 400px;">
+                <div class="console-line system">Ready for Meta Auto Post operations...</div>
               </div>
             </section>
           </div>

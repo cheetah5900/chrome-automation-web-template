@@ -284,6 +284,28 @@ ${step5}
 1. ระบบจะหาปุ่มทั้งหมดที่ตรงกับตัวเลือก
 2. สั่ง Chrome ให้คลิกเพื่อป้อนข้อมูลตัวละคร/สถานที่/อุปกรณ์ ในหน้าเว็บ Google Flow โดยอัตโนมัติ`;
   }
+
+  const tooltipScanMeta = document.getElementById('tooltip_btnScanMetaBatch');
+  if (tooltipScanMeta) {
+    const metaFolder = document.getElementById('cfg_meta_main_folder')?.value.trim() || '[ยังไม่ระบุโฟลเดอร์]';
+    const subRange = document.getElementById('cfg_meta_subfolders')?.value.trim() || 'ทั้งหมด';
+    const startDate = document.getElementById('cfg_meta_start_date')?.value.trim() || 'วันนี้';
+    const startTime = document.getElementById('cfg_meta_start_time')?.value.trim() || '18:00';
+    tooltipScanMeta.innerHTML = `🔍 <strong>ขั้นตอนการสแกนและจับคู่ข้อมูล:</strong><br>
+1. สแกนโฟลเดอร์หลัก: <code>${metaFolder}</code><br>
+2. เลือกโฟลเดอร์ย่อย: <code>${subRange}</code><br>
+3. ตรวจจับไฟล์วิดีโอ (.mp4) และไฟล์ Caption (.txt) ในแต่ละโฟลเดอร์<br>
+4. คำนวณวัน-เวลาโพสต์เริ่มต้น: <code>${startDate} ${startTime}</code><br>
+5. แสดงผลในตารางคิวให้ตรวจสอบและแก้ไขก่อนเริ่มรัน`;
+  }
+
+  const tooltipRunMeta = document.getElementById('tooltip_runMetaAutoPostBtn');
+  if (tooltipRunMeta) {
+    tooltipRunMeta.innerHTML = `🚀 <strong>รัน Auto Post ตามคิว:</strong><br>
+1. ตรวจสอบคิวโพสต์ที่เตรียมไว้ (${metaPostQueue.length} รายการ)<br>
+2. ควบคุมเบราว์เซอร์ส่งโพสต์ไปยัง Facebook / Meta ตามลำดับและเวลาที่กำหนด<br>
+3. แสดงความคืบหน้าแบบ Real-time บน Console`;
+  }
 }
 
 async function loadSettings() {
@@ -467,13 +489,14 @@ async function updatePortStatus() {
   const tabVideoGen = document.getElementById('tabVideoGenBtn');
   const tabVideoHelper = document.getElementById('tabVideoHelperBtn');
   const tabSeedanceGen = document.getElementById('tabSeedanceGenBtn');
+  const tabMetaAutoPost = document.getElementById('tabMetaAutoPostBtn');
   
   const sidebarSummary = document.getElementById('sidebar_profile_summary');
   const sidebarProfileName = document.getElementById('sidebar_active_profile_name');
   const sidebarProfilePort = document.getElementById('sidebar_active_profile_port');
   const browserStatusDot = document.getElementById('sidebar_browser_status_dot');
 
-  const otherTabs = [tabImageGen, tabStoryboardGen, tabVideoGen, tabVideoHelper, tabSeedanceGen];
+  const otherTabs = [tabImageGen, tabStoryboardGen, tabVideoGen, tabVideoHelper, tabSeedanceGen, tabMetaAutoPost];
 
   if (!select || !select.value) {
     if (badge) {
@@ -759,6 +782,13 @@ const inputsToListen = [
   'videoCombineSubFoldersText',
   'videoPrefixText',
   'viewChannelFolderText',
+  'cfg_meta_main_folder',
+  'cfg_meta_subfolders',
+  'cfg_meta_start_date',
+  'cfg_meta_start_time',
+  'cfg_meta_interval_val',
+  'cfg_meta_interval_type',
+  'cfg_meta_caption_template',
   'startupUrl1',
   'startupUrl2',
   'startupUrl3'
@@ -782,6 +812,7 @@ function initTabNavigation() {
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
+  const btnMetaAutoPost = document.getElementById('tabMetaAutoPostBtn');
   
   const viewBrowserSetup = document.getElementById('browserSetupView');
   const viewImageGen = document.getElementById('imageGenView');
@@ -790,6 +821,7 @@ function initTabNavigation() {
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
   const viewSeedanceGen = document.getElementById('seedanceGenView');
+  const viewMetaAutoPost = document.getElementById('metaAutoPostView');
 
   const tabs = [
     { btn: btnBrowserSetup, view: viewBrowserSetup, onLoad: null },
@@ -798,7 +830,8 @@ function initTabNavigation() {
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
-    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: loadSeedancePrompts }
+    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: loadSeedancePrompts },
+    { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig }
   ];
 
   tabs.forEach(tab => {
@@ -847,6 +880,7 @@ function restoreSavedTab() {
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
+  const btnMetaAutoPost = document.getElementById('tabMetaAutoPostBtn');
 
   const viewBrowserSetup = document.getElementById('browserSetupView');
   const viewImageGen = document.getElementById('imageGenView');
@@ -855,6 +889,7 @@ function restoreSavedTab() {
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
   const viewSeedanceGen = document.getElementById('seedanceGenView');
+  const viewMetaAutoPost = document.getElementById('metaAutoPostView');
 
   const tabs = [
     { btn: btnBrowserSetup, view: viewBrowserSetup, onLoad: null },
@@ -863,7 +898,8 @@ function restoreSavedTab() {
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
-    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: loadSeedancePrompts }
+    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: loadSeedancePrompts },
+    { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig }
   ];
 
   const savedTabId = localStorage.getItem('activeNavigationTab');
@@ -988,6 +1024,37 @@ async function loadConfig() {
     if (vWatermarkBorderWidth) vWatermarkBorderWidth.value = config.video_watermark_border_width !== undefined ? config.video_watermark_border_width : '0';
     
     applyVideoPreset('');
+
+    // Meta Auto Post Defaults
+    const metaMainFolder = document.getElementById('cfg_meta_main_folder');
+    if (metaMainFolder) metaMainFolder.value = config.meta_main_folder || '';
+
+    const metaSubfolders = document.getElementById('cfg_meta_subfolders');
+    if (metaSubfolders) metaSubfolders.value = config.meta_subfolders || '';
+
+    const metaStartDate = document.getElementById('cfg_meta_start_date');
+    if (metaStartDate) {
+      if (config.meta_start_date) {
+        metaStartDate.value = config.meta_start_date;
+      } else if (!metaStartDate.value) {
+        const today = new Date().toISOString().split('T')[0];
+        metaStartDate.value = today;
+      }
+    }
+
+    const metaStartTime = document.getElementById('cfg_meta_start_time');
+    if (metaStartTime) metaStartTime.value = config.meta_start_time || '18:00';
+
+    const metaIntervalVal = document.getElementById('cfg_meta_interval_val');
+    if (metaIntervalVal) metaIntervalVal.value = config.meta_interval_val !== undefined ? config.meta_interval_val : 1;
+
+    const metaIntervalType = document.getElementById('cfg_meta_interval_type');
+    if (metaIntervalType) metaIntervalType.value = config.meta_interval_type || 'days';
+
+    const metaCaptionTemplate = document.getElementById('cfg_meta_caption_template');
+    if (metaCaptionTemplate) metaCaptionTemplate.value = config.meta_caption_template || '';
+
+    loadMetaPresets(config.meta_presets);
     
     updateTooltips();
     if (typeof updateDurationsSum === 'function') {
@@ -6402,9 +6469,459 @@ function initSeedanceGenListeners() {
 
       reader.readAsText(file);
       importInput.value = '';
+// --- Meta Auto Post Logic ---
+let metaPostQueue = [];
+
+function loadMetaPresets(presets) {
+  const select = document.getElementById('metaPresetSelect');
+  if (!select) return;
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>';
+  if (presets && typeof presets === 'object') {
+    Object.keys(presets).forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    });
+  }
+  if (currentVal && presets && presets[currentVal]) {
+    select.value = currentVal;
+  }
+}
+
+async function saveMetaPreset() {
+  const name = prompt('ตั้งชื่อ Preset สำหรับ Meta Auto Post:');
+  if (!name || !name.trim()) return;
+  const trimmedName = name.trim();
+
+  const currentConfig = await jsonFetch('/api/config');
+  const presets = currentConfig.meta_presets || {};
+
+  presets[trimmedName] = {
+    main_folder: document.getElementById('cfg_meta_main_folder')?.value || '',
+    subfolders: document.getElementById('cfg_meta_subfolders')?.value || '',
+    start_time: document.getElementById('cfg_meta_start_time')?.value || '18:00',
+    interval_val: parseFloat(document.getElementById('cfg_meta_interval_val')?.value) || 1,
+    interval_type: document.getElementById('cfg_meta_interval_type')?.value || 'days',
+    caption_template: document.getElementById('cfg_meta_caption_template')?.value || ''
+  };
+
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'meta_presets', value: presets })
+    });
+    loadMetaPresets(presets);
+    const select = document.getElementById('metaPresetSelect');
+    if (select) select.value = trimmedName;
+    writeConsoleLine(`บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว`, 'success', 'metaConsole');
+    alert(`บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว`);
+  } catch (e) {
+    writeConsoleLine(`เกิดข้อผิดพลาดในการบันทึก Preset: ${e.message}`, 'error', 'metaConsole');
+  }
+}
+
+async function deleteMetaPreset() {
+  const select = document.getElementById('metaPresetSelect');
+  const currentName = select ? select.value : '';
+  if (!currentName) {
+    alert('กรุณาเลือก Preset ที่ต้องการลบ');
+    return;
+  }
+  if (!confirm(`ยืนยันการลบ Preset "${currentName}" หรือไม่?`)) return;
+
+  const currentConfig = await jsonFetch('/api/config');
+  const presets = currentConfig.meta_presets || {};
+  delete presets[currentName];
+
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'meta_presets', value: presets })
+    });
+    loadMetaPresets(presets);
+    writeConsoleLine(`ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'metaConsole');
+  } catch (e) {
+    writeConsoleLine(`เกิดข้อผิดพลาดในการลบ Preset: ${e.message}`, 'error', 'metaConsole');
+  }
+}
+
+async function applyMetaPreset() {
+  const select = document.getElementById('metaPresetSelect');
+  const currentName = select ? select.value : '';
+  if (!currentName) return;
+
+  const currentConfig = await jsonFetch('/api/config');
+  const preset = (currentConfig.meta_presets || {})[currentName];
+  if (!preset) return;
+
+  if (document.getElementById('cfg_meta_main_folder')) document.getElementById('cfg_meta_main_folder').value = preset.main_folder || '';
+  if (document.getElementById('cfg_meta_subfolders')) document.getElementById('cfg_meta_subfolders').value = preset.subfolders || '';
+  if (document.getElementById('cfg_meta_start_time')) document.getElementById('cfg_meta_start_time').value = preset.start_time || '18:00';
+  if (document.getElementById('cfg_meta_interval_val')) document.getElementById('cfg_meta_interval_val').value = preset.interval_val !== undefined ? preset.interval_val : 1;
+  if (document.getElementById('cfg_meta_interval_type')) document.getElementById('cfg_meta_interval_type').value = preset.interval_type || 'days';
+  if (document.getElementById('cfg_meta_caption_template')) document.getElementById('cfg_meta_caption_template').value = preset.caption_template || '';
+
+  writeConsoleLine(`โหลด Preset "${currentName}" สำเร็จ`, 'info', 'metaConsole');
+  updateTooltips();
+}
+
+async function scanMetaBatch() {
+  const mainFolder = document.getElementById('cfg_meta_main_folder')?.value.trim() || '';
+  if (!mainFolder) {
+    alert('กรุณาระบุโฟลเดอร์หลัก (Main Target Folder)');
+    return;
+  }
+  const subfoldersStr = document.getElementById('cfg_meta_subfolders')?.value.trim() || '';
+  const startDate = document.getElementById('cfg_meta_start_date')?.value.trim() || '';
+  const startTime = document.getElementById('cfg_meta_start_time')?.value.trim() || '18:00';
+  const intervalVal = parseFloat(document.getElementById('cfg_meta_interval_val')?.value) || 1;
+  const intervalType = document.getElementById('cfg_meta_interval_type')?.value || 'days';
+  const captionTemplate = document.getElementById('cfg_meta_caption_template')?.value || '';
+
+  const btn = document.getElementById('btnScanMetaBatch');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    const textSpan = btn.querySelector('.btn-text');
+    if (textSpan) textSpan.textContent = 'กำลังสแกน...';
+  }
+
+  writeConsoleLine(`Meta Auto Post: เริ่มสแกนโฟลเดอร์ "${mainFolder}"...`, 'system', 'metaConsole');
+
+  try {
+    const res = await jsonFetch('/api/meta-autopost/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_folder: mainFolder,
+        subfolders_str: subfoldersStr,
+        start_date: startDate,
+        start_time: startTime,
+        interval_type: intervalType,
+        interval_value: intervalVal,
+        caption_template: captionTemplate
+      })
+    });
+
+    if (res.ok && Array.isArray(res.items)) {
+      metaPostQueue = res.items;
+      renderMetaPostQueue();
+      writeConsoleLine(`Meta Auto Post: สแกนพบ ${res.items.length} รายการโพสต์ พร้อมจับคู่วิดีโอและ Caption อัตโนมัติ`, 'success', 'metaConsole');
+    } else {
+      writeConsoleLine(`Meta Auto Post Scan Error: ${res.detail || res.message || 'ไม่สามารถสแกนได้'}`, 'error', 'metaConsole');
+      alert(`ไม่สามารถสแกนได้: ${res.detail || res.message || 'Unknown error'}`);
+    }
+  } catch (e) {
+    writeConsoleLine(`เกิดข้อผิดพลาดในการสแกน: ${e.message}`, 'error', 'metaConsole');
+    alert(`เกิดข้อผิดพลาด: ${e.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      const textSpan = btn.querySelector('.btn-text');
+      if (textSpan) textSpan.textContent = '🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair)';
+    }
+  }
+}
+
+function renderMetaPostQueue() {
+  const container = document.getElementById('metaPostQueueList');
+  const badge = document.getElementById('metaBatchCountBadge');
+  if (!container) return;
+
+  if (badge) {
+    badge.textContent = `${metaPostQueue.length} Posts Ready`;
+  }
+
+  if (metaPostQueue.length === 0) {
+    container.innerHTML = `
+      <div id="metaEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
+        ยังไม่มีข้อมูลโพสต์ — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนและจับคู่ข้อมูล"</strong>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = '';
+  metaPostQueue.forEach((item, index) => {
+    const card = document.createElement('div');
+    card.className = 'meta-post-card';
+    card.style.cssText = `
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: all 0.2s ease;
+    `;
+
+    const hasVideoBadge = item.has_video
+      ? `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">🎬 พบไฟล์วิดีโอ</span>`
+      : `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">❌ ไม่พบวิดีโอ</span>`;
+
+    const hasCaptionBadge = item.has_caption
+      ? `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">📝 ${item.caption_file || 'มี Caption'}</span>`
+      : `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">⚠️ ไม่มี Caption</span>`;
+
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">#${index + 1} โฟลเดอร์: ${item.subfolder_name || 'Manual Post'}</span>
+          ${hasVideoBadge}
+          ${hasCaptionBadge}
+        </div>
+        <button class="delete-post-btn secondary" data-index="${index}" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; color: #ff6b6b; border-color: rgba(255,107,107,0.3); margin: 0;">🗑️ ลบ</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <!-- Video Path Field -->
+        <div>
+          <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">ตำแหน่งไฟล์วิดีโอ (Video Path)</label>
+          <div style="display: flex; gap: 6px;">
+            <input type="text" class="meta-video-input" data-index="${index}" value="${item.video_path || ''}" placeholder="เลือกหรือวางที่อยู่ไฟล์วิดีโอ..." style="font-size: 0.82rem; padding: 8px 10px; margin-bottom: 0; flex-grow: 1;" />
+            <button class="browse-meta-video-btn secondary" data-index="${index}" style="padding: 6px 10px; font-size: 0.78rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Browse</button>
+          </div>
+        </div>
+
+        <!-- Scheduled DateTime Field -->
+        <div>
+          <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">📅 กำหนดวัน-เวลาที่โพสต์ (Scheduled Time)</label>
+          <input type="datetime-local" class="meta-datetime-input" data-index="${index}" value="${item.scheduled_datetime || ''}" style="font-size: 0.82rem; padding: 8px 10px; margin-bottom: 0; width: 100%;" />
+        </div>
+      </div>
+
+      <!-- Caption Textarea -->
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">เนื้อหาโพสต์ / Caption</label>
+          <span class="char-counter" style="font-size: 0.72rem; color: rgba(255,255,255,0.4);">${(item.caption || '').length} ตัวอักษร</span>
+        </div>
+        <textarea class="meta-caption-input" data-index="${index}" rows="3" placeholder="ระบุข้อความ Caption สำหรับโพสต์นี้..." style="font-size: 0.85rem; padding: 8px 10px; margin-bottom: 0; width: 100%; border-radius: 8px; line-height: 1.4;">${item.caption || ''}</textarea>
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+
+  // Attach interactive listeners
+  container.querySelectorAll('.meta-video-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (metaPostQueue[idx]) {
+        metaPostQueue[idx].video_path = e.target.value;
+        metaPostQueue[idx].has_video = !!e.target.value.trim();
+      }
+    });
+  });
+
+  container.querySelectorAll('.meta-datetime-input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (metaPostQueue[idx]) {
+        metaPostQueue[idx].scheduled_datetime = e.target.value;
+      }
+    });
+  });
+
+  container.querySelectorAll('.meta-caption-input').forEach(textarea => {
+    textarea.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (metaPostQueue[idx]) {
+        metaPostQueue[idx].caption = e.target.value;
+        metaPostQueue[idx].has_caption = !!e.target.value.trim();
+        const card = e.target.closest('.meta-post-card');
+        const counter = card ? card.querySelector('.char-counter') : null;
+        if (counter) counter.textContent = `${e.target.value.length} ตัวอักษร`;
+      }
+    });
+  });
+
+  container.querySelectorAll('.browse-meta-video-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const idx = parseInt(e.currentTarget.dataset.index, 10);
+      try {
+        const res = await jsonFetch('/api/utils/browse-file?filter_type=video');
+        if (res.ok && res.path) {
+          if (metaPostQueue[idx]) {
+            metaPostQueue[idx].video_path = res.path;
+            metaPostQueue[idx].has_video = true;
+            renderMetaPostQueue();
+          }
+        }
+      } catch (err) {
+        console.error('Browse video error:', err);
+      }
+    });
+  });
+
+  container.querySelectorAll('.delete-post-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.index, 10);
+      metaPostQueue.splice(idx, 1);
+      renderMetaPostQueue();
+    });
+  });
+}
+
+function addManualMetaPost() {
+  const now = new Date();
+  now.setHours(18, 0, 0, 0);
+  const isoStr = now.toISOString().slice(0, 16);
+
+  metaPostQueue.push({
+    id: metaPostQueue.length + 1,
+    subfolder_name: `Manual Post ${metaPostQueue.length + 1}`,
+    subfolder_path: '',
+    video_path: '',
+    video_name: '',
+    has_video: false,
+    caption: '',
+    caption_file: '',
+    has_caption: false,
+    scheduled_datetime: isoStr,
+    status: 'warning'
+  });
+  renderMetaPostQueue();
+}
+
+function clearMetaBatch() {
+  if (metaPostQueue.length > 0) {
+    if (!confirm('ต้องการล้างรายการโพสต์ทั้งหมดหรือไม่?')) return;
+  }
+  metaPostQueue = [];
+  renderMetaPostQueue();
+  writeConsoleLine('ล้างรายการคิวโพสต์ทั้งหมดแล้ว', 'info', 'metaConsole');
+}
+
+async function runMetaAutoPost(btnElement) {
+  if (metaPostQueue.length === 0) {
+    alert('ไม่มีรายการโพสต์ในคิว กรุณาสแกนหรือเพิ่มรายการก่อน');
+    return;
+  }
+
+  // Check valid video paths
+  const missingVideos = metaPostQueue.filter(x => !x.video_path);
+  if (missingVideos.length > 0) {
+    if (!confirm(`มี ${missingVideos.length} รายการที่ยังไม่มีไฟล์วิดีโอ ต้องการดำเนินการต่อหรือไม่?`)) {
+      return;
+    }
+  }
+
+  if (btnElement) {
+    btnElement.disabled = true;
+    btnElement.classList.add('loading');
+    const textSpan = btnElement.querySelector('.btn-text');
+    if (textSpan) textSpan.textContent = 'กำลังดำเนินการ Auto Post...';
+  }
+
+  const progressContainer = document.getElementById('metaProgressContainer');
+  const progressBar = document.getElementById('metaProgressBar');
+  const progressText = document.getElementById('metaProgressText');
+
+  if (progressContainer) progressContainer.classList.remove('hidden');
+  if (progressBar) progressBar.style.width = '0%';
+  if (progressText) progressText.textContent = `0% (0/${metaPostQueue.length})`;
+
+  writeConsoleLine(`🚀 เริ่มส่งคำสั่งรัน Meta Auto Post สำหรับ ${metaPostQueue.length} รายการ...`, 'system', 'metaConsole');
+
+  try {
+    const res = await jsonFetch('/api/meta-autopost/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        posts: metaPostQueue
+      })
+    });
+
+    if (res.ok) {
+      writeConsoleLine(`[Meta Auto Post] ${res.message || 'ส่งคำสั่งสำเร็จ'}`, 'success', 'metaConsole');
+      writeConsoleLine(`[Meta Auto Post] ระบบพร้อมรับการทำงานร่วมกับขั้นตอน Automation/Scraping ของคุณ`, 'info', 'metaConsole');
+    } else {
+      writeConsoleLine(`[Meta Auto Post Error] ${res.detail || res.message}`, 'error', 'metaConsole');
+    }
+  } catch (e) {
+    writeConsoleLine(`[Meta Auto Post Error] ${e.message}`, 'error', 'metaConsole');
+  } finally {
+    if (btnElement) {
+      btnElement.disabled = false;
+      btnElement.classList.remove('loading');
+      const textSpan = btnElement.querySelector('.btn-text');
+      if (textSpan) textSpan.textContent = '🚀 เริ่มรัน Auto Post ตามคิว';
+    }
+  }
+}
+
+function initMetaAutoPostListeners() {
+  const browseMainBtn = document.getElementById('browseMetaMainFolderBtn');
+  if (browseMainBtn) {
+    browseMainBtn.addEventListener('click', async () => {
+      try {
+        const res = await jsonFetch('/api/utils/browse-dir');
+        if (res.ok && res.path) {
+          const input = document.getElementById('cfg_meta_main_folder');
+          if (input) input.value = res.path;
+          updateTooltips();
+        }
+      } catch (err) {
+        console.error('Browse meta main folder error:', err);
+      }
+    });
+  }
+
+  const setDefaultBtn = document.getElementById('setMetaMainFolderDefaultBtn');
+  if (setDefaultBtn) {
+    setDefaultBtn.addEventListener('click', async () => {
+      const val = document.getElementById('cfg_meta_main_folder')?.value.trim() || '';
+      try {
+        await jsonFetch('/api/config/set-default', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'meta_main_folder', value: val })
+        });
+        writeConsoleLine(`บันทึกโฟลเดอร์หลักเริ่มต้นสำหรับ Meta Auto Post: ${val || 'None'}`, 'success', 'metaConsole');
+        alert(`บันทึกค่าเริ่มต้นเรียบร้อยแล้ว: ${val || 'None'}`);
+      } catch (e) {
+        writeConsoleLine(`เกิดข้อผิดพลาดในการบันทึกค่าเริ่มต้น: ${e.message}`, 'error', 'metaConsole');
+      }
+    });
+  }
+
+  const savePresetBtn = document.getElementById('saveMetaPresetBtn');
+  if (savePresetBtn) savePresetBtn.addEventListener('click', saveMetaPreset);
+
+  const deletePresetBtn = document.getElementById('deleteMetaPresetBtn');
+  if (deletePresetBtn) deletePresetBtn.addEventListener('click', deleteMetaPreset);
+
+  const presetSelect = document.getElementById('metaPresetSelect');
+  if (presetSelect) presetSelect.addEventListener('change', applyMetaPreset);
+
+  const scanBtn = document.getElementById('btnScanMetaBatch');
+  if (scanBtn) scanBtn.addEventListener('click', scanMetaBatch);
+
+  const clearBtn = document.getElementById('btnClearMetaBatch');
+  if (clearBtn) clearBtn.addEventListener('click', clearMetaBatch);
+
+  const addManualBtn = document.getElementById('btnAddManualMetaPost');
+  if (addManualBtn) addManualBtn.addEventListener('click', addManualMetaPost);
+
+  const runBtn = document.getElementById('runMetaAutoPostBtn');
+  if (runBtn) runBtn.addEventListener('click', (e) => runMetaAutoPost(e.currentTarget));
+
+  const clearConsoleBtn = document.getElementById('clearMetaConsoleBtn');
+  if (clearConsoleBtn) {
+    clearConsoleBtn.addEventListener('click', () => {
+      const consoleBox = document.getElementById('metaConsole');
+      if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
     });
   }
 }
+
 const staticTooltips = {
   // Settings / Profile
   "openSettings": "⚙️ ตั้งค่าระบบ (Settings):<br>- แก้ไขพอร์ต, หน่วงเวลา, หรือ URL เริ่มต้น",
@@ -6420,6 +6937,7 @@ const staticTooltips = {
   "tabVideoGenBtn": "🎬 แถบสร้างวิดีโอ (Video Generation):<br>- รันเจเนอเรตวิดีโอบน Google Flow",
   "tabVideoHelperBtn": "🎥 แถบช่วยเหลือวิดีโอ (Video Helper):<br>- รวมคลิปวิดีโอเข้าด้วยกัน (Combine Mode)",
   "tabSeedanceGenBtn": "💃 แถบ Seedance Gen:<br>- สร้างคลิปเต้น (สำหรับอนาคต)",
+  "tabMetaAutoPostBtn": "📢 แถบ Meta Auto Post (Facebook Automation):<br>- ดึงข้อมูลแบบ Batch และตั้งเวลาโพสต์คลิปลง Facebook/Meta",
 
   // Image Gen
   "browseLakornPathBtn": "📁 เลือกโฟลเดอร์ละคร (Browse...):<br>- เลือกโฟลเดอร์รูปภาพหรือบทละคร",
@@ -6468,7 +6986,18 @@ const staticTooltips = {
   "addSeedancePromptBtn": "➕ เพิ่มพรอพต์ (Add Prompt)",
   "saveSeedancePromptsBtn": "💾 บันทึกพรอพต์ (Save)",
   "deleteAllSeedancePromptsBtn": "🗑️ ลบทั้งหมด (Delete All)",
-  "clearSeedanceConsoleBtn": "🧹 ล้าง Log (Clear)"
+  "clearSeedanceConsoleBtn": "🧹 ล้าง Log (Clear)",
+
+  // Meta Auto Post
+  "browseMetaMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่มีโฟลเดอร์ย่อยบรรจุวิดีโอและ Caption",
+  "setMetaMainFolderDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set default):<br>- บันทึกโฟลเดอร์นี้เป็นค่าเริ่มต้น",
+  "saveMetaPresetBtn": "💾 บันทึก Preset Meta Auto Post:<br>- บันทึกค่าการตั้งค่าและ Caption template เก็บไว้",
+  "deleteMetaPresetBtn": "🗑️ ลบ Preset ที่เลือก",
+  "btnScanMetaBatch": "🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair):<br>- สแกนไฟล์วิดีโอ (.mp4), แคปชั่น (.txt), และคำนวณวัน-เวลาโพสต์ตามช่วงที่ระบุ",
+  "btnClearMetaBatch": "🗑️ ล้างรายการโพสต์ที่จับคู่ไว้ทั้งหมดในตาราง",
+  "btnAddManualMetaPost": "➕ เพิ่มรายการโพสต์ด้วยตนเอง (Manual Post)",
+  "runMetaAutoPostBtn": "🚀 รัน Auto Post ตามคิว:<br>- เริ่มส่งโพสต์ตามรายการที่เตรียมไว้ทั้งหมดไปยัง Facebook/Meta",
+  "clearMetaConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)"
 };
 
 function initAllTooltips() {
@@ -6548,6 +7077,7 @@ async function initApp() {
   initFileImports();
   initVideoGenListeners();
   initSeedanceGenListeners();
+  initMetaAutoPostListeners();
   setupLogStream();
 
   // Load flow image models dynamically

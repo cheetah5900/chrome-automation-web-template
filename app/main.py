@@ -106,6 +106,31 @@ def custom_sleep(seconds: float):
 
 time.sleep = custom_sleep
 
+def natural_sort_key(s: Any) -> list[Any]:
+    import re
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
+
+def resolve_subfolder_by_prefix(base_dir: str, folder_id: str) -> str:
+    import os
+    import re
+    exact_path = os.path.join(base_dir, folder_id)
+    if os.path.isdir(exact_path):
+        return exact_path
+    if str(folder_id).strip().isdigit() and os.path.isdir(base_dir):
+        candidates = []
+        target_num = int(str(folder_id).strip())
+        for entry in os.listdir(base_dir):
+            entry_path = os.path.join(base_dir, entry)
+            if not os.path.isdir(entry_path):
+                continue
+            m = re.match(r'^(\d+)', entry)
+            if m and int(m.group(1)) == target_num:
+                candidates.append(entry)
+        if candidates:
+            candidates.sort(key=len)
+            return os.path.join(base_dir, candidates[0])
+    return exact_path
+
 @app.middleware("http")
 async def reset_force_stop_middleware(request, call_next):
     global _force_stop_requested
@@ -1281,7 +1306,15 @@ def _default_config() -> dict[str, Any]:
             "flowkit_worker_delay_min": 10.0,
             "flowkit_worker_delay_max": 20.0,
             "flow_video_presets": {},
-            "flow_po_presets": {}
+            "flow_po_presets": {},
+            "meta_main_folder": "",
+            "meta_subfolders": "",
+            "meta_start_date": "",
+            "meta_start_time": "18:00",
+            "meta_interval_type": "days",
+            "meta_interval_val": 1,
+            "meta_caption_template": "",
+            "meta_presets": {}
         }
     else:
         h = os.path.expanduser("~")
@@ -1348,7 +1381,15 @@ def _default_config() -> dict[str, Any]:
             "flowkit_worker_delay_min": 10.0,
             "flowkit_worker_delay_max": 20.0,
             "flow_video_presets": {},
-            "flow_po_presets": {}
+            "flow_po_presets": {},
+            "meta_main_folder": "",
+            "meta_subfolders": "",
+            "meta_start_date": "",
+            "meta_start_time": "18:00",
+            "meta_interval_type": "days",
+            "meta_interval_val": 1,
+            "meta_caption_template": "",
+            "meta_presets": {}
         }
 
     # Dynamically ensure all 30 rounds of image prompts and 10 rounds of video prompts are initialized in config
@@ -4063,13 +4104,214 @@ def verify_audio(path: str):
     except Exception as e:
         log(f"Audio verify probe error: {e}")
         
+# ----------------------------------------------------
+# Meta / Facebook Auto Post Endpoints
+# ----------------------------------------------------
+global_meta_progress: dict[str, Any] = {
+    "status": "idle",
+    "total": 0,
+    "current": 0,
+    "percent": 0,
+    "message": "",
+    "errors": []
+}
+
+class MetaScanRequest(BaseModel):
+    main_folder: str
+    subfolders_str: str = ""
+    start_date: str = ""
+    start_time: str = "18:00"
+    interval_type: str = "days"
+    interval_value: float = 1.0
+    caption_template: str = ""
+
+class MetaRunRequest(BaseModel):
+    posts: list[dict[str, Any]]
+    job_id: str | None = None
+
+@app.post("/api/meta-autopost/scan")
+def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
+    import os
+    import re
+    from datetime import datetime, timedelta
+
+    main_folder = req.main_folder.strip().strip('"').strip("'")
+    main_folder = os.path.expanduser(main_folder)
+
+    if not main_folder or not os.path.exists(main_folder) or not os.path.isdir(main_folder):
+        raise HTTPException(status_code=400, detail="โฟลเดอร์หลักไม่ถูกต้องหรือไม่พบในระบบ")
+
+    # 1. Resolve subfolders list
+    target_subfolders: list[str] = []
+    subfolders_input = req.subfolders_str.strip()
+
+    def parse_ranges(input_str: str) -> list[str]:
+        res = []
+        if not input_str:
+            return res
+        parts = input_str.split(',')
+        for part in parts:
+            trimmed = part.strip()
+            if not trimmed:
+                continue
+            if '-' in trimmed:
+                rng = trimmed.split('-')
+                if len(rng) == 2 and rng[0].strip().isdigit() and rng[1].strip().isdigit():
+                    s_val = int(rng[0].strip())
+                    e_val = int(rng[1].strip())
+                    if s_val <= e_val:
+                        for k in range(s_val, e_val + 1):
+                            res.append(str(k))
+                        continue
+            res.append(trimmed)
+        return res
+
+    parsed_keys = parse_ranges(subfolders_input)
+
+    all_entries = sorted(os.listdir(main_folder), key=natural_sort_key)
+    all_dir_entries = [e for e in all_entries if os.path.isdir(os.path.join(main_folder, e))]
+
+    if parsed_keys:
+        for k in parsed_keys:
+            resolved = resolve_subfolder_by_prefix(main_folder, k)
+            if os.path.isdir(resolved):
+                target_subfolders.append(resolved)
+    else:
+        # Scan all subdirectories
+        for d in all_dir_entries:
+            target_subfolders.append(os.path.join(main_folder, d))
+
+    if not target_subfolders:
+        return {"ok": True, "items": [], "count": 0, "message": "ไม่พบโฟลเดอร์ย่อยตามเงื่อนไข"}
+
+    # 2. Setup base datetime
+    base_dt = None
+    if req.start_date and req.start_date.strip():
+        date_str = req.start_date.strip()
+        time_str = req.start_time.strip() if req.start_time else "18:00"
+        try:
+            base_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+        except Exception:
+            try:
+                base_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                base_dt = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
+    else:
+        base_dt = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
+
+    items: list[dict[str, Any]] = []
+    video_exts = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"]
+    caption_priors = ["caption.txt", "caption.md", "content.txt", "prompt.txt", "post.txt", "desc.txt"]
+
+    for idx, folder_path in enumerate(target_subfolders):
+        folder_name = os.path.basename(folder_path)
+        
+        # Calculate scheduled datetime
+        if req.interval_type == "hours":
+            item_dt = base_dt + timedelta(hours=idx * req.interval_value)
+        elif req.interval_type == "minutes":
+            item_dt = base_dt + timedelta(minutes=idx * req.interval_value)
+        else: # "days"
+            item_dt = base_dt + timedelta(days=idx * req.interval_value)
+
+        scheduled_iso = item_dt.strftime("%Y-%m-%dT%H:%M")
+
+        # Find video file
+        sub_files = []
+        try:
+            sub_files = os.listdir(folder_path)
+        except Exception:
+            sub_files = []
+
+        video_files = [f for f in sub_files if any(f.lower().endswith(ext) for ext in video_exts) and os.path.isfile(os.path.join(folder_path, f))]
+        video_files.sort(key=natural_sort_key)
+        
+        # Prioritize *_combined.mp4 or combined.mp4
+        combined_videos = [v for v in video_files if "_combined" in v.lower()]
+        selected_video = combined_videos[0] if combined_videos else (video_files[0] if video_files else None)
+        video_path = os.path.join(folder_path, selected_video) if selected_video else ""
+
+        # Find caption file
+        caption_text = ""
+        caption_filename = ""
+        found_caption_file = None
+        for pname in caption_priors:
+            p_path = os.path.join(folder_path, pname)
+            if os.path.isfile(p_path):
+                found_caption_file = p_path
+                caption_filename = pname
+                break
+
+        if not found_caption_file:
+            for f in sorted(sub_files, key=natural_sort_key):
+                if any(f.lower().endswith(ext) for ext in [".txt", ".md"]) and os.path.isfile(os.path.join(folder_path, f)):
+                    found_caption_file = os.path.join(folder_path, f)
+                    caption_filename = f
+                    break
+
+        if found_caption_file:
+            try:
+                with open(found_caption_file, "r", encoding="utf-8") as cf:
+                    caption_text = cf.read().strip()
+            except UnicodeDecodeError:
+                try:
+                    with open(found_caption_file, "r", encoding="utf-8-sig") as cf:
+                        caption_text = cf.read().strip()
+                except Exception:
+                    with open(found_caption_file, "r", encoding="latin-1", errors="ignore") as cf:
+                        caption_text = cf.read().strip()
+
+        if not caption_text and req.caption_template:
+            caption_text = req.caption_template.replace("{subfolder}", folder_name).replace("{date}", item_dt.strftime("%Y-%m-%d")).replace("{time}", item_dt.strftime("%H:%M"))
+
+        items.append({
+            "id": idx + 1,
+            "subfolder_name": folder_name,
+            "subfolder_path": folder_path,
+            "video_path": video_path,
+            "video_name": selected_video or "",
+            "has_video": bool(selected_video and os.path.isfile(video_path)),
+            "caption": caption_text,
+            "caption_file": caption_filename,
+            "has_caption": bool(caption_text),
+            "scheduled_datetime": scheduled_iso,
+            "status": "ready" if (selected_video and caption_text) else "warning"
+        })
+
     return {
-        "ok": True, 
-        "valid": True,
-        "codec": codec_name,
-        "duration": duration,
-        "max_volume": "N/A (Skipped)"
+        "ok": True,
+        "items": items,
+        "count": len(items)
     }
+
+@app.post("/api/meta-autopost/run")
+def run_meta_autopost(req: MetaRunRequest) -> dict[str, Any]:
+    global global_meta_progress
+    posts = req.posts
+    if not posts:
+        raise HTTPException(status_code=400, detail="ไม่มีรายการโพสต์ให้ดำเนินการ")
+
+    global_meta_progress = {
+        "status": "running",
+        "total": len(posts),
+        "current": 0,
+        "percent": 0,
+        "message": f"เตรียมรันโพสต์ {len(posts)} รายการ...",
+        "errors": []
+    }
+    
+    log(f"[Meta Auto Post] Received batch run request for {len(posts)} items")
+    return {
+        "ok": True,
+        "message": f"เริ่มกระบวนการ Auto Post {len(posts)} รายการ",
+        "total": len(posts)
+    }
+
+@app.get("/api/meta-autopost/progress")
+def get_meta_autopost_progress() -> dict[str, Any]:
+    global global_meta_progress
+    return global_meta_progress
+
 @app.get("/api/utils/view-image")
 def view_image(path: str) -> FileResponse:
     import os
