@@ -6632,14 +6632,40 @@ async function scanMetaBatch() {
   }
 }
 
+function applyMetaRangeSelection() {
+  const rangeInput = document.getElementById('cfg_meta_select_range');
+  if (!rangeInput) return;
+  const val = rangeInput.value.trim();
+  if (!val) return;
+
+  const selectedIndices = parseRangeString(val);
+  console.log("applyMetaRangeSelection parsed indices:", Array.from(selectedIndices));
+
+  metaPostQueue.forEach((p, idx) => {
+    const orderIdx = idx + 1;
+    p.checked = selectedIndices.has(orderIdx);
+  });
+
+  renderMetaPostQueue();
+}
+
+function updateMetaSelectAllButtonText() {
+  const toggleBtn = document.getElementById('toggleAllMetaPostsBtn');
+  if (!toggleBtn) return;
+  const allChecked = metaPostQueue.length > 0 && metaPostQueue.every(p => p.checked !== false);
+  toggleBtn.textContent = allChecked ? 'Deselect All' : 'Select All';
+}
+
 function renderMetaPostQueue() {
   const container = document.getElementById('metaPostQueueList');
   const badge = document.getElementById('metaBatchCountBadge');
   if (!container) return;
 
+  const selectedCount = metaPostQueue.filter(p => p.checked !== false).length;
   if (badge) {
-    badge.textContent = `${metaPostQueue.length} Posts Ready`;
+    badge.textContent = `${selectedCount} / ${metaPostQueue.length} Posts Selected`;
   }
+  updateMetaSelectAllButtonText();
 
   if (metaPostQueue.length === 0) {
     container.innerHTML = `
@@ -6652,21 +6678,23 @@ function renderMetaPostQueue() {
 
   container.innerHTML = '';
   metaPostQueue.forEach((item, index) => {
+    const isChecked = item.checked !== false;
     const card = document.createElement('div');
     card.className = 'meta-post-card';
     card.style.cssText = `
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: ${isChecked ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.01)'};
+      border: 1px solid ${isChecked ? 'rgba(24, 119, 242, 0.3)' : 'rgba(255, 255, 255, 0.06)'};
       border-radius: 12px;
       padding: 14px 16px;
       display: flex;
       flex-direction: column;
       gap: 10px;
       transition: all 0.2s ease;
+      opacity: ${isChecked ? '1' : '0.45'};
     `;
 
     const hasVideoBadge = item.has_video
-      ? `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">🎬 พบไฟล์วิดีโอ</span>`
+      ? `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">🎬 ${item.video_name || 'พบ combined'}</span>`
       : `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">❌ ไม่พบวิดีโอ</span>`;
 
     const hasCaptionBadge = item.has_caption
@@ -6675,7 +6703,8 @@ function renderMetaPostQueue() {
 
     card.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <input type="checkbox" class="meta-item-checkbox" data-index="${index}" ${isChecked ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer; accent-color: #1877f2; margin: 0;" />
           <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">#${index + 1} โฟลเดอร์: ${item.subfolder_name || 'Manual Post'}</span>
           ${hasVideoBadge}
           ${hasCaptionBadge}
@@ -6714,6 +6743,24 @@ function renderMetaPostQueue() {
   });
 
   // Attach interactive listeners
+  container.querySelectorAll('.meta-item-checkbox').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (metaPostQueue[idx]) {
+        metaPostQueue[idx].checked = e.target.checked;
+        const card = e.target.closest('.meta-post-card');
+        if (card) {
+          card.style.opacity = e.target.checked ? '1' : '0.45';
+          card.style.background = e.target.checked ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.01)';
+          card.style.borderColor = e.target.checked ? 'rgba(24, 119, 242, 0.3)' : 'rgba(255, 255, 255, 0.06)';
+        }
+        const selectedCount = metaPostQueue.filter(p => p.checked !== false).length;
+        if (badge) badge.textContent = `${selectedCount} / ${metaPostQueue.length} Posts Selected`;
+        updateMetaSelectAllButtonText();
+      }
+    });
+  });
+
   container.querySelectorAll('.meta-video-input').forEach(input => {
     input.addEventListener('input', (e) => {
       const idx = parseInt(e.target.dataset.index, 10);
@@ -6754,6 +6801,7 @@ function renderMetaPostQueue() {
         if (res.ok && res.path) {
           if (metaPostQueue[idx]) {
             metaPostQueue[idx].video_path = res.path;
+            metaPostQueue[idx].video_name = res.path.split('/').pop().split('\\\\').pop();
             metaPostQueue[idx].has_video = true;
             renderMetaPostQueue();
           }
@@ -6780,6 +6828,7 @@ function addManualMetaPost() {
 
   metaPostQueue.push({
     id: metaPostQueue.length + 1,
+    checked: true,
     subfolder_name: `Manual Post ${metaPostQueue.length + 1}`,
     subfolder_path: '',
     video_path: '',
@@ -6804,13 +6853,14 @@ function clearMetaBatch() {
 }
 
 async function runMetaAutoPost(btnElement) {
-  if (metaPostQueue.length === 0) {
-    alert('ไม่มีรายการโพสต์ในคิว กรุณาสแกนหรือเพิ่มรายการก่อน');
+  const selectedPosts = metaPostQueue.filter(p => p.checked !== false);
+  if (selectedPosts.length === 0) {
+    alert('ไม่มีรายการโพสต์ที่ถูกเลือก กรุณาติ๊กเลือกอย่างน้อย 1 รายการ');
     return;
   }
 
   // Check valid video paths
-  const missingVideos = metaPostQueue.filter(x => !x.video_path);
+  const missingVideos = selectedPosts.filter(x => !x.video_path);
   if (missingVideos.length > 0) {
     if (!confirm(`มี ${missingVideos.length} รายการที่ยังไม่มีไฟล์วิดีโอ ต้องการดำเนินการต่อหรือไม่?`)) {
       return;
@@ -6830,16 +6880,16 @@ async function runMetaAutoPost(btnElement) {
 
   if (progressContainer) progressContainer.classList.remove('hidden');
   if (progressBar) progressBar.style.width = '0%';
-  if (progressText) progressText.textContent = `0% (0/${metaPostQueue.length})`;
+  if (progressText) progressText.textContent = `0% (0/${selectedPosts.length})`;
 
-  writeConsoleLine(`🚀 เริ่มส่งคำสั่งรัน Meta Auto Post สำหรับ ${metaPostQueue.length} รายการ...`, 'system', 'metaConsole');
+  writeConsoleLine(`🚀 เริ่มส่งคำสั่งรัน Meta Auto Post สำหรับ ${selectedPosts.length} รายการที่เลือก...`, 'system', 'metaConsole');
 
   try {
     const res = await jsonFetch('/api/meta-autopost/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        posts: metaPostQueue
+        posts: selectedPosts
       })
     });
 
@@ -6866,7 +6916,7 @@ function initMetaAutoPostListeners() {
   if (browseMainBtn) {
     browseMainBtn.addEventListener('click', async () => {
       try {
-        const res = await jsonFetch('/api/utils/browse-dir');
+        const res = await jsonFetch('/api/utils/browse-directory');
         if (res.ok && res.path) {
           const input = document.getElementById('cfg_meta_main_folder');
           if (input) input.value = res.path;
@@ -6913,6 +6963,31 @@ function initMetaAutoPostListeners() {
 
   const addManualBtn = document.getElementById('btnAddManualMetaPost');
   if (addManualBtn) addManualBtn.addEventListener('click', addManualMetaPost);
+
+  const toggleAllBtn = document.getElementById('toggleAllMetaPostsBtn');
+  if (toggleAllBtn) {
+    toggleAllBtn.addEventListener('click', () => {
+      const allChecked = metaPostQueue.length > 0 && metaPostQueue.every(p => p.checked !== false);
+      metaPostQueue.forEach(p => p.checked = !allChecked);
+      renderMetaPostQueue();
+    });
+  }
+
+  const rangeInput = document.getElementById('cfg_meta_select_range');
+  if (rangeInput) {
+    rangeInput.addEventListener('change', applyMetaRangeSelection);
+    rangeInput.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/[^0-9\\-\\,\\s]/g, '');
+    });
+    rangeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        applyMetaRangeSelection();
+      }
+    });
+  }
+
+  const applyRangeBtn = document.getElementById('btnApplyMetaRange');
+  if (applyRangeBtn) applyRangeBtn.addEventListener('click', applyMetaRangeSelection);
 
   const runBtn = document.getElementById('runMetaAutoPostBtn');
   if (runBtn) runBtn.addEventListener('click', (e) => runMetaAutoPost(e.currentTarget));

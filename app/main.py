@@ -4020,12 +4020,16 @@ def browse_file(filter_type: str = "image") -> dict[str, Any]:
     import os
     
     is_audio = filter_type == "audio"
+    is_video = filter_type == "video"
     
     if sys.platform == "darwin":
         try:
             if is_audio:
                 exts = '{"mp3", "wav", "m4a", "aac", "flac", "ogg"}'
                 prompt_msg = "Select Audio File"
+            elif is_video:
+                exts = '{"mp4", "mov", "mkv", "webm", "m4v", "avi"}'
+                prompt_msg = "Select Video File"
             else:
                 exts = '{"png", "jpg", "jpeg", "webp", "bmp"}'
                 prompt_msg = "Select Reference Image"
@@ -4050,6 +4054,9 @@ def browse_file(filter_type: str = "image") -> dict[str, Any]:
         if is_audio:
             filetypes = [("Audio files", "*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg"), ("All files", "*.*")]
             prompt_msg = "Select Audio File"
+        elif is_video:
+            filetypes = [("Video files", "*.mp4;*.mov;*.mkv;*.webm;*.m4v;*.avi"), ("All files", "*.*")]
+            prompt_msg = "Select Video File"
         else:
             filetypes = [("Image files", "*.png;*.jpg;*.jpeg;*.webp;*.bmp"), ("All files", "*.*")]
             prompt_msg = "Select Reference Image"
@@ -4226,25 +4233,49 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
         video_files = [f for f in sub_files if any(f.lower().endswith(ext) for ext in video_exts) and os.path.isfile(os.path.join(folder_path, f))]
         video_files.sort(key=natural_sort_key)
         
-        # Prioritize *_combined.mp4 or combined.mp4
-        combined_videos = [v for v in video_files if "_combined" in v.lower()]
-        selected_video = combined_videos[0] if combined_videos else (video_files[0] if video_files else None)
+        # Prioritize files starting with 'combined' (e.g. combined.mp4, combined_ep1.mp4, combined-1.mp4)
+        starts_combined = [v for v in video_files if v.lower().startswith("combined")]
+        contains_combined = [v for v in video_files if "combined" in v.lower()]
+        
+        if starts_combined:
+            selected_video = starts_combined[0]
+        elif contains_combined:
+            selected_video = contains_combined[0]
+        elif video_files:
+            selected_video = video_files[0]
+        else:
+            selected_video = None
+
         video_path = os.path.join(folder_path, selected_video) if selected_video else ""
 
-        # Find caption file
+        # Find caption file (prioritizing Caption.md / caption.md)
         caption_text = ""
         caption_filename = ""
         found_caption_file = None
-        for pname in caption_priors:
-            p_path = os.path.join(folder_path, pname)
-            if os.path.isfile(p_path):
-                found_caption_file = p_path
-                caption_filename = pname
+
+        # 1. Exact/case-insensitive match for Caption.md
+        for f in sub_files:
+            if f.lower() == "caption.md" and os.path.isfile(os.path.join(folder_path, f)):
+                found_caption_file = os.path.join(folder_path, f)
+                caption_filename = f
                 break
 
+        # 2. Check other priority names
+        if not found_caption_file:
+            caption_priors = ["caption.txt", "content.md", "content.txt", "prompt.txt", "post.txt", "desc.txt"]
+            for pname in caption_priors:
+                for f in sub_files:
+                    if f.lower() == pname.lower() and os.path.isfile(os.path.join(folder_path, f)):
+                        found_caption_file = os.path.join(folder_path, f)
+                        caption_filename = f
+                        break
+                if found_caption_file:
+                    break
+
+        # 3. Check any .md or .txt file
         if not found_caption_file:
             for f in sorted(sub_files, key=natural_sort_key):
-                if any(f.lower().endswith(ext) for ext in [".txt", ".md"]) and os.path.isfile(os.path.join(folder_path, f)):
+                if any(f.lower().endswith(ext) for ext in [".md", ".txt"]) and os.path.isfile(os.path.join(folder_path, f)):
                     found_caption_file = os.path.join(folder_path, f)
                     caption_filename = f
                     break
@@ -4266,6 +4297,7 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
 
         items.append({
             "id": idx + 1,
+            "checked": True,
             "subfolder_name": folder_name,
             "subfolder_path": folder_path,
             "video_path": video_path,

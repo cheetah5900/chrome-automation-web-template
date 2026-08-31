@@ -1389,13 +1389,22 @@
 
             <!-- Scanned & Paired Posts Preview List -->
             <section class="card">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
-                <h3 style="margin: 0; font-size: 1.15rem; color: #8da6ff;">📋 รายการโพสต์ที่จับคู่แล้ว (Paired Posts Queue)</h3>
-                <div style="display: flex; gap: 8px;">
-                  <button id="btnAddManualMetaPost" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 8px;">+ เพิ่มรายการแบบ Manual</button>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #8da6ff;">📸 รายการโพสต์ที่สแกนพบ (Scanned Posts)</h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button id="toggleAllMetaPostsBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 20px; margin: 0; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #fff;">Deselect All</button>
+                  <button id="btnAddManualMetaPost" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 8px; margin: 0;">+ เพิ่มรายการแบบ Manual</button>
                 </div>
               </div>
-              <p class="section-subtitle" style="margin-bottom: 16px;">ตรวจสอบหรือแก้ไข Caption และวัน-เวลาที่กำหนดโพสต์ของแต่ละคลิปได้โดยตรง</p>
+
+              <!-- Range Selection Input (like Video Gen) -->
+              <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px; background: rgba(255,255,255,0.02); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);">
+                <label for="cfg_meta_select_range" style="font-size: 0.85rem; color: rgba(255,255,255,0.7); font-weight: 500; display: flex; align-items: center; gap: 6px; white-space: nowrap;">
+                  🎯 เลือกตามลำดับ (เช่น 1-3,5,8-10):
+                </label>
+                <input id="cfg_meta_select_range" placeholder="ระบุช่วงลำดับ เช่น 1-3,5,8-10" style="flex: 1; padding: 8px 12px; font-size: 0.85rem; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; margin: 0;" />
+                <button id="btnApplyMetaRange" class="secondary" style="padding: 8px 14px; font-size: 0.8rem; margin: 0; border-radius: 8px; background: rgba(24, 119, 242, 0.15); border-color: rgba(24, 119, 242, 0.3); color: #8da6ff; white-space: nowrap;">Apply</button>
+              </div>
 
               <!-- Queue Container -->
               <div id="metaPostQueueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 650px; overflow-y: auto; padding-right: 4px;">
