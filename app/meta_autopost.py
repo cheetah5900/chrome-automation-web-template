@@ -252,39 +252,47 @@ def post_single_reel(
         ''', caption)
         time.sleep(0.5)
 
-    # 7. Continuously poll until top 'Share' tab is enabled (aria-disabled != 'true') with 30s timeout
-    log("[Meta Auto Post Script] Checking top 'Share' tab until enabled (timeout 30s)...")
-    share_tab_ready = fast_poll(driver, '''
-        const allEls = Array.from(document.querySelectorAll('div, span, button'));
-        const shareTab = allEls.find(el => el.innerText && el.innerText.trim() === 'Share' && el.getBoundingClientRect().y < 120);
-        if (shareTab) {
-            const isDisabled = shareTab.getAttribute('aria-disabled') === 'true' || shareTab.classList.contains('disabled');
-            if (!isDisabled) {
-                return shareTab;
-            }
-        }
-        return false;
-    ''', timeout=30.0, poll_interval=0.2)
+    # 7. Advance to Step 3 (Share) - Primary top 'Share' tab click with bottom 'Next' fallback
+    log("[Meta Auto Post Script] Navigating to Step 3 (Share) with 30s validation poll...")
+    start_share_poll = time.time()
+    on_step3 = False
+    while time.time() - start_share_poll < 30.0:
+        # Check if already on Step 3
+        is_step3 = driver.execute_script('''
+            return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
+        ''')
+        if is_step3:
+            on_step3 = True
+            break
 
-    # 8. Click top 'Share' tab to jump straight to Step 3
-    if share_tab_ready:
-        log("[Meta Auto Post Script] Top 'Share' tab is enabled! Clicking to jump to Step 3...")
-        try:
-            ActionChains(driver).move_to_element(share_tab_ready).pause(0.1).click().perform()
-        except Exception:
-            driver.execute_script("arguments[0].click();", share_tab_ready)
-    else:
-        log("[Meta Auto Post Script] Warning: Share tab poll timeout, attempting direct click...")
-        driver.execute_script('''
+        # Try clicking the top 'Share' tab (outermost clickable parent)
+        clicked_share = driver.execute_script('''
             const allEls = Array.from(document.querySelectorAll('div, span, button'));
-            const shareTab = allEls.find(el => el.innerText && el.innerText.trim() === 'Share' && el.getBoundingClientRect().y < 120);
-            if (shareTab) shareTab.click();
+            const textEl = allEls.find(el => el.innerText && el.innerText.trim() === 'Share' && el.getBoundingClientRect().y < 120);
+            if (textEl) {
+                const clickable = textEl.closest('[role="tab"], [role="button"], [tabindex]') || textEl;
+                const isDisabled = clickable.getAttribute('aria-disabled') === 'true' || clickable.classList.contains('disabled') || window.getComputedStyle(clickable).pointerEvents === 'none';
+                if (!isDisabled) {
+                    clickable.click();
+                    return true;
+                }
+            }
+            return false;
         ''')
 
-    # Wait for Step 3 active (Scheduling options or Share now)
-    fast_poll(driver, '''
-        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
-    ''', timeout=15.0, poll_interval=0.15)
+        # If direct top Share click did not trigger yet, also try clicking the bottom 'Next' button if enabled
+        if not clicked_share:
+            driver.execute_script('''
+                const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+                const nextBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700 && b.getAttribute('aria-disabled') !== 'true');
+                if (nextBtn) nextBtn.click();
+            ''')
+
+        time.sleep(0.3)
+
+    if not on_step3:
+        raise RuntimeError("ไม่สามารถเข้าสู่ Step 3 (Share) ได้ภายใน 30 วินาที")
+
     time.sleep(0.5)
 
     # 9. Select 'Schedule' Option Tab
