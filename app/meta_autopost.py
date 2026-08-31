@@ -210,12 +210,24 @@ def _post_single_reel_core(
 
     time.sleep(0.5)
 
-    # 4. macOS File Dialog
+    # 4. macOS File Dialog with Fresh UUID Copy (Bypasses Meta duplicate/cache)
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"ไม่พบไฟล์วิดีโอ: {video_path}")
 
-    log(f"[Meta Auto Post Script] Uploading video via dialog: {video_path}")
-    upload_macos_file_dialog_fast(video_path, port=9222)
+    import uuid
+    import shutil
+    ext = os.path.splitext(video_path)[1] or ".mp4"
+    unique_name = f"reel_{uuid.uuid4().hex}{ext}"
+    temp_uuid_file = os.path.join("/tmp", unique_name)
+    try:
+        shutil.copy2(video_path, temp_uuid_file)
+        log(f"[Meta Auto Post Script] Created fresh UUID video copy: {temp_uuid_file}")
+
+        log(f"[Meta Auto Post Script] Uploading video via dialog: {temp_uuid_file}")
+        upload_macos_file_dialog_fast(temp_uuid_file, port=9222)
+    except Exception as ex_copy:
+        log(f"[Meta Auto Post Script] UUID copy note: {ex_copy}, falling back to original path")
+        upload_macos_file_dialog_fast(video_path, port=9222)
 
     # 5. Insert Caption into Lexical / DraftJS textbox using DataTransfer ClipboardEvent + Event dispatch
     if caption:
