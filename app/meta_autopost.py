@@ -19,25 +19,17 @@ def log(msg: str) -> None:
     except Exception:
         pass
 
-def _get_active_browser_app_name() -> str:
-    from app.browser import DEFAULTS_FILE, PROFILES_FILE
-    import json
+def get_port_pid(port: int = 9222) -> Optional[str]:
+    """Retrieves the exact process PID listening on the specified debugging port."""
     try:
-        if DEFAULTS_FILE.exists() and PROFILES_FILE.exists():
-            defaults = json.loads(DEFAULTS_FILE.read_text())
-            selected_name = defaults.get("selected_profile", "")
-            if selected_name:
-                profiles_data = json.loads(PROFILES_FILE.read_text())
-                profiles = profiles_data.get("profiles", [])
-                profile = next((p for p in profiles if p.get("name") == selected_name), None)
-                if profile and profile.get("browser_type", "").lower() == "brave":
-                    return "Brave Browser"
+        res = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, check=False)
+        pids = [p.strip() for p in res.stdout.strip().split() if p.strip()]
+        return pids[0] if pids else None
     except Exception:
-        pass
-    return "Google Chrome"
+        return None
 
-def activate_browser_window(driver=None, port: int = 9222) -> None:
-    """Bring the exact 9222 debug browser window to frontmost without activating default Chrome."""
+def focus_meta_window_at_start(driver=None, port: int = 9222) -> None:
+    """Brings ONLY the specific 9222 debug browser window to front by PID and CDP."""
     if driver:
         try:
             driver.execute_cdp_cmd('Page.bringToFront', {})
@@ -47,39 +39,44 @@ def activate_browser_window(driver=None, port: int = 9222) -> None:
     if sys.platform != "darwin":
         return
 
-    try:
-        pid_res = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, check=False)
-        pids = [p.strip() for p in pid_res.stdout.strip().split() if p.strip()]
-        if pids:
-            target_pid = pids[0]
-            script = f'''
-            tell application "System Events"
-                try
-                    set p to first process whose unix id is {target_pid}
-                    set frontmost of p to true
-                end try
-            end tell
-            '''
+    pid = get_port_pid(port)
+    if pid:
+        script = f'''
+        tell application "System Events"
+            try
+                set targetProc to (first process whose unix id is {pid})
+                set frontmost of targetProc to true
+                tell targetProc
+                    perform action "AXRaise" of window 1
+                    set index of window 1 to 1
+                end tell
+            end try
+        end tell
+        '''
+        try:
             subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
+        except Exception:
+            pass
 
-def upload_macos_file_dialog_fast(file_path: str) -> bool:
-    """Strictly follows AGENTS.md macOS File Dialog rules without app switching interference."""
+def upload_macos_file_dialog_fast(file_path: str, port: int = 9222) -> bool:
+    """Strictly targets the 9222 file dialog sheet without application switching interference."""
     if sys.platform != "darwin":
         return False
     escaped_path = file_path.replace('"', '\\"')
+    pid = get_port_pid(port)
+    pid_clause = f"set targetProc to (first process whose unix id is {pid})\nset frontmost of targetProc to true" if pid else ""
+
     script = f"""
     set the clipboard to "{escaped_path}"
     tell application "System Events"
-        -- Wait 1.0s for macOS file sheet to render completely
+        {pid_clause}
         delay 1.0
         
-        -- Press Cmd + Shift + G (key code 5 is 'g' on US layout)
+        -- Press Cmd + Shift + G
         key code 5 using {{command down, shift down}}
         delay 1.0
         
-        -- Press Cmd + V to paste filepath into sheet
+        -- Press Cmd + V
         keystroke "v" using {{command down}}
         delay 1.0
         
@@ -111,33 +108,6 @@ def fast_poll(driver, js_expr: str, timeout: float = 20.0, poll_interval: float 
         time.sleep(poll_interval)
     return None
 
-def focus_meta_window_at_start(driver=None) -> None:
-    """Brings Chrome 9222 window to the front at the start of the automation."""
-    if driver:
-        try:
-            driver.execute_cdp_cmd('Page.bringToFront', {})
-        except Exception:
-            pass
-    if sys.platform == "darwin":
-        script = '''
-        tell application "Google Chrome"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    if URL of t contains "facebook.com" or URL of t contains "reels_composer" then
-                        set index of w to 1
-                        activate
-                        return true
-                    end if
-                end repeat
-            end repeat
-            activate
-        end tell
-        '''
-        try:
-            subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception:
-            pass
-
 def post_single_reel(
     driver,
     item: dict[str, Any],
@@ -148,12 +118,12 @@ def post_single_reel(
 ) -> bool:
     """
     Executes a high-speed, bulletproof single reel post sequence:
-    1. Focus Chrome 9222 window at start
+    1. Focus Chrome 9222 window at start by PID
     2. Ensure on composer page
     3. Click 'Add video' (ActionChains)
     4. Fast macOS dialog path submission
     5. Fast poll for video upload completion (100%)
-    6. Insert caption
+    6. Insert caption into Lexical editor with event dispatch
     7. Step 1 (Create) -> Step 2 (Edit) -> Step 3 (Share)
     8. Schedule radio option selection
     9. Date & Time input configuration (with TAB commit)
@@ -175,8 +145,8 @@ def post_single_reel(
             "message": msg
         })
 
-    # 1. Focus Chrome 9222 window right at the start
-    focus_meta_window_at_start(driver)
+    # 1. Focus Chrome 9222 window right at the start by PID
+    focus_meta_window_at_start(driver, port=9222)
     time.sleep(0.3)
 
     # 2. Ensure on composer
@@ -193,6 +163,9 @@ def post_single_reel(
             raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
 
     # 3. Click 'Add video'
+    focus_meta_window_at_start(driver, port=9222)
+    time.sleep(0.2)
+
     all_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')
     target_btn = next((b for b in all_btns if b.text and 'Add video' in b.text), None)
 
@@ -218,7 +191,7 @@ def post_single_reel(
         raise FileNotFoundError(f"ไม่พบไฟล์วิดีโอ: {video_path}")
 
     log(f"[Meta Auto Post Script] Uploading video via dialog: {video_path}")
-    upload_macos_file_dialog_fast(video_path)
+    upload_macos_file_dialog_fast(video_path, port=9222)
 
     # 5. Fast poll for upload completion
     log("[Meta Auto Post Script] Waiting for upload completion...")
@@ -230,21 +203,27 @@ def post_single_reel(
     if not upload_done:
         log("[Meta Auto Post Script] Warning: Upload timeout check, attempting to proceed...")
 
-    time.sleep(0.4)
+    time.sleep(0.5)
 
-    # 6. Insert Caption
+    # 6. Insert Caption into Lexical / DraftJS textbox
     if caption:
         log(f"[Meta Auto Post Script] Inserting caption ({len(caption)} chars)...")
         driver.execute_script('''
             const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
             if (tb) {
                 tb.focus();
-                document.execCommand('selectAll', false, null);
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(tb);
+                selection.removeAllRanges();
+                selection.addRange(range);
                 document.execCommand('delete', false, null);
                 document.execCommand('insertText', false, arguments[0]);
+                tb.dispatchEvent(new Event('input', { bubbles: true }));
+                tb.dispatchEvent(new Event('change', { bubbles: true }));
             }
         ''', caption)
-        time.sleep(0.3)
+        time.sleep(0.4)
 
     # 7. Step 1 (Create) -> Step 2 (Edit)
     log("[Meta Auto Post Script] Advancing Step 1 (Create -> Edit)...")
