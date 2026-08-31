@@ -106,7 +106,7 @@ def upload_macos_file_dialog_fast(file_path: str, port: int = 9222) -> bool:
         log(f"[Meta Auto Post Dialog Error] {e}")
         return False
 
-def fast_poll(driver, js_expr: str, timeout: float = 20.0, poll_interval: float = 0.15) -> Any:
+def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float = 0.15) -> Any:
     """Polls JavaScript expression every 150ms until truthy or timeout."""
     start_t = time.time()
     while time.time() - start_t < timeout:
@@ -134,11 +134,12 @@ def post_single_reel(
     3. Click 'Add video' (ActionChains)
     4. macOS dialog path submission
     5. Fast poll for video upload completion (100%)
-    6. Insert caption into Lexical editor with event dispatch
-    7. Direct jump to Step 3 (Share) via top header tab click
-    8. Schedule radio option selection
-    9. Date & Time input configuration (with TAB commit)
-    10. Final Schedule submit button click (ActionChains) & confirmation
+    6. Insert caption into Lexical editor with DataTransfer + Event dispatch
+    7. Continuous 30s poll until top 'Share' tab is enabled (aria-disabled != 'true')
+    8. Click top 'Share' tab to jump straight to Step 3
+    9. Select Schedule radio option
+    10. Date & Time input configuration (with TAB commit)
+    11. Final Schedule submit button click (ActionChains) & confirmation
     """
     subfolder_name = item.get("subfolder_name", "")
     video_name = item.get("video_name", "")
@@ -204,7 +205,7 @@ def post_single_reel(
     log(f"[Meta Auto Post Script] Uploading video via dialog: {video_path}")
     upload_macos_file_dialog_fast(video_path, port=9222)
 
-    # 5. Fast poll for upload completion
+    # 5. Fast poll for upload completion (100% or Delete button present)
     log("[Meta Auto Post Script] Waiting for upload completion...")
     upload_done = fast_poll(driver, '''
         const text = document.body.innerText || '';
@@ -216,55 +217,81 @@ def post_single_reel(
 
     time.sleep(0.5)
 
-    # 6. Insert Caption into Lexical / DraftJS textbox
+    # 6. Insert Caption into Lexical / DraftJS textbox using DataTransfer ClipboardEvent + Event dispatch
     if caption:
         log(f"[Meta Auto Post Script] Inserting caption ({len(caption)} chars)...")
         driver.execute_script('''
             const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
             if (tb) {
                 tb.focus();
-                const selection = window.getSelection();
-                const range = document.createRange();
-                range.selectNodeContents(tb);
-                selection.removeAllRanges();
-                selection.addRange(range);
-                document.execCommand('delete', false, null);
-                document.execCommand('insertText', false, arguments[0]);
+                
+                // Method 1: DataTransfer clipboard paste simulation
+                try {
+                    const dt = new DataTransfer();
+                    dt.setData('text/plain', arguments[0]);
+                    const pasteEvt = new ClipboardEvent('paste', {
+                        bubbles: true,
+                        cancelable: true,
+                        clipboardData: dt
+                    });
+                    tb.dispatchEvent(pasteEvt);
+                } catch (e) {}
+
+                // Method 2: Range replacement fallback
+                if (!tb.innerText || !tb.innerText.trim()) {
+                    const sel = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(tb);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    document.execCommand('delete', false, null);
+                    document.execCommand('insertText', false, arguments[0]);
+                }
+
+                // Dispatch full React input events and blur
                 tb.dispatchEvent(new Event('input', { bubbles: true }));
                 tb.dispatchEvent(new Event('change', { bubbles: true }));
+                tb.blur();
             }
         ''', caption)
-        time.sleep(0.4)
+        time.sleep(0.5)
 
-    # 7. Direct jump to Step 3 (Share) via top header tab click
-    log("[Meta Auto Post Script] Jumping directly to Step 3 (Share) via top header tab...")
-    for _ in range(5):
-        share_tab = driver.execute_script('''
+    # 7. Continuously poll until top 'Share' tab is enabled (aria-disabled != 'true') with 30s timeout
+    log("[Meta Auto Post Script] Checking top 'Share' tab until enabled (timeout 30s)...")
+    share_tab_ready = fast_poll(driver, '''
+        const allEls = Array.from(document.querySelectorAll('div, span, button'));
+        const shareTab = allEls.find(el => el.innerText && el.innerText.trim() === 'Share' && el.getBoundingClientRect().y < 120);
+        if (shareTab) {
+            const isDisabled = shareTab.getAttribute('aria-disabled') === 'true' || shareTab.classList.contains('disabled');
+            if (!isDisabled) {
+                return shareTab;
+            }
+        }
+        return false;
+    ''', timeout=30.0, poll_interval=0.2)
+
+    # 8. Click top 'Share' tab to jump straight to Step 3
+    if share_tab_ready:
+        log("[Meta Auto Post Script] Top 'Share' tab is enabled! Clicking to jump to Step 3...")
+        try:
+            ActionChains(driver).move_to_element(share_tab_ready).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", share_tab_ready)
+    else:
+        log("[Meta Auto Post Script] Warning: Share tab poll timeout, attempting direct click...")
+        driver.execute_script('''
             const allEls = Array.from(document.querySelectorAll('div, span, button'));
-            return allEls.find(el => el.innerText && el.innerText.trim() === 'Share' && el.getBoundingClientRect().y < 120);
+            const shareTab = allEls.find(el => el.innerText && el.innerText.trim() === 'Share' && el.getBoundingClientRect().y < 120);
+            if (shareTab) shareTab.click();
         ''')
-        if share_tab:
-            try:
-                ActionChains(driver).move_to_element(share_tab).pause(0.1).click().perform()
-            except Exception:
-                driver.execute_script("arguments[0].click();", share_tab)
-            time.sleep(0.5)
 
-        # Check if on Step 3
-        on_step3 = driver.execute_script('''
-            return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
-        ''')
-        if on_step3:
-            break
-        time.sleep(0.2)
-
-    # Fallback to Step 3 fast poll if needed
+    # Wait for Step 3 active (Scheduling options or Share now)
     fast_poll(driver, '''
         return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
-    ''', timeout=10.0, poll_interval=0.15)
+    ''', timeout=15.0, poll_interval=0.15)
     time.sleep(0.5)
 
-    # 8. Select 'Schedule' Option Tab
+    # 9. Select 'Schedule' Option Tab
     log("[Meta Auto Post Script] Selecting 'Schedule' radio tab...")
     sched_tab = driver.execute_script('''
         const allEls = Array.from(document.querySelectorAll('div, span, button, [role="radio"]'));
@@ -278,7 +305,7 @@ def post_single_reel(
             driver.execute_script("arguments[0].click();", sched_tab)
     time.sleep(0.6)
 
-    # 9. Set Date & Time
+    # 10. Set Date & Time
     if scheduled_dt_str:
         try:
             dt = datetime.fromisoformat(scheduled_dt_str)
@@ -325,7 +352,7 @@ def post_single_reel(
     ''')
     time.sleep(0.4)
 
-    # 10. Click final 'Schedule' submit button
+    # 11. Click final 'Schedule' submit button with ActionChains
     log("[Meta Auto Post Script] Clicking final Schedule submit button...")
     sched_submit_el = driver.execute_script('''
         const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
@@ -344,7 +371,7 @@ def post_single_reel(
             if (schedBtn) schedBtn.click();
         ''')
 
-    # 11. Fast poll for modal closure / submission confirmation
+    # 12. Fast poll for modal closure / submission confirmation
     log("[Meta Auto Post Script] Waiting for submission confirmation...")
     submitted = fast_poll(driver, '''
         const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
