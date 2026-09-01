@@ -373,63 +373,71 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
 
             log(f"[Meta Step 5] กำหนดวันโพสต์: {target_date_label}, เวลา: {hour_str}:{min_str}")
 
-            # 1. Click Date input to open Calendar Popover
-            date_input = driver.find_element(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
-            try:
-                ActionChains(driver).move_to_element(date_input).pause(0.1).click().perform()
-            except Exception:
-                driver.execute_script("arguments[0].click();", date_input)
+            # 1. Set Date for ALL platforms (Facebook, Instagram, etc.)
+            date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+            for d_idx, date_input in enumerate(date_inputs):
+                try:
+                    ActionChains(driver).move_to_element(date_input).pause(0.1).click().perform()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", date_input)
 
-            # Loop check: poll until target day in Calendar popover is found
-            day_clicked = fast_poll(driver, '''
-                const targetText = arguments[0];
-                const allEls = Array.from(document.querySelectorAll('div[role="gridcell"], [role="button"], span, div'));
-                const dayEl = allEls.find(el => el.getAttribute('aria-label') && el.getAttribute('aria-label').includes(targetText));
-                if (dayEl) {
-                    dayEl.click();
-                    return true;
-                }
-                return false;
-            ''', timeout=8.0, poll_interval=0.2, js_args=target_date_label)
+                # Loop check: poll until target day in Calendar popover is found
+                day_clicked = fast_poll(driver, '''
+                    const targetText = arguments[0];
+                    const allEls = Array.from(document.querySelectorAll('div[role="gridcell"], [role="button"], span, div'));
+                    const dayEl = allEls.find(el => el.getAttribute('aria-label') && el.getAttribute('aria-label').includes(targetText));
+                    if (dayEl) {
+                        dayEl.click();
+                        return true;
+                    }
+                    return false;
+                ''', timeout=8.0, poll_interval=0.2, js_args=target_date_label)
 
-            if not day_clicked:
-                # Try clicking day cell matching number as fallback
-                driver.execute_script('''
-                    const dayNum = String(arguments[0]);
-                    const allEls = Array.from(document.querySelectorAll('div[role="gridcell"], [role="button"]'));
-                    const dayEl = allEls.find(el => el.innerText && el.innerText.trim() === dayNum);
-                    if (dayEl) dayEl.click();
-                ''', target_day)
+                if not day_clicked:
+                    driver.execute_script('''
+                        const dayNum = String(arguments[0]);
+                        const allEls = Array.from(document.querySelectorAll('div[role="gridcell"], [role="button"]'));
+                        const dayEl = allEls.find(el => el.innerText && el.innerText.trim() === dayNum);
+                        if (dayEl) dayEl.click();
+                    ''', target_day)
+                time.sleep(0.2)
 
-            # Loop check: verify Date value updated
+            # Loop check: verify all Date values updated
             fast_poll(driver, '''
-                const d = document.querySelector('input[placeholder="dd/mm/yyyy"]');
-                return d && d.value && d.value.includes(String(arguments[0]));
+                const dates = Array.from(document.querySelectorAll('input[placeholder="dd/mm/yyyy"]'));
+                return dates.length > 0 && dates.every(d => d.value && d.value.includes(String(arguments[0])));
             ''', timeout=5.0, poll_interval=0.2, js_args=target_day)
 
-            # 2. Set Hours & Minutes spinbuttons
+            # 2. Set Hours for ALL platforms (Facebook, Instagram, etc.)
             hours_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
-            if hours_inputs:
-                hours_inputs[0].click()
+            for h_input in hours_inputs:
+                try:
+                    h_input.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", h_input)
                 time.sleep(0.05)
-                hours_inputs[0].send_keys(Keys.BACKSPACE, Keys.BACKSPACE, hour_str)
+                h_input.send_keys(Keys.BACKSPACE, Keys.BACKSPACE, hour_str)
 
+            # 3. Set Minutes for ALL platforms (Facebook, Instagram, etc.)
             mins_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
-            if mins_inputs:
-                mins_inputs[0].click()
+            for m_input in mins_inputs:
+                try:
+                    m_input.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", m_input)
                 time.sleep(0.05)
-                mins_inputs[0].send_keys(Keys.BACKSPACE, Keys.BACKSPACE, min_str)
+                m_input.send_keys(Keys.BACKSPACE, Keys.BACKSPACE, min_str)
 
-            # Loop check: verify hours and minutes values
+            # Loop check: verify all hours and minutes values
             fast_poll(driver, '''
-                const h = document.querySelector('input[aria-label="hours"]');
-                const m = document.querySelector('input[aria-label="minutes"]');
-                const hVal = h ? (h.getAttribute('aria-valuenow') || h.value) : '';
-                const mVal = m ? (m.getAttribute('aria-valuenow') || m.value) : '';
-                return hVal === arguments[0] && mVal === arguments[1];
+                const hList = Array.from(document.querySelectorAll('input[aria-label="hours"]'));
+                const mList = Array.from(document.querySelectorAll('input[aria-label="minutes"]'));
+                const hOk = hList.length > 0 && hList.every(h => (h.getAttribute('aria-valuenow') || h.value) === arguments[0]);
+                const mOk = mList.length > 0 && mList.every(m => (m.getAttribute('aria-valuenow') || m.value) === arguments[1]);
+                return hOk && mOk;
             ''', timeout=5.0, poll_interval=0.2, js_args=[hour_str, min_str])
 
-            log("[Meta Step 5] ✅ กำหนดวัน-เวลาและตรวจสอบค่าใน Schedule สำเร็จเรียบร้อยแล้ว")
+            log(f"[Meta Step 5] ✅ กำหนดวัน-เวลาและตรวจสอบค่าใน Schedule ครบทุกแพลตฟอร์ม (Facebook & Instagram: {len(date_inputs)} ช่อง) สำเร็จเรียบร้อยแล้ว")
             return True
 
         except Exception as ex_dt:
