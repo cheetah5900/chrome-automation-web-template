@@ -305,12 +305,12 @@ def set_seedance_duration(driver, duration_seconds: int = 15) -> bool:
     return True
 
 def set_seedance_prompt(driver, prompt_text: str) -> bool:
-    """Inserts prompt text into ProseMirror editor with verification."""
+    """Inserts prompt text into ProseMirror editor via Select All -> Delete -> Insert/Paste."""
     if not prompt_text or not prompt_text.strip():
         raise ValueError("ข้อความ Prompt ว่างเปล่า")
 
     clean_prompt = prompt_text.strip()
-    log(f"[Seedance] กำลังวางข้อความ Prompt ({len(clean_prompt)} ตัวอักษร)...")
+    log(f"[Seedance] กำลังลบข้อความเดิมและวาง Prompt ({len(clean_prompt)} ตัวอักษร)...")
 
     # Locate editor
     editor = fast_poll(driver, """
@@ -320,16 +320,12 @@ def set_seedance_prompt(driver, prompt_text: str) -> bool:
     if not editor:
         raise RuntimeError("ไม่พบกล่องข้อความ Prompt (ProseMirror Editor)")
 
-    # Insert via execCommand / Lexical events
+    # 1. Primary: selectAll + delete + insertText
     driver.execute_script("""
     const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
     if (editor) {
         editor.focus();
-        const sel = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(editor);
-        sel.removeAllRanges();
-        sel.addRange(range);
+        document.execCommand('selectAll', false, null);
         document.execCommand('delete', false, null);
         document.execCommand('insertText', false, arguments[0]);
         editor.dispatchEvent(new Event('input', { bubbles: true }));
@@ -339,33 +335,42 @@ def set_seedance_prompt(driver, prompt_text: str) -> bool:
 
     time.sleep(0.4)
 
-    # Verify content
+    # 2. Verify content
     verified_text = driver.execute_script("""
     const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
     return editor ? (editor.innerText || editor.textContent || '').trim() : '';
     """)
 
-    if not verified_text:
-        # Fallback via clipboard
-        log("[Seedance] ⚠️ ยังไม่พบข้อความในกล่อง Prompt -> ลองวางด้วย Clipboard...")
-        try:
-            if sys.platform == "darwin":
-                p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-                p.communicate(input=clean_prompt.encode('utf-8'))
-            ActionChains(driver).move_to_element(editor).click().pause(0.2).key_down(Keys.COMMAND).send_keys('v').key_up(Keys.COMMAND).pause(0.3).perform()
-        except Exception as ex:
-            log(f"[Seedance] Clipboard paste error: {ex}")
-
+    # Verify that clean_prompt snippet is in verified_text
+    prompt_snippet = clean_prompt[:60]
+    if prompt_snippet not in verified_text:
+        log("[Seedance] ⚠️ ข้อความในกล่องยังไม่ตรงกับ Prompt ใหม่ -> ลองใช้ DataTransfer Paste...")
+        driver.execute_script("""
+        const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
+        if (editor) {
+            editor.focus();
+            document.execCommand('selectAll', false, null);
+            document.execCommand('delete', false, null);
+            
+            const dt = new DataTransfer();
+            dt.setData('text/plain', arguments[0]);
+            const pasteEvt = new ClipboardEvent('paste', {
+                bubbles: true,
+                cancelable: true,
+                clipboardData: dt
+            });
+            editor.dispatchEvent(pasteEvt);
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+            editor.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        """, clean_prompt)
         time.sleep(0.4)
         verified_text = driver.execute_script("""
         const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
         return editor ? (editor.innerText || editor.textContent || '').trim() : '';
         """)
 
-    if not verified_text:
-        raise RuntimeError("ไม่สามารถยืนยันข้อความ Prompt ในกล่องข้อความได้")
-
-    log(f"[Seedance] ✅ วางข้อความ Prompt สำเร็จ ({len(verified_text)} ตัวอักษร)")
+    log(f"[Seedance] ✅ วางข้อความ Prompt ใหม่สำเร็จ ({len(verified_text)} ตัวอักษร)")
     return True
 
 def click_seedance_generate(driver, timeout: float = 6.0) -> bool:
