@@ -6513,6 +6513,7 @@ async function saveMetaPreset() {
     main_folder: document.getElementById('cfg_meta_main_folder')?.value || '',
     subfolders: document.getElementById('cfg_meta_subfolders')?.value || '',
     video_prefix: document.getElementById('cfg_meta_video_prefix')?.value || 'combined',
+    start_date: document.getElementById('cfg_meta_start_date')?.value || '',
     start_hour: parseInt(document.getElementById('cfg_meta_start_hour')?.value, 10) || 18
   };
 
@@ -6571,6 +6572,7 @@ async function applyMetaPreset() {
   if (document.getElementById('cfg_meta_main_folder')) document.getElementById('cfg_meta_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_meta_subfolders')) document.getElementById('cfg_meta_subfolders').value = preset.subfolders || '';
   if (document.getElementById('cfg_meta_video_prefix')) document.getElementById('cfg_meta_video_prefix').value = preset.video_prefix || 'combined';
+  if (document.getElementById('cfg_meta_start_date')) document.getElementById('cfg_meta_start_date').value = preset.start_date || '';
   if (document.getElementById('cfg_meta_start_hour')) {
     const h = preset.start_hour !== undefined ? preset.start_hour : (preset.start_time ? parseInt(preset.start_time.split(':')[0], 10) : 18);
     document.getElementById('cfg_meta_start_hour').value = isNaN(h) ? 18 : h;
