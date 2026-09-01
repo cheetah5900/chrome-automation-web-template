@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import random
 import subprocess
 import argparse
 from datetime import datetime
@@ -644,9 +645,11 @@ def post_single_reel(
 def run_meta_autopost_batch(
     posts: list[dict[str, Any]],
     target_url: str = "",
+    delay_min: float = 5.0,
+    delay_max: float = 15.0,
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> dict[str, Any]:
-    """Runs a batch of scheduled posts through the fast script engine."""
+    """Runs a batch of scheduled posts through the fast script engine with random anti-bot delays."""
     bot = browser_manager.get()
     driver = bot.driver
     total = len(posts)
@@ -659,13 +662,39 @@ def run_meta_autopost_batch(
     success_count = 0
     reset_meta_stop()
 
-    log(f"[Meta Auto Post Script Engine] Starting batch of {total} posts on 9222...")
+    log(f"[Meta Auto Post Script Engine] Starting batch of {total} posts on 9222 (Random delay between posts: {delay_min}s - {delay_max}s)...")
 
     for idx, post in enumerate(posts):
         if is_meta_stopped():
             log("[Meta Auto Post] 🛑 ยกเลิกการโพสต์รายการที่เหลือเนื่องจากคำสั่ง Force Stop")
             errors.append("🛑 การทำงานถูกยกเลิกด้วย Force Stop")
             break
+
+        # Random anti-bot delay before starting next round (from 2nd post onwards)
+        if idx > 0 and (delay_max > 0 or delay_min > 0):
+            actual_min = min(float(delay_min), float(delay_max))
+            actual_max = max(float(delay_min), float(delay_max))
+            rand_delay = round(random.uniform(actual_min, actual_max), 1)
+            log(f"[Meta Auto Post] ⏳ สุ่มหน่วงเวลา {rand_delay} วินาที (สุ่มระหว่าง {actual_min}-{actual_max}s) ก่อนเริ่มโพสต์ที่ {idx + 1}/{total} เพื่อป้องกันบอท...")
+            if progress_callback:
+                progress_callback({
+                    "current": idx,
+                    "total": total,
+                    "percent": int((idx / max(total, 1)) * 100),
+                    "message": f"⏳ สุ่มหน่วงเวลา {rand_delay}s ก่อนเริ่มโพสต์ที่ {idx + 1}/{total}..."
+                })
+            
+            wait_start = time.time()
+            while time.time() - wait_start < rand_delay:
+                if is_meta_stopped():
+                    log("[Meta Auto Post] 🛑 หยุดทำงานระหว่างหน่วงเวลาตามคำสั่ง Force Stop")
+                    break
+                time.sleep(0.3)
+
+            if is_meta_stopped():
+                errors.append("🛑 บังคับหยุดทำงาน (Force Stop)")
+                break
+
         try:
             ok = post_single_reel(
                 driver=driver,

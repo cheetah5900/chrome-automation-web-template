@@ -6514,7 +6514,9 @@ async function saveMetaPreset() {
     subfolders: document.getElementById('cfg_meta_subfolders')?.value || '',
     video_prefix: document.getElementById('cfg_meta_video_prefix')?.value || 'combined',
     start_date: document.getElementById('cfg_meta_start_date')?.value || '',
-    start_hour: parseInt(document.getElementById('cfg_meta_start_hour')?.value, 10) || 18
+    start_hour: parseInt(document.getElementById('cfg_meta_start_hour')?.value, 10) || 18,
+    delay_min: parseFloat(document.getElementById('cfg_meta_delay_min')?.value) || 5,
+    delay_max: parseFloat(document.getElementById('cfg_meta_delay_max')?.value) || 15
   };
 
   try {
@@ -6577,6 +6579,8 @@ async function applyMetaPreset() {
     const h = preset.start_hour !== undefined ? preset.start_hour : (preset.start_time ? parseInt(preset.start_time.split(':')[0], 10) : 18);
     document.getElementById('cfg_meta_start_hour').value = isNaN(h) ? 18 : h;
   }
+  if (document.getElementById('cfg_meta_delay_min')) document.getElementById('cfg_meta_delay_min').value = preset.delay_min !== undefined ? preset.delay_min : 5;
+  if (document.getElementById('cfg_meta_delay_max')) document.getElementById('cfg_meta_delay_max').value = preset.delay_max !== undefined ? preset.delay_max : 15;
 
   const urlDisplay = preset.page_url || preset.channel_url || 'ไม่ได้ระบุ';
   writeConsoleLine(`โหลด Preset "${currentName}" สำเร็จ (URL: ${urlDisplay})`, 'info', 'metaConsole');
@@ -6905,7 +6909,10 @@ async function runMetaAutoPost(btnElement) {
   if (progressBar) progressBar.style.width = '0%';
   if (progressText) progressText.textContent = `0% (0/${selectedPosts.length})`;
 
-  writeConsoleLine(`🚀 เริ่มส่งคำสั่งรัน Meta Auto Post สำหรับ ${selectedPosts.length} รายการที่เลือก (URL: ${targetUrl})...`, 'system', 'metaConsole');
+  const delayMin = parseFloat(document.getElementById('cfg_meta_delay_min')?.value) || 5;
+  const delayMax = parseFloat(document.getElementById('cfg_meta_delay_max')?.value) || 15;
+
+  writeConsoleLine(`🚀 เริ่มส่งคำสั่งรัน Meta Auto Post สำหรับ ${selectedPosts.length} รายการที่เลือก (URL: ${targetUrl}, Delay: ${delayMin}s-${delayMax}s)...`, 'system', 'metaConsole');
 
   try {
     const res = await jsonFetch('/api/meta-autopost/run', {
@@ -6913,7 +6920,9 @@ async function runMetaAutoPost(btnElement) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         posts: selectedPosts,
-        target_url: targetUrl
+        target_url: targetUrl,
+        delay_min: delayMin,
+        delay_max: delayMax
       })
     });
 

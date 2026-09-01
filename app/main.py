@@ -4185,8 +4185,10 @@ class MetaRunRequest(BaseModel):
     posts: list[dict[str, Any]]
     target_url: str = ""
     job_id: str | None = None
+    delay_min: float = 5.0
+    delay_max: float = 15.0
 
-def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
+def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0):
     global global_meta_progress
     import os
     import sys
@@ -4221,6 +4223,8 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
         res = run_meta_autopost_batch(
             posts=posts,
             target_url=target_url,
+            delay_min=delay_min,
+            delay_max=delay_max,
             progress_callback=_on_progress
         )
 
@@ -4250,10 +4254,14 @@ def run_meta_autopost(req: MetaRunRequest) -> dict[str, Any]:
         "errors": []
     }
     
-    log(f"[Meta Auto Post] Received batch run request for {len(posts)} items")
+    log(f"[Meta Auto Post] Received batch run request for {len(posts)} items (Delay: {req.delay_min}s - {req.delay_max}s)")
     
     import threading
-    t = threading.Thread(target=_meta_autopost_worker, args=(posts, req.target_url), daemon=True)
+    t = threading.Thread(
+        target=_meta_autopost_worker,
+        args=(posts, req.target_url, req.delay_min, req.delay_max),
+        daemon=True
+    )
     t.start()
 
     return {
