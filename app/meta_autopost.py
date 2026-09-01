@@ -180,48 +180,74 @@ def step_1_open_composer(driver, composer_url: str) -> bool:
     focus_9222_browser_tab(driver, port=9222)
     time.sleep(0.2)
 
-    log(f"[Meta Step 1] Navigating to fresh composer URL: {composer_url}")
+    log(f"[Meta Step 1] กำลังโหลดหน้าต่าง Composer: {composer_url}")
     driver.get(composer_url)
     
-    # Loop check: document ready + composer container/Add video present
+    # Loop check: document ready + verify Add video button or Composer frame is loaded
     ready = fast_poll(driver, '''
         if (document.readyState !== 'complete') return false;
-        const hasAddVideo = !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim().includes('Add video'));
+        const allEls = Array.from(document.querySelectorAll('div[role="button"], button, span, div'));
+        const addBtn = allEls.find(el => {
+            const txt = (el.innerText || '').trim();
+            const rect = el.getBoundingClientRect();
+            return rect.width > 10 && rect.height > 10 && (txt.includes('Add video') || txt.includes('Add Video'));
+        });
         const hasComposer = !!document.querySelector('div[role="dialog"], [role="main"], div[class*="composer" i]');
-        return hasAddVideo || hasComposer;
-    ''', timeout=20.0, poll_interval=0.2)
+        return !!addBtn || hasComposer;
+    ''', timeout=35.0, poll_interval=0.25)
     
     if not ready:
-        raise RuntimeError("หน้าต่าง Composer ไม่พร้อมทำงานภายในเวลาที่กำหนด")
+        raise RuntimeError("หน้าต่าง Composer ไม่พร้อมทำงานภายในเวลา 35 วินาที")
 
     log("[Meta Step 1] ✅ หน้าต่าง Composer พร้อมใช้งานเรียบร้อยแล้ว")
     return True
 
 def step_2_upload_video(driver, video_path: str) -> bool:
-    """Step 2: Poll for 'Add video' button, click, send video file path, and poll upload start."""
+    """Step 2: Thoroughly poll for 'Add video' button, click immediately when ready, and send video file path."""
     focus_9222_browser_tab(driver, port=9222)
     time.sleep(0.1)
 
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"ไม่พบไฟล์วิดีโอ: {video_path}")
 
-    # Loop check: locate Add video button
+    log(f"[Meta Step 2] กำลังตรวจสอบความพร้อมของปุ่ม 'Add video' บนหน้าจอ...")
+
+    # Loop check: thoroughly locate visible, enabled Add video button
     target_btn = fast_poll(driver, '''
         const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const direct = allBtns.find(b => b.innerText && b.innerText.trim().includes('Add video') && b.getAttribute('aria-disabled') !== 'true');
+        const direct = allBtns.find(b => {
+            const txt = (b.innerText || '').trim();
+            const rect = b.getBoundingClientRect();
+            const isVis = rect.width > 10 && rect.height > 10;
+            const isEnabled = b.getAttribute('aria-disabled') !== 'true';
+            return isVis && isEnabled && (txt.includes('Add video') || txt.includes('Add Video') || txt.includes('Upload video'));
+        });
         if (direct) return direct;
-        const textEl = Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video' && el.children.length === 0);
-        return textEl ? (textEl.closest('[role="button"]') || textEl) : null;
-    ''', timeout=15.0, poll_interval=0.2)
+
+        const textEls = Array.from(document.querySelectorAll('div, span, button')).filter(el => {
+            const t = (el.innerText || '').trim();
+            return (t === 'Add video' || t === 'Add Video' || t === 'Upload video') && el.children.length === 0;
+        });
+        for (const tEl of textEls) {
+            const btnParent = tEl.closest('[role="button"], button');
+            if (btnParent) {
+                const rect = btnParent.getBoundingClientRect();
+                if (rect.width > 10 && rect.height > 10 && btnParent.getAttribute('aria-disabled') !== 'true') {
+                    return btnParent;
+                }
+            }
+        }
+        return null;
+    ''', timeout=35.0, poll_interval=0.2)
 
     if not target_btn:
-        raise RuntimeError("ไม่พบปุ่ม Add video ที่พร้อมคลิกบนหน้าจอ")
+        raise RuntimeError("ไม่พบปุ่ม Add video ที่พร้อมคลิกบนหน้าจอ (หมดเวลา 35 วินาที)")
 
     try:
-        ActionChains(driver).move_to_element(target_btn).pause(0.1).click().perform()
+        ActionChains(driver).move_to_element(target_btn).pause(0.05).click().perform()
     except Exception:
         driver.execute_script("arguments[0].click();", target_btn)
-    log(f"[Meta Step 2] ส่งไฟล์วิดีโอผ่าน Dialog: {video_path}")
+    log(f"[Meta Step 2] คลิกปุ่ม 'Add video' สำเร็จ -> กำลังส่งไฟล์วิดีโอผ่าน Dialog: {video_path}")
     upload_macos_file_dialog_fast(video_path, port=9222)
 
     # Loop check: poll until video is received / upload is recognized
@@ -229,7 +255,7 @@ def step_2_upload_video(driver, video_path: str) -> bool:
         const hasVideo = !!document.querySelector('video, div[role="progressbar"], div[class*="thumbnail" i], div[class*="preview" i]');
         const shareActive = !!Array.from(document.querySelectorAll('div[role="button"], button')).find(b => b.innerText && b.innerText.trim().startsWith('Share') && b.getAttribute('aria-disabled') !== 'true');
         return hasVideo || shareActive;
-    ''', timeout=20.0, poll_interval=0.3)
+    ''', timeout=25.0, poll_interval=0.25)
 
     if upload_started:
         log(f"[Meta Step 2] ✅ อัปโหลดวิดีโอเข้าระบบเรียบร้อย: {os.path.basename(video_path)}")
@@ -450,12 +476,12 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
     return True
 
 def step_6_submit_schedule(driver) -> bool:
-    """Step 6: Poll for final Schedule button, click, and wait 5s cooldown before proceeding."""
-    log("[Meta Step 6] กำลังรอปุ่ม Schedule ขวาล่าง...")
+    """Step 6: Poll for final Schedule button, click immediately when ready without pre-cooldown."""
+    log("[Meta Step 6] กำลังตรวจจับปุ่ม Schedule ขวาล่าง (เมื่อพร้อมจะกดทันที)...")
     sched_submit_el = fast_poll(driver, '''
         const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
         return allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().x > 1400 && el.getBoundingClientRect().y > 700 && el.getAttribute('aria-disabled') !== 'true');
-    ''', timeout=15.0, poll_interval=0.2)
+    ''', timeout=20.0, poll_interval=0.1)
 
     if not sched_submit_el:
         sched_submit_el = driver.execute_script('''
@@ -465,16 +491,14 @@ def step_6_submit_schedule(driver) -> bool:
 
     if sched_submit_el:
         try:
-            ActionChains(driver).move_to_element(sched_submit_el).pause(0.1).click().perform()
+            ActionChains(driver).move_to_element(sched_submit_el).pause(0.05).click().perform()
         except Exception:
             driver.execute_script("arguments[0].click();", sched_submit_el)
     else:
         raise RuntimeError("ไม่พบปุ่ม Schedule ขวาล่างที่พร้อมคลิก")
 
-    log("[Meta Step 6] คลิกปุ่ม Schedule เรียบร้อยแล้ว กำลังรอ Cooldown 2.5 วินาที...")
+    log("[Meta Step 6] ✅ กดปุ่ม Schedule ยืนยันเรียบร้อยแล้ว (รอระบบประมวลผล 2.5 วินาที)")
     time.sleep(2.5)
-
-    log("[Meta Step 6] ✅ ส่งคำสั่ง Schedule และรอ Cooldown 2.5 วินาทีเรียบร้อยแล้ว")
     return True
 
 def get_scheduled_posts_url(composer_url: str) -> str:
