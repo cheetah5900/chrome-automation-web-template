@@ -205,20 +205,8 @@ def step_2_upload_video(driver, video_path: str) -> bool:
         ActionChains(driver).move_to_element(target_btn).pause(0.1).click().perform()
     except Exception:
         driver.execute_script("arguments[0].click();", target_btn)
-    log("[Meta Step 2] คลิกปุ่ม 'Add video' เรียบร้อย")
-
-    import uuid
-    import shutil
-    ext = os.path.splitext(video_path)[1] or ".mp4"
-    unique_name = f"reel_{uuid.uuid4().hex}{ext}"
-    temp_uuid_file = os.path.join("/tmp", unique_name)
-    try:
-        shutil.copy2(video_path, temp_uuid_file)
-        log(f"[Meta Step 2] ส่งไฟล์ผ่าน Dialog: {temp_uuid_file}")
-        upload_macos_file_dialog_fast(temp_uuid_file, port=9222)
-    except Exception as ex_copy:
-        log(f"[Meta Step 2] UUID copy note: {ex_copy}, ใช้พาธเดิม")
-        upload_macos_file_dialog_fast(video_path, port=9222)
+    log(f"[Meta Step 2] ส่งไฟล์วิดีโอผ่าน Dialog: {video_path}")
+    upload_macos_file_dialog_fast(video_path, port=9222)
 
     # Loop check: poll until video is received / upload is recognized
     upload_started = fast_poll(driver, '''
