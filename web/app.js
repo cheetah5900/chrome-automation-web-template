@@ -6850,29 +6850,6 @@ function renderMetaPostQueue() {
     }
   }
 }
-
-function addManualMetaPost() {
-  const now = new Date();
-  now.setHours(18, 0, 0, 0);
-  const isoStr = now.toISOString().slice(0, 16);
-
-  metaPostQueue.push({
-    id: metaPostQueue.length + 1,
-    checked: true,
-    subfolder_name: `Manual Post ${metaPostQueue.length + 1}`,
-    subfolder_path: '',
-    video_path: '',
-    video_name: '',
-    has_video: false,
-    caption: '',
-    caption_file: '',
-    has_caption: false,
-    scheduled_datetime: isoStr,
-    status: 'warning'
-  });
-  renderMetaPostQueue();
-}
-
 function clearMetaBatch() {
   if (metaPostQueue.length > 0) {
     if (!confirm('ต้องการล้างรายการโพสต์ทั้งหมดหรือไม่?')) return;
@@ -7222,24 +7199,6 @@ function initMetaAutoPostListeners() {
   const openUrlBtn = document.getElementById('btnOpenMetaPageUrl');
   if (openUrlBtn) openUrlBtn.addEventListener('click', openMetaPageUrl);
 
-  const setDefaultUrlBtn = document.getElementById('setMetaPageUrlDefaultBtn');
-  if (setDefaultUrlBtn) {
-    setDefaultUrlBtn.addEventListener('click', async () => {
-      const val = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
-      try {
-        await jsonFetch('/api/config/set-default', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'meta_page_url', value: val })
-        });
-        writeConsoleLine(`บันทึก URL เริ่มต้นสำหรับ Meta Auto Post: ${val || 'None'}`, 'success', 'metaConsole');
-        alert(`บันทึกค่าเริ่มต้นเรียบร้อยแล้ว: ${val || 'None'}`);
-      } catch (e) {
-        writeConsoleLine(`เกิดข้อผิดพลาดในการบันทึกค่าเริ่มต้น: ${e.message}`, 'error', 'metaConsole');
-      }
-    });
-  }
-
   const browseMainBtn = document.getElementById('browseMetaMainFolderBtn');
   if (browseMainBtn) {
     browseMainBtn.addEventListener('click', async () => {
@@ -7252,24 +7211,6 @@ function initMetaAutoPostListeners() {
         }
       } catch (err) {
         console.error('Browse meta main folder error:', err);
-      }
-    });
-  }
-
-  const setDefaultBtn = document.getElementById('setMetaMainFolderDefaultBtn');
-  if (setDefaultBtn) {
-    setDefaultBtn.addEventListener('click', async () => {
-      const val = document.getElementById('cfg_meta_main_folder')?.value.trim() || '';
-      try {
-        await jsonFetch('/api/config/set-default', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'meta_main_folder', value: val })
-        });
-        writeConsoleLine(`บันทึกโฟลเดอร์หลักเริ่มต้นสำหรับ Meta Auto Post: ${val || 'None'}`, 'success', 'metaConsole');
-        alert(`บันทึกค่าเริ่มต้นเรียบร้อยแล้ว: ${val || 'None'}`);
-      } catch (e) {
-        writeConsoleLine(`เกิดข้อผิดพลาดในการบันทึกค่าเริ่มต้น: ${e.message}`, 'error', 'metaConsole');
       }
     });
   }
@@ -7288,9 +7229,6 @@ function initMetaAutoPostListeners() {
 
   const clearBtn = document.getElementById('btnClearMetaBatch');
   if (clearBtn) clearBtn.addEventListener('click', clearMetaBatch);
-
-  const addManualBtn = document.getElementById('btnAddManualMetaPost');
-  if (addManualBtn) addManualBtn.addEventListener('click', addManualMetaPost);
 
   const toggleAllBtn = document.getElementById('toggleAllMetaPostsBtn');
   if (toggleAllBtn) {
@@ -7406,14 +7344,11 @@ const staticTooltips = {
 
   // Meta Auto Post
   "btnOpenMetaPageUrl": "🌐 ไปที่หน้าเพจนี้ (Open / Redirect):<br>- เปิด Chrome ไปยัง URL ของช่อง/เพจนี้ทันที",
-  "setMetaPageUrlDefaultBtn": "📌 ตั้ง URL เพจเป็นค่าเริ่มต้น (Set Default)",
   "browseMetaMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่มีโฟลเดอร์ย่อยบรรจุวิดีโอและ Caption",
-  "setMetaMainFolderDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set default):<br>- บันทึกโฟลเดอร์นี้เป็นค่าเริ่มต้น",
   "saveMetaPresetBtn": "💾 บันทึก Preset Meta Auto Post:<br>- บันทึกค่าการตั้งค่า, ลิงก์เพจ และชั่วโมงที่เริ่มโพสต์เก็บไว้",
   "deleteMetaPresetBtn": "🗑️ ลบ Preset ที่เลือก",
   "btnScanMetaBatch": "🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair):<br>- สแกนไฟล์วิดีโอ (combined*), แคปชั่น (caption.md), และจัดคิวโพสต์วันละ 1 โพสต์ตามชั่วโมงที่ระบุ (สุ่มนาที 00-59)",
   "btnClearMetaBatch": "🗑️ ล้างรายการโพสต์ที่จับคู่ไว้ทั้งหมดในตาราง",
-  "btnAddManualMetaPost": "➕ เพิ่มรายการโพสต์ด้วยตนเอง (Manual Post)",
   "runMetaAutoPostBtn": "🚀 รัน Auto Post ตามคิว:<br>- เริ่มส่งโพสต์ตามรายการที่เตรียมไว้ทั้งหมดไปยัง Facebook/Meta",
   "btnMetaForceStop": "🛑 บังคับหยุดทำงาน (Force Stop):<br>- หยุดกระบวนการโพสต์ที่กำลังทำงานอยู่ทันทีโดยไม่ปิดหน้าเบราว์เซอร์",
   "clearMetaConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)"
