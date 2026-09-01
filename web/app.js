@@ -7122,6 +7122,10 @@ async function runMetaStep6(btn) {
   } catch (e) {
     writeConsoleLine(`[Step 6 Error] ❌ ${e.message}`, 'error', 'metaConsole');
   } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function runMetaStep7(btn) {
   const targetUrl = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
   if (!targetUrl) {
