@@ -6895,6 +6895,13 @@ async function runMetaAutoPost(btnElement) {
     }
   }
 
+  const targetUrl = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
+  if (!targetUrl) {
+    writeConsoleLine(`[Meta Auto Post Error] ❌ กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน`, 'error', 'metaConsole');
+    alert('กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน');
+    return;
+  }
+
   if (btnElement) {
     btnElement.disabled = true;
     btnElement.classList.add('loading');
@@ -6910,10 +6917,9 @@ async function runMetaAutoPost(btnElement) {
   if (progressBar) progressBar.style.width = '0%';
   if (progressText) progressText.textContent = `0% (0/${selectedPosts.length})`;
 
-  writeConsoleLine(`🚀 เริ่มส่งคำสั่งรัน Meta Auto Post สำหรับ ${selectedPosts.length} รายการที่เลือก...`, 'system', 'metaConsole');
+  writeConsoleLine(`🚀 เริ่มส่งคำสั่งรัน Meta Auto Post สำหรับ ${selectedPosts.length} รายการที่เลือก (URL: ${targetUrl})...`, 'system', 'metaConsole');
 
   try {
-    const targetUrl = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
     const res = await jsonFetch('/api/meta-autopost/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -6981,7 +6987,12 @@ function getActiveMetaStepItem() {
 
 async function runMetaStep1(btn) {
   const targetUrl = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
-  writeConsoleLine(`[Step 1] 🌐 กำลังเปิด Composer URL (หน้าใหม่)...`, 'system', 'metaConsole');
+  if (!targetUrl) {
+    writeConsoleLine(`[Step 1 Error] ❌ กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน`, 'error', 'metaConsole');
+    alert('กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน');
+    return;
+  }
+  writeConsoleLine(`[Step 1] 🌐 กำลังเปิด Composer URL: ${targetUrl}...`, 'system', 'metaConsole');
   if (btn) btn.disabled = true;
   try {
     const res = await jsonFetch('/api/meta-autopost/step/open-composer', {

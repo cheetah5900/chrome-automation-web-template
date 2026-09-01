@@ -4203,11 +4203,13 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = ""):
             log("[Meta Auto Post] Error: Chrome driver is not attached")
             return
 
-        driver = bot.driver
-
-        # Determine composer URL - ALWAYS use fresh configured URL, never reuse whatever page is open
-        default_composer_url = "https://business.facebook.com/latest/reels_composer/?asset_id=1306362672555632&business_id=509334133244636&ir_qe_exposed=1&ref=biz_web_content_manager_published_posts&context_ref=POSTS"
-        composer_url = target_url.strip() if target_url and "facebook.com" in target_url else default_composer_url
+        # Determine composer URL - STRICTLY use configured target_url from preset/input, NO hardcoded fallback
+        composer_url = target_url.strip() if target_url else ""
+        if not composer_url:
+            global_meta_progress["status"] = "error"
+            global_meta_progress["message"] = "กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน"
+            log("[Meta Auto Post Error] กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน")
+            return
 
         from app.meta_autopost import run_meta_autopost_batch
 
@@ -4490,8 +4492,9 @@ def api_meta_step_open_composer(req: MetaStepOpenComposerRequest) -> dict[str, A
     bot = browser_manager.get()
     if not bot or not bot.driver:
         raise HTTPException(status_code=400, detail="เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน (กรุณากด Launch Profile ก่อน)")
-    default_url = "https://business.facebook.com/latest/reels_composer/?asset_id=1306362672555632&business_id=509334133244636&ir_qe_exposed=1&ref=biz_web_content_manager_published_posts&context_ref=POSTS"
-    url = (req.url or "").strip() or default_url
+    url = (req.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน")
     from app.meta_autopost import step_1_open_composer
     try:
         step_1_open_composer(bot.driver, url)

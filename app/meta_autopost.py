@@ -489,8 +489,9 @@ def run_meta_autopost_batch(
     driver = bot.driver
     total = len(posts)
 
-    default_composer_url = "https://business.facebook.com/latest/reels_composer/?asset_id=1306362672555632&business_id=509334133244636&ir_qe_exposed=1&ref=biz_web_content_manager_published_posts&context_ref=POSTS"
-    composer_url = target_url.strip() or default_composer_url
+    composer_url = target_url.strip() if target_url else ""
+    if not composer_url:
+        raise ValueError("กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน")
 
     errors = []
     success_count = 0
