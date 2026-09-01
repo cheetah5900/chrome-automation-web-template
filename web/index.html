@@ -1264,6 +1264,18 @@
               <p class="section-subtitle">สแกนไฟล์ Markdown Prompt จากโฟลเดอร์หลัก และตั้งค่าโมเดล/อัตราส่วน/ระยะเวลาบน Dreamina อัตโนมัติ</p>
 
               <div class="settings-form" style="margin-top: 15px;">
+                <!-- Seedance Preset Manager -->
+                <div id="seedancePresetsGroup" class="form-group" style="margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px;">
+                  <label style="font-weight: bold; color: #ffb86c; margin-bottom: 8px; display: block;">🎯 Preset การตั้งค่า Seedance</label>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <select id="seedancePresetSelect" onchange="window.applySeedancePreset()" style="flex-grow: 1; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
+                      <option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>
+                    </select>
+                    <button type="button" id="saveSeedancePresetBtn" onclick="window.saveSeedancePreset()" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap;">💾 บันทึก Preset</button>
+                    <button type="button" id="deleteSeedancePresetBtn" onclick="window.deleteSeedancePreset()" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap; color: #ff6b6b; border-color: rgba(255,107,107,0.3);">🗑️ ลบ</button>
+                  </div>
+                </div>
+
                 <!-- Main Folder Selection -->
                 <div class="form-group" style="margin-bottom: 18px;">
                   <label for="cfg_seedance_main_folder" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์หลักสำหรับดึงข้อมูล (Main Target Folder)</label>
@@ -1684,6 +1696,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=34"></script>
+  <script src="/web/app.js?v=35"></script>
 </body>
 </html>

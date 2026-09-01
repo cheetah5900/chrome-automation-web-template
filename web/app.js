@@ -1060,6 +1060,7 @@ async function loadConfig() {
     }
 
     loadMetaPresets(config.meta_presets);
+    loadSeedancePresets(config.seedance_presets);
     
     updateTooltips();
     if (typeof updateDurationsSum === 'function') {
@@ -5914,6 +5915,141 @@ function initVideoGenListeners() {
   }
   
   let seedanceBatchQueue = [];
+
+  // --- Seedance Preset Functions ---
+  function loadSeedancePresets(presets) {
+    const select = document.getElementById('seedancePresetSelect');
+    if (!select) return;
+    const currentVal = select.value || localStorage.getItem('seedance_last_preset') || '';
+    select.innerHTML = '<option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>';
+    if (presets && typeof presets === 'object') {
+      Object.keys(presets).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+      });
+    }
+    if (currentVal && presets && presets[currentVal]) {
+      select.value = currentVal;
+    }
+  }
+  window.loadSeedancePresets = loadSeedancePresets;
+
+  async function saveSeedancePreset() {
+    const currentKey = document.getElementById('seedancePresetSelect')?.value || '';
+    const name = prompt('ระบุชื่อ Preset สำหรับ Seedance (หรือระบุชื่อเดิมเพื่อบันทึกทับ):', currentKey);
+    if (!name || !name.trim()) return;
+    const trimmedName = name.trim();
+
+    let currentConfig = {};
+    try {
+      currentConfig = await jsonFetch('/api/config');
+    } catch (e) {
+      console.error('Failed to fetch config:', e);
+    }
+    const presets = currentConfig.seedance_presets || {};
+
+    presets[trimmedName] = {
+      main_folder: document.getElementById('cfg_seedance_main_folder')?.value || '',
+      subfolders: document.getElementById('cfg_seedance_subfolders')?.value || '',
+      model: document.getElementById('cfg_seedance_model')?.value || 'fast',
+      aspect_ratio: document.getElementById('cfg_seedance_aspect_ratio')?.value || '9:16',
+      duration: parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15,
+      delay_min: parseFloat(document.getElementById('cfg_seedance_delay_min')?.value) || 5,
+      delay_max: parseFloat(document.getElementById('cfg_seedance_delay_max')?.value) || 15,
+      click_generate: document.getElementById('chkSeedanceClickSubmit')?.checked || false,
+      manual_prompt: document.getElementById('cfg_seedance_manual_prompt')?.value || ''
+    };
+
+    try {
+      await jsonFetch('/api/config/set-default', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'seedance_presets', value: presets })
+      });
+      loadSeedancePresets(presets);
+      const select = document.getElementById('seedancePresetSelect');
+      if (select) select.value = trimmedName;
+      localStorage.setItem('seedance_last_preset', trimmedName);
+      writeConsoleLine(`💾 บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว`, 'success', 'seedanceConsole');
+      if (typeof showToast === 'function') showToast(`บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว!`, 'success');
+    } catch (e) {
+      writeConsoleLine(`เกิดข้อผิดพลาดในการบันทึก Preset: ${e.message}`, 'error', 'seedanceConsole');
+      if (typeof showToast === 'function') showToast(`เกิดข้อผิดพลาด: ${e.message}`, 'error');
+    }
+  }
+  window.saveSeedancePreset = saveSeedancePreset;
+
+  async function deleteSeedancePreset() {
+    const select = document.getElementById('seedancePresetSelect');
+    const currentName = select ? select.value : '';
+    if (!currentName) {
+      alert('กรุณาเลือก Preset ที่ต้องการลบ');
+      return;
+    }
+    if (!confirm(`ยืนยันการลบ Preset "${currentName}" หรือไม่?`)) return;
+
+    let currentConfig = {};
+    try {
+      currentConfig = await jsonFetch('/api/config');
+    } catch (e) {
+      console.error('Failed to fetch config:', e);
+    }
+    const presets = currentConfig.seedance_presets || {};
+    delete presets[currentName];
+
+    try {
+      await jsonFetch('/api/config/set-default', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'seedance_presets', value: presets })
+      });
+      loadSeedancePresets(presets);
+      localStorage.removeItem('seedance_last_preset');
+      writeConsoleLine(`🗑️ ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'seedanceConsole');
+      if (typeof showToast === 'function') showToast(`ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info');
+    } catch (e) {
+      writeConsoleLine(`เกิดข้อผิดพลาดในการลบ Preset: ${e.message}`, 'error', 'seedanceConsole');
+      if (typeof showToast === 'function') showToast(`เกิดข้อผิดพลาด: ${e.message}`, 'error');
+    }
+  }
+  window.deleteSeedancePreset = deleteSeedancePreset;
+
+  async function applySeedancePreset() {
+    const select = document.getElementById('seedancePresetSelect');
+    const currentName = select ? select.value : '';
+    if (!currentName) return;
+
+    let currentConfig = {};
+    try {
+      currentConfig = await jsonFetch('/api/config');
+    } catch (e) {
+      console.error('Failed to fetch config:', e);
+    }
+    const preset = (currentConfig.seedance_presets || {})[currentName];
+    if (!preset) return;
+
+    if (document.getElementById('cfg_seedance_main_folder')) document.getElementById('cfg_seedance_main_folder').value = preset.main_folder || '';
+    if (document.getElementById('cfg_seedance_subfolders')) document.getElementById('cfg_seedance_subfolders').value = preset.subfolders || '';
+    if (document.getElementById('cfg_seedance_model')) document.getElementById('cfg_seedance_model').value = preset.model || 'fast';
+    if (document.getElementById('cfg_seedance_aspect_ratio')) document.getElementById('cfg_seedance_aspect_ratio').value = preset.aspect_ratio || '9:16';
+    if (document.getElementById('cfg_seedance_duration')) document.getElementById('cfg_seedance_duration').value = preset.duration || 15;
+    if (document.getElementById('cfg_seedance_delay_min')) document.getElementById('cfg_seedance_delay_min').value = preset.delay_min !== undefined ? preset.delay_min : 5;
+    if (document.getElementById('cfg_seedance_delay_max')) document.getElementById('cfg_seedance_delay_max').value = preset.delay_max !== undefined ? preset.delay_max : 15;
+    if (document.getElementById('chkSeedanceClickSubmit')) document.getElementById('chkSeedanceClickSubmit').checked = !!preset.click_generate;
+    if (document.getElementById('cfg_seedance_manual_prompt')) document.getElementById('cfg_seedance_manual_prompt').value = preset.manual_prompt || '';
+
+    if (preset.main_folder) localStorage.setItem('seedance_main_folder', preset.main_folder);
+    if (preset.subfolders) localStorage.setItem('seedance_subfolders', preset.subfolders);
+    localStorage.setItem('seedance_last_preset', currentName);
+
+    updateSeedanceQuickBtnStyles();
+    updateTooltips();
+    writeConsoleLine(`🎯 โหลด Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'seedanceConsole');
+    if (typeof showToast === 'function') showToast(`โหลด Preset "${currentName}" เรียบร้อยแล้ว!`, 'success');
+  }
+  window.applySeedancePreset = applySeedancePreset;
 
   async function applySeedanceDirectSettings(customOptions = {}) {
     const btn = document.getElementById('btnApplySeedanceSettings');

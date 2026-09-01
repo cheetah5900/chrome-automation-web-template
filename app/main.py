@@ -1367,7 +1367,8 @@ def _default_config() -> dict[str, Any]:
             "meta_video_prefix": "combined",
             "meta_start_date": "",
             "meta_start_hour": 18,
-            "meta_presets": {}
+            "meta_presets": {},
+            "seedance_presets": {}
         }
     else:
         h = os.path.expanduser("~")
@@ -1441,7 +1442,8 @@ def _default_config() -> dict[str, Any]:
             "meta_video_prefix": "combined",
             "meta_start_date": "",
             "meta_start_hour": 18,
-            "meta_presets": {}
+            "meta_presets": {},
+            "seedance_presets": {}
         }
 
     # Dynamically ensure all 30 rounds of image prompts and 10 rounds of video prompts are initialized in config
