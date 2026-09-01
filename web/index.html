@@ -1430,13 +1430,18 @@
                   </label>
                 </div>
 
+                <!-- Dynamic Mode Explanation -->
+                <div id="seedanceModeDesc" style="font-size: 0.82rem; color: #c4b5fd; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 8px 12px; line-height: 1.4;">
+                  ✍️ โหมดทีละขั้นตอน: เมื่อกดปุ่ม ระบบจะลบข้อความเดิมในช่อง และวาง Prompt ของลำดับต่อไปลงบนเว็บ Dreamina
+                </div>
+
                 <div style="display: flex; gap: 10px;">
-                  <button id="runSeedanceBatchBtn" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">
-                    <span class="btn-text">🚀 เริ่มรัน Seedance ตามคิว</span>
+                  <button id="runSeedanceBatchBtn" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #7f5cff, #3aa0ff); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(127, 92, 255, 0.3); transition: all 0.2s ease;">
+                    <span class="btn-text">🚀 เริ่มวาง Prompt แรก</span>
                     <div class="custom-tooltip" id="tooltip_runSeedanceBatchBtn"></div>
                   </button>
-                  <button id="btnSeedanceForceStop" class="secondary has-tooltip" style="padding: 14px 18px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #f87171; white-space: nowrap;">
-                    🛑 Force Stop
+                  <button id="btnSeedanceForceStop" class="secondary has-tooltip" style="padding: 14px 18px; font-size: 0.9rem; font-weight: bold; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #f87171; white-space: nowrap;">
+                    🔄 รีเซ็ตคิว
                     <div class="custom-tooltip" id="tooltip_btnSeedanceForceStop"></div>
                   </button>
                 </div>
@@ -1696,6 +1701,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=38"></script>
+  <script src="/web/app.js?v=39"></script>
 </body>
 </html>

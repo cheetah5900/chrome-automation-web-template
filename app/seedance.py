@@ -466,19 +466,10 @@ def run_seedance_batch(
                     "current": idx,
                     "total": total,
                     "percent": int((idx / max(total, 1)) * 100),
-                    "message": f"[{idx+1}/{total}] กำลังตั้งค่าและวาง Prompt สำหรับ {sub_name}..."
+                    "message": f"[{idx+1}/{total}] กำลังลบข้อความเดิมและวาง Prompt สำหรับ {sub_name}..."
                 })
 
-            # 1. Set model
-            set_seedance_model(driver, model)
-
-            # 2. Set aspect ratio
-            set_seedance_aspect_ratio(driver, aspect_ratio)
-
-            # 3. Set duration
-            set_seedance_duration(driver, duration)
-
-            # 4. Insert prompt
+            # Insert prompt (clears existing text in editor and inserts new prompt)
             set_seedance_prompt(driver, prompt_text)
 
             # 5. Click generate IF AND ONLY IF explicitly requested
