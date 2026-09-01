@@ -7126,6 +7126,14 @@ async function runMetaStep6(btn) {
   }
 }
 
+// Expose globally to ensure onclick handlers work immediately
+window.runMetaStep1 = runMetaStep1;
+window.runMetaStep2 = runMetaStep2;
+window.runMetaStep3 = runMetaStep3;
+window.runMetaStep4 = runMetaStep4;
+window.runMetaStep5 = runMetaStep5;
+window.runMetaStep6 = runMetaStep6;
+
 function initMetaAutoPostListeners() {
   const openUrlBtn = document.getElementById('btnOpenMetaPageUrl');
   if (openUrlBtn) openUrlBtn.addEventListener('click', openMetaPageUrl);
