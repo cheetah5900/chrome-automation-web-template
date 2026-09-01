@@ -6270,26 +6270,21 @@ function initVideoGenListeners() {
     const browseBtn = document.getElementById('browseSeedanceMainFolderBtn');
     if (browseBtn) {
       browseBtn.addEventListener('click', async () => {
-        browseBtn.disabled = true;
-        browseBtn.textContent = 'Opening...';
-        writeConsoleLine('📂 กำลังเปิดหน้าต่างเลือกโฟลเดอร์ใน macOS Finder...', 'info', 'seedanceConsole');
         try {
-          const res = await jsonFetch('/api/utils/browse-directory');
-          if (res.ok && res.path) {
+          const res = await jsonFetch('/api/batch-uploader/browse-folder', { method: 'POST' });
+          if (res && res.path) {
             const input = document.getElementById('cfg_seedance_main_folder');
             if (input) {
               input.value = res.path;
-              localStorage.setItem('seedance_main_folder', res.path);
+              input.dispatchEvent(new Event('input'));
             }
+            localStorage.setItem('seedance_main_folder', res.path);
             writeConsoleLine(`📂 เลือกโฟลเดอร์: ${res.path}`, 'success', 'seedanceConsole');
             updateTooltips();
           }
         } catch (err) {
           console.error('Browse Seedance folder error:', err);
           writeConsoleLine(`Browse error: ${err.message}`, 'error', 'seedanceConsole');
-        } finally {
-          browseBtn.disabled = false;
-          browseBtn.textContent = 'Browse...';
         }
       });
     }

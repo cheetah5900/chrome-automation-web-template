@@ -6452,6 +6452,28 @@ global_seedance_progress: dict[str, Any] = {
     "errors": []
 }
 
+@app.post("/api/seedance/browse-folder")
+async def api_seedance_browse_folder():
+    """Trigger native macOS folder browser dialog and return selected absolute path matching Flow Kit."""
+    script = 'POSIX path of (choose folder with prompt "Select Folder")'
+    try:
+        def run_script():
+            return subprocess.run(
+                ['osascript', '-e', script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+        proc = await asyncio.to_thread(run_script)
+        if proc.returncode == 0:
+            path = proc.stdout.strip()
+            return {"ok": True, "path": path}
+        else:
+            return {"ok": False, "path": None}
+    except Exception as e:
+        log(f"[Seedance Browse Folder Error] {e}")
+        return {"ok": False, "path": None, "error": str(e)}
+
 @app.post("/api/seedance/scan")
 def api_seedance_scan(req: SeedanceScanRequest) -> dict[str, Any]:
     from app.seedance import scan_seedance_folders
