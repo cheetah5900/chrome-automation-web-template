@@ -6974,6 +6974,35 @@ async function runMetaAutoPost(btnElement) {
   }
 }
 
+let isMetaAutoPostStopping = false;
+
+async function stopMetaAutoPost(btnElement) {
+  if (isMetaAutoPostStopping) return;
+  isMetaAutoPostStopping = true;
+  writeConsoleLine(`[Meta Auto Post] 🛑 กำลังส่งคำสั่ง Force Stop เพื่อหยุดทุกกระบวนการ...`, 'warning', 'metaConsole');
+  if (btnElement) btnElement.disabled = true;
+
+  try {
+    const res = await jsonFetch('/api/meta-autopost/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    writeConsoleLine(`[Meta Auto Post] 🛑 ${res.message || 'สั่ง Force Stop สำเร็จ'}`, 'error', 'metaConsole');
+  } catch (err) {
+    writeConsoleLine(`[Meta Auto Post] 🛑 Force Stop Call: ${err.message}`, 'error', 'metaConsole');
+  } finally {
+    const runBtn = document.getElementById('runMetaAutoPostBtn');
+    if (runBtn) {
+      runBtn.disabled = false;
+      runBtn.classList.remove('loading');
+      const textSpan = runBtn.querySelector('.btn-text');
+      if (textSpan) textSpan.textContent = '🚀 เริ่มรัน Auto Post ตามคิว';
+    }
+    if (btnElement) btnElement.disabled = false;
+    isMetaAutoPostStopping = false;
+  }
+}
+
 // --- Manual Step-by-Step Controller Functions ---
 function getActiveMetaStepItem() {
   const stepSelect = document.getElementById('metaStepItemSelect');
@@ -7248,6 +7277,9 @@ function initMetaAutoPostListeners() {
   const runBtn = document.getElementById('runMetaAutoPostBtn');
   if (runBtn) runBtn.addEventListener('click', (e) => runMetaAutoPost(e.currentTarget));
 
+  const forceStopBtn = document.getElementById('btnMetaForceStop');
+  if (forceStopBtn) forceStopBtn.addEventListener('click', (e) => stopMetaAutoPost(e.currentTarget));
+
   // Step-by-Step Manual Controller Buttons
   const step1Btn = document.getElementById('btnMetaStep1');
   if (step1Btn) step1Btn.addEventListener('click', (e) => runMetaStep1(e.currentTarget));
@@ -7356,6 +7388,7 @@ const staticTooltips = {
   "btnClearMetaBatch": "🗑️ ล้างรายการโพสต์ที่จับคู่ไว้ทั้งหมดในตาราง",
   "btnAddManualMetaPost": "➕ เพิ่มรายการโพสต์ด้วยตนเอง (Manual Post)",
   "runMetaAutoPostBtn": "🚀 รัน Auto Post ตามคิว:<br>- เริ่มส่งโพสต์ตามรายการที่เตรียมไว้ทั้งหมดไปยัง Facebook/Meta",
+  "btnMetaForceStop": "🛑 บังคับหยุดทำงาน (Force Stop):<br>- หยุดกระบวนการโพสต์ที่กำลังทำงานอยู่ทันทีโดยไม่ปิดหน้าเบราว์เซอร์",
   "clearMetaConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)"
 };
 

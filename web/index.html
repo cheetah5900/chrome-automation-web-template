@@ -1414,10 +1414,14 @@
               <h2 class="section-title">🚀 Auto Post Execution</h2>
               <p class="section-subtitle">สถานะและบันทึกการส่งโพสต์ไปยัง Facebook / Meta</p>
 
-              <div style="margin: 15px 0 16px 0;">
-                <button id="runMetaAutoPostBtn" class="primary has-tooltip" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">
+              <div style="margin: 15px 0 16px 0; display: flex; gap: 10px;">
+                <button id="runMetaAutoPostBtn" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">
                   <span class="btn-text">🚀 เริ่มรัน Auto Post ตามคิว</span>
                   <div class="custom-tooltip" id="tooltip_runMetaAutoPostBtn"></div>
+                </button>
+                <button id="btnMetaForceStop" class="danger has-tooltip" style="padding: 14px 20px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                  <span>🛑 Force Stop</span>
+                  <div class="custom-tooltip" id="tooltip_btnMetaForceStop"></div>
                 </button>
               </div>
 
@@ -1567,6 +1571,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=20"></script>
+  <script src="/web/app.js?v=21"></script>
 </body>
 </html>

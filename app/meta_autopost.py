@@ -133,6 +133,20 @@ def upload_macos_file_dialog_fast(file_path: str, port: int = 9222) -> bool:
         log(f"[Meta Auto Post Dialog Error] {e}")
         return False
 
+_meta_stop_requested = False
+
+def request_meta_stop():
+    global _meta_stop_requested
+    _meta_stop_requested = True
+
+def reset_meta_stop():
+    global _meta_stop_requested
+    _meta_stop_requested = False
+
+def is_meta_stopped() -> bool:
+    global _meta_stop_requested
+    return _meta_stop_requested
+
 def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float = 0.2, *args, **kwargs) -> Any:
     """Polls JavaScript expression until truthy or timeout."""
     start_t = time.time()
@@ -145,6 +159,8 @@ def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float 
         call_args = []
 
     while time.time() - start_t < timeout:
+        if is_meta_stopped():
+            raise RuntimeError("🛑 Force Stop: ผู้ใช้สั่งหยุดการทำงาน")
         try:
             res = driver.execute_script(js_expr, *call_args)
             if res:
@@ -605,10 +621,15 @@ def run_meta_autopost_batch(
 
     errors = []
     success_count = 0
+    reset_meta_stop()
 
     log(f"[Meta Auto Post Script Engine] Starting batch of {total} posts on 9222...")
 
     for idx, post in enumerate(posts):
+        if is_meta_stopped():
+            log("[Meta Auto Post] 🛑 ยกเลิกการโพสต์รายการที่เหลือเนื่องจากคำสั่ง Force Stop")
+            errors.append("🛑 การทำงานถูกยกเลิกด้วย Force Stop")
+            break
         try:
             ok = post_single_reel(
                 driver=driver,
@@ -621,6 +642,10 @@ def run_meta_autopost_batch(
             if ok:
                 success_count += 1
         except Exception as e:
+            if is_meta_stopped() or "Force Stop" in str(e):
+                log("[Meta Auto Post] 🛑 หยุดทำงานทันทีตามคำสั่ง Force Stop")
+                errors.append("🛑 บังคับหยุดทำงาน (Force Stop)")
+                break
             err_msg = f"[{idx+1}/{total}] {post.get('subfolder_name', 'Item')}: {str(e)}"
             log(f"[Meta Auto Post Script Item Error] {err_msg}")
             errors.append(err_msg)

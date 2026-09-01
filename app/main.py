@@ -4607,6 +4607,15 @@ def api_meta_step_view_scheduled(req: MetaStepViewScheduledRequest) -> dict[str,
         log(f"[Meta Step 7 Error] {e}")
         return {"ok": False, "detail": str(e)}
 
+@app.post("/api/meta-autopost/stop")
+def api_meta_autopost_stop() -> dict[str, Any]:
+    from app.meta_autopost import request_meta_stop
+    request_meta_stop()
+    global _force_stop_requested
+    _force_stop_requested = True
+    log("[Meta Auto Post] 🛑 ได้รับคำสั่ง Force Stop - กำลังหยุดการทำงานทุกกระบวนการ")
+    return {"ok": True, "message": "🛑 สั่ง Force Stop เรียบร้อยแล้ว"}
+
 @app.get("/api/utils/view-image")
 def view_image(path: str) -> FileResponse:
     import os
