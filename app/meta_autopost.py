@@ -373,8 +373,11 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
 
             log(f"[Meta Step 5] กำหนดวันโพสต์: {target_date_label}, เวลา: {hour_str}:{min_str}")
 
-            # 1. Set Date for ALL platforms (Facebook, Instagram, etc.)
+            # 1. Set Date for ALL available platforms dynamically (Facebook only or Facebook + Instagram)
             date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+            platform_count = len(date_inputs)
+            log(f"[Meta Step 5] ตรวจพบช่องตั้งเวลาทั้งหมด {platform_count} แพลตฟอร์ม (Facebook {'+ Instagram' if platform_count > 1 else 'อย่างเดียว'})")
+
             for d_idx, date_input in enumerate(date_inputs):
                 try:
                     ActionChains(driver).move_to_element(date_input).pause(0.1).click().perform()
@@ -437,7 +440,8 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
                 return hOk && mOk;
             ''', timeout=5.0, poll_interval=0.2, js_args=[hour_str, min_str])
 
-            log(f"[Meta Step 5] ✅ กำหนดวัน-เวลาและตรวจสอบค่าใน Schedule ครบทุกแพลตฟอร์ม (Facebook & Instagram: {len(date_inputs)} ช่อง) สำเร็จเรียบร้อยแล้ว")
+            platform_str = "Facebook & Instagram" if platform_count > 1 else "Facebook"
+            log(f"[Meta Step 5] ✅ กำหนดวัน-เวลาและตรวจสอบค่าใน Schedule ({platform_str}: {platform_count} แพลตฟอร์ม) สำเร็จเรียบร้อยแล้ว")
             return True
 
         except Exception as ex_dt:
