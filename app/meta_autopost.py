@@ -158,12 +158,9 @@ def step_1_open_composer(driver, composer_url: str) -> bool:
 
     log(f"[Meta Step 1] Navigating to fresh composer URL: {composer_url}")
     driver.get(composer_url)
-    ready = fast_poll(driver, '''
-        return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
-    ''', timeout=25.0, poll_interval=0.2)
-    if not ready:
-        raise RuntimeError("ไม่พบหน้าต่าง Create reel หรือปุ่ม 'Add video'")
-    log("[Meta Step 1] ✅ เปิดหน้าต่าง Create reel พร้อมใช้งานเรียบร้อยแล้ว")
+    fast_poll(driver, "return document.readyState === 'complete';", timeout=15.0, poll_interval=0.2)
+    time.sleep(1.0)
+    log("[Meta Step 1] ✅ เปิดหน้าต่าง Composer สำเร็จเรียบร้อยแล้ว")
     return True
 
 def step_2_upload_video(driver, video_path: str) -> bool:
@@ -298,7 +295,7 @@ def step_4_click_share_tab(driver, timeout: float = 60.0) -> bool:
     return True
 
 def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
-    """Step 5: Select Schedule radio and input Date & Time with TAB commit."""
+    """Step 5: Select Schedule radio and input Date via Calendar click & Time via spinbuttons."""
     log("[Meta Step 5] กำลังเลือกแท็บตัวเลือก 'Schedule'...")
     sched_tab = driver.execute_script('''
         const allEls = Array.from(document.querySelectorAll('div, span, button, [role="radio"]'));
@@ -310,55 +307,59 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
             ActionChains(driver).move_to_element(sched_tab).pause(0.1).click().perform()
         except Exception:
             driver.execute_script("arguments[0].click();", sched_tab)
-    else:
-        log("[Meta Step 5] ข้อความเตือน: ไม่พบแท็บ Schedule (อาจถูกเลือกอยู่แล้ว)")
-
     time.sleep(0.6)
 
     if scheduled_dt_str:
         try:
             dt = datetime.fromisoformat(scheduled_dt_str)
-            date_str = dt.strftime("%d/%m/%Y")
+            target_day = dt.day
+            target_month_name = dt.strftime('%B')
+            target_year = dt.year
+            target_date_label = f"{target_day} {target_month_name} {target_year}"
             hour_str = f"{dt.hour:02d}"
             min_str = f"{dt.minute:02d}"
 
-            log(f"[Meta Step 5] กำหนดวันโพสต์: {date_str}, เวลา: {hour_str}:{min_str}")
+            log(f"[Meta Step 5] กำหนดวันโพสต์: {target_date_label}, เวลา: {hour_str}:{min_str}")
 
-            def safe_input(selector: str, val: str, is_time: bool = False):
+            # 1. Open Calendar Popover & Click target date cell
+            date_input = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+            if date_input:
                 try:
-                    inputs = driver.find_elements(By.CSS_SELECTOR, selector)
-                    if inputs:
-                        inputs[0].click()
-                        time.sleep(0.1)
-                        if is_time:
-                            inputs[0].send_keys(Keys.BACKSPACE)
-                            for ch in val:
-                                inputs[0].send_keys(ch)
-                        else:
-                            inputs[0].send_keys(Keys.COMMAND, 'a')
-                            inputs[0].send_keys(val)
-                        time.sleep(0.1)
-                        fresh = driver.find_elements(By.CSS_SELECTOR, selector)
-                        if fresh:
-                            fresh[0].send_keys(Keys.TAB)
-                except Exception as ex_in:
-                    log(f"[Meta Step 5] Input note ({selector}): {ex_in}")
+                    ActionChains(driver).move_to_element(date_input[0]).pause(0.1).click().perform()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", date_input[0])
+                time.sleep(0.4)
 
-            safe_input('input[placeholder="dd/mm/yyyy"]', date_str)
-            time.sleep(0.2)
-            safe_input('input[aria-label="hours"]', hour_str, is_time=True)
-            time.sleep(0.2)
-            safe_input('input[aria-label="minutes"]', min_str, is_time=True)
-            time.sleep(0.4)
+                # Click matching day cell in popover
+                driver.execute_script('''
+                    const targetText = arguments[0];
+                    const allEls = Array.from(document.querySelectorAll('div[role="gridcell"], [role="button"], span, div'));
+                    const dayEl = allEls.find(el => (el.getAttribute('aria-label') && el.getAttribute('aria-label').includes(targetText)));
+                    if (dayEl) {
+                        dayEl.click();
+                        return true;
+                    }
+                    return false;
+                ''', target_date_label)
+                time.sleep(0.4)
 
-            # Commit React form state
-            driver.execute_script('''
-                const bg = document.querySelector('div[role="dialog"], body');
-                if (bg) bg.click();
-            ''')
-            time.sleep(0.3)
+            # 2. Set Hours spinbutton
+            hours_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
+            if hours_inputs:
+                hours_inputs[0].click()
+                time.sleep(0.1)
+                hours_inputs[0].send_keys(Keys.BACKSPACE, Keys.BACKSPACE, hour_str)
+                time.sleep(0.2)
 
-            log("[Meta Step 5] ✅ กำหนดวัน-เวลาและ Commit State สำเร็จ")
+            # 3. Set Minutes spinbutton
+            mins_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
+            if mins_inputs:
+                mins_inputs[0].click()
+                time.sleep(0.1)
+                mins_inputs[0].send_keys(Keys.BACKSPACE, Keys.BACKSPACE, min_str)
+                time.sleep(0.2)
+
+            log("[Meta Step 5] ✅ กำหนดวัน-เวลาใน Schedule สำเร็จเรียบร้อยแล้ว")
             return True
 
         except Exception as ex_dt:
