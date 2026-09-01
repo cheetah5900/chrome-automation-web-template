@@ -265,12 +265,13 @@ def step_2_upload_video(driver, video_path: str) -> bool:
     return True
 
 def step_3_insert_caption(driver, caption: str) -> bool:
-    """Step 3: Poll for Description box, insert Caption, and loop verify value."""
-    if not caption:
+    """Step 3: Poll for Description box, insert Caption, and loop verify value. Retries if not present."""
+    if not caption or not str(caption).strip():
         log("[Meta Step 3] ไม่มีข้อความ Caption ข้ามขั้นตอนนี้")
         return True
 
-    log(f"[Meta Step 3] กำลังรอช่องข้อความ Description เพื่อวาง Caption ({len(caption)} ตัวอักษร)...")
+    caption_clean = str(caption).strip()
+    log(f"[Meta Step 3] กำลังรอช่องข้อความ Description เพื่อวาง Caption ({len(caption_clean)} ตัวอักษร)...")
     
     # Loop check: locate textbox
     tb = fast_poll(driver, '''
@@ -280,48 +281,92 @@ def step_3_insert_caption(driver, caption: str) -> bool:
     if not tb:
         raise RuntimeError("ไม่พบกล่องข้อความ Description บนหน้าจอ")
 
-    # Insert text and dispatch events
-    driver.execute_script('''
-        const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
-        if (tb) {
-            tb.focus();
-            try {
-                const dt = new DataTransfer();
-                dt.setData('text/plain', arguments[0]);
-                const pasteEvt = new ClipboardEvent('paste', {
-                    bubbles: true,
-                    cancelable: true,
-                    clipboardData: dt
-                });
-                tb.dispatchEvent(pasteEvt);
-            } catch (e) {}
+    max_paste_attempts = 3
+    for attempt in range(1, max_paste_attempts + 1):
+        # 1. Check if already properly filled
+        existing_text = driver.execute_script('''
+            const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
+            return tb ? (tb.innerText || tb.textContent || '').trim() : '';
+        ''')
+        if existing_text and len(existing_text) > 0:
+            log(f"[Meta Step 3] ✅ ตรวจสอบพบข้อความใน Description เรียบร้อย ({len(existing_text)} ตัวอักษร)")
+            return True
 
-            if (!tb.innerText || !tb.innerText.trim()) {
-                const sel = window.getSelection();
-                const range = document.createRange();
-                range.selectNodeContents(tb);
-                sel.removeAllRanges();
-                sel.addRange(range);
-                document.execCommand('delete', false, null);
-                document.execCommand('insertText', false, arguments[0]);
+        log(f"[Meta Step 3] 📝 กำลังวางข้อความ Description (ครั้งที่ {attempt}/{max_paste_attempts})...")
+
+        # 2. Try JavaScript insertion (ClipboardEvent + execCommand)
+        driver.execute_script('''
+            const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
+            if (tb) {
+                tb.focus();
+                try {
+                    const dt = new DataTransfer();
+                    dt.setData('text/plain', arguments[0]);
+                    const pasteEvt = new ClipboardEvent('paste', {
+                        bubbles: true,
+                        cancelable: true,
+                        clipboardData: dt
+                    });
+                    tb.dispatchEvent(pasteEvt);
+                } catch (e) {}
+
+                if (!tb.innerText || !tb.innerText.trim()) {
+                    const sel = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(tb);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    document.execCommand('delete', false, null);
+                    document.execCommand('insertText', false, arguments[0]);
+                }
+
+                tb.dispatchEvent(new Event('input', { bubbles: true }));
+                tb.dispatchEvent(new Event('change', { bubbles: true }));
             }
+        ''', caption_clean)
 
-            tb.dispatchEvent(new Event('input', { bubbles: true }));
-            tb.dispatchEvent(new Event('change', { bubbles: true }));
-            tb.blur();
-        }
-    ''', caption)
+        # 3. Quick poll check if JS insertion worked
+        verified = fast_poll(driver, '''
+            const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
+            return tb && (tb.innerText || tb.textContent || '').trim().length > 0;
+        ''', timeout=2.0, poll_interval=0.2)
 
-    # Loop check: verify textbox value is actually populated
-    verified = fast_poll(driver, '''
+        if verified:
+            log(f"[Meta Step 3] ✅ ตรวจสอบยืนยันข้อความ Caption ใน Description สำเร็จ ({len(caption_clean)} ตัวอักษร)")
+            return True
+
+        # 4. Fallback if still empty: Click textbox and use ActionChains + Clipboard paste
+        log(f"[Meta Step 3] ⚠️ ตรวจสอบแล้วยังไม่พบข้อความในช่อง Description (ครั้งที่ {attempt}) -> กำลังลองใช้วิธี Fallback วางด้วย Clipboard...")
+        try:
+            # Set macOS clipboard
+            if sys.platform == "darwin":
+                p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+                p.communicate(input=caption_clean.encode('utf-8'))
+            
+            # Click and paste via keyboard
+            ActionChains(driver).move_to_element(tb).click().pause(0.2).key_down(Keys.COMMAND).send_keys('v').key_up(Keys.COMMAND).pause(0.3).perform()
+        except Exception as paste_err:
+            log(f"[Meta Step 3] ActionChains paste fallback error: {paste_err}")
+
+        # 5. Check again for this attempt
+        time.sleep(0.5)
+        check_text = driver.execute_script('''
+            const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
+            return tb ? (tb.innerText || tb.textContent || '').trim() : '';
+        ''')
+        if check_text and len(check_text) > 0:
+            log(f"[Meta Step 3] ✅ ตรวจสอบยืนยันข้อความ Caption สำเร็จหลังวางใหม่ ({len(check_text)} ตัวอักษร)")
+            return True
+
+    # Final assertion
+    final_text = driver.execute_script('''
         const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
-        return tb && tb.innerText && tb.innerText.trim().length > 0;
-    ''', timeout=5.0, poll_interval=0.2)
+        return tb ? (tb.innerText || tb.textContent || '').trim() : '';
+    ''')
+    if not final_text:
+        raise RuntimeError(f"ไม่สามารถยืนยันข้อความ Caption ในกล่อง Description ได้หลังพยายามวาง {max_paste_attempts} ครั้ง")
 
-    if not verified:
-        raise RuntimeError("ไม่สามารถยืนยันข้อความ Caption ในกล่องข้อความได้")
-
-    log("[Meta Step 3] ✅ วางข้อความ Description และยืนยันผลสำเร็จ")
+    log(f"[Meta Step 3] ✅ วางข้อความ Description และยืนยันผลสำเร็จ")
     return True
 
 def step_4_click_share_tab(driver, timeout: float = 60.0) -> bool:
