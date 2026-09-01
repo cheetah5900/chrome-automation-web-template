@@ -6242,18 +6242,87 @@ function initVideoGenListeners() {
   }
 
   function initSeedanceGenListeners() {
+    const mainFolderInput = document.getElementById('cfg_seedance_main_folder');
+    if (mainFolderInput) {
+      const savedFolder = localStorage.getItem('seedance_main_folder');
+      if (savedFolder && !mainFolderInput.value) {
+        mainFolderInput.value = savedFolder;
+      }
+      mainFolderInput.addEventListener('input', () => {
+        localStorage.setItem('seedance_main_folder', mainFolderInput.value);
+      });
+      mainFolderInput.addEventListener('change', () => {
+        localStorage.setItem('seedance_main_folder', mainFolderInput.value);
+      });
+    }
+
+    const subfoldersInput = document.getElementById('cfg_seedance_subfolders');
+    if (subfoldersInput) {
+      const savedSub = localStorage.getItem('seedance_subfolders');
+      if (savedSub && !subfoldersInput.value) {
+        subfoldersInput.value = savedSub;
+      }
+      subfoldersInput.addEventListener('input', () => {
+        localStorage.setItem('seedance_subfolders', subfoldersInput.value);
+      });
+    }
+
     const browseBtn = document.getElementById('browseSeedanceMainFolderBtn');
     if (browseBtn) {
       browseBtn.addEventListener('click', async () => {
+        browseBtn.disabled = true;
+        browseBtn.textContent = 'Opening...';
+        writeConsoleLine('📂 กำลังเปิดหน้าต่างเลือกโฟลเดอร์ใน macOS Finder...', 'info', 'seedanceConsole');
         try {
           const res = await jsonFetch('/api/utils/browse-directory');
           if (res.ok && res.path) {
             const input = document.getElementById('cfg_seedance_main_folder');
-            if (input) input.value = res.path;
+            if (input) {
+              input.value = res.path;
+              localStorage.setItem('seedance_main_folder', res.path);
+            }
+            writeConsoleLine(`📂 เลือกโฟลเดอร์: ${res.path}`, 'success', 'seedanceConsole');
             updateTooltips();
           }
         } catch (err) {
           console.error('Browse Seedance folder error:', err);
+          writeConsoleLine(`Browse error: ${err.message}`, 'error', 'seedanceConsole');
+        } finally {
+          browseBtn.disabled = false;
+          browseBtn.textContent = 'Browse...';
+        }
+      });
+    }
+
+    const pasteBtn = document.getElementById('pasteSeedanceMainFolderBtn');
+    if (pasteBtn) {
+      pasteBtn.addEventListener('click', async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text && text.trim()) {
+            const cleanPath = text.trim();
+            const input = document.getElementById('cfg_seedance_main_folder');
+            if (input) {
+              input.value = cleanPath;
+              localStorage.setItem('seedance_main_folder', cleanPath);
+            }
+            writeConsoleLine(`📋 วาง Path จาก Clipboard สำเร็จ: ${cleanPath}`, 'success', 'seedanceConsole');
+            showToast('วาง Path โฟลเดอร์สำเร็จ!', 'success');
+            updateTooltips();
+          } else {
+            alert('ไม่พบข้อความใน Clipboard (ใน Finder ให้เลือกโฟลเดอร์แล้วกด Cmd+Option+C เพื่อคัดลอก Path แล้วกดปุ่มนี้)');
+          }
+        } catch (clipErr) {
+          const promptPath = prompt('วาง Path โฟลเดอร์เป้าหมาย:', document.getElementById('cfg_seedance_main_folder')?.value || '');
+          if (promptPath && promptPath.trim()) {
+            const input = document.getElementById('cfg_seedance_main_folder');
+            if (input) {
+              input.value = promptPath.trim();
+              localStorage.setItem('seedance_main_folder', promptPath.trim());
+            }
+            showToast('บันทึก Path สำเร็จ!', 'success');
+            updateTooltips();
+          }
         }
       });
     }

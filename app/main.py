@@ -4039,8 +4039,24 @@ def browse_directory() -> dict[str, Any]:
     
     if sys.platform == "darwin":
         try:
-            cmd = ['osascript', '-e', 'POSIX path of (choose folder with prompt "Select Output Directory")']
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            script = '''
+            try
+                set theApp to path to frontmost application as text
+                tell application theApp
+                    activate
+                    set myFolder to choose folder with prompt "Select Folder"
+                    return POSIX path of myFolder
+                end tell
+            on error
+                tell application "Finder"
+                    activate
+                    set myFolder to choose folder with prompt "Select Folder"
+                    return POSIX path of myFolder
+                end tell
+            end try
+            '''
+            cmd = ['osascript', '-e', script]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
             if res.returncode == 0:
                 path = res.stdout.strip()
                 if path:
