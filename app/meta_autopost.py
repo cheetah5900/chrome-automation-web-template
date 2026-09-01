@@ -400,7 +400,7 @@ def step_6_submit_schedule(driver) -> bool:
     return True
 
 def get_scheduled_posts_url(composer_url: str) -> str:
-    """Extracts asset_id and business_id / bus_id from composer_url to build the scheduled posts URL."""
+    """Extracts asset_id and business_id from composer_url to build the scheduled posts URL."""
     url = (composer_url or "").strip()
     if not url:
         return "https://business.facebook.com/latest/posts/scheduled_posts"
@@ -414,7 +414,7 @@ def get_scheduled_posts_url(composer_url: str) -> str:
         parsed = urlparse(url)
         params = parse_qs(parsed.query)
         asset_id = params.get("asset_id", [""])[0] or params.get("page_id", [""])[0]
-        business_id = params.get("business_id", [""])[0] or params.get("bus_id", [""])[0]
+        business_id = params.get("business_id", [""])[0]
     except Exception:
         pass
 
@@ -424,7 +424,7 @@ def get_scheduled_posts_url(composer_url: str) -> str:
         if m:
             asset_id = m.group(1)
     if not business_id:
-        m = re.search(r'business_id=(\d+)', url) or re.search(r'bus_id=(\d+)', url)
+        m = re.search(r'business_id=(\d+)', url)
         if m:
             business_id = m.group(1)
 
