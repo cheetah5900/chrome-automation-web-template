@@ -4473,94 +4473,118 @@ def open_meta_channel_url(req: MetaOpenUrlRequest) -> dict[str, Any]:
 # ==============================================================================
 
 class MetaStepOpenComposerRequest(BaseModel):
-    url: Optional[str] = None
+    url: str = ""
 
 class MetaStepUploadVideoRequest(BaseModel):
-    video_path: str
+    video_path: str = ""
 
 class MetaStepInsertCaptionRequest(BaseModel):
-    caption: str
+    caption: str = ""
 
 class MetaStepClickShareRequest(BaseModel):
-    timeout: Optional[float] = 60.0
+    timeout: float = 60.0
 
 class MetaStepSetScheduleRequest(BaseModel):
-    scheduled_datetime: str
+    scheduled_datetime: str = ""
+
+MetaStepOpenComposerRequest.model_rebuild()
+MetaStepUploadVideoRequest.model_rebuild()
+MetaStepInsertCaptionRequest.model_rebuild()
+MetaStepClickShareRequest.model_rebuild()
+MetaStepSetScheduleRequest.model_rebuild()
+
+def _get_meta_driver():
+    try:
+        bot = browser_manager.get()
+        if bot and bot.driver:
+            return bot.driver
+    except Exception as e:
+        log(f"[Meta Driver Error] {e}")
+    return None
 
 @app.post("/api/meta-autopost/step/open-composer")
 def api_meta_step_open_composer(req: MetaStepOpenComposerRequest) -> dict[str, Any]:
-    bot = browser_manager.get()
-    if not bot or not bot.driver:
-        raise HTTPException(status_code=400, detail="เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน (กรุณากด Launch Profile ก่อน)")
     url = (req.url or "").strip()
     if not url:
-        raise HTTPException(status_code=400, detail="กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน")
+        return {"ok": False, "detail": "กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน"}
+    driver = _get_meta_driver()
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน (กรุณากด Launch Profile ก่อน)"}
     from app.meta_autopost import step_1_open_composer
     try:
-        step_1_open_composer(bot.driver, url)
-        return {"ok": True, "message": "Step 1: เปิดหน้าต่าง Create reel สำเร็จ"}
+        step_1_open_composer(driver, url)
+        return {"ok": True, "message": f"Step 1: เปิดหน้าต่าง Composer สำเร็จ"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log(f"[Meta Step 1 Error] {e}")
+        return {"ok": False, "detail": str(e)}
 
 @app.post("/api/meta-autopost/step/upload-video")
 def api_meta_step_upload_video(req: MetaStepUploadVideoRequest) -> dict[str, Any]:
-    bot = browser_manager.get()
-    if not bot or not bot.driver:
-        raise HTTPException(status_code=400, detail="เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน")
+    vpath = (req.video_path or "").strip()
+    if not vpath:
+        return {"ok": False, "detail": "ไม่พบพาธไฟล์วิดีโอ"}
+    driver = _get_meta_driver()
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน"}
     from app.meta_autopost import step_2_upload_video
     try:
-        step_2_upload_video(bot.driver, req.video_path.strip())
+        step_2_upload_video(driver, vpath)
         return {"ok": True, "message": "Step 2: อัปโหลดวิดีโอผ่าน Dialog สำเร็จ"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log(f"[Meta Step 2 Error] {e}")
+        return {"ok": False, "detail": str(e)}
 
 @app.post("/api/meta-autopost/step/insert-caption")
 def api_meta_step_insert_caption(req: MetaStepInsertCaptionRequest) -> dict[str, Any]:
-    bot = browser_manager.get()
-    if not bot or not bot.driver:
-        raise HTTPException(status_code=400, detail="เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน")
+    driver = _get_meta_driver()
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน"}
     from app.meta_autopost import step_3_insert_caption
     try:
-        step_3_insert_caption(bot.driver, req.caption)
+        step_3_insert_caption(driver, req.caption or "")
         return {"ok": True, "message": "Step 3: วางข้อความ Caption ลงกล่อง Description สำเร็จ"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log(f"[Meta Step 3 Error] {e}")
+        return {"ok": False, "detail": str(e)}
 
 @app.post("/api/meta-autopost/step/click-share-tab")
 def api_meta_step_click_share_tab(req: MetaStepClickShareRequest) -> dict[str, Any]:
-    bot = browser_manager.get()
-    if not bot or not bot.driver:
-        raise HTTPException(status_code=400, detail="เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน")
+    driver = _get_meta_driver()
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน"}
     from app.meta_autopost import step_4_click_share_tab
     try:
-        step_4_click_share_tab(bot.driver, timeout=req.timeout or 60.0)
+        step_4_click_share_tab(driver, timeout=req.timeout or 60.0)
         return {"ok": True, "message": "Step 4: กดแท็บ Share และเข้าสู่ Step 3 (Share) สำเร็จ"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log(f"[Meta Step 4 Error] {e}")
+        return {"ok": False, "detail": str(e)}
 
 @app.post("/api/meta-autopost/step/set-schedule")
 def api_meta_step_set_schedule(req: MetaStepSetScheduleRequest) -> dict[str, Any]:
-    bot = browser_manager.get()
-    if not bot or not bot.driver:
-        raise HTTPException(status_code=400, detail="เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน")
+    driver = _get_meta_driver()
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน"}
     from app.meta_autopost import step_5_set_schedule
     try:
-        step_5_set_schedule(bot.driver, req.scheduled_datetime.strip())
+        step_5_set_schedule(driver, (req.scheduled_datetime or "").strip())
         return {"ok": True, "message": "Step 5: เลือก Schedule และใส่วันที่/เวลา สำเร็จ"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log(f"[Meta Step 5 Error] {e}")
+        return {"ok": False, "detail": str(e)}
 
 @app.post("/api/meta-autopost/step/submit-schedule")
 def api_meta_step_submit_schedule() -> dict[str, Any]:
-    bot = browser_manager.get()
-    if not bot or not bot.driver:
-        raise HTTPException(status_code=400, detail="เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน")
+    driver = _get_meta_driver()
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน"}
     from app.meta_autopost import step_6_submit_schedule
     try:
-        step_6_submit_schedule(bot.driver)
+        step_6_submit_schedule(driver)
         return {"ok": True, "message": "Step 6: กดยืนยัน Schedule สำเร็จ"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log(f"[Meta Step 6 Error] {e}")
+        return {"ok": False, "detail": str(e)}
 
 @app.get("/api/utils/view-image")
 def view_image(path: str) -> FileResponse:
