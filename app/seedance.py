@@ -368,6 +368,46 @@ def set_seedance_prompt(driver, prompt_text: str) -> bool:
     log(f"[Seedance] ✅ วางข้อความ Prompt สำเร็จ ({len(verified_text)} ตัวอักษร)")
     return True
 
+def click_seedance_generate(driver, timeout: float = 6.0) -> bool:
+    """Clicks the active Generate/Submit button on Dreamina, avoiding collapsed dummy buttons."""
+    time.sleep(0.5)  # Allow React state to enable button
+    start_t = time.time()
+    while time.time() - start_t < timeout:
+        res = driver.execute_script("""
+        const buttons = Array.from(document.querySelectorAll('button[class*="submit-button"], button.submit-button-IG_OEx'));
+        const activeBtn = buttons.find(b => {
+            const cls = b.className || '';
+            const isDisabled = b.disabled || b.classList.contains('lv-btn-disabled') || b.getAttribute('aria-disabled') === 'true';
+            const isCollapsed = cls.includes('collapsed');
+            const rect = b.getBoundingClientRect();
+            return !isDisabled && !isCollapsed && rect.width > 0 && rect.height > 0;
+        });
+
+        if (activeBtn) {
+            activeBtn.scrollIntoView({ block: 'nearest' });
+            activeBtn.click();
+            return true;
+        }
+        return false;
+        """)
+
+        if res:
+            log("[Seedance] ✅ กดปุ่ม Generate บน Dreamina สำเร็จ")
+            return True
+        time.sleep(0.3)
+
+    # Fallback with Selenium element click
+    real_btn = fast_poll(driver, """
+        return document.querySelector('button.submit-button-IG_OEx:not([disabled]):not(.lv-btn-disabled)') ||
+               document.querySelector('button[class*="submit-button"]:not([class*="collapsed"]):not([disabled]):not(.lv-btn-disabled)');
+    """, timeout=2.0)
+    if real_btn:
+        real_btn.click()
+        log("[Seedance] ✅ กดปุ่ม Generate สำเร็จ (Fallback)")
+        return True
+
+    raise RuntimeError("ไม่สามารถกดปุ่ม Generate ได้ (ปุ่มยังคง Disabled หรือไม่พบปุ่ม Generate ที่พร้อมใช้งาน)")
+
 def ensure_seedance_tab(bot) -> bool:
     """Ensures Selenium driver is switched to the Dreamina / Seedance tab."""
     if not bot or not bot.driver:
@@ -475,14 +515,7 @@ def run_seedance_batch(
             # 5. Click generate IF AND ONLY IF explicitly requested
             if click_generate:
                 log(f"[Seedance] 🚀 กำลังกดปุ่ม Generate สำหรับ {sub_name}...")
-                gen_btn = fast_poll(driver, """
-                    return document.querySelector('button.submit-button-g5Q97D, button[class*="submit-button"]:not([disabled])');
-                """, timeout=5.0)
-                if gen_btn:
-                    gen_btn.click()
-                    log(f"[Seedance] ✅ กดปุ่ม Generate สำเร็จสำหรับ {sub_name}")
-                else:
-                    raise RuntimeError("ไม่พบปุ่ม Generate หรือปุ่มถูกปิดการใช้งาน")
+                click_seedance_generate(driver)
             else:
                 log(f"[Seedance] 🛡️ โหมด Safe: ตั้งค่าและวาง Prompt เรียบร้อยแล้ว (ไม่กด Generate ตามคำสั่ง)")
 
