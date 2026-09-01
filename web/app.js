@@ -7249,8 +7249,7 @@ async function saveSeedancePreset() {
     duration: parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15,
     delay_min: parseFloat(document.getElementById('cfg_seedance_delay_min')?.value) || 5,
     delay_max: parseFloat(document.getElementById('cfg_seedance_delay_max')?.value) || 15,
-    click_generate: document.getElementById('chkSeedanceClickSubmit')?.checked || false,
-    manual_prompt: document.getElementById('cfg_seedance_manual_prompt')?.value || ''
+    click_generate: document.getElementById('chkSeedanceClickSubmit')?.checked || false
   };
 
   try {
@@ -7329,7 +7328,6 @@ async function applySeedancePreset() {
   if (document.getElementById('cfg_seedance_delay_min')) document.getElementById('cfg_seedance_delay_min').value = preset.delay_min !== undefined ? preset.delay_min : 5;
   if (document.getElementById('cfg_seedance_delay_max')) document.getElementById('cfg_seedance_delay_max').value = preset.delay_max !== undefined ? preset.delay_max : 15;
   if (document.getElementById('chkSeedanceClickSubmit')) document.getElementById('chkSeedanceClickSubmit').checked = !!preset.click_generate;
-  if (document.getElementById('cfg_seedance_manual_prompt')) document.getElementById('cfg_seedance_manual_prompt').value = preset.manual_prompt || '';
 
   if (preset.main_folder) localStorage.setItem('seedance_main_folder', preset.main_folder);
   if (preset.subfolders) localStorage.setItem('seedance_subfolders', preset.subfolders);
@@ -7388,16 +7386,6 @@ async function applySeedanceDirectSettings(customOptions = {}) {
   }
 }
 window.applySeedanceDirectSettings = applySeedanceDirectSettings;
-
-function applyManualSeedancePrompt() {
-  const promptVal = document.getElementById('cfg_seedance_manual_prompt')?.value || '';
-  if (!promptVal.trim()) {
-    alert('กรุณากรอกข้อความ Prompt ก่อนกดส่ง');
-    return;
-  }
-  applySeedanceDirectSettings({ prompt_text: promptVal });
-}
-window.applyManualSeedancePrompt = applyManualSeedancePrompt;
 
 function updateSeedanceQuickBtnStyles() {
   const curModel = document.getElementById('cfg_seedance_model')?.value;
@@ -7982,14 +7970,6 @@ function initSeedanceGenListeners() {
   if (applySettingsBtn) {
     applySettingsBtn.addEventListener('click', () => {
       applySeedanceDirectSettings();
-    });
-  }
-
-  // Manual Prompt Apply Button
-  const applyManualPromptBtn = document.getElementById('btnApplyManualSeedancePrompt');
-  if (applyManualPromptBtn) {
-    applyManualPromptBtn.addEventListener('click', () => {
-      applyManualSeedancePrompt();
     });
   }
 
