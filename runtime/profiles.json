@@ -2,13 +2,15 @@
   "selected_profile": "Generate Image Dino",
   "profiles": [
     {
-      "name": "Brave Flow",
-      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Brave Flow",
-      "debug_port": 9223,
+      "name": "Google Chrome",
+      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Google Chrome",
+      "debug_port": 9222,
       "startup_urls": [
-        "https://labs.google/fx/tools/flow"
+        "https://chatgpt.com/",
+        "https://labs.google/fx/tools/flow",
+        "https://dreamina.capcut.com/ai-tool/generate?workspace=0&type=video"
       ],
-      "browser_type": "brave"
+      "browser_type": "chrome"
     },
     {
       "name": "Generate Image Dino",
@@ -19,6 +21,15 @@
         "https://labs.google/fx/tools/flow"
       ],
       "browser_type": "chrome"
+    },
+    {
+      "name": "Brave Flow",
+      "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Brave Flow",
+      "debug_port": 9223,
+      "startup_urls": [
+        "https://labs.google/fx/tools/flow"
+      ],
+      "browser_type": "brave"
     },
     {
       "name": "Google Chrome Canary",

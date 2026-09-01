@@ -39,7 +39,7 @@
       <nav class="sidebar-nav">
         <button id="tabBrowserSetupBtn" class="sidebar-nav-btn active">
           <span class="nav-icon">🌐</span>
-          <span class="nav-text">Browser Setup</span>
+          <span class="nav-text">Chrome Profiles</span>
           <span class="nav-status-dot" id="sidebar_browser_status_dot"></span>
         </button>
         <button id="tabImageGenBtn" class="sidebar-nav-btn locked" disabled>
@@ -62,10 +62,9 @@
           <span class="nav-text">Video Helper</span>
           <span class="nav-lock">🔒</span>
         </button>
-        <button id="tabSeedanceGenBtn" class="sidebar-nav-btn locked" disabled>
+        <button id="tabSeedanceGenBtn" class="sidebar-nav-btn">
           <span class="nav-icon">💃</span>
           <span class="nav-text">Seedance Gen</span>
-          <span class="nav-lock">🔒</span>
         </button>
         <button id="tabMetaAutoPostBtn" class="sidebar-nav-btn locked" disabled>
           <span class="nav-icon">📢</span>
@@ -88,7 +87,7 @@
     <div class="main-content-wrapper">
       <header class="app-header">
         <div class="header-left">
-          <h1 id="activeViewTitle">Browser Setup</h1>
+          <h1 id="activeViewTitle">Chrome Profiles</h1>
           <span id="portStatusBadge" class="status-badge offline" style="margin-left: 12px;">Offline</span>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
@@ -1254,42 +1253,200 @@
       <!-- VIEW 5: SEEDANCE GEN -->
       <div id="seedanceGenView" class="tab-view hidden">
         <div class="layout-grid workflow-grid" style="grid-template-columns: 7fr 3fr;">
-          <!-- Configuration Column -->
-          <section class="card">
-            <h2 class="section-title">💃 Seedance Gen</h2>
-            <p class="section-subtitle">Automate prompt input for CapCut Dreamina (Seedance)</p>
-            
-            <div class="settings-form" style="margin-top: 15px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px; flex-wrap: wrap;">
-                <label style="font-weight: bold; color: #8da6ff; font-size: 1.1rem;">📝 Seedance Prompts</label>
-                <span id="seedancePromptCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(127, 92, 255, 0.15); border: 1px solid rgba(127, 92, 255, 0.25); color: #c4b5fd; border-radius: 20px; font-weight: bold;">0 Prompts</span>
+          <!-- Left Column: Settings, Batch Scanner & Scanned Prompts List -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Configuration & Batch Scanner Card -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
+                <h2 class="section-title" style="margin-bottom: 0;">💃 Seedance Video Gen (CapCut Dreamina)</h2>
+                <span id="seedancePromptCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(127, 92, 255, 0.15); border: 1px solid rgba(127, 92, 255, 0.25); color: #c4b5fd; border-radius: 20px; font-weight: bold;">0 Prompts Ready</span>
               </div>
-              <p class="section-subtitle" style="margin-bottom: 16px;">เพิ่ม/ลด พรอพต์ที่ต้องการส่งไปเจเนอเรทภาพเคลื่อนไหวบน CapCut Dreamina</p>
-              
-              <!-- Prompt List Container -->
-              <div id="seedancePromptList" class="prompt-list" style="margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px; max-height: 500px; overflow-y: auto; padding-right: 4px;"></div>
-              
-              <!-- Action Row -->
-              <div class="row" style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
-                <button id="addSeedancePromptBtn" class="secondary" style="padding: 10px 16px; border-radius: 12px;">+ Add Prompt</button>
-                <button id="saveSeedancePromptsBtn" style="padding: 10px 16px; border-radius: 12px; font-weight: bold; background: linear-gradient(135deg, #7f5cff, #3aa0ff); color: white; border: none; cursor: pointer;">Save Prompts</button>
-                <button id="deleteAllSeedancePromptsBtn" class="secondary" style="padding: 10px 16px; border-radius: 12px; background: rgba(245, 101, 101, 0.12); border-color: rgba(245, 101, 101, 0.22); color: #f56565;">🗑️ Delete All</button>
-                <label for="importSeedancePromptsFile" class="btn secondary" style="cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 11px 16px; margin: 0; font-size: 0.9rem; font-weight: 500; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; transition: all 0.2s ease;">📥 Import (.txt, .md)</label>
-                <input type="file" id="importSeedancePromptsFile" accept=".txt,.md" style="display: none;" />
-              </div>
-              <p id="seedancePromptMsg" class="msg" style="margin-top: 10px; font-size: 0.85rem; text-align: center; min-height: auto;"></p>
-            </div>
-          </section>
+              <p class="section-subtitle">สแกนไฟล์ Markdown Prompt จากโฟลเดอร์หลัก และตั้งค่าโมเดล/อัตราส่วน/ระยะเวลาบน Dreamina อัตโนมัติ</p>
 
-          <!-- Console Column -->
-          <div class="actions-column">
-            <section class="card console-card">
-              <div class="console-header">
-                <h3>📟 Seedance Console</h3>
+              <div class="settings-form" style="margin-top: 15px;">
+                <!-- Main Folder Selection -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_seedance_main_folder" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์หลักสำหรับดึงข้อมูล (Main Target Folder)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์หลักที่มีโฟลเดอร์ย่อยบรรจุไฟล์ <code>*prompt*.md</code></div>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <input id="cfg_seedance_main_folder" placeholder="เช่น /Users/litar/Downloads/animation_prompts_batch" style="margin-bottom: 0; flex-grow: 1;" />
+                    <button id="browseSeedanceMainFolderBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                  </div>
+                </div>
+
+                <!-- Subfolders Input -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_seedance_subfolders" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
+                  <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ระบุตัวเลขหรือช่วง เช่น 1-10, 15, 20-25 (เว้นว่าง = ดึงทุกโฟลเดอร์ย่อย)</div>
+                  <input id="cfg_seedance_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
+                </div>
+
+                <!-- Settings Grid: Model, Aspect Ratio, Duration & Delay -->
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.2fr; gap: 14px; margin-bottom: 14px;">
+                  <!-- Model Selection -->
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_seedance_model" style="font-weight: bold; color: #8da6ff;">โมเดล AI (Model)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เลือก Seedance Engine</div>
+                    <select id="cfg_seedance_model" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.25); color: white; border: 1px solid rgba(255,255,255,0.12); outline: none;">
+                      <option value="fast" selected>Seedance 2.0 Fast</option>
+                      <option value="mini">Seedance 2.0 Mini</option>
+                      <option value="2.0">Seedance 2.0 (Standard)</option>
+                      <option value="2.5">Seedance 2.5</option>
+                    </select>
+                    <div style="display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap;">
+                      <button type="button" class="seedance-quick-btn" data-type="model" data-val="fast" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">Fast</button>
+                      <button type="button" class="seedance-quick-btn" data-type="model" data-val="mini" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">Mini</button>
+                      <button type="button" class="seedance-quick-btn" data-type="model" data-val="2.0" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">2.0</button>
+                      <button type="button" class="seedance-quick-btn" data-type="model" data-val="2.5" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">2.5</button>
+                    </div>
+                  </div>
+
+                  <!-- Aspect Ratio Selection -->
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_seedance_aspect_ratio" style="font-weight: bold; color: #8da6ff;">อัตราส่วน (Ratio)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ขนาดเฟรมวิดีโอ</div>
+                    <select id="cfg_seedance_aspect_ratio" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.25); color: white; border: 1px solid rgba(255,255,255,0.12); outline: none;">
+                      <option value="9:16" selected>9:16 (แนวตั้ง)</option>
+                      <option value="16:9">16:9 (แนวนอน)</option>
+                      <option value="1:1">1:1 (จัตุรัส)</option>
+                      <option value="3:4">3:4</option>
+                      <option value="4:3">4:3</option>
+                      <option value="21:9">21:9</option>
+                    </select>
+                    <div style="display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap;">
+                      <button type="button" class="seedance-quick-btn" data-type="ratio" data-val="9:16" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">9:16</button>
+                      <button type="button" class="seedance-quick-btn" data-type="ratio" data-val="16:9" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">16:9</button>
+                      <button type="button" class="seedance-quick-btn" data-type="ratio" data-val="1:1" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">1:1</button>
+                      <button type="button" class="seedance-quick-btn" data-type="ratio" data-val="3:4" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">3:4</button>
+                    </div>
+                  </div>
+
+                  <!-- Duration Selection -->
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_seedance_duration" style="font-weight: bold; color: #8da6ff;">ระยะเวลา (Duration)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ความยาวคลิป</div>
+                    <select id="cfg_seedance_duration" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.25); color: white; border: 1px solid rgba(255,255,255,0.12); outline: none;">
+                      <option value="15" selected>15 วินาที (15s)</option>
+                      <option value="10">10 วินาที (10s)</option>
+                      <option value="5">5 วินาที (5s)</option>
+                    </select>
+                    <div style="display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap;">
+                      <button type="button" class="seedance-quick-btn" data-type="duration" data-val="15" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">15s</button>
+                      <button type="button" class="seedance-quick-btn" data-type="duration" data-val="10" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">10s</button>
+                      <button type="button" class="seedance-quick-btn" data-type="duration" data-val="5" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">5s</button>
+                    </div>
+                  </div>
+
+                  <!-- Random Delay Min - Max -->
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-weight: bold; color: #8da6ff;">สุ่มหน่วงเวลา (Delay)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">Min - Max (วินาที)</div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                      <input type="number" id="cfg_seedance_delay_min" min="0" max="3600" value="5" placeholder="Min" style="margin-bottom: 0; width: 65px; text-align: center; padding: 10px;" />
+                      <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">-</span>
+                      <input type="number" id="cfg_seedance_delay_max" min="0" max="3600" value="15" placeholder="Max" style="margin-bottom: 0; width: 65px; text-align: center; padding: 10px;" />
+                      <span style="color: rgba(255,255,255,0.6); font-size: 0.8rem;">วิ</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Direct Settings Apply Bar -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(127, 92, 255, 0.08); border: 1px solid rgba(127, 92, 255, 0.2); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 0.88rem; font-weight: bold; color: #c4b5fd;">⚡ Direct Settings:</span>
+                    <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">ส่งการตั้งค่า Model, Ratio & Duration ไปใช้บนเว็บ Dreamina ทันที</span>
+                  </div>
+                  <button type="button" id="btnApplySeedanceSettings" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; background: linear-gradient(135deg, rgba(127, 92, 255, 0.3), rgba(58, 160, 255, 0.3)); border: 1px solid rgba(127, 92, 255, 0.4); color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <span>⚡ นำการตั้งค่าไปใช้บน Dreamina</span>
+                  </button>
+                </div>
+
+                <!-- Manual Prompt Test Box -->
+                <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                    <label for="cfg_seedance_manual_prompt" style="font-weight: bold; color: #8da6ff; font-size: 0.88rem;">✍️ ทดสอบส่ง Prompt เดี่ยวไปยังหน้าเว็บ (Manual Prompt Test)</label>
+                    <button type="button" id="btnApplyManualSeedancePrompt" class="secondary" style="padding: 6px 14px; font-size: 0.8rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 8px; cursor: pointer;">
+                      ⚡ ส่ง Prompt นี้ลง Dreamina
+                    </button>
+                  </div>
+                  <textarea id="cfg_seedance_manual_prompt" rows="3" placeholder="พิมพ์หรือวางข้อความ Prompt ที่ต้องการทดสอบส่งเข้ากล่องข้อความ Dreamina..." style="width: 100%; margin-bottom: 0; font-size: 0.85rem; border-radius: 8px; background: rgba(0,0,0,0.25);"></textarea>
+                </div>
+
+                <!-- Scan Buttons -->
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <button id="btnScanSeedanceBatch" class="primary has-tooltip" style="padding: 12px 24px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #7f5cff, #3aa0ff); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(127, 92, 255, 0.3);">
+                    <span class="btn-text">🔍 สแกนหาไฟล์ Prompt (*prompt*.md)</span>
+                    <div class="custom-tooltip" id="tooltip_btnScanSeedanceBatch"></div>
+                  </button>
+                  <button id="btnClearSeedanceBatch" class="secondary" style="padding: 12px 18px; font-size: 0.85rem; border-radius: 12px; margin-bottom: 0;">🗑️ ล้างรายการ</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Scanned Prompts Preview List -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #8da6ff;">📝 รายการ Prompt ที่สแกนพบ (Scanned Items)</h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button id="toggleAllSeedancePromptsBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 20px; margin: 0; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #fff;">Deselect All</button>
+                </div>
+              </div>
+
+              <!-- Queue Container -->
+              <div id="seedanceQueueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 650px; overflow-y: auto; padding-right: 4px;">
+                <div id="seedanceEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
+                  ยังไม่มีข้อมูล Prompt — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนหาไฟล์ Prompt"</strong>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Right Column: Status, Run Controls & Console -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <section class="card" style="height: 100%; display: flex; flex-direction: column;">
+              <h2 class="section-title">🚀 Seedance Execution</h2>
+              <p class="section-subtitle">สถานะและบันทึกการส่งคำสั่งไปยัง CapCut Dreamina (9222)</p>
+
+              <!-- Safety Options & Run Buttons -->
+              <div style="margin: 15px 0 16px 0; display: flex; flex-direction: column; gap: 12px;">
+                <!-- Submit checkbox with Warning -->
+                <div style="padding: 10px 14px; background: rgba(255, 184, 108, 0.08); border: 1px solid rgba(255, 184, 108, 0.25); border-radius: 10px; display: flex; align-items: center; gap: 10px;">
+                  <input type="checkbox" id="chkSeedanceClickSubmit" style="cursor: pointer; width: 18px; height: 18px; margin: 0;" />
+                  <label for="chkSeedanceClickSubmit" style="margin: 0; font-size: 0.85rem; color: #ffb86c; font-weight: bold; cursor: pointer;">
+                    ⚡ กดปุ่ม Generate ในเว็บด้วย (ใช้เครดิตจริง)
+                  </label>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                  <button id="runSeedanceBatchBtn" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">
+                    <span class="btn-text">🚀 เริ่มรัน Seedance ตามคิว</span>
+                    <div class="custom-tooltip" id="tooltip_runSeedanceBatchBtn"></div>
+                  </button>
+                  <button id="btnSeedanceForceStop" class="secondary has-tooltip" style="padding: 14px 18px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #f87171; white-space: nowrap;">
+                    🛑 Force Stop
+                    <div class="custom-tooltip" id="tooltip_btnSeedanceForceStop"></div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Progress Bar -->
+              <div id="seedanceProgressContainer" class="hidden" style="margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; color: rgba(255,255,255,0.7);">
+                  <span>ความคืบหน้า</span>
+                  <span id="seedanceProgressText">0% (0/0)</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;">
+                  <div id="seedanceProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #7f5cff, #10b981); transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+
+              <!-- Console Box -->
+              <div class="console-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 0.95rem; color: #8da6ff;">📟 Console Logs</h3>
                 <button id="clearSeedanceConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
               </div>
-              <div id="seedanceConsole" class="console-box">
-                <div class="console-line system">Waiting for process to start...</div>
+              <div id="seedanceConsole" class="console-box" style="flex-grow: 1; min-height: 280px; max-height: 500px; overflow-y: auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; font-family: monospace; font-size: 0.82rem;">
+                <div class="console-line system">พร้อมสำหรับการใช้งาน Seedance Video Gen (CapCut Dreamina)</div>
               </div>
             </section>
           </div>
@@ -1526,6 +1683,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=24"></script>
+  <script src="/web/app.js?v=28"></script>
 </body>
 </html>

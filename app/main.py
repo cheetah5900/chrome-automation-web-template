@@ -6401,10 +6401,123 @@ async def stop_storyboard_autofill() -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/")
+# ==============================================================================
+# Seedance (Dreamina) Automation Endpoints
+# ==============================================================================
 
+class SeedanceScanRequest(BaseModel):
+    main_folder: str
+    subfolders_str: str = ""
+
+class SeedanceRunRequest(BaseModel):
+    items: list[dict[str, Any]]
+    model: str = "fast"
+    aspect_ratio: str = "9:16"
+    duration: int = 15
+    delay_min: float = 5.0
+    delay_max: float = 15.0
+    click_generate: bool = False
+
+class SeedanceApplySettingsRequest(BaseModel):
+    model: Optional[str] = None
+    aspect_ratio: Optional[str] = None
+    duration: Optional[int] = None
+    prompt_text: Optional[str] = None
+
+global_seedance_progress: dict[str, Any] = {
+    "status": "idle",
+    "total": 0,
+    "current": 0,
+    "percent": 0,
+    "message": "พร้อมทำงาน",
+    "errors": []
+}
+
+@app.post("/api/seedance/scan")
+def api_seedance_scan(req: SeedanceScanRequest) -> dict[str, Any]:
+    from app.seedance import scan_seedance_folders
+    try:
+        res = scan_seedance_folders(req.main_folder, req.subfolders_str)
+        return res
+    except Exception as e:
+        log(f"[Seedance Scan Error] {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/seedance/apply-settings")
+def api_seedance_apply_settings(req: SeedanceApplySettingsRequest) -> dict[str, Any]:
+    bot = browser_manager.get()
+    if not bot or not bot.driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน"}
+    from app.seedance import apply_all_seedance_settings
+    try:
+        res = apply_all_seedance_settings(
+            driver=bot.driver,
+            model=req.model,
+            aspect_ratio=req.aspect_ratio,
+            duration=req.duration,
+            prompt_text=req.prompt_text
+        )
+        return {"ok": True, "message": "ตั้งค่าโมเดล อัตราส่วน ระยะเวลา และพรอพต์สำเร็จ", "results": res}
+    except Exception as e:
+        log(f"[Seedance Apply Error] {e}")
+        return {"ok": False, "detail": str(e)}
+
+def _seedance_worker(req: SeedanceRunRequest):
+    global global_seedance_progress
+    from app.seedance import run_seedance_batch
+    def _on_prog(data: dict[str, Any]):
+        global global_seedance_progress
+        for k, v in data.items():
+            global_seedance_progress[k] = v
+    try:
+        res = run_seedance_batch(
+            items=req.items,
+            model=req.model,
+            aspect_ratio=req.aspect_ratio,
+            duration=req.duration,
+            delay_min=req.delay_min,
+            delay_max=req.delay_max,
+            click_generate=req.click_generate,
+            progress_callback=_on_prog
+        )
+        global_seedance_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
+        global_seedance_progress["percent"] = 100
+        global_seedance_progress["message"] = f"✅ ทำงานสำเร็จ {res['success_count']}/{len(req.items)} รายการ"
+    except Exception as ex:
+        log(f"[Seedance Worker Error] {ex}")
+        global_seedance_progress["status"] = "error"
+        global_seedance_progress["message"] = str(ex)
+
+@app.post("/api/seedance/run")
+def api_seedance_run(req: SeedanceRunRequest) -> dict[str, Any]:
+    global global_seedance_progress
+    if not req.items:
+        raise HTTPException(status_code=400, detail="ไม่มีรายการสำหรับประมวลผล")
+    global_seedance_progress = {
+        "status": "running",
+        "total": len(req.items),
+        "current": 0,
+        "percent": 0,
+        "message": f"เตรียมประมวลผล {len(req.items)} รายการ...",
+        "errors": []
+    }
+    import threading
+    threading.Thread(target=_seedance_worker, args=(req,), daemon=True).start()
+    return {"ok": True, "message": f"เริ่มกระบวนการ Seedance {len(req.items)} รายการ", "total": len(req.items)}
+
+@app.post("/api/seedance/stop")
+def api_seedance_stop() -> dict[str, Any]:
+    from app.seedance import request_seedance_stop
+    request_seedance_stop()
+    return {"ok": True, "message": "ส่งคำสั่ง Force Stop ไปยัง Seedance เรียบร้อยแล้ว"}
+
+@app.get("/api/seedance/progress")
+def api_seedance_progress() -> dict[str, Any]:
+    global global_seedance_progress
+    return global_seedance_progress
+
+@app.get("/")
 def index():
     return FileResponse(BASE_DIR / "web" / "index.html")
-
 
 app.mount("/web", StaticFiles(directory=BASE_DIR / "web"), name="web")
