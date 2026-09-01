@@ -6881,6 +6881,15 @@ function clearMetaBatch() {
 }
 
 async function runMetaAutoPost(btnElement) {
+  const presetSelect = document.getElementById('metaPresetSelect');
+  const presetVal = presetSelect ? presetSelect.value.trim() : '';
+  if (!presetVal) {
+    writeConsoleLine(`[Meta Auto Post Error] ❌ กรุณาเลือก Preset ก่อนเริ่มรัน Auto Post`, 'error', 'metaConsole');
+    alert('กรุณาเลือก Preset ก่อนเริ่มรัน Auto Post');
+    if (presetSelect) presetSelect.focus();
+    return;
+  }
+
   const selectedPosts = metaPostQueue.filter(p => p.checked !== false);
   if (selectedPosts.length === 0) {
     alert('ไม่มีรายการโพสต์ที่ถูกเลือก กรุณาติ๊กเลือกอย่างน้อย 1 รายการ');
@@ -7015,6 +7024,14 @@ function getActiveMetaStepItem() {
 }
 
 async function runMetaStep1(btn) {
+  const presetSelect = document.getElementById('metaPresetSelect');
+  const presetVal = presetSelect ? presetSelect.value.trim() : '';
+  if (!presetVal) {
+    writeConsoleLine(`[Step 1 Error] ❌ กรุณาเลือก Preset ก่อนเริ่มทำงาน`, 'error', 'metaConsole');
+    alert('กรุณาเลือก Preset ก่อนเริ่มทำงาน');
+    if (presetSelect) presetSelect.focus();
+    return;
+  }
   const targetUrl = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
   if (!targetUrl) {
     writeConsoleLine(`[Step 1 Error] ❌ กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน`, 'error', 'metaConsole');
@@ -7156,6 +7173,14 @@ async function runMetaStep6(btn) {
 }
 
 async function runMetaStep7(btn) {
+  const presetSelect = document.getElementById('metaPresetSelect');
+  const presetVal = presetSelect ? presetSelect.value.trim() : '';
+  if (!presetVal) {
+    writeConsoleLine(`[Step 7 Error] ❌ กรุณาเลือก Preset ก่อนเริ่มทำงาน`, 'error', 'metaConsole');
+    alert('กรุณาเลือก Preset ก่อนเริ่มทำงาน');
+    if (presetSelect) presetSelect.focus();
+    return;
+  }
   const targetUrl = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
   if (!targetUrl) {
     writeConsoleLine(`[Step 7 Error] ❌ กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน`, 'error', 'metaConsole');
