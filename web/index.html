@@ -1268,11 +1268,11 @@
                 <div id="seedancePresetsGroup" class="form-group" style="margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px;">
                   <label style="font-weight: bold; color: #ffb86c; margin-bottom: 8px; display: block;">🎯 Preset การตั้งค่า Seedance</label>
                   <div style="display: flex; gap: 10px; width: 100%;">
-                    <select id="seedancePresetSelect" onchange="window.applySeedancePreset()" style="flex-grow: 1; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
+                    <select id="seedancePresetSelect" style="flex-grow: 1; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
                       <option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>
                     </select>
-                    <button type="button" id="saveSeedancePresetBtn" onclick="window.saveSeedancePreset()" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap;">💾 บันทึก Preset</button>
-                    <button type="button" id="deleteSeedancePresetBtn" onclick="window.deleteSeedancePreset()" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap; color: #ff6b6b; border-color: rgba(255,107,107,0.3);">🗑️ ลบ</button>
+                    <button type="button" id="saveSeedancePresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap;">💾 บันทึก Preset</button>
+                    <button type="button" id="deleteSeedancePresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap; color: #ff6b6b; border-color: rgba(255,107,107,0.3);">🗑️ ลบ</button>
                   </div>
                 </div>
 
@@ -1282,8 +1282,8 @@
                   <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์หลักที่มีโฟลเดอร์ย่อยบรรจุไฟล์ <code>*prompt*.md</code></div>
                   <div style="display: flex; gap: 10px; width: 100%;">
                     <input id="cfg_seedance_main_folder" placeholder="เช่น /Users/litar/Downloads/animation_prompts_batch" style="margin-bottom: 0; flex-grow: 1;" />
-                    <button id="browseSeedanceMainFolderBtn" type="button" onclick="handleBrowseSeedanceFolder()" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
-                    <button id="pasteSeedanceMainFolderBtn" type="button" onclick="handlePasteSeedanceFolder()" class="secondary" title="วางโฟลเดอร์จาก Clipboard ทันที (ใน Finder กด Cmd+Option+C แล้วกดปุ่มนี้)" style="padding: 10px 14px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: rgba(58, 160, 255, 0.12); border-color: rgba(58, 160, 255, 0.3); color: #8da6ff;">📋 วาง Path</button>
+                    <button id="browseSeedanceMainFolderBtn" type="button" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                    <button id="pasteSeedanceMainFolderBtn" type="button" class="secondary" title="วางโฟลเดอร์จาก Clipboard ทันที (ใน Finder กด Cmd+Option+C แล้วกดปุ่มนี้)" style="padding: 10px 14px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: rgba(58, 160, 255, 0.12); border-color: rgba(58, 160, 255, 0.3); color: #8da6ff;">📋 วาง Path</button>
                   </div>
                 </div>
 
@@ -1369,7 +1369,7 @@
                     <span style="font-size: 0.88rem; font-weight: bold; color: #c4b5fd;">⚡ Direct Settings:</span>
                     <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">ส่งการตั้งค่า Model, Ratio & Duration ไปใช้บนเว็บ Dreamina ทันที</span>
                   </div>
-                  <button type="button" id="btnApplySeedanceSettings" onclick="window.applySeedanceDirectSettings()" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; background: linear-gradient(135deg, rgba(127, 92, 255, 0.3), rgba(58, 160, 255, 0.3)); border: 1px solid rgba(127, 92, 255, 0.4); color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                  <button type="button" id="btnApplySeedanceSettings" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; background: linear-gradient(135deg, rgba(127, 92, 255, 0.3), rgba(58, 160, 255, 0.3)); border: 1px solid rgba(127, 92, 255, 0.4); color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                     <span>⚡ นำการตั้งค่าไปใช้บน Dreamina</span>
                   </button>
                 </div>
@@ -1378,7 +1378,7 @@
                 <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
                     <label for="cfg_seedance_manual_prompt" style="font-weight: bold; color: #8da6ff; font-size: 0.88rem;">✍️ ทดสอบส่ง Prompt เดี่ยวไปยังหน้าเว็บ (Manual Prompt Test)</label>
-                    <button type="button" id="btnApplyManualSeedancePrompt" onclick="window.applyManualSeedancePrompt()" class="secondary" style="padding: 6px 14px; font-size: 0.8rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 8px; cursor: pointer;">
+                    <button type="button" id="btnApplyManualSeedancePrompt" class="secondary" style="padding: 6px 14px; font-size: 0.8rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 8px; cursor: pointer;">
                       ⚡ ส่ง Prompt นี้ลง Dreamina
                     </button>
                   </div>
@@ -1696,6 +1696,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=37"></script>
+  <script src="/web/app.js?v=38"></script>
 </body>
 </html>

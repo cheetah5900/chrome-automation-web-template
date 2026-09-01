@@ -7764,6 +7764,16 @@ function initSeedanceGenListeners() {
     });
   }
 
+  const browseFolderBtn = document.getElementById('browseSeedanceMainFolderBtn');
+  if (browseFolderBtn) {
+    browseFolderBtn.addEventListener('click', handleBrowseSeedanceFolder);
+  }
+
+  const pasteFolderBtn = document.getElementById('pasteSeedanceMainFolderBtn');
+  if (pasteFolderBtn) {
+    pasteFolderBtn.addEventListener('click', handlePasteSeedanceFolder);
+  }
+
   const subfoldersInput = document.getElementById('cfg_seedance_subfolders');
   if (subfoldersInput) {
     const savedSub = localStorage.getItem('seedance_subfolders');
