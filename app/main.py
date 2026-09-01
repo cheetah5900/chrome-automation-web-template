@@ -1,3 +1,4 @@
+from typing import Any, Optional, Union, List, Dict
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -6423,6 +6424,8 @@ class SeedanceApplySettingsRequest(BaseModel):
     aspect_ratio: Optional[str] = None
     duration: Optional[int] = None
     prompt_text: Optional[str] = None
+
+SeedanceApplySettingsRequest.model_rebuild()
 
 global_seedance_progress: dict[str, Any] = {
     "status": "idle",

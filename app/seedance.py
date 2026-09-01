@@ -210,14 +210,16 @@ def set_seedance_aspect_ratio(driver, ratio_target: str = "9:16") -> bool:
     target = (ratio_target or "9:16").strip()
     log(f"[Seedance] กำลังตั้งค่าอัตราส่วนภาพเป็น '{target}'...")
 
-    # Click ratio button
+    # Open ratio popover if not open
     opened = driver.execute_script("""
-    const btn = Array.from(document.querySelectorAll('button')).find(b => {
+    const btn = Array.from(document.querySelectorAll('.toolbar-button-EJ0kAg, button')).find(b => {
         const t = (b.innerText || '');
-        return (t.includes('16:9') || t.includes('9:16') || t.includes('1:1') || t.includes('4:3') || t.includes('3:4') || t.includes('21:9')) && b.getBoundingClientRect().y > 1100;
+        return t.includes('16:9') || t.includes('9:16') || t.includes('1:1') || t.includes('3:4') || t.includes('4:3') || t.includes('21:9');
     });
     if (btn) {
-        btn.click();
+        if (!btn.classList.contains('lv-popover-open')) {
+            btn.click();
+        }
         return true;
     }
     return false;
@@ -229,11 +231,13 @@ def set_seedance_aspect_ratio(driver, ratio_target: str = "9:16") -> bool:
     # Click ratio in popover
     selected = driver.execute_script("""
     const target = arguments[0].trim();
-    const radios = Array.from(document.querySelectorAll('.lv-radio, .radio-N0Z9nR, [role="radio"], label'));
-    const matched = radios.find(el => (el.innerText || '').trim() === target);
-    if (matched) {
-        matched.click();
-        return true;
+    const labels = Array.from(document.querySelectorAll('.lv-popover-content label, label.lv-radio, input[type="radio"], [role="radiogroup"] label'));
+    for (const el of labels) {
+        const t = (el.innerText || '').trim();
+        if (t === target || el.value === target) {
+            (el.tagName === 'INPUT' ? el.closest('label') || el : el).click();
+            return true;
+        }
     }
     return false;
     """, target)
@@ -252,14 +256,16 @@ def set_seedance_duration(driver, duration_seconds: int = 15) -> bool:
     target_sec = str(duration_seconds or 15).strip()
     log(f"[Seedance] กำลังตั้งค่าระยะเวลาวิดีโอเป็น {target_sec}s...")
 
-    # Click duration button
+    # Open duration popover if not open
     opened = driver.execute_script("""
-    const btn = Array.from(document.querySelectorAll('button')).find(b => {
+    const btn = Array.from(document.querySelectorAll('.toolbar-button-EJ0kAg, button')).find(b => {
         const t = (b.innerText || '').trim();
-        return (t === '5s' || t === '10s' || t === '15s' || t.match(/^\\d+s$/)) && b.getBoundingClientRect().y > 1100;
+        return t === '5s' || t === '10s' || t === '15s' || t.endsWith('s');
     });
     if (btn) {
-        btn.click();
+        if (!btn.classList.contains('lv-popover-open')) {
+            btn.click();
+        }
         return true;
     }
     return false;
@@ -271,11 +277,12 @@ def set_seedance_duration(driver, duration_seconds: int = 15) -> bool:
     # Click duration tick or type number
     selected = driver.execute_script("""
     const targetSec = arguments[0];
-    const tickBtns = Array.from(document.querySelectorAll('.tick-button-T1cxZR, button'));
-    const matched = tickBtns.find(b => (b.innerText || '').trim() === targetSec);
-    if (matched) {
-        matched.click();
-        return true;
+    const tickBtns = Array.from(document.querySelectorAll('.tick-button-T1cxZR, .lv-popover-content button'));
+    for (const b of tickBtns) {
+        if ((b.innerText || '').trim() === targetSec) {
+            b.click();
+            return true;
+        }
     }
     const numInput = document.querySelector('.duration-input-sipuPP input, .duration-panel-kl0UWV input, .lv-input-number input');
     if (numInput) {
