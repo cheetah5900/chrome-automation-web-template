@@ -1357,7 +1357,7 @@
                     <span style="font-size: 0.88rem; font-weight: bold; color: #c4b5fd;">⚡ Direct Settings:</span>
                     <span style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">ส่งการตั้งค่า Model, Ratio & Duration ไปใช้บนเว็บ Dreamina ทันที</span>
                   </div>
-                  <button type="button" id="btnApplySeedanceSettings" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; background: linear-gradient(135deg, rgba(127, 92, 255, 0.3), rgba(58, 160, 255, 0.3)); border: 1px solid rgba(127, 92, 255, 0.4); color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                  <button type="button" id="btnApplySeedanceSettings" onclick="window.applySeedanceDirectSettings()" class="secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; background: linear-gradient(135deg, rgba(127, 92, 255, 0.3), rgba(58, 160, 255, 0.3)); border: 1px solid rgba(127, 92, 255, 0.4); color: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                     <span>⚡ นำการตั้งค่าไปใช้บน Dreamina</span>
                   </button>
                 </div>
@@ -1366,7 +1366,7 @@
                 <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
                     <label for="cfg_seedance_manual_prompt" style="font-weight: bold; color: #8da6ff; font-size: 0.88rem;">✍️ ทดสอบส่ง Prompt เดี่ยวไปยังหน้าเว็บ (Manual Prompt Test)</label>
-                    <button type="button" id="btnApplyManualSeedancePrompt" class="secondary" style="padding: 6px 14px; font-size: 0.8rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 8px; cursor: pointer;">
+                    <button type="button" id="btnApplyManualSeedancePrompt" onclick="window.applyManualSeedancePrompt()" class="secondary" style="padding: 6px 14px; font-size: 0.8rem; font-weight: bold; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 8px; cursor: pointer;">
                       ⚡ ส่ง Prompt นี้ลง Dreamina
                     </button>
                   </div>
@@ -1684,6 +1684,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=33"></script>
+  <script src="/web/app.js?v=34"></script>
 </body>
 </html>

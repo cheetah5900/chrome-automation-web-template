@@ -5916,6 +5916,13 @@ function initVideoGenListeners() {
   let seedanceBatchQueue = [];
 
   async function applySeedanceDirectSettings(customOptions = {}) {
+    const btn = document.getElementById('btnApplySeedanceSettings');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ กำลังตั้งค่าบน Dreamina...</span>';
+    }
+
     const model = customOptions.model || document.getElementById('cfg_seedance_model')?.value || 'fast';
     const aspectRatio = customOptions.aspect_ratio || document.getElementById('cfg_seedance_aspect_ratio')?.value || '9:16';
     const duration = customOptions.duration !== undefined ? parseInt(customOptions.duration, 10) : (parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15);
@@ -5935,19 +5942,34 @@ function initVideoGenListeners() {
         })
       });
 
-      if (res.ok) {
+      if (res && res.ok) {
         writeConsoleLine(`[Seedance Direct] ✅ ${res.message || 'ตั้งค่าบนเว็บ Dreamina สำเร็จ'}`, 'success', 'seedanceConsole');
-        showToast('ตั้งค่าบน Dreamina สำเร็จ!', 'success');
+        if (typeof showToast === 'function') showToast('ตั้งค่าบน Dreamina สำเร็จ!', 'success');
       } else {
-        const errMsg = res.detail || res.message || 'เกิดข้อผิดพลาดในการตั้งค่า';
+        const errMsg = res?.detail || res?.message || 'เกิดข้อผิดพลาดในการตั้งค่า';
         writeConsoleLine(`[Seedance Direct Error] ❌ ${errMsg}`, 'error', 'seedanceConsole');
-        showToast(`ตั้งค่าไม่สำเร็จ: ${errMsg}`, 'error');
+        if (typeof showToast === 'function') showToast(`ตั้งค่าไม่สำเร็จ: ${errMsg}`, 'error');
       }
     } catch (err) {
       writeConsoleLine(`[Seedance Direct Error] ❌ ${err.message}`, 'error', 'seedanceConsole');
-      showToast(`Error: ${err.message}`, 'error');
+      if (typeof showToast === 'function') showToast(`Error: ${err.message}`, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalText || '<span>⚡ นำการตั้งค่าไปใช้บน Dreamina</span>';
+      }
     }
   }
+  window.applySeedanceDirectSettings = applySeedanceDirectSettings;
+
+  window.applyManualSeedancePrompt = function() {
+    const promptVal = document.getElementById('cfg_seedance_manual_prompt')?.value || '';
+    if (!promptVal.trim()) {
+      alert('กรุณากรอกข้อความ Prompt ก่อนกดส่ง');
+      return;
+    }
+    applySeedanceDirectSettings({ prompt_text: promptVal });
+  };
 
   function updateSeedanceQuickBtnStyles() {
     const curModel = document.getElementById('cfg_seedance_model')?.value;
