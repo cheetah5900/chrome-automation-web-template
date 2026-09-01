@@ -399,6 +399,37 @@ def step_6_submit_schedule(driver) -> bool:
     log("[Meta Step 6] ✅ ส่งคำสั่ง Schedule เรียบร้อยและปิดหน้าต่างสำเร็จ!")
     return True
 
+def get_scheduled_posts_url(composer_url: str) -> str:
+    """Extracts asset_id and business_id from composer_url to build the scheduled posts URL."""
+    try:
+        from urllib.parse import urlparse, parse_qs, urlencode
+        parsed = urlparse(composer_url)
+        params = parse_qs(parsed.query)
+        asset_id = params.get("asset_id", [""])[0]
+        business_id = params.get("business_id", [""])[0]
+        
+        query_dict = {}
+        if asset_id:
+            query_dict["asset_id"] = asset_id
+        if business_id:
+            query_dict["business_id"] = business_id
+            
+        q_str = f"?{urlencode(query_dict)}" if query_dict else ""
+        return f"https://business.facebook.com/latest/posts/scheduled_posts{q_str}"
+    except Exception:
+        return "https://business.facebook.com/latest/posts/scheduled_posts"
+
+def step_7_view_scheduled(driver, composer_url: str) -> bool:
+    """Step 7: Navigate to Scheduled Posts management page."""
+    sched_url = get_scheduled_posts_url(composer_url)
+    log(f"[Meta Step 7] กำลังเปิดหน้ารายการโพสต์ที่ตั้งเวลาไว้ (Scheduled Posts): {sched_url}")
+    try:
+        driver.execute_script("window.location.href = arguments[0];", sched_url)
+    except Exception:
+        driver.get(sched_url)
+    log("[Meta Step 7] ✅ เปิดหน้ารายการ Scheduled Posts เรียบร้อยแล้ว")
+    return True
+
 # ==============================================================================
 # Full Single Post & Batch Runner
 # ==============================================================================

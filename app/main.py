@@ -4586,6 +4586,27 @@ def api_meta_step_submit_schedule() -> dict[str, Any]:
         log(f"[Meta Step 6 Error] {e}")
         return {"ok": False, "detail": str(e)}
 
+class MetaStepViewScheduledRequest(BaseModel):
+    url: str = ""
+
+MetaStepViewScheduledRequest.model_rebuild()
+
+@app.post("/api/meta-autopost/step/view-scheduled")
+def api_meta_step_view_scheduled(req: MetaStepViewScheduledRequest) -> dict[str, Any]:
+    url = (req.url or "").strip()
+    if not url:
+        return {"ok": False, "detail": "กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน"}
+    driver = _get_meta_driver()
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน"}
+    from app.meta_autopost import step_7_view_scheduled
+    try:
+        step_7_view_scheduled(driver, url)
+        return {"ok": True, "message": "Step 7: เปิดหน้ารายการ Scheduled Posts สำเร็จ"}
+    except Exception as e:
+        log(f"[Meta Step 7 Error] {e}")
+        return {"ok": False, "detail": str(e)}
+
 @app.get("/api/utils/view-image")
 def view_image(path: str) -> FileResponse:
     import os

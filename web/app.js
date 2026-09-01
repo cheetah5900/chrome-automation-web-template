@@ -7122,6 +7122,29 @@ async function runMetaStep6(btn) {
   } catch (e) {
     writeConsoleLine(`[Step 6 Error] ❌ ${e.message}`, 'error', 'metaConsole');
   } finally {
+async function runMetaStep7(btn) {
+  const targetUrl = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
+  if (!targetUrl) {
+    writeConsoleLine(`[Step 7 Error] ❌ กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน`, 'error', 'metaConsole');
+    alert('กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน');
+    return;
+  }
+  writeConsoleLine(`[Step 7] 📅 กำลังเปิดหน้า Scheduled Posts สำหรับเพจนี้...`, 'system', 'metaConsole');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/meta-autopost/step/view-scheduled', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl })
+    });
+    if (res.ok) {
+      writeConsoleLine(`[Step 7] ✅ ${res.message || 'เปิดหน้า Scheduled Posts สำเร็จ'}`, 'success', 'metaConsole');
+    } else {
+      writeConsoleLine(`[Step 7 Error] ❌ ${res.detail || res.message}`, 'error', 'metaConsole');
+    }
+  } catch (e) {
+    writeConsoleLine(`[Step 7 Error] ❌ ${e.message}`, 'error', 'metaConsole');
+  } finally {
     if (btn) btn.disabled = false;
   }
 }
@@ -7133,6 +7156,7 @@ window.runMetaStep3 = runMetaStep3;
 window.runMetaStep4 = runMetaStep4;
 window.runMetaStep5 = runMetaStep5;
 window.runMetaStep6 = runMetaStep6;
+window.runMetaStep7 = runMetaStep7;
 
 function initMetaAutoPostListeners() {
   const openUrlBtn = document.getElementById('btnOpenMetaPageUrl');
@@ -7238,6 +7262,9 @@ function initMetaAutoPostListeners() {
 
   const step6Btn = document.getElementById('btnMetaStep6');
   if (step6Btn) step6Btn.addEventListener('click', (e) => runMetaStep6(e.currentTarget));
+
+  const step7Btn = document.getElementById('btnMetaStep7');
+  if (step7Btn) step7Btn.addEventListener('click', (e) => runMetaStep7(e.currentTarget));
 
   const clearConsoleBtn = document.getElementById('clearMetaConsoleBtn');
   if (clearConsoleBtn) {
