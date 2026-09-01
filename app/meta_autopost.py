@@ -471,10 +471,10 @@ def step_6_submit_schedule(driver) -> bool:
     else:
         raise RuntimeError("ไม่พบปุ่ม Schedule ขวาล่างที่พร้อมคลิก")
 
-    log("[Meta Step 6] คลิกปุ่ม Schedule เรียบร้อยแล้ว กำลังรอ Cooldown 5 วินาที...")
-    time.sleep(5.0)
+    log("[Meta Step 6] คลิกปุ่ม Schedule เรียบร้อยแล้ว กำลังรอ Cooldown 2.5 วินาที...")
+    time.sleep(2.5)
 
-    log("[Meta Step 6] ✅ ส่งคำสั่ง Schedule และรอ Cooldown 5 วินาทีเรียบร้อยแล้ว")
+    log("[Meta Step 6] ✅ ส่งคำสั่ง Schedule และรอ Cooldown 2.5 วินาทีเรียบร้อยแล้ว")
     return True
 
 def get_scheduled_posts_url(composer_url: str) -> str:
@@ -661,14 +661,6 @@ def run_meta_autopost_batch(
             err_msg = f"[{idx+1}/{total}] {post.get('subfolder_name', 'Item')}: {str(e)}"
             log(f"[Meta Auto Post Script Item Error] {err_msg}")
             errors.append(err_msg)
-
-    # Automatically open Scheduled Posts page after batch completes
-    if success_count > 0:
-        try:
-            log("[Meta Auto Post Script] 🎉 โพสต์ครบทุกรายการแล้ว กำลังเปิดหน้ารายการ Scheduled Posts...")
-            step_7_view_scheduled(driver, composer_url)
-        except Exception as ex_sched:
-            log(f"[Meta Auto Post Script Note] Step 7 view note: {ex_sched}")
 
     if progress_callback:
         progress_callback({
