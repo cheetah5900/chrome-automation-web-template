@@ -897,7 +897,7 @@ function restoreSavedTab() {
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
-    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: null },
+    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: loadConfig },
     { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig }
   ];
 
@@ -922,6 +922,7 @@ async function loadConfig() {
     loadVideoPresets(config.video_presets);
     loadFlowVideoPresets(config.flow_video_presets);
     loadFlowPoPresets(config.flow_po_presets);
+    loadSeedancePresets(config.seedance_presets);
     const folderInput = document.getElementById('cfg_folder_name');
     if (folderInput) folderInput.value = config.folder_name || '';
     const localInput = document.getElementById('cfg_local_path');
@@ -7199,9 +7200,17 @@ async function loadFlowImageModels() {
 let seedanceBatchQueue = [];
 
 // --- Seedance Preset Functions ---
-function loadSeedancePresets(presets) {
+async function loadSeedancePresets(presets) {
   const select = document.getElementById('seedancePresetSelect');
   if (!select) return;
+  if (!presets) {
+    try {
+      const config = await jsonFetch('/api/config');
+      presets = config.seedance_presets || {};
+    } catch (e) {
+      presets = {};
+    }
+  }
   const currentVal = select.value || localStorage.getItem('seedance_last_preset') || '';
   select.innerHTML = '<option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>';
   if (presets && typeof presets === 'object') {
@@ -7865,6 +7874,9 @@ function initSeedanceGenListeners() {
       if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
     });
   }
+
+  // Load Seedance presets immediately upon listener initialization
+  loadSeedancePresets();
 }
 window.initSeedanceGenListeners = initSeedanceGenListeners;
 
@@ -7881,6 +7893,7 @@ async function initApp() {
   try { initAllTooltips(); } catch (e) { console.error('initAllTooltips error:', e); }
   try { initModal(); } catch (e) { console.error('initModal error:', e); }
   try { loadSettings(); } catch (e) { console.error('loadSettings error:', e); }
+  try { loadConfig(); } catch (e) { console.error('loadConfig error:', e); }
   try { loadImagePrompts(); } catch (e) { console.error('loadImagePrompts error:', e); }
   try { renderSeedanceQueue(); } catch (e) { console.error('renderSeedanceQueue error:', e); }
   try { renderVideoHelperBatchRows(); } catch (e) { console.error('renderVideoHelperBatchRows error:', e); }
