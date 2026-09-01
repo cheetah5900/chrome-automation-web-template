@@ -400,34 +400,52 @@ def step_6_submit_schedule(driver) -> bool:
     return True
 
 def get_scheduled_posts_url(composer_url: str) -> str:
-    """Extracts asset_id and business_id from composer_url to build the scheduled posts URL."""
-    try:
-        from urllib.parse import urlparse, parse_qs, urlencode
-        parsed = urlparse(composer_url)
-        params = parse_qs(parsed.query)
-        asset_id = params.get("asset_id", [""])[0]
-        business_id = params.get("business_id", [""])[0]
-        
-        query_dict = {}
-        if asset_id:
-            query_dict["asset_id"] = asset_id
-        if business_id:
-            query_dict["business_id"] = business_id
-            
-        q_str = f"?{urlencode(query_dict)}" if query_dict else ""
-        return f"https://business.facebook.com/latest/posts/scheduled_posts{q_str}"
-    except Exception:
+    """Extracts asset_id and business_id / bus_id from composer_url to build the scheduled posts URL."""
+    url = (composer_url or "").strip()
+    if not url:
         return "https://business.facebook.com/latest/posts/scheduled_posts"
+    
+    asset_id = ""
+    business_id = ""
+    
+    # 1. Parse URL query params
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        asset_id = params.get("asset_id", [""])[0] or params.get("page_id", [""])[0]
+        business_id = params.get("business_id", [""])[0] or params.get("bus_id", [""])[0]
+    except Exception:
+        pass
+
+    # 2. Regex fallback
+    if not asset_id:
+        m = re.search(r'asset_id=(\d+)', url) or re.search(r'page_id=(\d+)', url)
+        if m:
+            asset_id = m.group(1)
+    if not business_id:
+        m = re.search(r'business_id=(\d+)', url) or re.search(r'bus_id=(\d+)', url)
+        if m:
+            business_id = m.group(1)
+
+    query_params = []
+    if asset_id:
+        query_params.append(f"asset_id={asset_id}")
+    if business_id:
+        query_params.append(f"business_id={business_id}")
+        
+    q_str = f"?{'&'.join(query_params)}" if query_params else ""
+    return f"https://business.facebook.com/latest/posts/scheduled_posts{q_str}"
 
 def step_7_view_scheduled(driver, composer_url: str) -> bool:
-    """Step 7: Navigate to Scheduled Posts management page."""
+    """Step 7: Navigate directly to Scheduled Posts management page."""
     sched_url = get_scheduled_posts_url(composer_url)
     log(f"[Meta Step 7] กำลังเปิดหน้ารายการโพสต์ที่ตั้งเวลาไว้ (Scheduled Posts): {sched_url}")
     try:
-        driver.execute_script("window.location.href = arguments[0];", sched_url)
+        driver.execute_script("window.location.assign(arguments[0]);", sched_url)
     except Exception:
         driver.get(sched_url)
-    log("[Meta Step 7] ✅ เปิดหน้ารายการ Scheduled Posts เรียบร้อยแล้ว")
+    log(f"[Meta Step 7] ✅ เปิดหน้ารายการ Scheduled Posts สำเร็จ: {sched_url}")
     return True
 
 # ==============================================================================
