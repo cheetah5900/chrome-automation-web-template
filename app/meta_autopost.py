@@ -557,8 +557,13 @@ def _post_single_reel_core(
     # Step 4: Click Share Tab to reach Step 3
     step_4_click_share_tab(driver, timeout=100.0)
 
-    # 🛑 หยุด Flow ชั่วคราวตามคำขอของผู้ใช้ เพื่อตรวจสอบหน้า Share Screen
-    log("[Meta Auto Post Script] 🛑 หยุดการทำงานชั่วคราวตามคำสั่ง: เข้าสู่หน้า Share เรียบร้อยแล้ว (หยุดก่อนตั้งเวลาและกดปุ่ม Share ขวาล่าง)")
+    # Step 5: Set Schedule Date & Time
+    step_5_set_schedule(driver, scheduled_dt_str)
+
+    # Step 6: Submit Schedule (with 5s cooldown)
+    step_6_submit_schedule(driver)
+
+    log(f"[Meta Auto Post Script] ✅ สำเร็จการตั้งเวลาโพสต์รายการที่ {item_idx}/{total_items}: {subfolder_name or video_name}")
     return True
 
 def post_single_reel(
@@ -631,6 +636,14 @@ def run_meta_autopost_batch(
             err_msg = f"[{idx+1}/{total}] {post.get('subfolder_name', 'Item')}: {str(e)}"
             log(f"[Meta Auto Post Script Item Error] {err_msg}")
             errors.append(err_msg)
+
+    # Automatically open Scheduled Posts page after batch completes
+    if success_count > 0:
+        try:
+            log("[Meta Auto Post Script] 🎉 โพสต์ครบทุกรายการแล้ว กำลังเปิดหน้ารายการ Scheduled Posts...")
+            step_7_view_scheduled(driver, composer_url)
+        except Exception as ex_sched:
+            log(f"[Meta Auto Post Script Note] Step 7 view note: {ex_sched}")
 
     if progress_callback:
         progress_callback({
