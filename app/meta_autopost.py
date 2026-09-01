@@ -434,7 +434,7 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
     return True
 
 def step_6_submit_schedule(driver) -> bool:
-    """Step 6: Poll for final Schedule button, click, and poll verify modal closure."""
+    """Step 6: Poll for final Schedule button, click, and wait 5s cooldown before proceeding."""
     log("[Meta Step 6] กำลังรอปุ่ม Schedule ขวาล่าง...")
     sched_submit_el = fast_poll(driver, '''
         const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
@@ -455,17 +455,10 @@ def step_6_submit_schedule(driver) -> bool:
     else:
         raise RuntimeError("ไม่พบปุ่ม Schedule ขวาล่างที่พร้อมคลิก")
 
-    log("[Meta Step 6] กำลังรอผลการยืนยันการตั้งเวลาโพสต์...")
-    submitted = fast_poll(driver, '''
-        const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
-        const modalClosed = !document.querySelector('div[role="textbox"][contenteditable="true"]') && !Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && el.innerText.trim() === 'Scheduling options');
-        return onPlanner || modalClosed;
-    ''', timeout=30.0, poll_interval=0.3)
+    log("[Meta Step 6] คลิกปุ่ม Schedule เรียบร้อยแล้ว กำลังรอ Cooldown 5 วินาที...")
+    time.sleep(5.0)
 
-    if not submitted:
-        log("[Meta Step 6] ข้อความเตือน: คำสั่งถูกส่งแล้วแต่วินโดว์ยังไม่ปิดอัตโนมัติ")
-
-    log("[Meta Step 6] ✅ ส่งคำสั่ง Schedule เรียบร้อยและยืนยันผลสำเร็จ!")
+    log("[Meta Step 6] ✅ ส่งคำสั่ง Schedule และรอ Cooldown 5 วินาทีเรียบร้อยแล้ว")
     return True
 
 def get_scheduled_posts_url(composer_url: str) -> str:
