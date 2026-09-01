@@ -295,6 +295,10 @@ def _post_single_reel_core(
 
     time.sleep(0.5)
 
+    # 🛑 หยุด Flow ชั่วคราวตามคำขอของผู้ใช้ เพื่อตรวจสอบหน้า Share Screen
+    log("[Meta Auto Post Script] 🛑 หยุดการทำงานชั่วคราวตามคำสั่ง: เข้าสู่หน้า Share เรียบร้อยแล้ว (หยุดก่อนตั้งเวลาและกดปุ่ม Share ขวาล่าง)")
+    return True
+
     # 8. Select 'Schedule' Option Tab
     log("[Meta Auto Post Script] Selecting 'Schedule' radio tab...")
     sched_tab = driver.execute_script('''
