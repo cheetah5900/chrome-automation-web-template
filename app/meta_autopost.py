@@ -146,6 +146,262 @@ def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float 
         time.sleep(poll_interval)
     return None
 
+# ==============================================================================
+# Modular Step Functions (Callable individually or in batch)
+# ==============================================================================
+
+def step_1_open_composer(driver, composer_url: str) -> bool:
+    """Step 1: Focus 9222, close extra tabs, navigate to fresh composer URL."""
+    cleanup_browser_tabs(driver)
+    focus_9222_browser_tab(driver, port=9222)
+    time.sleep(0.3)
+
+    log(f"[Meta Step 1] Navigating to fresh composer URL: {composer_url}")
+    driver.get(composer_url)
+    ready = fast_poll(driver, '''
+        return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
+    ''', timeout=25.0, poll_interval=0.2)
+    if not ready:
+        raise RuntimeError("ไม่พบหน้าต่าง Create reel หรือปุ่ม 'Add video'")
+    log("[Meta Step 1] ✅ เปิดหน้าต่าง Create reel พร้อมใช้งานเรียบร้อยแล้ว")
+    return True
+
+def step_2_upload_video(driver, video_path: str) -> bool:
+    """Step 2: Click 'Add video' and send video file path via macOS sheet dialog."""
+    focus_9222_browser_tab(driver, port=9222)
+    time.sleep(0.2)
+
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"ไม่พบไฟล์วิดีโอ: {video_path}")
+
+    all_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')
+    target_btn = next((b for b in all_btns if b.text and 'Add video' in b.text), None)
+    if not target_btn:
+        target_btn = driver.execute_script('''
+            const textEl = Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video' && el.children.length === 0);
+            return textEl ? (textEl.closest('[role="button"]') || textEl) : null;
+        ''')
+
+    if target_btn:
+        try:
+            ActionChains(driver).move_to_element(target_btn).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", target_btn)
+        log("[Meta Step 2] คลิกปุ่ม 'Add video' เรียบร้อย")
+    else:
+        raise RuntimeError("ไม่พบปุ่ม Add video บนหน้าจอ")
+
+    time.sleep(0.5)
+
+    import uuid
+    import shutil
+    ext = os.path.splitext(video_path)[1] or ".mp4"
+    unique_name = f"reel_{uuid.uuid4().hex}{ext}"
+    temp_uuid_file = os.path.join("/tmp", unique_name)
+    try:
+        shutil.copy2(video_path, temp_uuid_file)
+        log(f"[Meta Step 2] สร้างไฟล์ชั่วคราว UUID: {temp_uuid_file}")
+        upload_macos_file_dialog_fast(temp_uuid_file, port=9222)
+    except Exception as ex_copy:
+        log(f"[Meta Step 2] UUID copy note: {ex_copy}, ใช้พาธเดิม")
+        upload_macos_file_dialog_fast(video_path, port=9222)
+
+    log(f"[Meta Step 2] ✅ ส่งคำสั่งเลือกไฟล์วิดีโอผ่าน Dialog เรียบร้อย: {os.path.basename(video_path)}")
+    return True
+
+def step_3_insert_caption(driver, caption: str) -> bool:
+    """Step 3: Insert Caption into Lexical / DraftJS description box with Event dispatch & blur."""
+    if not caption:
+        log("[Meta Step 3] ไม่มีข้อความ Caption ข้ามขั้นตอนนี้")
+        return True
+
+    log(f"[Meta Step 3] กำลังวางข้อความ Caption ({len(caption)} ตัวอักษร)...")
+    res = driver.execute_script('''
+        const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
+        if (tb) {
+            tb.focus();
+            try {
+                const dt = new DataTransfer();
+                dt.setData('text/plain', arguments[0]);
+                const pasteEvt = new ClipboardEvent('paste', {
+                    bubbles: true,
+                    cancelable: true,
+                    clipboardData: dt
+                });
+                tb.dispatchEvent(pasteEvt);
+            } catch (e) {}
+
+            if (!tb.innerText || !tb.innerText.trim()) {
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(tb);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                document.execCommand('delete', false, null);
+                document.execCommand('insertText', false, arguments[0]);
+            }
+
+            tb.dispatchEvent(new Event('input', { bubbles: true }));
+            tb.dispatchEvent(new Event('change', { bubbles: true }));
+            tb.blur();
+            return true;
+        }
+        return false;
+    ''', caption)
+
+    if not res:
+        raise RuntimeError("ไม่พบกล่องข้อความ Description บนหน้าจอ")
+
+    time.sleep(0.4)
+    log("[Meta Step 3] ✅ วางข้อความ Description และ Commit React State สำเร็จ")
+    return True
+
+def step_4_click_share_tab(driver, timeout: float = 60.0) -> bool:
+    """Step 4: Wait for readiness and click top 'Share' tab to jump to Step 3."""
+    log(f"[Meta Step 4] กำลังตรวจสอบสถานะแท็บ 'Share' ด้านบน (Timeout {timeout}s)...")
+    
+    top_share_btn = fast_poll(driver, '''
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+        const shareBtn = allBtns.find(b => b.innerText && b.innerText.trim().startsWith('Share') && b.getBoundingClientRect().y < 120 && b.getAttribute('aria-disabled') !== 'true');
+        return shareBtn;
+    ''', timeout=timeout, poll_interval=0.3)
+
+    if top_share_btn:
+        log("[Meta Step 4] แท็บ Share ด้านบนเปิดใช้งานแล้ว! กำลังคลิกกระโดดไป Step 3...")
+        try:
+            ActionChains(driver).move_to_element(top_share_btn).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", top_share_btn)
+    else:
+        # Fallback progression via Next buttons if top tab requires step wizard
+        log("[Meta Step 4] ลองเลื่อน Step ผ่านปุ่ม Next...")
+        step1_next = driver.execute_script('''
+            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+            return allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1600 && b.getBoundingClientRect().y > 900 && b.getAttribute('aria-disabled') !== 'true');
+        ''')
+        if step1_next:
+            try:
+                ActionChains(driver).move_to_element(step1_next).pause(0.1).click().perform()
+            except Exception:
+                driver.execute_script("arguments[0].click();", step1_next)
+            time.sleep(0.8)
+
+    # Fast poll for Step 3 active (Scheduling options or Share now)
+    on_step3 = fast_poll(driver, '''
+        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
+    ''', timeout=15.0, poll_interval=0.2)
+
+    if not on_step3:
+        raise RuntimeError("ไม่สามารถเข้าสู่หน้า Step 3 (Share) ได้")
+
+    log("[Meta Step 4] ✅ เข้าสู่หน้า Step 3 (Share Screen) เรียบร้อยแล้ว")
+    return True
+
+def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
+    """Step 5: Select Schedule radio and input Date & Time with TAB commit."""
+    log("[Meta Step 5] กำลังเลือกแท็บตัวเลือก 'Schedule'...")
+    sched_tab = driver.execute_script('''
+        const allEls = Array.from(document.querySelectorAll('div, span, button, [role="radio"]'));
+        const tab = allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().y < 350 && el.getBoundingClientRect().y > 100);
+        return tab ? (tab.closest('[role="button"], [role="radio"]') || tab) : null;
+    ''')
+    if sched_tab:
+        try:
+            ActionChains(driver).move_to_element(sched_tab).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", sched_tab)
+    else:
+        log("[Meta Step 5] ข้อความเตือน: ไม่พบแท็บ Schedule (อาจถูกเลือกอยู่แล้ว)")
+
+    time.sleep(0.6)
+
+    if scheduled_dt_str:
+        try:
+            dt = datetime.fromisoformat(scheduled_dt_str)
+            date_str = dt.strftime("%d/%m/%Y")
+            hour_str = f"{dt.hour:02d}"
+            min_str = f"{dt.minute:02d}"
+
+            log(f"[Meta Step 5] กำหนดวันโพสต์: {date_str}, เวลา: {hour_str}:{min_str}")
+
+            def safe_input(selector: str, val: str, is_time: bool = False):
+                try:
+                    inputs = driver.find_elements(By.CSS_SELECTOR, selector)
+                    if inputs:
+                        inputs[0].click()
+                        time.sleep(0.1)
+                        if is_time:
+                            inputs[0].send_keys(Keys.BACKSPACE)
+                            for ch in val:
+                                inputs[0].send_keys(ch)
+                        else:
+                            inputs[0].send_keys(Keys.COMMAND, 'a')
+                            inputs[0].send_keys(val)
+                        time.sleep(0.1)
+                        fresh = driver.find_elements(By.CSS_SELECTOR, selector)
+                        if fresh:
+                            fresh[0].send_keys(Keys.TAB)
+                except Exception as ex_in:
+                    log(f"[Meta Step 5] Input note ({selector}): {ex_in}")
+
+            safe_input('input[placeholder="dd/mm/yyyy"]', date_str)
+            time.sleep(0.2)
+            safe_input('input[aria-label="hours"]', hour_str, is_time=True)
+            time.sleep(0.2)
+            safe_input('input[aria-label="minutes"]', min_str, is_time=True)
+            time.sleep(0.4)
+
+            # Commit React form state
+            driver.execute_script('''
+                const bg = document.querySelector('div[role="dialog"], body');
+                if (bg) bg.click();
+            ''')
+            time.sleep(0.3)
+
+            log("[Meta Step 5] ✅ กำหนดวัน-เวลาและ Commit State สำเร็จ")
+            return True
+
+        except Exception as ex_dt:
+            log(f"[Meta Step 5 Error] แปลงวัน-เวลา '{scheduled_dt_str}' ไม่ถูกต้อง: {ex_dt}")
+            raise ex_dt
+    return True
+
+def step_6_submit_schedule(driver) -> bool:
+    """Step 6: Click final Schedule button at bottom right and wait for confirmation."""
+    log("[Meta Step 6] กำลังคลิกปุ่ม Schedule ขวาล่างเพื่อยืนยันโพสต์...")
+    sched_submit_el = driver.execute_script('''
+        const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
+        return allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().x > 1400 && el.getBoundingClientRect().y > 700);
+    ''')
+
+    if sched_submit_el:
+        try:
+            ActionChains(driver).move_to_element(sched_submit_el).pause(0.1).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", sched_submit_el)
+    else:
+        # Fallback click
+        driver.execute_script('''
+            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+            const schedBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Schedule' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700);
+            if (schedBtn) schedBtn.click();
+        ''')
+
+    # Fast poll for modal closure / submission confirmation
+    log("[Meta Step 6] กำลังรอผลการยืนยันการตั้งเวลาโพสต์...")
+    submitted = fast_poll(driver, '''
+        const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
+        const modalClosed = !document.querySelector('div[role="textbox"][contenteditable="true"]') && !Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && el.innerText.trim() === 'Scheduling options');
+        return onPlanner || modalClosed;
+    ''', timeout=30.0, poll_interval=0.3)
+
+    log("[Meta Step 6] ✅ ส่งคำสั่ง Schedule เรียบร้อยและปิดหน้าต่างสำเร็จ!")
+    return True
+
+# ==============================================================================
+# Full Single Post & Batch Runner
+# ==============================================================================
+
 def _post_single_reel_core(
     driver,
     item: dict[str, Any],
@@ -172,222 +428,20 @@ def _post_single_reel_core(
             "message": msg
         })
 
-    # 1. Close extra tabs, focus 9222 window
-    cleanup_browser_tabs(driver)
-    focus_9222_browser_tab(driver, port=9222)
-    time.sleep(0.3)
+    # Step 1: Open Composer
+    step_1_open_composer(driver, composer_url)
 
-    # 2. ALWAYS redirect to fresh composer URL
-    log(f"[Meta Auto Post Script] Redirecting to fresh composer URL: {composer_url}")
-    driver.get(composer_url)
-    ready = fast_poll(driver, '''
-        return !!Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video');
-    ''', timeout=25.0, poll_interval=0.2)
-    if not ready:
-        raise RuntimeError("ไม่พบหน้าต่าง Create reel / ปุ่ม Add video")
+    # Step 2: Upload Video
+    step_2_upload_video(driver, video_path)
 
-    # 3. Click 'Add video' on 9222
-    focus_9222_browser_tab(driver, port=9222)
-    time.sleep(0.2)
+    # Step 3: Insert Caption
+    step_3_insert_caption(driver, caption)
 
-    all_btns = driver.find_elements(By.CSS_SELECTOR, 'div[role="button"], button')
-    target_btn = next((b for b in all_btns if b.text and 'Add video' in b.text), None)
-
-    if not target_btn:
-        target_btn = driver.execute_script('''
-            const textEl = Array.from(document.querySelectorAll('div, span, button')).find(el => el.innerText && el.innerText.trim() === 'Add video' && el.children.length === 0);
-            return textEl ? (textEl.closest('[role="button"]') || textEl) : null;
-        ''')
-
-    if target_btn:
-        try:
-            ActionChains(driver).move_to_element(target_btn).pause(0.1).click().perform()
-        except Exception:
-            driver.execute_script("arguments[0].click();", target_btn)
-        log("[Meta Auto Post Script] Clicked 'Add video' button on 9222")
-    else:
-        raise RuntimeError("ไม่สามารถคลิกปุ่ม Add video ได้")
-
-    time.sleep(0.5)
-
-    # 4. macOS File Dialog with Fresh UUID Copy (Bypasses Meta duplicate/cache)
-    if not os.path.exists(video_path):
-        raise FileNotFoundError(f"ไม่พบไฟล์วิดีโอ: {video_path}")
-
-    import uuid
-    import shutil
-    ext = os.path.splitext(video_path)[1] or ".mp4"
-    unique_name = f"reel_{uuid.uuid4().hex}{ext}"
-    temp_uuid_file = os.path.join("/tmp", unique_name)
-    try:
-        shutil.copy2(video_path, temp_uuid_file)
-        log(f"[Meta Auto Post Script] Created fresh UUID video copy: {temp_uuid_file}")
-
-        log(f"[Meta Auto Post Script] Uploading video via dialog: {temp_uuid_file}")
-        upload_macos_file_dialog_fast(temp_uuid_file, port=9222)
-    except Exception as ex_copy:
-        log(f"[Meta Auto Post Script] UUID copy note: {ex_copy}, falling back to original path")
-        upload_macos_file_dialog_fast(video_path, port=9222)
-
-    # 5. Insert Caption into Lexical / DraftJS textbox using DataTransfer ClipboardEvent + Event dispatch
-    if caption:
-        log(f"[Meta Auto Post Script] Inserting caption ({len(caption)} chars)...")
-        driver.execute_script('''
-            const tb = document.querySelector('div[role="textbox"][contenteditable="true"]');
-            if (tb) {
-                tb.focus();
-                
-                // Method 1: DataTransfer clipboard paste simulation
-                try {
-                    const dt = new DataTransfer();
-                    dt.setData('text/plain', arguments[0]);
-                    const pasteEvt = new ClipboardEvent('paste', {
-                        bubbles: true,
-                        cancelable: true,
-                        clipboardData: dt
-                    });
-                    tb.dispatchEvent(pasteEvt);
-                } catch (e) {}
-
-                // Method 2: Range replacement fallback
-                if (!tb.innerText || !tb.innerText.trim()) {
-                    const sel = window.getSelection();
-                    const range = document.createRange();
-                    range.selectNodeContents(tb);
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                    document.execCommand('delete', false, null);
-                    document.execCommand('insertText', false, arguments[0]);
-                }
-
-                // Dispatch full React input events and blur
-                tb.dispatchEvent(new Event('input', { bubbles: true }));
-                tb.dispatchEvent(new Event('change', { bubbles: true }));
-                tb.blur();
-            }
-        ''', caption)
-        time.sleep(0.4)
-
-    # 6. Wait for top 'Share' tab readiness with 100s Timeout
-    log("[Meta Auto Post Script] Waiting for top 'Share' tab to be enabled (timeout 100s)...")
-    top_share_btn = fast_poll(driver, '''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const shareBtn = allBtns.find(b => b.innerText && b.innerText.trim().startsWith('Share') && b.getBoundingClientRect().y < 120 && b.getAttribute('aria-disabled') !== 'true');
-        return shareBtn;
-    ''', timeout=100.0, poll_interval=0.3)
-
-    if not top_share_btn:
-        raise TimeoutError("แท็บ Share ไม่เปิดใช้งานภายใน 100 วินาที")
-
-    # 7. Click top 'Share' tab directly to jump straight to Step 3
-    log("[Meta Auto Post Script] Top 'Share' tab is enabled! Clicking to jump directly to Step 3...")
-    try:
-        ActionChains(driver).move_to_element(top_share_btn).pause(0.1).click().perform()
-    except Exception:
-        driver.execute_script("arguments[0].click();", top_share_btn)
-
-    # Fast poll for Step 3 active (Scheduling options or Share now)
-    on_step3 = fast_poll(driver, '''
-        return !!Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now'));
-    ''', timeout=15.0, poll_interval=0.2)
-    if not on_step3:
-        raise RuntimeError("ไม่สามารถเข้าสู่ Step 3 (Share) ได้ภายในเวลาที่กำหนด")
-
-    time.sleep(0.5)
+    # Step 4: Click Share Tab to reach Step 3
+    step_4_click_share_tab(driver, timeout=100.0)
 
     # 🛑 หยุด Flow ชั่วคราวตามคำขอของผู้ใช้ เพื่อตรวจสอบหน้า Share Screen
     log("[Meta Auto Post Script] 🛑 หยุดการทำงานชั่วคราวตามคำสั่ง: เข้าสู่หน้า Share เรียบร้อยแล้ว (หยุดก่อนตั้งเวลาและกดปุ่ม Share ขวาล่าง)")
-    return True
-
-    # 8. Select 'Schedule' Option Tab
-    log("[Meta Auto Post Script] Selecting 'Schedule' radio tab...")
-    sched_tab = driver.execute_script('''
-        const allEls = Array.from(document.querySelectorAll('div, span, button, [role="radio"]'));
-        const tab = allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().y < 350 && el.getBoundingClientRect().y > 100);
-        return tab ? (tab.closest('[role="button"], [role="radio"]') || tab) : null;
-    ''')
-    if sched_tab:
-        try:
-            ActionChains(driver).move_to_element(sched_tab).pause(0.1).click().perform()
-        except Exception:
-            driver.execute_script("arguments[0].click();", sched_tab)
-    time.sleep(0.6)
-
-    # 9. Set Date & Time
-    if scheduled_dt_str:
-        try:
-            dt = datetime.fromisoformat(scheduled_dt_str)
-            date_str = dt.strftime("%d/%m/%Y")
-            hour_str = f"{dt.hour:02d}"
-            min_str = f"{dt.minute:02d}"
-
-            log(f"[Meta Auto Post Script] Setting Schedule Date: {date_str}, Time: {hour_str}:{min_str}")
-
-            def safe_input(selector: str, val: str, is_time: bool = False):
-                try:
-                    inputs = driver.find_elements(By.CSS_SELECTOR, selector)
-                    if inputs:
-                        inputs[0].click()
-                        time.sleep(0.1)
-                        if is_time:
-                            inputs[0].send_keys(Keys.BACKSPACE)
-                            for ch in val:
-                                inputs[0].send_keys(ch)
-                        else:
-                            inputs[0].send_keys(Keys.COMMAND, 'a')
-                            inputs[0].send_keys(val)
-                        time.sleep(0.1)
-                        fresh = driver.find_elements(By.CSS_SELECTOR, selector)
-                        if fresh:
-                            fresh[0].send_keys(Keys.TAB)
-                except Exception as ex_in:
-                    log(f"[Meta Auto Post Script] Input note ({selector}): {ex_in}")
-
-            safe_input('input[placeholder="dd/mm/yyyy"]', date_str)
-            time.sleep(0.2)
-            safe_input('input[aria-label="hours"]', hour_str, is_time=True)
-            time.sleep(0.2)
-            safe_input('input[aria-label="minutes"]', min_str, is_time=True)
-            time.sleep(0.4)
-
-        except Exception as ex_dt:
-            log(f"[Meta Auto Post Script] Parse datetime error '{scheduled_dt_str}': {ex_dt}")
-
-    # Commit React state
-    driver.execute_script('''
-        const bg = document.querySelector('div[role="dialog"], body');
-        if (bg) bg.click();
-    ''')
-    time.sleep(0.4)
-
-    # 10. Click final 'Schedule' submit button with ActionChains
-    log("[Meta Auto Post Script] Clicking final Schedule submit button...")
-    sched_submit_el = driver.execute_script('''
-        const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
-        return allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().x > 1400 && el.getBoundingClientRect().y > 700);
-    ''')
-    if sched_submit_el:
-        try:
-            ActionChains(driver).move_to_element(sched_submit_el).pause(0.1).click().perform()
-        except Exception:
-            driver.execute_script("arguments[0].click();", sched_submit_el)
-    else:
-        # Fallback click
-        driver.execute_script('''
-            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-            const schedBtn = allBtns.find(b => b.innerText && b.innerText.trim() === 'Schedule' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700);
-            if (schedBtn) schedBtn.click();
-        ''')
-
-    # 11. Fast poll for modal closure / submission confirmation
-    log("[Meta Auto Post Script] Waiting for submission confirmation...")
-    submitted = fast_poll(driver, '''
-        const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
-        const modalClosed = !document.querySelector('div[role="textbox"][contenteditable="true"]') && !Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && el.innerText.trim() === 'Scheduling options');
-        return onPlanner || modalClosed;
-    ''', timeout=30.0, poll_interval=0.3)
-
-    log(f"[Meta Auto Post Script] Post {item_idx}/{total_items} finished successfully!")
     return True
 
 def post_single_reel(
@@ -398,7 +452,7 @@ def post_single_reel(
     total_items: int = 1,
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> bool:
-    """Executes single reel post sequence with 100s timeout & auto-refresh retry on failure."""
+    """Executes single reel post sequence with auto-refresh retry on failure."""
     max_retries = 2
     for attempt in range(1, max_retries + 1):
         try:

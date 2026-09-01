@@ -1414,11 +1414,58 @@
               <h2 class="section-title">🚀 Auto Post Execution</h2>
               <p class="section-subtitle">สถานะและบันทึกการส่งโพสต์ไปยัง Facebook / Meta</p>
 
-              <div style="margin: 15px 0 20px 0;">
+              <div style="margin: 15px 0 16px 0;">
                 <button id="runMetaAutoPostBtn" class="primary has-tooltip" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">
                   <span class="btn-text">🚀 เริ่มรัน Auto Post ตามคิว</span>
                   <div class="custom-tooltip" id="tooltip_runMetaAutoPostBtn"></div>
                 </button>
+              </div>
+
+              <!-- Manual Step-by-Step Testing Panel -->
+              <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                  <span style="font-weight: bold; color: #ffb86c; font-size: 0.9rem;">🛠️ Manual Step Debugger (ทดสอบทีละขั้นตอน)</span>
+                  <span style="font-size: 0.75rem; color: rgba(255,255,255,0.4);">รันทีละ Step เพื่อเช็คจุดติดขัด</span>
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                  <label style="font-size: 0.78rem; color: rgba(255,255,255,0.6); display: block; margin-bottom: 4px;">เลือกรายการคลิปที่ต้องการทดสอบ:</label>
+                  <select id="metaStepItemSelect" style="width: 100%; padding: 8px 10px; font-size: 0.82rem; border-radius: 8px; background: rgba(255,255,255,0.05); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
+                    <option value="">-- เลือกรายการจากคิวที่สแกนพบ --</option>
+                  </select>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <button id="btnMetaStep1" class="secondary" style="width: 100%; padding: 8px 12px; font-size: 0.82rem; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; text-align: left; background: rgba(58, 160, 255, 0.08); border-color: rgba(58, 160, 255, 0.25); color: #8da6ff;">
+                    <span><strong>Step 1:</strong> 🌐 เปิด Composer URL (หน้าใหม่)</span>
+                    <span style="font-size: 0.75rem; opacity: 0.7;">Run ➔</span>
+                  </button>
+
+                  <button id="btnMetaStep2" class="secondary" style="width: 100%; padding: 8px 12px; font-size: 0.82rem; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; text-align: left; background: rgba(255, 184, 108, 0.08); border-color: rgba(255, 184, 108, 0.25); color: #ffb86c;">
+                    <span><strong>Step 2:</strong> 📤 อัปโหลดวิดีโอ (ผ่าน Dialog)</span>
+                    <span style="font-size: 0.75rem; opacity: 0.7;">Run ➔</span>
+                  </button>
+
+                  <button id="btnMetaStep3" class="secondary" style="width: 100%; padding: 8px 12px; font-size: 0.82rem; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; text-align: left; background: rgba(189, 147, 249, 0.08); border-color: rgba(189, 147, 249, 0.25); color: #bd93f9;">
+                    <span><strong>Step 3:</strong> 📝 วาง Caption ลงกล่องข้อความ</span>
+                    <span style="font-size: 0.75rem; opacity: 0.7;">Run ➔</span>
+                  </button>
+
+                  <button id="btnMetaStep4" class="secondary" style="width: 100%; padding: 8px 12px; font-size: 0.82rem; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; text-align: left; background: rgba(80, 250, 123, 0.08); border-color: rgba(80, 250, 123, 0.25); color: #50fa7b;">
+                    <span><strong>Step 4:</strong> 🔀 กดแท็บ Share ด้านบน (เข้า Step 3)</span>
+                    <span style="font-size: 0.75rem; opacity: 0.7;">Run ➔</span>
+                  </button>
+
+                  <button id="btnMetaStep5" class="secondary" style="width: 100%; padding: 8px 12px; font-size: 0.82rem; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; text-align: left; background: rgba(241, 250, 140, 0.08); border-color: rgba(241, 250, 140, 0.25); color: #f1fa8c;">
+                    <span><strong>Step 5:</strong> ⏰ เลือก Schedule & ใส่วัน-เวลา</span>
+                    <span style="font-size: 0.75rem; opacity: 0.7;">Run ➔</span>
+                  </button>
+
+                  <button id="btnMetaStep6" class="secondary" style="width: 100%; padding: 8px 12px; font-size: 0.82rem; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; text-align: left; background: rgba(255, 107, 107, 0.08); border-color: rgba(255, 107, 107, 0.25); color: #ff6b6b;">
+                    <span><strong>Step 6:</strong> 🚀 กดปุ่ม Schedule (ขวาล่าง)</span>
+                    <span style="font-size: 0.75rem; opacity: 0.7;">Run ➔</span>
+                  </button>
+                </div>
               </div>
 
               <!-- Progress Bar -->

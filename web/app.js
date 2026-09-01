@@ -6829,6 +6829,24 @@ function renderMetaPostQueue() {
       renderMetaPostQueue();
     });
   });
+
+  // Update Step Debugger Dropdown
+  const stepSelect = document.getElementById('metaStepItemSelect');
+  if (stepSelect) {
+    const curVal = stepSelect.value;
+    stepSelect.innerHTML = '<option value="">-- เลือกรายการจากคิวที่สแกนพบ --</option>';
+    metaPostQueue.forEach((item, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx;
+      opt.textContent = `[#${idx + 1}] ${item.subfolder_name || item.video_name || 'Item'} (${item.scheduled_datetime || 'No Time'})`;
+      stepSelect.appendChild(opt);
+    });
+    if (curVal !== '' && parseInt(curVal, 10) < metaPostQueue.length) {
+      stepSelect.value = curVal;
+    } else if (metaPostQueue.length > 0) {
+      stepSelect.value = "0";
+    }
+  }
 }
 
 function addManualMetaPost() {
@@ -6950,6 +6968,153 @@ async function runMetaAutoPost(btnElement) {
   }
 }
 
+// --- Manual Step-by-Step Controller Functions ---
+function getActiveMetaStepItem() {
+  const stepSelect = document.getElementById('metaStepItemSelect');
+  const selVal = stepSelect ? stepSelect.value : '';
+  if (selVal !== '' && !isNaN(parseInt(selVal, 10))) {
+    const idx = parseInt(selVal, 10);
+    if (metaPostQueue[idx]) return metaPostQueue[idx];
+  }
+  return metaPostQueue.find(it => it.checked !== false) || metaPostQueue[0] || null;
+}
+
+async function runMetaStep1(btn) {
+  const targetUrl = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
+  writeConsoleLine(`[Step 1] 🌐 กำลังเปิด Composer URL (หน้าใหม่)...`, 'system', 'metaConsole');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/meta-autopost/step/open-composer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl })
+    });
+    if (res.ok) {
+      writeConsoleLine(`[Step 1] ✅ ${res.message || 'เปิดหน้าต่าง Create reel สำเร็จ'}`, 'success', 'metaConsole');
+    } else {
+      writeConsoleLine(`[Step 1 Error] ❌ ${res.detail || res.message}`, 'error', 'metaConsole');
+    }
+  } catch (e) {
+    writeConsoleLine(`[Step 1 Error] ❌ ${e.message}`, 'error', 'metaConsole');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function runMetaStep2(btn) {
+  const item = getActiveMetaStepItem();
+  if (!item || !item.video_path) {
+    writeConsoleLine(`[Step 2 Error] ❌ กรุณาสแกนหรือเลือกรายการที่มีไฟล์วิดีโอก่อน`, 'error', 'metaConsole');
+    alert('ไม่พบไฟล์วิดีโอของรายการที่เลือก กรุณาตรวจสอบหรือสแกนใหม่');
+    return;
+  }
+  writeConsoleLine(`[Step 2] 📤 กำลังกด Add video และส่งไฟล์ผ่าน Dialog: ${item.video_name || item.video_path}`, 'system', 'metaConsole');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/meta-autopost/step/upload-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_path: item.video_path })
+    });
+    if (res.ok) {
+      writeConsoleLine(`[Step 2] ✅ ${res.message || 'อัปโหลดวิดีโอสำเร็จ'}`, 'success', 'metaConsole');
+    } else {
+      writeConsoleLine(`[Step 2 Error] ❌ ${res.detail || res.message}`, 'error', 'metaConsole');
+    }
+  } catch (e) {
+    writeConsoleLine(`[Step 2 Error] ❌ ${e.message}`, 'error', 'metaConsole');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function runMetaStep3(btn) {
+  const item = getActiveMetaStepItem();
+  const caption = item ? (item.caption || '') : '';
+  writeConsoleLine(`[Step 3] 📝 กำลังวาง Caption (${caption.length} ตัวอักษร) ลงในกล่อง Description...`, 'system', 'metaConsole');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/meta-autopost/step/insert-caption', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caption: caption })
+    });
+    if (res.ok) {
+      writeConsoleLine(`[Step 3] ✅ ${res.message || 'วาง Caption สำเร็จ'}`, 'success', 'metaConsole');
+    } else {
+      writeConsoleLine(`[Step 3 Error] ❌ ${res.detail || res.message}`, 'error', 'metaConsole');
+    }
+  } catch (e) {
+    writeConsoleLine(`[Step 3 Error] ❌ ${e.message}`, 'error', 'metaConsole');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function runMetaStep4(btn) {
+  writeConsoleLine(`[Step 4] 🔀 กำลังตรวจสอบสถานะและคลิกแท็บ Share ด้านบนเพื่อเข้าสู่ Step 3...`, 'system', 'metaConsole');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/meta-autopost/step/click-share-tab', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timeout: 60.0 })
+    });
+    if (res.ok) {
+      writeConsoleLine(`[Step 4] ✅ ${res.message || 'เข้าสู่ Step 3 (Share) สำเร็จ'}`, 'success', 'metaConsole');
+    } else {
+      writeConsoleLine(`[Step 4 Error] ❌ ${res.detail || res.message}`, 'error', 'metaConsole');
+    }
+  } catch (e) {
+    writeConsoleLine(`[Step 4 Error] ❌ ${e.message}`, 'error', 'metaConsole');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function runMetaStep5(btn) {
+  const item = getActiveMetaStepItem();
+  const dtStr = item ? (item.scheduled_datetime || '') : '';
+  writeConsoleLine(`[Step 5] ⏰ กำลังเลือก Schedule และใส่วันที่/เวลา (${dtStr || 'Default'})...`, 'system', 'metaConsole');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/meta-autopost/step/set-schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduled_datetime: dtStr })
+    });
+    if (res.ok) {
+      writeConsoleLine(`[Step 5] ✅ ${res.message || 'ตั้งค่า Schedule สำเร็จ'}`, 'success', 'metaConsole');
+    } else {
+      writeConsoleLine(`[Step 5 Error] ❌ ${res.detail || res.message}`, 'error', 'metaConsole');
+    }
+  } catch (e) {
+    writeConsoleLine(`[Step 5 Error] ❌ ${e.message}`, 'error', 'metaConsole');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function runMetaStep6(btn) {
+  writeConsoleLine(`[Step 6] 🚀 กำลังคลิกปุ่ม Schedule (ขวาล่าง) เพื่อยืนยันการโพสต์...`, 'system', 'metaConsole');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/meta-autopost/step/submit-schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.ok) {
+      writeConsoleLine(`[Step 6] ✅ ${res.message || 'กดยืนยัน Schedule สำเร็จ'}`, 'success', 'metaConsole');
+    } else {
+      writeConsoleLine(`[Step 6 Error] ❌ ${res.detail || res.message}`, 'error', 'metaConsole');
+    }
+  } catch (e) {
+    writeConsoleLine(`[Step 6 Error] ❌ ${e.message}`, 'error', 'metaConsole');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function initMetaAutoPostListeners() {
   const openUrlBtn = document.getElementById('btnOpenMetaPageUrl');
   if (openUrlBtn) openUrlBtn.addEventListener('click', openMetaPageUrl);
@@ -7035,6 +7200,25 @@ function initMetaAutoPostListeners() {
 
   const runBtn = document.getElementById('runMetaAutoPostBtn');
   if (runBtn) runBtn.addEventListener('click', (e) => runMetaAutoPost(e.currentTarget));
+
+  // Step-by-Step Manual Controller Buttons
+  const step1Btn = document.getElementById('btnMetaStep1');
+  if (step1Btn) step1Btn.addEventListener('click', (e) => runMetaStep1(e.currentTarget));
+
+  const step2Btn = document.getElementById('btnMetaStep2');
+  if (step2Btn) step2Btn.addEventListener('click', (e) => runMetaStep2(e.currentTarget));
+
+  const step3Btn = document.getElementById('btnMetaStep3');
+  if (step3Btn) step3Btn.addEventListener('click', (e) => runMetaStep3(e.currentTarget));
+
+  const step4Btn = document.getElementById('btnMetaStep4');
+  if (step4Btn) step4Btn.addEventListener('click', (e) => runMetaStep4(e.currentTarget));
+
+  const step5Btn = document.getElementById('btnMetaStep5');
+  if (step5Btn) step5Btn.addEventListener('click', (e) => runMetaStep5(e.currentTarget));
+
+  const step6Btn = document.getElementById('btnMetaStep6');
+  if (step6Btn) step6Btn.addEventListener('click', (e) => runMetaStep6(e.currentTarget));
 
   const clearConsoleBtn = document.getElementById('clearMetaConsoleBtn');
   if (clearConsoleBtn) {
