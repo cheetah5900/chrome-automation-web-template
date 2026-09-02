@@ -502,7 +502,7 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
                 except Exception:
                     driver.execute_script("arguments[0].click();", h_input)
                 time.sleep(0.05)
-                h_input.send_keys(Keys.BACKSPACE, Keys.BACKSPACE, hour_str, Keys.TAB)
+                h_input.send_keys(Keys.BACKSPACE, Keys.BACKSPACE, hour_str)
 
             # 3. Set Minutes for ALL platforms (Facebook, Instagram, etc.)
             mins_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
@@ -512,11 +512,7 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
                 except Exception:
                     driver.execute_script("arguments[0].click();", m_input)
                 time.sleep(0.05)
-                m_input.send_keys(Keys.BACKSPACE, Keys.BACKSPACE, min_str, Keys.TAB)
-
-            # Blur active input to commit changes
-            driver.execute_script("if (document.activeElement) document.activeElement.blur();")
-            time.sleep(0.3)
+                m_input.send_keys(Keys.BACKSPACE, Keys.BACKSPACE, min_str)
 
             # Loop check: verify all hours and minutes values
             fast_poll(driver, '''
@@ -537,39 +533,30 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
     return True
 
 def step_6_submit_schedule(driver) -> bool:
-    """Step 6: Poll for final Schedule button with dynamic screen bounds and click immediately when ready."""
-    log("[Meta Step 6] กำลังตรวจจับปุ่ม Schedule ขวาล่าง (เมื่อพร้อมจะกดทันที)...")
+    """Step 6: Poll for final Schedule button and click when ready."""
+    log("[Meta Step 6] กำลังตรวจจับปุ่ม Schedule (เมื่อพร้อมจะกดทันที)...")
 
-    # 1. Blur active input to ensure validation updates
-    driver.execute_script("if (document.activeElement) document.activeElement.blur();")
-    time.sleep(0.4)
-
-    # 2. Poll for Schedule button with dynamic screen bounds (independent of screen resolution)
     sched_submit_el = fast_poll(driver, '''
-        const winW = window.innerWidth;
-        const winH = window.innerHeight;
         const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
         return allEls.find(el => {
             const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-            const r = el.getBoundingClientRect();
-            const isBottomRight = r.x > winW - 400 && r.y > winH - 300 && r.width > 20 && r.height > 20;
-            const isMatchText = t === 'schedule' || t === 'share' || t === 'กำหนดเวลา' || t === 'แชร์';
+            const isMatch = t === 'schedule' || t === 'share' || t === 'กำหนดเวลา' || t === 'แชร์';
+            const isNotRadio = el.getAttribute('role') !== 'radio' && !el.closest('[role="radiogroup"], [role="radio"]');
+            const isVisible = el.offsetWidth > 20 && el.offsetHeight > 20;
             const isEnabled = el.getAttribute('aria-disabled') !== 'true';
-            return isBottomRight && isMatchText && isEnabled;
+            return isMatch && isNotRadio && isVisible && isEnabled;
         });
     ''', timeout=20.0, poll_interval=0.1)
 
     if not sched_submit_el:
-        # Fallback without strict enabled check if disabled attribute takes time to clear
         sched_submit_el = fast_poll(driver, '''
-            const winW = window.innerWidth;
-            const winH = window.innerHeight;
-            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-            return allBtns.find(b => {
-                const t = (b.innerText || b.textContent || '').trim().toLowerCase();
-                const r = b.getBoundingClientRect();
-                const isBottomRight = r.x > winW - 400 && r.y > winH - 300 && r.width > 20 && r.height > 20;
-                return isBottomRight && (t === 'schedule' || t === 'share' || t === 'กำหนดเวลา' || t === 'แชร์');
+            const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
+            return allEls.find(el => {
+                const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                const isMatch = t === 'schedule' || t === 'share' || t === 'กำหนดเวลา' || t === 'แชร์';
+                const isNotRadio = el.getAttribute('role') !== 'radio' && !el.closest('[role="radiogroup"], [role="radio"]');
+                const isVisible = el.offsetWidth > 20 && el.offsetHeight > 20;
+                return isMatch && isNotRadio && isVisible;
             });
         ''', timeout=5.0, poll_interval=0.2)
 
@@ -579,7 +566,7 @@ def step_6_submit_schedule(driver) -> bool:
         except Exception:
             driver.execute_script("arguments[0].scrollIntoView({block: 'nearest'}); arguments[0].click();", sched_submit_el)
     else:
-        raise RuntimeError("ไม่พบปุ่ม Schedule ขวาล่างที่พร้อมคลิก (กรุณาตรวจสอบว่ากรอกวัน-เวลาถูกต้อง)")
+        raise RuntimeError("ไม่พบปุ่ม Schedule ที่พร้อมคลิก (กรุณาตรวจสอบว่ากรอกวัน-เวลาถูกต้อง)")
 
     log("[Meta Step 6] ✅ กดปุ่ม Schedule ยืนยันเรียบร้อยแล้ว (รอระบบประมวลผล 2.5 วินาที)")
     time.sleep(2.5)
