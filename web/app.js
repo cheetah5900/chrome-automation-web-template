@@ -923,6 +923,7 @@ async function loadConfig() {
     loadFlowVideoPresets(config.flow_video_presets);
     loadFlowPoPresets(config.flow_po_presets);
     loadSeedancePresets(config.seedance_presets);
+    loadMetaPresets(config.meta_presets);
     const folderInput = document.getElementById('cfg_folder_name');
     if (folderInput) folderInput.value = config.folder_name || '';
     const localInput = document.getElementById('cfg_local_path');
@@ -6260,18 +6261,27 @@ function loadMetaPresets(presets) {
       select.appendChild(opt);
     });
   }
-  if (currentVal && presets && presets[currentVal]) {
+  const savedLast = localStorage.getItem('meta_last_preset');
+  if (savedLast && presets && presets[savedLast]) {
+    select.value = savedLast;
+  } else if (currentVal && presets && presets[currentVal]) {
     select.value = currentVal;
   }
 }
+window.loadMetaPresets = loadMetaPresets;
 
 async function saveMetaPreset() {
   const currentKey = document.getElementById('metaPresetSelect')?.value || '';
-  const name = prompt('ระบุชื่อ Preset หรือระบุชื่อเดิมเพื่อบันทึกทับ:', currentKey);
+  const name = prompt('ระบุชื่อ Preset สำหรับ Meta Auto Post (หรือระบุชื่อเดิมเพื่อบันทึกทับ):', currentKey);
   if (!name || !name.trim()) return;
   const trimmedName = name.trim();
 
-  const currentConfig = await jsonFetch('/api/config');
+  let currentConfig = {};
+  try {
+    currentConfig = await jsonFetch('/api/config');
+  } catch (e) {
+    console.error('Failed to fetch config:', e);
+  }
   const presets = currentConfig.meta_presets || {};
 
   presets[trimmedName] = {
@@ -6294,12 +6304,15 @@ async function saveMetaPreset() {
     loadMetaPresets(presets);
     const select = document.getElementById('metaPresetSelect');
     if (select) select.value = trimmedName;
-    writeConsoleLine(`บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว`, 'success', 'metaConsole');
-    alert(`บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว`);
+    localStorage.setItem('meta_last_preset', trimmedName);
+    writeConsoleLine(`💾 บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว`, 'success', 'metaConsole');
+    if (typeof showToast === 'function') showToast(`บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว!`, 'success');
   } catch (e) {
     writeConsoleLine(`เกิดข้อผิดพลาดในการบันทึก Preset: ${e.message}`, 'error', 'metaConsole');
+    if (typeof showToast === 'function') showToast(`เกิดข้อผิดพลาด: ${e.message}`, 'error');
   }
 }
+window.saveMetaPreset = saveMetaPreset;
 
 async function deleteMetaPreset() {
   const select = document.getElementById('metaPresetSelect');
@@ -6310,7 +6323,12 @@ async function deleteMetaPreset() {
   }
   if (!confirm(`ยืนยันการลบ Preset "${currentName}" หรือไม่?`)) return;
 
-  const currentConfig = await jsonFetch('/api/config');
+  let currentConfig = {};
+  try {
+    currentConfig = await jsonFetch('/api/config');
+  } catch (e) {
+    console.error('Failed to fetch config:', e);
+  }
   const presets = currentConfig.meta_presets || {};
   delete presets[currentName];
 
@@ -6321,18 +6339,28 @@ async function deleteMetaPreset() {
       body: JSON.stringify({ key: 'meta_presets', value: presets })
     });
     loadMetaPresets(presets);
-    writeConsoleLine(`ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'metaConsole');
+    localStorage.removeItem('meta_last_preset');
+    writeConsoleLine(`🗑️ ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'metaConsole');
+    if (typeof showToast === 'function') showToast(`ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info');
   } catch (e) {
     writeConsoleLine(`เกิดข้อผิดพลาดในการลบ Preset: ${e.message}`, 'error', 'metaConsole');
+    if (typeof showToast === 'function') showToast(`เกิดข้อผิดพลาด: ${e.message}`, 'error');
   }
 }
+window.deleteMetaPreset = deleteMetaPreset;
 
 async function applyMetaPreset() {
   const select = document.getElementById('metaPresetSelect');
   const currentName = select ? select.value : '';
   if (!currentName) return;
 
-  const currentConfig = await jsonFetch('/api/config');
+  localStorage.setItem('meta_last_preset', currentName);
+  let currentConfig = {};
+  try {
+    currentConfig = await jsonFetch('/api/config');
+  } catch (e) {
+    console.error('Failed to fetch config:', e);
+  }
   const preset = (currentConfig.meta_presets || {})[currentName];
   if (!preset) return;
 
@@ -6352,6 +6380,7 @@ async function applyMetaPreset() {
   writeConsoleLine(`โหลด Preset "${currentName}" สำเร็จ (URL: ${urlDisplay})`, 'info', 'metaConsole');
   updateTooltips();
 }
+window.applyMetaPreset = applyMetaPreset;
 
 async function openMetaPageUrl() {
   const url = document.getElementById('cfg_meta_page_url')?.value.trim() || '';
