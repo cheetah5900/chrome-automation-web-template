@@ -533,40 +533,71 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
     return True
 
 def step_6_submit_schedule(driver) -> bool:
-    """Step 6: Poll for final Schedule button and click when ready."""
-    log("[Meta Step 6] กำลังตรวจจับปุ่ม Schedule (เมื่อพร้อมจะกดทันที)...")
+    """Step 6: Poll for final Schedule submit button (distinguished from Radio and Nav Header) and click."""
+    log("[Meta Step 6] กำลังตรวจจับปุ่มกดยืนยัน Schedule (ตัดตัวเลือก Radio และแท็บด้านบนออก)...")
 
     sched_submit_el = fast_poll(driver, '''
-        const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
-        return allEls.find(el => {
-            const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-            const isMatch = t === 'schedule' || t === 'share' || t === 'กำหนดเวลา' || t === 'แชร์';
-            const isNotRadio = el.getAttribute('role') !== 'radio' && !el.closest('[role="radiogroup"], [role="radio"]');
-            const isVisible = el.offsetWidth > 20 && el.offsetHeight > 20;
-            const isEnabled = el.getAttribute('aria-disabled') !== 'true';
-            return isMatch && isNotRadio && isVisible && isEnabled;
+        const allBtns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+
+        // Strategy A: Find submit button in the same footer container as 'Back' or 'Cancel'
+        const backBtn = allBtns.find(b => {
+            const t = (b.innerText || '').trim();
+            return t === 'Back' || t === 'ย้อนกลับ' || t === 'Cancel' || t === 'ยกเลิก';
         });
+
+        if (backBtn && backBtn.parentElement) {
+            const footerParent = backBtn.parentElement;
+            const siblingSubmit = Array.from(footerParent.querySelectorAll('button, div[role="button"]')).find(b => {
+                const t = (b.innerText || '').trim().toLowerCase();
+                const isMatch = t === 'schedule' || t === 'กำหนดเวลา' || t === 'share' || t === 'แชร์';
+                const isEnabled = b.getAttribute('aria-disabled') !== 'true';
+                return isMatch && b !== backBtn && isEnabled;
+            });
+            if (siblingSubmit) return siblingSubmit;
+        }
+
+        // Strategy B: Semantic filtering across all buttons (must NOT be Radio and must NOT be Nav Header)
+        const candidates = allBtns.filter(b => {
+            const t = (b.innerText || '').trim().toLowerCase();
+            const isMatch = t === 'schedule' || t === 'กำหนดเวลา' || t === 'share' || t === 'แชร์';
+            const isNavHeader = !!b.closest('[role="listitem"], [role="list"], nav, header');
+            const isRadio = b.getAttribute('role') === 'radio'
+                         || !!b.querySelector('input[type="radio"], [role="radio"]')
+                         || !!b.closest('[role="radiogroup"], [role="radio"]');
+            const isVisible = b.offsetWidth > 20 && b.offsetHeight > 20;
+            const isEnabled = b.getAttribute('aria-disabled') !== 'true';
+            return isMatch && !isNavHeader && !isRadio && isVisible && isEnabled;
+        });
+
+        // The final submit button is always the last action button in document order
+        return candidates.length > 0 ? candidates[candidates.length - 1] : null;
     ''', timeout=20.0, poll_interval=0.1)
 
     if not sched_submit_el:
+        # Fallback query without waiting for aria-disabled if it lags
         sched_submit_el = fast_poll(driver, '''
-            const allEls = Array.from(document.querySelectorAll('div[role="button"], button'));
-            return allEls.find(el => {
-                const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-                const isMatch = t === 'schedule' || t === 'share' || t === 'กำหนดเวลา' || t === 'แชร์';
-                const isNotRadio = el.getAttribute('role') !== 'radio' && !el.closest('[role="radiogroup"], [role="radio"]');
-                const isVisible = el.offsetWidth > 20 && el.offsetHeight > 20;
-                return isMatch && isNotRadio && isVisible;
+            const allBtns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+            const candidates = allBtns.filter(b => {
+                const t = (b.innerText || '').trim().toLowerCase();
+                const isMatch = t === 'schedule' || t === 'กำหนดเวลา' || t === 'share' || t === 'แชร์';
+                const isNavHeader = !!b.closest('[role="listitem"], [role="list"], nav, header');
+                const isRadio = b.getAttribute('role') === 'radio'
+                             || !!b.querySelector('input[type="radio"], [role="radio"]')
+                             || !!b.closest('[role="radiogroup"], [role="radio"]');
+                const isVisible = b.offsetWidth > 20 && b.offsetHeight > 20;
+                return isMatch && !isNavHeader && !isRadio && isVisible;
             });
+            return candidates.length > 0 ? candidates[candidates.length - 1] : null;
         ''', timeout=5.0, poll_interval=0.2)
 
     if sched_submit_el:
         try:
             ActionChains(driver).move_to_element(sched_submit_el).pause(0.1).click().perform()
         except Exception:
-            driver.execute_script("arguments[0].scrollIntoView({block: 'nearest'}); arguments[0].click();", sched_submit_el)
+            pass
+        driver.execute_script("arguments[0].scrollIntoView({block: 'nearest'}); arguments[0].click();", sched_submit_el)
     else:
-        raise RuntimeError("ไม่พบปุ่ม Schedule ที่พร้อมคลิก (กรุณาตรวจสอบว่ากรอกวัน-เวลาถูกต้อง)")
+        raise RuntimeError("ไม่พบปุ่ม Schedule ยืนยันที่พร้อมคลิก (กรุณาตรวจสอบว่ากรอกวัน-เวลาถูกต้อง)")
 
     log("[Meta Step 6] ✅ กดปุ่ม Schedule ยืนยันเรียบร้อยแล้ว (รอระบบประมวลผล 2.5 วินาที)")
     time.sleep(2.5)
