@@ -103,28 +103,39 @@ def upload_macos_file_dialog_fast(file_path: str, port: int = 9222) -> bool:
         return False
     escaped_path = file_path.replace('"', '\\"')
 
-    # Ensure 9222 is active right before keystrokes
-    focus_9222_browser_tab(None, port=port)
+    # 1. Set system clipboard directly via pbcopy
+    try:
+        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+        p.communicate(input=file_path.encode('utf-8'))
+    except Exception as pb_err:
+        log(f"[Meta Upload Dialog] pbcopy error: {pb_err}")
 
+    # 2. Send keystrokes to the open file sheet
     script = f"""
     set the clipboard to "{escaped_path}"
     tell application "System Events"
-        delay 1.0
+        delay 0.8
         
-        -- Press Cmd + Shift + G
+        -- Press Cmd + Shift + G to open path sheet
         key code 5 using {{command down, shift down}}
-        delay 1.0
+        delay 0.8
         
-        -- Press Cmd + V
-        keystroke "v" using {{command down}}
-        delay 1.0
+        -- Select all existing text in sheet (Cmd + A) and delete
+        key code 0 using {{command down}}
+        delay 0.15
+        key code 51
+        delay 0.2
         
-        -- Enter to confirm path
-        keystroke return
+        -- Press Cmd + V to paste filepath (key code 9 is 'v' on any keyboard layout)
+        key code 9 using {{command down}}
+        delay 0.8
+        
+        -- Return to confirm path sheet
+        key code 36
         delay 1.2
         
-        -- Enter to confirm file selection
-        keystroke return
+        -- Return to confirm open file dialog
+        key code 36
     end tell
     """
     try:
