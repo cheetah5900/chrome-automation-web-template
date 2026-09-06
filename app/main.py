@@ -1368,6 +1368,7 @@ def _default_config() -> dict[str, Any]:
             "meta_start_date": "",
             "meta_start_hour": 18,
             "meta_presets": {},
+            "shopee_presets": {},
             "seedance_presets": {}
         }
     else:
@@ -1443,6 +1444,7 @@ def _default_config() -> dict[str, Any]:
             "meta_start_date": "",
             "meta_start_hour": 18,
             "meta_presets": {},
+            "shopee_presets": {},
             "seedance_presets": {}
         }
 
@@ -4642,6 +4644,260 @@ def api_meta_autopost_stop() -> dict[str, Any]:
     _force_stop_requested = True
     log("[Meta Auto Post] 🛑 ได้รับคำสั่ง Force Stop - กำลังหยุดการทำงานทุกกระบวนการ")
     return {"ok": True, "message": "🛑 สั่ง Force Stop เรียบร้อยแล้ว"}
+
+# ==============================================================================
+# SHOPEE AFFILIATE AUTOMATION
+# ==============================================================================
+
+class ShopeeScanRequest(BaseModel):
+    main_folder: str
+    subfolders_str: str = ""
+    video_prefix: str = "combined"
+    start_date: str = ""
+    start_hour: int | str = 18
+
+class ShopeeRunRequest(BaseModel):
+    items: list[dict[str, Any]]
+    target_url: str = ""
+    job_id: str | None = None
+    delay_min: float = 5.0
+    delay_max: float = 15.0
+
+global_shopee_progress: dict[str, Any] = {
+    "status": "idle",
+    "total": 0,
+    "current": 0,
+    "percent": 0,
+    "message": "Ready",
+    "errors": []
+}
+
+def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0):
+    global global_shopee_progress
+    try:
+        bot = browser_manager.get()
+        if not bot or not bot.driver:
+            global_shopee_progress["status"] = "error"
+            global_shopee_progress["message"] = "เบราว์เซอร์ Chrome ไม่ได้เชื่อมต่อ (กรุณากด Launch Browser ก่อน)"
+            log("[Shopee Affiliate] Error: Chrome driver is not attached")
+            return
+
+        from app.shopee_affiliate import run_shopee_affiliate_batch
+
+        def _on_progress(prog_data: dict[str, Any]):
+            global global_shopee_progress
+            for k, v in prog_data.items():
+                global_shopee_progress[k] = v
+
+        res = run_shopee_affiliate_batch(
+            items=items,
+            target_url=target_url,
+            delay_min=delay_min,
+            delay_max=delay_max,
+            progress_callback=_on_progress
+        )
+
+        global_shopee_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
+        global_shopee_progress["percent"] = 100
+        global_shopee_progress["current"] = len(items)
+        global_shopee_progress["message"] = f"✅ ดำเนินการสำเร็จครบทั้งหมด {res['success_count']} รายการ" if res["ok"] else f"เสร็จสิ้น {res['success_count']}/{len(items)} รายการ"
+
+    except Exception as e:
+        log(f"[Shopee Affiliate Error] {e}")
+        global_shopee_progress["status"] = "error"
+        global_shopee_progress["message"] = f"เกิดข้อผิดพลาด: {str(e)}"
+
+@app.post("/api/shopee-affiliate/run")
+def run_shopee_affiliate(req: ShopeeRunRequest) -> dict[str, Any]:
+    global global_shopee_progress
+    items = req.items
+    if not items:
+        raise HTTPException(status_code=400, detail="ไม่มีรายการให้ดำเนินการ")
+
+    global_shopee_progress = {
+        "status": "running",
+        "total": len(items),
+        "current": 0,
+        "percent": 0,
+        "message": f"เตรียมรัน Shopee Affiliate {len(items)} รายการ...",
+        "errors": []
+    }
+    
+    log(f"[Shopee Affiliate] Received batch run request for {len(items)} items (Delay: {req.delay_min}s - {req.delay_max}s)")
+    
+    import threading
+    t = threading.Thread(
+        target=_shopee_affiliate_worker,
+        args=(items, req.target_url, req.delay_min, req.delay_max),
+        daemon=True
+    )
+    t.start()
+
+    return {
+        "ok": True,
+        "message": f"เริ่มกระบวนการ Shopee Affiliate {len(items)} รายการ",
+        "total": len(items)
+    }
+
+@app.post("/api/shopee-affiliate/scan")
+def scan_shopee_affiliate(req: ShopeeScanRequest) -> dict[str, Any]:
+    import os
+    import re
+    import random
+    from datetime import datetime, timedelta
+
+    main_folder = req.main_folder.strip().strip('"').strip("'")
+    main_folder = os.path.expanduser(main_folder)
+
+    if not main_folder or not os.path.exists(main_folder) or not os.path.isdir(main_folder):
+        raise HTTPException(status_code=400, detail="โฟลเดอร์หลักไม่ถูกต้องหรือไม่พบในระบบ")
+
+    target_subfolders: list[str] = []
+    subfolders_input = req.subfolders_str.strip()
+
+    def parse_ranges(input_str: str) -> list[str]:
+        res = []
+        if not input_str:
+            return res
+        parts = input_str.split(',')
+        for part in parts:
+            trimmed = part.strip()
+            if not trimmed:
+                continue
+            if '-' in trimmed:
+                rng = trimmed.split('-')
+                if len(rng) == 2 and rng[0].strip().isdigit() and rng[1].strip().isdigit():
+                    s_val = int(rng[0].strip())
+                    e_val = int(rng[1].strip())
+                    if s_val <= e_val:
+                        for k in range(s_val, e_val + 1):
+                            res.append(str(k))
+                        continue
+            res.append(trimmed)
+        return res
+
+    parsed_keys = parse_ranges(subfolders_input)
+    all_entries = sorted(os.listdir(main_folder), key=natural_sort_key)
+    all_dir_entries = [e for e in all_entries if os.path.isdir(os.path.join(main_folder, e))]
+
+    if parsed_keys:
+        for k in parsed_keys:
+            resolved = resolve_subfolder_by_prefix(main_folder, k)
+            if os.path.isdir(resolved):
+                target_subfolders.append(resolved)
+    else:
+        for d in all_dir_entries:
+            target_subfolders.append(os.path.join(main_folder, d))
+
+    if not target_subfolders:
+        return {"ok": True, "items": [], "count": 0, "message": "ไม่พบโฟลเดอร์ย่อยตามเงื่อนไข"}
+
+    try:
+        target_hour = int(req.start_hour)
+        if target_hour < 0 or target_hour > 23:
+            target_hour = 18
+    except Exception:
+        target_hour = 18
+
+    if req.start_date and req.start_date.strip():
+        try:
+            base_day = datetime.strptime(req.start_date.strip(), "%Y-%m-%d").date()
+        except Exception:
+            base_day = (datetime.now() + timedelta(days=1)).date()
+    else:
+        base_day = (datetime.now() + timedelta(days=1)).date()
+
+    prefix_clean = (req.video_prefix or "").strip().lower()
+    if not prefix_clean:
+        prefix_clean = "combined"
+
+    items: list[dict[str, Any]] = []
+    video_exts = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"]
+
+    for idx, folder_path in enumerate(target_subfolders):
+        folder_name = os.path.basename(folder_path)
+        post_day = base_day + timedelta(days=idx)
+        random_minute = random.randint(0, 59)
+        item_dt = datetime(post_day.year, post_day.month, post_day.day, target_hour, random_minute)
+        scheduled_iso = item_dt.strftime("%Y-%m-%dT%H:%M")
+
+        matching_video = None
+        for f in sorted(os.listdir(folder_path), key=natural_sort_key):
+            ext = os.path.splitext(f)[1].lower()
+            if ext in video_exts and f.lower().startswith(prefix_clean):
+                matching_video = os.path.join(folder_path, f)
+                break
+
+        if not matching_video:
+            for f in sorted(os.listdir(folder_path), key=natural_sort_key):
+                ext = os.path.splitext(f)[1].lower()
+                if ext in video_exts:
+                    matching_video = os.path.join(folder_path, f)
+                    break
+
+        caption_text = ""
+        txt_files = [f for f in sorted(os.listdir(folder_path), key=natural_sort_key) if f.lower().endswith(".txt")]
+        if txt_files:
+            caption_file = os.path.join(folder_path, txt_files[0])
+            try:
+                with open(caption_file, "r", encoding="utf-8") as tf:
+                    caption_text = tf.read().strip()
+            except Exception:
+                try:
+                    with open(caption_file, "r", encoding="cp874") as tf:
+                        caption_text = tf.read().strip()
+                except Exception:
+                    pass
+
+        if matching_video:
+            items.append({
+                "subfolder_name": folder_name,
+                "folder_path": folder_path,
+                "video_name": os.path.basename(matching_video),
+                "video_path": matching_video,
+                "caption": caption_text,
+                "product_link": "",
+                "scheduled_datetime": scheduled_iso,
+                "enabled": True
+            })
+
+    return {
+        "ok": True,
+        "items": items,
+        "count": len(items),
+        "message": f"สแกนพบ {len(items)} รายการพร้อมดำเนินการ"
+    }
+
+@app.get("/api/shopee-affiliate/progress")
+def get_shopee_affiliate_progress() -> dict[str, Any]:
+    global global_shopee_progress
+    return global_shopee_progress
+
+@app.post("/api/shopee-affiliate/open-url")
+def open_shopee_affiliate_url(req: dict[str, Any]) -> dict[str, Any]:
+    url = (req.get("url") or "").strip()
+    if not url:
+        url = "https://affiliate.shopee.co.th"
+    
+    bot = browser_manager.get()
+    if not bot or not bot.driver:
+        raise HTTPException(status_code=400, detail="Chrome Browser ยังไม่ได้เปิด (กรุณากด Launch Browser ก่อน)")
+
+    driver = bot.driver
+    try:
+        driver.get(url)
+        return {"ok": True, "message": f"เปิด URL ใน Chrome 9222 สำเร็จ: {url}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ไม่สามารถเปิด URL ได้: {str(e)}")
+
+@app.post("/api/shopee-affiliate/stop")
+def api_shopee_affiliate_stop() -> dict[str, Any]:
+    from app.shopee_affiliate import stop_shopee_affiliate
+    stop_shopee_affiliate()
+    global _force_stop_requested
+    _force_stop_requested = True
+    log("[Shopee Affiliate] 🛑 ได้รับคำสั่ง Force Stop - กำลังหยุดการทำงาน")
+    return {"ok": True, "message": "🛑 สั่ง Force Stop Shopee Affiliate เรียบร้อยแล้ว"}
 
 @app.get("/api/utils/view-image")
 def view_image(path: str) -> FileResponse:

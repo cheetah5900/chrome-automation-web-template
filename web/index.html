@@ -71,6 +71,11 @@
           <span class="nav-text">Meta Auto Post</span>
           <span class="nav-lock">🔒</span>
         </button>
+        <button id="tabShopeeAffiliateBtn" class="sidebar-nav-btn locked" disabled>
+          <span class="nav-icon">🛍️</span>
+          <span class="nav-text">Shopee Affiliate</span>
+          <span class="nav-lock">🔒</span>
+        </button>
       </nav>
       
       <!-- Collapsed mini indicator -->
@@ -1616,6 +1621,166 @@
               <!-- Console Box -->
               <div id="metaConsole" class="console-box" style="flex-grow: 1; min-height: 400px;">
                 <div class="console-line system">Ready for Meta Auto Post operations...</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 7: SHOPEE AFFILIATE -->
+      <div id="shopeeAffiliateView" class="tab-view hidden">
+        <div class="layout-grid workflow-grid" style="grid-template-columns: 7fr 3fr;">
+          <!-- Left Column: Settings, Batch Scanner & Items Preview -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Configuration & Batch Scanner Card -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
+                <h2 class="section-title" style="margin-bottom: 0;">🛍️ Shopee Affiliate Manager</h2>
+                <span id="shopeeBatchCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(238, 77, 45, 0.15); border: 1px solid rgba(238, 77, 45, 0.3); color: #ff7e67; border-radius: 20px; font-weight: bold;">0 Items Ready</span>
+              </div>
+              <p class="section-subtitle">จัดการรายการ Shopee Affiliate สแกนดึงข้อมูลโฟลเดอร์ วิดีโอ/รูปภาพ และลิงก์สินค้า</p>
+
+              <div class="settings-form" style="margin-top: 15px;">
+                <!-- Preset Manager -->
+                <div id="shopeePresetsGroup" class="form-group" style="margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px;">
+                  <label style="font-weight: bold; color: #ffb86c; margin-bottom: 8px; display: block;">Preset การตั้งค่า</label>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <select id="shopeePresetSelect" style="flex-grow: 1; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
+                      <option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>
+                    </select>
+                    <button id="saveShopeePresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap;">💾 บันทึก Preset</button>
+                    <button id="deleteShopeePresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap; color: #ff6b6b; border-color: rgba(255,107,107,0.3);">🗑️ ลบ</button>
+                  </div>
+                </div>
+
+                <!-- Shopee Page URL -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_shopee_page_url" style="font-weight: bold; color: #ff7e67;">ลิงก์หน้า Shopee Affiliate / สินค้า (Shopee URL)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">ระบุ URL หน้า Shopee Affiliate Platform หรือหน้าร้านค้า/สินค้า</div>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <input id="cfg_shopee_page_url" placeholder="เช่น https://affiliate.shopee.co.th" style="margin-bottom: 0; flex-grow: 1;" />
+                    <button id="btnOpenShopeePageUrl" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: rgba(238, 77, 45, 0.15); border-color: rgba(238, 77, 45, 0.3); color: #ff7e67;">🌐 ไปที่หน้านี้ (Redirect)</button>
+                  </div>
+                </div>
+
+                <!-- Main Folder -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_shopee_main_folder" style="font-weight: bold; color: #ff7e67;">โฟลเดอร์หลักสำหรับดึงข้อมูล (Main Target Folder)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์หลักที่มีโฟลเดอร์ย่อยบรรจุสื่อและไฟล์ข้อความรายละเอียด</div>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <input id="cfg_shopee_main_folder" placeholder="เช่น /Users/litar/Downloads/shopee_affiliate_batch" style="margin-bottom: 0; flex-grow: 1;" />
+                    <button id="browseShopeeMainFolderBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                  </div>
+                </div>
+
+                <!-- Sub folders & Video Prefix Grid -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_shopee_subfolders" style="font-weight: bold; color: #ff7e67;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)</div>
+                    <input id="cfg_shopee_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_shopee_video_prefix" style="font-weight: bold; color: #ff7e67;">คำนำหน้าชื่อวิดีโอ (Video Prefix)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ขึ้นต้นด้วยคำนี้เพื่อจับคู่วิดีโอ (ค่าเริ่มต้น: combined)</div>
+                    <input id="cfg_shopee_video_prefix" value="combined" placeholder="เช่น combined หรือ final" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+                </div>
+
+                <!-- Date, Time and Delay Scheduling Row -->
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 16px; margin-bottom: 20px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_shopee_start_date" style="font-weight: bold; color: #ff7e67;">วันที่เริ่มต้น (Start Date)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">กำหนดวันเริ่มต้นสำหรับแต่ละรายการ</div>
+                    <input type="date" id="cfg_shopee_start_date" style="margin-bottom: 0; width: 100%; padding: 10px;" />
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_shopee_start_hour" style="font-weight: bold; color: #ff7e67;">ชั่วโมงเริ่มต้น (0-23)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เวลาสำหรับแต่ละรายการ</div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <input type="number" id="cfg_shopee_start_hour" min="0" max="23" value="18" placeholder="18" style="margin-bottom: 0; width: 80px; text-align: center; padding: 10px;" />
+                      <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">: (สุ่มนาที)</span>
+                    </div>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-weight: bold; color: #ff7e67;">สุ่มหน่วงเวลาระหว่างรอบ (วินาที)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">Delay Min - Max ก่อนเริ่มรายการถัดไป</div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <input type="number" id="cfg_shopee_delay_min" min="0" max="3600" value="5" placeholder="Min" style="margin-bottom: 0; width: 75px; text-align: center; padding: 10px;" />
+                      <span style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">-</span>
+                      <input type="number" id="cfg_shopee_delay_max" min="0" max="3600" value="15" placeholder="Max" style="margin-bottom: 0; width: 75px; text-align: center; padding: 10px;" />
+                      <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">วิ</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Scan Button -->
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <button id="btnScanShopeeBatch" class="primary has-tooltip" style="padding: 12px 24px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #ee4d2d, #ff5722); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(238, 77, 45, 0.3);">
+                    <span class="btn-text">🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair)</span>
+                    <div class="custom-tooltip" id="tooltip_btnScanShopeeBatch"></div>
+                  </button>
+                  <button id="btnClearShopeeBatch" class="secondary" style="padding: 12px 18px; font-size: 0.85rem; border-radius: 12px; margin-bottom: 0;">🗑️ ล้างรายการ</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Scanned Items Preview List -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #ff7e67;">🛍️ รายการสินค้าที่สแกนพบ (Scanned Items)</h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button id="toggleAllShopeeItemsBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 20px; margin: 0; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #fff;">Deselect All</button>
+                </div>
+              </div>
+
+              <!-- Queue Container -->
+              <div id="shopeeQueueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 650px; overflow-y: auto; padding-right: 4px;">
+                <div id="shopeeEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
+                  ยังไม่มีข้อมูล — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนและจับคู่ข้อมูล"</strong>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Right Column: Status, Run Controls & Console -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <section class="card" style="height: 100%; display: flex; flex-direction: column;">
+              <h2 class="section-title">🚀 Shopee Affiliate Execution</h2>
+              <p class="section-subtitle">สถานะและบันทึกการทำงานของบอท Shopee Affiliate</p>
+
+              <div style="margin: 15px 0 16px 0; display: flex; gap: 10px;">
+                <button id="runShopeeAffiliateBtn" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #ee4d2d, #ff5722); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(238, 77, 45, 0.3);">
+                  <span class="btn-text">🚀 เริ่มรัน Shopee Affiliate</span>
+                  <div class="custom-tooltip" id="tooltip_runShopeeAffiliateBtn"></div>
+                </button>
+                <button id="btnShopeeForceStop" class="danger has-tooltip" style="padding: 14px 20px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                  <span>🛑 Force Stop</span>
+                  <div class="custom-tooltip" id="tooltip_btnShopeeForceStop"></div>
+                </button>
+              </div>
+
+              <!-- Progress Bar -->
+              <div id="shopeeProgressContainer" class="hidden" style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; color: #ff7e67;">
+                  <span>ความคืบหน้า</span>
+                  <span id="shopeeProgressText">0% (0/0)</span>
+                </div>
+                <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.08); border-radius: 5px; overflow: hidden;">
+                  <div id="shopeeProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #ee4d2d, #10b981); transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+
+              <!-- Console Header -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label style="font-weight: bold; color: rgba(255,255,255,0.7); font-size: 0.85rem;">Live Console Output</label>
+                <button id="clearShopeeConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; margin: 0;">Clear</button>
+              </div>
+
+              <!-- Console Box -->
+              <div id="shopeeConsole" class="console-box" style="flex-grow: 1; min-height: 400px;">
+                <div class="console-line system">Ready for Shopee Affiliate operations...</div>
               </div>
             </section>
           </div>

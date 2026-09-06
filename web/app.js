@@ -490,13 +490,14 @@ async function updatePortStatus() {
   const tabVideoHelper = document.getElementById('tabVideoHelperBtn');
   const tabSeedanceGen = document.getElementById('tabSeedanceGenBtn');
   const tabMetaAutoPost = document.getElementById('tabMetaAutoPostBtn');
+  const tabShopeeAffiliate = document.getElementById('tabShopeeAffiliateBtn');
   
   const sidebarSummary = document.getElementById('sidebar_profile_summary');
   const sidebarProfileName = document.getElementById('sidebar_active_profile_name');
   const sidebarProfilePort = document.getElementById('sidebar_active_profile_port');
   const browserStatusDot = document.getElementById('sidebar_browser_status_dot');
 
-  const otherTabs = [tabImageGen, tabStoryboardGen, tabVideoGen, tabVideoHelper, tabSeedanceGen, tabMetaAutoPost];
+  const otherTabs = [tabImageGen, tabStoryboardGen, tabVideoGen, tabVideoHelper, tabSeedanceGen, tabMetaAutoPost, tabShopeeAffiliate];
 
   if (!select || !select.value) {
     if (badge) {
@@ -812,6 +813,7 @@ function initTabNavigation() {
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
   const btnMetaAutoPost = document.getElementById('tabMetaAutoPostBtn');
+  const btnShopeeAffiliate = document.getElementById('tabShopeeAffiliateBtn');
   
   const viewBrowserSetup = document.getElementById('browserSetupView');
   const viewImageGen = document.getElementById('imageGenView');
@@ -821,6 +823,7 @@ function initTabNavigation() {
   const viewVideoHelper = document.getElementById('videoHelperView');
   const viewSeedanceGen = document.getElementById('seedanceGenView');
   const viewMetaAutoPost = document.getElementById('metaAutoPostView');
+  const viewShopeeAffiliate = document.getElementById('shopeeAffiliateView');
 
   const tabs = [
     { btn: btnBrowserSetup, view: viewBrowserSetup, onLoad: null },
@@ -830,7 +833,8 @@ function initTabNavigation() {
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
     { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: null },
-    { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig }
+    { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig },
+    { btn: btnShopeeAffiliate, view: viewShopeeAffiliate, onLoad: loadConfig }
   ];
 
   tabs.forEach(tab => {
@@ -880,6 +884,7 @@ function restoreSavedTab() {
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
   const btnMetaAutoPost = document.getElementById('tabMetaAutoPostBtn');
+  const btnShopeeAffiliate = document.getElementById('tabShopeeAffiliateBtn');
 
   const viewBrowserSetup = document.getElementById('browserSetupView');
   const viewImageGen = document.getElementById('imageGenView');
@@ -889,6 +894,7 @@ function restoreSavedTab() {
   const viewVideoHelper = document.getElementById('videoHelperView');
   const viewSeedanceGen = document.getElementById('seedanceGenView');
   const viewMetaAutoPost = document.getElementById('metaAutoPostView');
+  const viewShopeeAffiliate = document.getElementById('shopeeAffiliateView');
 
   const tabs = [
     { btn: btnBrowserSetup, view: viewBrowserSetup, onLoad: null },
@@ -898,7 +904,8 @@ function restoreSavedTab() {
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
     { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: loadConfig },
-    { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig }
+    { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig },
+    { btn: btnShopeeAffiliate, view: viewShopeeAffiliate, onLoad: loadConfig }
   ];
 
   const savedTabId = localStorage.getItem('activeNavigationTab');
@@ -924,6 +931,7 @@ async function loadConfig() {
     loadFlowPoPresets(config.flow_po_presets);
     loadSeedancePresets(config.seedance_presets);
     loadMetaPresets(config.meta_presets);
+    if (typeof loadShopeePresets === 'function') loadShopeePresets(config.shopee_presets);
     const folderInput = document.getElementById('cfg_folder_name');
     if (folderInput) folderInput.value = config.folder_name || '';
     const localInput = document.getElementById('cfg_local_path');
@@ -1062,6 +1070,7 @@ async function loadConfig() {
     }
 
     loadMetaPresets(config.meta_presets);
+    if (typeof loadShopeePresets === 'function') loadShopeePresets(config.shopee_presets);
     loadSeedancePresets(config.seedance_presets);
     
     updateTooltips();
@@ -7080,6 +7089,442 @@ function initMetaAutoPostListeners() {
   }
 }
 
+// --- Shopee Affiliate Logic ---
+let shopeeQueue = [];
+
+function loadShopeePresets(presets) {
+  const select = document.getElementById('shopeePresetSelect');
+  if (!select) return;
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>';
+  if (presets && typeof presets === 'object') {
+    Object.keys(presets).forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    });
+  }
+  const savedLast = localStorage.getItem('shopee_last_preset');
+  if (savedLast && presets && presets[savedLast]) {
+    select.value = savedLast;
+  } else if (currentVal && presets && presets[currentVal]) {
+    select.value = currentVal;
+  }
+}
+window.loadShopeePresets = loadShopeePresets;
+
+async function saveShopeePreset() {
+  const currentKey = document.getElementById('shopeePresetSelect')?.value || '';
+  const name = prompt('ระบุชื่อ Preset สำหรับ Shopee Affiliate (หรือระบุชื่อเดิมเพื่อบันทึกทับ):', currentKey);
+  if (!name || !name.trim()) return;
+  const trimmedName = name.trim();
+
+  let currentConfig = {};
+  try {
+    currentConfig = await jsonFetch('/api/config');
+  } catch (e) {
+    console.error('Failed to fetch config:', e);
+  }
+  const presets = currentConfig.shopee_presets || {};
+
+  presets[trimmedName] = {
+    page_url: document.getElementById('cfg_shopee_page_url')?.value || '',
+    main_folder: document.getElementById('cfg_shopee_main_folder')?.value || '',
+    subfolders: document.getElementById('cfg_shopee_subfolders')?.value || '',
+    video_prefix: document.getElementById('cfg_shopee_video_prefix')?.value || 'combined',
+    start_date: document.getElementById('cfg_shopee_start_date')?.value || '',
+    start_hour: parseInt(document.getElementById('cfg_shopee_start_hour')?.value, 10) || 18,
+    delay_min: parseFloat(document.getElementById('cfg_shopee_delay_min')?.value) || 5,
+    delay_max: parseFloat(document.getElementById('cfg_shopee_delay_max')?.value) || 15
+  };
+
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      body: JSON.stringify({ shopee_presets: presets })
+    });
+    loadShopeePresets(presets);
+    const select = document.getElementById('shopeePresetSelect');
+    if (select) select.value = trimmedName;
+    localStorage.setItem('shopee_last_preset', trimmedName);
+    logShopeeConsole(`✅ บันทึก Preset "${trimmedName}" สำเร็จ`, 'success');
+  } catch (e) {
+    alert('บันทึก Preset ไม่สำเร็จ: ' + e.message);
+  }
+}
+
+async function deleteShopeePreset() {
+  const select = document.getElementById('shopeePresetSelect');
+  const name = select?.value;
+  if (!name) {
+    alert('กรุณาเลือก Preset ที่ต้องการลบ');
+    return;
+  }
+  if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ Preset "${name}"?`)) return;
+
+  let currentConfig = {};
+  try {
+    currentConfig = await jsonFetch('/api/config');
+  } catch (e) {
+    console.error('Failed to fetch config:', e);
+  }
+  const presets = currentConfig.shopee_presets || {};
+  delete presets[name];
+
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      body: JSON.stringify({ shopee_presets: presets })
+    });
+    loadShopeePresets(presets);
+    if (select) select.value = '';
+    localStorage.removeItem('shopee_last_preset');
+    logShopeeConsole(`🗑️ ลบ Preset "${name}" สำเร็จ`, 'system');
+  } catch (e) {
+    alert('ลบ Preset ไม่สำเร็จ: ' + e.message);
+  }
+}
+
+function applyShopeePreset(name) {
+  if (!name) return;
+  jsonFetch('/api/config').then(cfg => {
+    const presets = cfg.shopee_presets || {};
+    const p = presets[name];
+    if (!p) return;
+
+    localStorage.setItem('shopee_last_preset', name);
+
+    const pageUrl = document.getElementById('cfg_shopee_page_url');
+    if (pageUrl && p.page_url !== undefined) pageUrl.value = p.page_url;
+
+    const mainFolder = document.getElementById('cfg_shopee_main_folder');
+    if (mainFolder && p.main_folder !== undefined) mainFolder.value = p.main_folder;
+
+    const subfolders = document.getElementById('cfg_shopee_subfolders');
+    if (subfolders && p.subfolders !== undefined) subfolders.value = p.subfolders;
+
+    const vPref = document.getElementById('cfg_shopee_video_prefix');
+    if (vPref && p.video_prefix !== undefined) vPref.value = p.video_prefix;
+
+    const sDate = document.getElementById('cfg_shopee_start_date');
+    if (sDate && p.start_date !== undefined) sDate.value = p.start_date;
+
+    const sHour = document.getElementById('cfg_shopee_start_hour');
+    if (sHour && p.start_hour !== undefined) sHour.value = p.start_hour;
+
+    const dMin = document.getElementById('cfg_shopee_delay_min');
+    if (dMin && p.delay_min !== undefined) dMin.value = p.delay_min;
+
+    const dMax = document.getElementById('cfg_shopee_delay_max');
+    if (dMax && p.delay_max !== undefined) dMax.value = p.delay_max;
+
+    logShopeeConsole(`📋 โหลดการตั้งค่าจาก Preset "${name}" เรียบร้อย`, 'system');
+  }).catch(e => console.error('Failed to apply Shopee preset:', e));
+}
+
+function logShopeeConsole(msg, type = 'normal') {
+  const consoleBox = document.getElementById('shopeeConsole');
+  if (!consoleBox) return;
+  const line = document.createElement('div');
+  line.className = `console-line ${type}`;
+  const timeStr = new Date().toLocaleTimeString('th-TH', { hour12: false });
+  line.textContent = `[${timeStr}] ${msg}`;
+  consoleBox.appendChild(line);
+  consoleBox.scrollTop = consoleBox.scrollHeight;
+}
+
+async function openShopeePageUrl() {
+  const pageUrl = document.getElementById('cfg_shopee_page_url')?.value || '';
+  logShopeeConsole(`🌐 กำลังเปิด URL ใน Chrome 9222: ${pageUrl || 'https://affiliate.shopee.co.th'}`, 'system');
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/open-url', {
+      method: 'POST',
+      body: JSON.stringify({ url: pageUrl })
+    });
+    if (res.ok) {
+      logShopeeConsole(`✅ ${res.message}`, 'success');
+    } else {
+      logShopeeConsole(`❌ ${res.detail || 'เกิดข้อผิดพลาดในการเปิดหน้าเว็บ'}`, 'error');
+    }
+  } catch (e) {
+    logShopeeConsole(`❌ เกิดข้อผิดพลาด: ${e.message}`, 'error');
+  }
+}
+
+async function browseShopeeMainFolder() {
+  const currentVal = document.getElementById('cfg_shopee_main_folder')?.value || '';
+  try {
+    const res = await jsonFetch(`/api/browse-directory?initial_path=${encodeURIComponent(currentVal)}`);
+    if (res.path) {
+      document.getElementById('cfg_shopee_main_folder').value = res.path;
+      logShopeeConsole(`📁 เลือกโฟลเดอร์หลัก: ${res.path}`, 'system');
+    }
+  } catch (e) {
+    console.error('Directory browse failed:', e);
+  }
+}
+
+async function scanShopeeBatch() {
+  const mainFolder = document.getElementById('cfg_shopee_main_folder')?.value || '';
+  const subfolders = document.getElementById('cfg_shopee_subfolders')?.value || '';
+  const videoPrefix = document.getElementById('cfg_shopee_video_prefix')?.value || 'combined';
+  const startDate = document.getElementById('cfg_shopee_start_date')?.value || '';
+  const startHour = parseInt(document.getElementById('cfg_shopee_start_hour')?.value, 10) || 18;
+
+  if (!mainFolder.trim()) {
+    alert('กรุณาระบุโฟลเดอร์หลักสำหรับดึงข้อมูล (Main Target Folder)');
+    return;
+  }
+
+  logShopeeConsole(`🔍 กำลังสแกนโฟลเดอร์: ${mainFolder}...`, 'system');
+
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/scan', {
+      method: 'POST',
+      body: JSON.stringify({
+        main_folder: mainFolder,
+        subfolders_str: subfolders,
+        video_prefix: videoPrefix,
+        start_date: startDate,
+        start_hour: startHour
+      })
+    });
+
+    if (!res.ok) {
+      logShopeeConsole(`❌ สแกนล้มเหลว: ${res.detail || res.message}`, 'error');
+      alert('สแกนล้มเหลว: ' + (res.detail || res.message));
+      return;
+    }
+
+    shopeeQueue = (res.items || []).map(it => ({ ...it, checked: true }));
+    renderShopeeQueue();
+    updateShopeeCountBadge();
+    logShopeeConsole(`✅ ${res.message} (พบทั้งหมด ${shopeeQueue.length} รายการ)`, 'success');
+
+  } catch (e) {
+    logShopeeConsole(`❌ สแกนล้มเหลว: ${e.message}`, 'error');
+    alert('เกิดข้อผิดพลาดในการสแกน: ' + e.message);
+  }
+}
+
+function clearShopeeBatch() {
+  shopeeQueue = [];
+  renderShopeeQueue();
+  updateShopeeCountBadge();
+  logShopeeConsole('🗑️ ล้างรายการคิว Shopee Affiliate เรียบร้อยแล้ว', 'system');
+}
+
+function updateShopeeCountBadge() {
+  const badge = document.getElementById('shopeeBatchCountBadge');
+  if (badge) {
+    const activeCount = shopeeQueue.filter(p => p.checked !== false).length;
+    badge.textContent = `${activeCount} Items Ready`;
+  }
+}
+
+function renderShopeeQueue() {
+  const list = document.getElementById('shopeeQueueList');
+  if (!list) return;
+
+  if (!shopeeQueue || shopeeQueue.length === 0) {
+    list.innerHTML = `
+      <div id="shopeeEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
+        ยังไม่มีข้อมูล — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนและจับคู่ข้อมูล"</strong>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = '';
+  shopeeQueue.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;';
+
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;';
+
+    const left = document.createElement('div');
+    left.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-grow: 1;';
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = item.checked !== false;
+    chk.style.cssText = 'cursor: pointer; width: 16px; height: 16px; margin: 0;';
+    chk.addEventListener('change', () => {
+      item.checked = chk.checked;
+      updateShopeeCountBadge();
+    });
+
+    const title = document.createElement('span');
+    title.style.cssText = 'font-weight: bold; color: #ff7e67; font-size: 0.95rem;';
+    title.textContent = `#${idx + 1} โฟลเดอร์: ${item.subfolder_name}`;
+
+    left.appendChild(chk);
+    left.appendChild(title);
+
+    const right = document.createElement('div');
+    right.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+
+    const dtBadge = document.createElement('span');
+    dtBadge.style.cssText = 'font-size: 0.78rem; padding: 3px 8px; background: rgba(238, 77, 45, 0.15); border: 1px solid rgba(238, 77, 45, 0.3); border-radius: 6px; color: #ff7e67;';
+    dtBadge.textContent = `📅 ${item.scheduled_datetime.replace('T', ' เวลา ')} น.`;
+    right.appendChild(dtBadge);
+
+    topRow.appendChild(left);
+    topRow.appendChild(right);
+
+    const detailRow = document.createElement('div');
+    detailRow.style.cssText = 'font-size: 0.82rem; color: rgba(255,255,255,0.7); line-height: 1.4;';
+    detailRow.innerHTML = `<strong>🎬 ไฟล์:</strong> ${item.video_name} <br><strong>📝 ข้อความ:</strong> ${item.caption ? (item.caption.slice(0, 100) + (item.caption.length > 100 ? '...' : '')) : '<span style="color: rgba(255,255,255,0.3);">(ไม่มีข้อความ)</span>'}`;
+
+    row.appendChild(topRow);
+    row.appendChild(detailRow);
+    list.appendChild(row);
+  });
+}
+
+let shopeePollingInterval = null;
+
+async function runShopeeAffiliate(btn) {
+  const selectedItems = shopeeQueue.filter(p => p.checked !== false);
+  if (selectedItems.length === 0) {
+    alert('กรุณาเลือกรายการที่ต้องการรันอย่างน้อย 1 รายการ');
+    return;
+  }
+
+  const targetUrl = document.getElementById('cfg_shopee_page_url')?.value || '';
+  const delayMin = parseFloat(document.getElementById('cfg_shopee_delay_min')?.value) || 5;
+  const delayMax = parseFloat(document.getElementById('cfg_shopee_delay_max')?.value) || 15;
+
+  if (!confirm(`ยืนยันเริ่มรัน Shopee Affiliate ทั้งหมด ${selectedItems.length} รายการ?`)) return;
+
+  logShopeeConsole(`🚀 ส่งคำขอเริ่มรัน Shopee Affiliate ${selectedItems.length} รายการ...`, 'system');
+  if (btn) btn.disabled = true;
+
+  const progContainer = document.getElementById('shopeeProgressContainer');
+  const progText = document.getElementById('shopeeProgressText');
+  const progBar = document.getElementById('shopeeProgressBar');
+
+  if (progContainer) progContainer.classList.remove('hidden');
+  if (progText) progText.textContent = `0% (0/${selectedItems.length})`;
+  if (progBar) progBar.style.width = '0%';
+
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/run', {
+      method: 'POST',
+      body: JSON.stringify({
+        items: selectedItems,
+        target_url: targetUrl,
+        delay_min: delayMin,
+        delay_max: delayMax
+      })
+    });
+
+    if (!res.ok) {
+      logShopeeConsole(`❌ เริ่มรันล้มเหลว: ${res.detail || res.message}`, 'error');
+      alert('เริ่มรันล้มเหลว: ' + (res.detail || res.message));
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    logShopeeConsole(`✅ ${res.message}`, 'success');
+
+    if (shopeePollingInterval) clearInterval(shopeePollingInterval);
+    shopeePollingInterval = setInterval(async () => {
+      try {
+        const prog = await jsonFetch('/api/shopee-affiliate/progress');
+        if (progText) progText.textContent = `${prog.percent || 0}% (${prog.current || 0}/${prog.total || selectedItems.length})`;
+        if (progBar) progBar.style.width = `${prog.percent || 0}%`;
+
+        if (prog.message) {
+          logShopeeConsole(prog.message, prog.status === 'error' ? 'error' : 'normal');
+        }
+
+        if (prog.status === 'completed' || prog.status === 'completed_with_errors' || prog.status === 'error') {
+          clearInterval(shopeePollingInterval);
+          shopeePollingInterval = null;
+          if (btn) btn.disabled = false;
+          logShopeeConsole(`🏁 กระบวนการเสร็จสิ้น: ${prog.message}`, prog.status === 'completed' ? 'success' : 'error');
+        }
+      } catch (err) {
+        console.error('Shopee progress poll error:', err);
+      }
+    }, 1500);
+
+  } catch (e) {
+    logShopeeConsole(`❌ เกิดข้อผิดพลาด: ${e.message}`, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function stopShopeeAffiliate(btn) {
+  logShopeeConsole('🛑 กำลังส่งสัญญาณ Force Stop ไปยัง Shopee Affiliate Engine...', 'error');
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/stop', { method: 'POST' });
+    logShopeeConsole(`🛑 ${res.message || 'สั่งหยุดการทำงานเรียบร้อยแล้ว'}`, 'error');
+    if (shopeePollingInterval) {
+      clearInterval(shopeePollingInterval);
+      shopeePollingInterval = null;
+    }
+    const runBtn = document.getElementById('runShopeeAffiliateBtn');
+    if (runBtn) runBtn.disabled = false;
+  } catch (e) {
+    logShopeeConsole(`❌ ไม่สามารถส่งคำสั่งหยุดได้: ${e.message}`, 'error');
+  }
+}
+
+function initShopeeAffiliateListeners() {
+  const presetSelect = document.getElementById('shopeePresetSelect');
+  if (presetSelect) {
+    presetSelect.addEventListener('change', (e) => {
+      applyShopeePreset(e.target.value);
+    });
+  }
+
+  const savePresetBtn = document.getElementById('saveShopeePresetBtn');
+  if (savePresetBtn) savePresetBtn.addEventListener('click', saveShopeePreset);
+
+  const deletePresetBtn = document.getElementById('deleteShopeePresetBtn');
+  if (deletePresetBtn) deletePresetBtn.addEventListener('click', deleteShopeePreset);
+
+  const openUrlBtn = document.getElementById('btnOpenShopeePageUrl');
+  if (openUrlBtn) openUrlBtn.addEventListener('click', openShopeePageUrl);
+
+  const browseBtn = document.getElementById('browseShopeeMainFolderBtn');
+  if (browseBtn) browseBtn.addEventListener('click', browseShopeeMainFolder);
+
+  const scanBtn = document.getElementById('btnScanShopeeBatch');
+  if (scanBtn) scanBtn.addEventListener('click', scanShopeeBatch);
+
+  const clearBtn = document.getElementById('btnClearShopeeBatch');
+  if (clearBtn) clearBtn.addEventListener('click', clearShopeeBatch);
+
+  const toggleAllBtn = document.getElementById('toggleAllShopeeItemsBtn');
+  if (toggleAllBtn) {
+    toggleAllBtn.addEventListener('click', () => {
+      const allChecked = shopeeQueue.length > 0 && shopeeQueue.every(p => p.checked !== false);
+      shopeeQueue.forEach(p => p.checked = !allChecked);
+      renderShopeeQueue();
+      updateShopeeCountBadge();
+    });
+  }
+
+  const runBtn = document.getElementById('runShopeeAffiliateBtn');
+  if (runBtn) runBtn.addEventListener('click', (e) => runShopeeAffiliate(e.currentTarget));
+
+  const forceStopBtn = document.getElementById('btnShopeeForceStop');
+  if (forceStopBtn) forceStopBtn.addEventListener('click', (e) => stopShopeeAffiliate(e.currentTarget));
+
+  const clearConsoleBtn = document.getElementById('clearShopeeConsoleBtn');
+  if (clearConsoleBtn) {
+    clearConsoleBtn.addEventListener('click', () => {
+      const consoleBox = document.getElementById('shopeeConsole');
+      if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
+    });
+  }
+}
+
 const staticTooltips = {
   // Settings / Profile
   "openSettings": "⚙️ ตั้งค่าระบบ (Settings):<br>- แก้ไขพอร์ต, หน่วงเวลา, หรือ URL เริ่มต้น",
@@ -7155,7 +7600,19 @@ const staticTooltips = {
   "btnClearMetaBatch": "🗑️ ล้างรายการโพสต์ที่จับคู่ไว้ทั้งหมดในตาราง",
   "runMetaAutoPostBtn": "🚀 รัน Auto Post ตามคิว:<br>- เริ่มส่งโพสต์ตามรายการที่เตรียมไว้ทั้งหมดไปยัง Facebook/Meta",
   "btnMetaForceStop": "🛑 บังคับหยุดทำงาน (Force Stop):<br>- หยุดกระบวนการโพสต์ที่กำลังทำงานอยู่ทันทีโดยไม่ปิดหน้าเบราว์เซอร์",
-  "clearMetaConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)"
+  "clearMetaConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)",
+
+  // Shopee Affiliate
+  "tabShopeeAffiliateBtn": "🛍️ แถบ Shopee Affiliate:<br>- จัดการและอัปโหลดเนื้อหา/โพสต์ Shopee Affiliate อัตโนมัติ",
+  "btnOpenShopeePageUrl": "🌐 ไปที่หน้า Shopee (Open / Redirect):<br>- เปิด Chrome ไปยัง URL ของ Shopee Affiliate",
+  "browseShopeeMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่บรรจุสื่อและข้อมูลสินค้า",
+  "saveShopeePresetBtn": "💾 บันทึก Preset Shopee Affiliate",
+  "deleteShopeePresetBtn": "🗑️ ลบ Preset Shopee ที่เลือก",
+  "btnScanShopeeBatch": "🔍 สแกนและเตรียมคิว (Scan Queue):<br>- สแกนหาไฟล์สื่อและข้อมูลเพื่อเตรียมรัน Shopee Affiliate",
+  "btnClearShopeeBatch": "🗑️ ล้างรายการคิว Shopee ทั้งหมด",
+  "runShopeeAffiliateBtn": "🚀 รัน Shopee Affiliate:<br>- เริ่มทำงานส่งข้อมูลตามคิวอัตโนมัติ",
+  "btnShopeeForceStop": "🛑 บังคับหยุดทำงาน (Force Stop):<br>- หยุดกระบวนการ Shopee Affiliate ทันที",
+  "clearShopeeConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)"
 };
 
 function initAllTooltips() {
@@ -8092,6 +8549,7 @@ async function initApp() {
   try { initVideoGenListeners(); } catch (e) { console.error('initVideoGenListeners error:', e); }
   try { initSeedanceGenListeners(); } catch (e) { console.error('initSeedanceGenListeners error:', e); }
   try { initMetaAutoPostListeners(); } catch (e) { console.error('initMetaAutoPostListeners error:', e); }
+  try { initShopeeAffiliateListeners(); } catch (e) { console.error('initShopeeAffiliateListeners error:', e); }
   try { setupLogStream(); } catch (e) { console.error('setupLogStream error:', e); }
 
   // 3. Load flow image models dynamically
