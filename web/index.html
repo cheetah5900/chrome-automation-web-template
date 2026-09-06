@@ -1672,19 +1672,11 @@
                   </div>
                 </div>
 
-                <!-- Sub folders & Video Prefix Grid -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label for="cfg_shopee_subfolders" style="font-weight: bold; color: #ff7e67;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
-                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)</div>
-                    <input id="cfg_shopee_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
-                  </div>
-
-                  <div class="form-group" style="margin-bottom: 0;">
-                    <label for="cfg_shopee_video_prefix" style="font-weight: bold; color: #ff7e67;">คำนำหน้าชื่อวิดีโอ (Video Prefix)</label>
-                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ขึ้นต้นด้วยคำนี้เพื่อจับคู่วิดีโอ (ค่าเริ่มต้น: combined)</div>
-                    <input id="cfg_shopee_video_prefix" value="combined" placeholder="เช่น combined หรือ final" style="margin-bottom: 0; width: 100%;" />
-                  </div>
+                <!-- Sub folders -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_shopee_subfolders" style="font-weight: bold; color: #ff7e67;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
+                  <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)</div>
+                  <input id="cfg_shopee_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
                 </div>
 
                 <!-- Delay Scheduling Row -->
@@ -1841,6 +1833,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=46"></script>
+  <script src="/web/app.js?v=47"></script>
 </body>
 </html>
