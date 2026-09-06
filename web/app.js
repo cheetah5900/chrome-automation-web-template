@@ -10286,7 +10286,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ==============================================================================
-// Visual Element Picker & Inspector (Cmd + F / Ctrl + F)
+// Visual Element Picker & Inspector (Ctrl + F / Floating Button)
 // ==============================================================================
 function initVisualElementPicker() {
   let isInspectActive = false;
@@ -10294,7 +10294,20 @@ function initVisualElementPicker() {
   let selectedEl = null;
   let targetInfo = null;
 
-  // 1. Create Overlay Elements
+  // 1. Create Floating Trigger Button (Bottom-Right)
+  const floatTrigger = document.createElement('button');
+  floatTrigger.className = 'inspector-float-trigger';
+  floatTrigger.setAttribute('data-inspector-ui', 'true');
+  floatTrigger.setAttribute('title', 'คลิกเพื่อเปิดโหมดชี้จุดแก้ไขบนหน้าเว็บ (Shortcut: Ctrl + F)');
+  floatTrigger.innerHTML = `
+    <span style="font-size: 1.15rem; line-height: 1;">📌</span>
+    <span id="inspectorFloatBtnText">ชี้จุดสั่งแก้ (Ctrl+F)</span>
+  `;
+  document.body.appendChild(floatTrigger);
+
+  const floatBtnText = floatTrigger.querySelector('#inspectorFloatBtnText');
+
+  // 2. Create Overlay Highlight Box
   const highlightBox = document.createElement('div');
   highlightBox.className = 'inspector-highlight-box';
   highlightBox.style.display = 'none';
@@ -10306,14 +10319,18 @@ function initVisualElementPicker() {
   highlightBox.appendChild(highlightBadge);
   document.body.appendChild(highlightBox);
 
+  // 3. Create Floating Status Banner (Top-Center)
   const banner = document.createElement('div');
   banner.className = 'inspector-banner';
   banner.style.display = 'none';
   banner.setAttribute('data-inspector-ui', 'true');
-  banner.innerHTML = '<span>🎯 Inspect Mode: คลิกที่ Element ที่ต้องการแก้ไข (ESC เพื่อยกเลิก)</span>';
+  banner.innerHTML = `
+    <span style="font-size: 1.2rem;">🎯</span>
+    <span><strong>โหมดชี้จุดแก้ไข:</strong> เลื่อนเมาส์ชี้และคลิก Element ที่ต้องการแก้ (ESC เพื่อยกเลิก)</span>
+  `;
   document.body.appendChild(banner);
 
-  // 2. Create Modal Elements
+  // 4. Create Centered Modal Elements
   const modalBackdrop = document.createElement('div');
   modalBackdrop.className = 'inspector-modal-backdrop';
   modalBackdrop.style.display = 'none';
@@ -10337,7 +10354,7 @@ function initVisualElementPicker() {
         <div class="inspector-info-val" id="inspectorInfoText" style="color: rgba(255,255,255,0.85);">-</div>
       </div>
       <div>
-        <label style="font-size: 0.88rem; font-weight: 600; color: #f59e0b;">✍️ ข้อความที่อยากให้แก้ / สิ่งที่ต้องการปรับปรุง:</label>
+        <label style="font-size: 0.88rem; font-weight: 600; color: #38bdf8;">✍️ ข้อความที่อยากให้แก้ / สิ่งที่ต้องการปรับปรุง:</label>
         <textarea id="inspectorFeedbackText" class="inspector-textarea" placeholder="เช่น แก้คำนี้เป็น..., ปรับสีปุ่มเป็นสีส้ม, เพิ่ม validation ตรงนี้..."></textarea>
       </div>
       <div class="inspector-modal-actions">
@@ -10396,6 +10413,8 @@ function initVisualElementPicker() {
   function startInspect() {
     isInspectActive = true;
     banner.style.display = 'flex';
+    floatTrigger.classList.add('active');
+    if (floatBtnText) floatBtnText.textContent = 'กำลังชี้จุด... (ESC ปิด)';
     document.body.style.cursor = 'crosshair';
   }
 
@@ -10403,8 +10422,22 @@ function initVisualElementPicker() {
     isInspectActive = false;
     banner.style.display = 'none';
     highlightBox.style.display = 'none';
+    floatTrigger.classList.remove('active');
+    if (floatBtnText) floatBtnText.textContent = 'ชี้จุดสั่งแก้ (Ctrl+F)';
     document.body.style.cursor = '';
     hoveredEl = null;
+  }
+
+  function toggleInspect() {
+    if (modalBackdrop.style.display === 'flex') {
+      closeModal();
+      return;
+    }
+    if (isInspectActive) {
+      stopInspect();
+    } else {
+      startInspect();
+    }
   }
 
   function updateHighlight(el) {
@@ -10425,7 +10458,7 @@ function initVisualElementPicker() {
     const tag = el.tagName.toLowerCase();
     const id = el.id ? `#${el.id}` : '';
     const firstClass = el.classList.length > 0 ? `.${el.classList[0]}` : '';
-    highlightBadge.textContent = `${tag}${id}${id ? '' : firstClass} (${Math.round(rect.width)}×${Math.round(rect.height)})`;
+    highlightBadge.innerHTML = `<span>&lt;${tag}${id}${id ? '' : firstClass}&gt;</span> <span style="opacity: 0.65; font-size: 10px;">${Math.round(rect.width)}×${Math.round(rect.height)}</span>`;
   }
 
   function openInspectorModal(el) {
@@ -10535,23 +10568,20 @@ ${userComment}
 
   // --- Event Listeners ---
 
-  // Shortcut: Cmd + F (Mac) or Ctrl + F (Windows/Linux)
+  // Floating Button Click
+  floatTrigger.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleInspect();
+  });
+
+  // Shortcut: Ctrl + F (or Cmd + F)
   window.addEventListener('keydown', (e) => {
-    const isCmdOrCtrl = e.metaKey || e.ctrlKey;
-    if (isCmdOrCtrl && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+    if (isCtrlOrCmd && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
       e.preventDefault();
       e.stopPropagation();
-
-      if (modalBackdrop.style.display === 'flex') {
-        closeModal();
-        return;
-      }
-
-      if (isInspectActive) {
-        stopInspect();
-      } else {
-        startInspect();
-      }
+      toggleInspect();
     } else if (e.key === 'Escape') {
       if (modalBackdrop.style.display === 'flex') {
         closeModal();
