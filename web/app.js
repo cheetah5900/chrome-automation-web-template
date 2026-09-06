@@ -10298,10 +10298,10 @@ function initVisualElementPicker() {
   const floatTrigger = document.createElement('button');
   floatTrigger.className = 'inspector-float-trigger';
   floatTrigger.setAttribute('data-inspector-ui', 'true');
-  floatTrigger.setAttribute('title', 'คลิกเพื่อเปิดโหมดชี้จุดแก้ไขบนหน้าเว็บ (Shortcut: Ctrl + F)');
+  floatTrigger.setAttribute('title', 'คลิกเพื่อเปิดโหมดชี้จุดแก้ไขบนหน้าเว็บ (Shortcut: Option + F / Alt + F)');
   floatTrigger.innerHTML = `
     <span style="font-size: 1.15rem; line-height: 1;">📌</span>
-    <span id="inspectorFloatBtnText">ชี้จุดสั่งแก้ (Ctrl+F)</span>
+    <span id="inspectorFloatBtnText">ชี้จุดสั่งแก้ (Option+F)</span>
   `;
   document.body.appendChild(floatTrigger);
 
@@ -10423,7 +10423,7 @@ function initVisualElementPicker() {
     banner.style.display = 'none';
     highlightBox.style.display = 'none';
     floatTrigger.classList.remove('active');
-    if (floatBtnText) floatBtnText.textContent = 'ชี้จุดสั่งแก้ (Ctrl+F)';
+    if (floatBtnText) floatBtnText.textContent = 'ชี้จุดสั่งแก้ (Option+F)';
     document.body.style.cursor = '';
     hoveredEl = null;
   }
@@ -10575,10 +10575,9 @@ ${userComment}
     toggleInspect();
   });
 
-  // Shortcut: Ctrl + F (or Cmd + F)
+  // Shortcut: Option + F (Alt + F)
   window.addEventListener('keydown', (e) => {
-    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
-    if (isCtrlOrCmd && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
+    if (e.altKey && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
       e.preventDefault();
       e.stopPropagation();
       toggleInspect();
