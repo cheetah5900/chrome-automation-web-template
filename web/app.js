@@ -497,7 +497,7 @@ async function updatePortStatus() {
   const sidebarProfilePort = document.getElementById('sidebar_active_profile_port');
   const browserStatusDot = document.getElementById('sidebar_browser_status_dot');
 
-  const otherTabs = [tabImageGen, tabStoryboardGen, tabVideoGen, tabVideoHelper, tabSeedanceGen, tabMetaAutoPost, tabShopeeAffiliate];
+  const otherTabs = [tabImageGen, tabStoryboardGen, tabVideoGen, tabVideoHelper, tabSeedanceGen, tabMetaAutoPost];
 
   if (!select || !select.value) {
     if (badge) {
@@ -1070,6 +1070,12 @@ async function loadConfig() {
     }
 
     loadMetaPresets(config.meta_presets);
+    
+    // Shopee Affiliate Defaults
+    const shopeePageUrl = document.getElementById('cfg_shopee_page_url');
+    if (shopeePageUrl && !shopeePageUrl.value) {
+      shopeePageUrl.value = config.shopee_page_url || 'https://affiliate.shopee.co.th/offer/product_offer';
+    }
     if (typeof loadShopeePresets === 'function') loadShopeePresets(config.shopee_presets);
     loadSeedancePresets(config.seedance_presets);
     

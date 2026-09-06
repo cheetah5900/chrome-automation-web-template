@@ -1368,6 +1368,7 @@ def _default_config() -> dict[str, Any]:
             "meta_start_date": "",
             "meta_start_hour": 18,
             "meta_presets": {},
+            "shopee_page_url": "https://affiliate.shopee.co.th/offer/product_offer",
             "shopee_presets": {},
             "seedance_presets": {}
         }
@@ -1444,6 +1445,7 @@ def _default_config() -> dict[str, Any]:
             "meta_start_date": "",
             "meta_start_hour": 18,
             "meta_presets": {},
+            "shopee_page_url": "https://affiliate.shopee.co.th/offer/product_offer",
             "shopee_presets": {},
             "seedance_presets": {}
         }
@@ -4877,18 +4879,45 @@ def get_shopee_affiliate_progress() -> dict[str, Any]:
 def open_shopee_affiliate_url(req: dict[str, Any]) -> dict[str, Any]:
     url = (req.get("url") or "").strip()
     if not url:
-        url = "https://affiliate.shopee.co.th"
+        url = "https://affiliate.shopee.co.th/offer/product_offer"
     
-    bot = browser_manager.get()
-    if not bot or not bot.driver:
-        raise HTTPException(status_code=400, detail="Chrome Browser ยังไม่ได้เปิด (กรุณากด Launch Browser ก่อน)")
-
-    driver = bot.driver
+    # 1. Try Selenium driver if Chrome debug port is open and CDP is ready
     try:
-        driver.get(url)
-        return {"ok": True, "message": f"เปิด URL ใน Chrome 9222 สำเร็จ: {url}"}
+        port = 9222
+        # Verify CDP endpoint is actually ready
+        cdp_ready = False
+        try:
+            import urllib.request
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=0.8) as cdp_res:
+                if cdp_res.status == 200:
+                    cdp_ready = True
+        except Exception:
+            cdp_ready = False
+
+        if cdp_ready:
+            bot = browser_manager.get()
+            if bot and bot.driver:
+                driver = bot.driver
+                _activate_chrome(driver, port=port)
+                driver.get(url)
+                log(f"[Shopee Affiliate] Navigated Chrome to: {url}")
+                return {"ok": True, "message": f"เปิดหน้าเว็บ {url} บนเบราว์เซอร์ Chrome (Port {port}) สำเร็จ"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ไม่สามารถเปิด URL ได้: {str(e)}")
+        log(f"[Shopee Affiliate] Selenium navigate error: {e}")
+
+    # 2. Fallback to system browser opening if Chrome debug session is not running
+    import subprocess
+    import sys
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", url])
+        else:
+            import webbrowser
+            webbrowser.open(url)
+        return {"ok": True, "message": f"เปิดหน้าเว็บ {url} บนเบราว์เซอร์ระบบสำเร็จ"}
+    except Exception as err:
+        log(f"[Shopee Affiliate] Open URL error: {err}")
+        return {"ok": False, "message": str(err)}
 
 @app.post("/api/shopee-affiliate/stop")
 def api_shopee_affiliate_stop() -> dict[str, Any]:
