@@ -8556,6 +8556,7 @@ async function initApp() {
   try { initSeedanceGenListeners(); } catch (e) { console.error('initSeedanceGenListeners error:', e); }
   try { initMetaAutoPostListeners(); } catch (e) { console.error('initMetaAutoPostListeners error:', e); }
   try { initShopeeAffiliateListeners(); } catch (e) { console.error('initShopeeAffiliateListeners error:', e); }
+  try { initVisualElementPicker(); } catch (e) { console.error('initVisualElementPicker error:', e); }
   try { setupLogStream(); } catch (e) { console.error('setupLogStream error:', e); }
 
   // 3. Load flow image models dynamically
@@ -10283,5 +10284,311 @@ document.addEventListener('DOMContentLoaded', () => {
   
   loadFlowKitProjects();
 });
+
+// ==============================================================================
+// Visual Element Picker & Inspector (Cmd + F / Ctrl + F)
+// ==============================================================================
+function initVisualElementPicker() {
+  let isInspectActive = false;
+  let hoveredEl = null;
+  let selectedEl = null;
+  let targetInfo = null;
+
+  // 1. Create Overlay Elements
+  const highlightBox = document.createElement('div');
+  highlightBox.className = 'inspector-highlight-box';
+  highlightBox.style.display = 'none';
+  highlightBox.setAttribute('data-inspector-ui', 'true');
+
+  const highlightBadge = document.createElement('div');
+  highlightBadge.className = 'inspector-highlight-badge';
+  highlightBadge.textContent = '';
+  highlightBox.appendChild(highlightBadge);
+  document.body.appendChild(highlightBox);
+
+  const banner = document.createElement('div');
+  banner.className = 'inspector-banner';
+  banner.style.display = 'none';
+  banner.setAttribute('data-inspector-ui', 'true');
+  banner.innerHTML = '<span>🎯 Inspect Mode: คลิกที่ Element ที่ต้องการแก้ไข (ESC เพื่อยกเลิก)</span>';
+  document.body.appendChild(banner);
+
+  // 2. Create Modal Elements
+  const modalBackdrop = document.createElement('div');
+  modalBackdrop.className = 'inspector-modal-backdrop';
+  modalBackdrop.style.display = 'none';
+  modalBackdrop.setAttribute('data-inspector-ui', 'true');
+  modalBackdrop.innerHTML = `
+    <div class="inspector-modal-card">
+      <div class="inspector-modal-header">
+        <h3>🎯 ระบุจุดแก้ไข (Element Inspector)</h3>
+        <button class="inspector-modal-close" id="inspectorModalCloseBtn">×</button>
+      </div>
+      <div class="inspector-info-row">
+        <div class="inspector-info-label">📍 หน้าเว็บ / แท็บปัจจุบัน (Active Tab & URL):</div>
+        <div class="inspector-info-val" id="inspectorInfoUrl">-</div>
+      </div>
+      <div class="inspector-info-row">
+        <div class="inspector-info-label">🎯 CSS Selector / Element Path:</div>
+        <div class="inspector-info-val" id="inspectorInfoSelector">-</div>
+      </div>
+      <div class="inspector-info-row" id="inspectorTextContentRow" style="display: none;">
+        <div class="inspector-info-label">💬 ข้อความปัจจุบัน (Current Text):</div>
+        <div class="inspector-info-val" id="inspectorInfoText" style="color: rgba(255,255,255,0.85);">-</div>
+      </div>
+      <div>
+        <label style="font-size: 0.88rem; font-weight: 600; color: #f59e0b;">✍️ ข้อความที่อยากให้แก้ / สิ่งที่ต้องการปรับปรุง:</label>
+        <textarea id="inspectorFeedbackText" class="inspector-textarea" placeholder="เช่น แก้คำนี้เป็น..., ปรับสีปุ่มเป็นสีส้ม, เพิ่ม validation ตรงนี้..."></textarea>
+      </div>
+      <div class="inspector-modal-actions">
+        <button class="inspector-btn-cancel" id="inspectorCancelBtn">ยกเลิก</button>
+        <button class="inspector-btn-copy" id="inspectorCopyBtn">
+          <span>📋 คัดลอกลง Clipboard</span>
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modalBackdrop);
+
+  const infoUrlEl = modalBackdrop.querySelector('#inspectorInfoUrl');
+  const infoSelectorEl = modalBackdrop.querySelector('#inspectorInfoSelector');
+  const infoTextEl = modalBackdrop.querySelector('#inspectorInfoText');
+  const textContentRow = modalBackdrop.querySelector('#inspectorTextContentRow');
+  const feedbackInput = modalBackdrop.querySelector('#inspectorFeedbackText');
+  const copyBtn = modalBackdrop.querySelector('#inspectorCopyBtn');
+  const cancelBtn = modalBackdrop.querySelector('#inspectorCancelBtn');
+  const closeBtn = modalBackdrop.querySelector('#inspectorModalCloseBtn');
+
+  function calculateOptimalSelector(el) {
+    if (!el || el === document.body || el === document.documentElement) return 'body';
+    if (el.id) return `#${el.id}`;
+
+    const path = [];
+    let curr = el;
+    while (curr && curr.nodeType === Node.ELEMENT_NODE && curr !== document.body) {
+      let sel = curr.tagName.toLowerCase();
+      if (curr.id) {
+        sel = `#${curr.id}`;
+        path.unshift(sel);
+        break;
+      } else {
+        const classes = Array.from(curr.classList || [])
+          .filter(c => !c.startsWith('inspector-') && c !== 'active' && c !== 'hidden')
+          .slice(0, 2);
+        if (classes.length > 0) {
+          sel += '.' + classes.join('.');
+        } else {
+          let nth = 1;
+          let sib = curr.previousElementSibling;
+          while (sib) {
+            if (sib.tagName === curr.tagName) nth++;
+            sib = sib.previousElementSibling;
+          }
+          if (nth > 1) sel += `:nth-of-type(${nth})`;
+        }
+      }
+      path.unshift(sel);
+      curr = curr.parentElement;
+    }
+    return path.join(' > ');
+  }
+
+  function startInspect() {
+    isInspectActive = true;
+    banner.style.display = 'flex';
+    document.body.style.cursor = 'crosshair';
+  }
+
+  function stopInspect() {
+    isInspectActive = false;
+    banner.style.display = 'none';
+    highlightBox.style.display = 'none';
+    document.body.style.cursor = '';
+    hoveredEl = null;
+  }
+
+  function updateHighlight(el) {
+    if (!el) {
+      highlightBox.style.display = 'none';
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const scrollX = window.scrollX || window.pageXOffset || 0;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+
+    highlightBox.style.top = `${rect.top + scrollY}px`;
+    highlightBox.style.left = `${rect.left + scrollX}px`;
+    highlightBox.style.width = `${rect.width}px`;
+    highlightBox.style.height = `${rect.height}px`;
+    highlightBox.style.display = 'block';
+
+    const tag = el.tagName.toLowerCase();
+    const id = el.id ? `#${el.id}` : '';
+    const firstClass = el.classList.length > 0 ? `.${el.classList[0]}` : '';
+    highlightBadge.textContent = `${tag}${id}${id ? '' : firstClass} (${Math.round(rect.width)}×${Math.round(rect.height)})`;
+  }
+
+  function openInspectorModal(el) {
+    selectedEl = el;
+    stopInspect();
+
+    const activeViewTitle = document.getElementById('activeViewTitle')?.textContent || 'Current Tab';
+    const activeTabBtn = document.querySelector('.sidebar-nav-btn.active .nav-text')?.textContent || '';
+    const tabInfo = activeTabBtn ? `${activeTabBtn} (${activeViewTitle})` : activeViewTitle;
+    const currentPath = window.location.pathname || '/';
+    const fullLinkPath = `${window.location.origin}${currentPath}`;
+
+    const selector = calculateOptimalSelector(el);
+    const textSnippet = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 150);
+
+    targetInfo = {
+      tag: el.tagName.toLowerCase(),
+      selector: selector,
+      textSnippet: textSnippet,
+      tabInfo: tabInfo,
+      fullLinkPath: fullLinkPath
+    };
+
+    infoUrlEl.textContent = `${fullLinkPath} [แท็บ: ${tabInfo}]`;
+    infoSelectorEl.textContent = selector;
+
+    if (textSnippet) {
+      infoTextEl.textContent = `"${textSnippet}"`;
+      textContentRow.style.display = 'block';
+    } else {
+      textContentRow.style.display = 'none';
+    }
+
+    feedbackInput.value = '';
+    modalBackdrop.style.display = 'flex';
+    setTimeout(() => feedbackInput.focus(), 80);
+  }
+
+  function closeModal() {
+    modalBackdrop.style.display = 'none';
+    selectedEl = null;
+    targetInfo = null;
+  }
+
+  function copyToClipboard() {
+    if (!targetInfo) return;
+
+    const userComment = feedbackInput.value.trim() || '(ไม่ได้ระบุข้อความเพิ่มเติม)';
+    const promptText = `
+<EDIT_REQUEST>
+📍 Link Path: ${targetInfo.fullLinkPath}
+📂 Tab: ${targetInfo.tabInfo}
+🎯 Selector: \`${targetInfo.selector}\`
+🏷️ Element: <${targetInfo.tag}>
+${targetInfo.textSnippet ? `💬 ข้อความปัจจุบัน: "${targetInfo.textSnippet}"\n` : ''}
+✍️ สิ่งที่อยากให้แก้:
+${userComment}
+</EDIT_REQUEST>
+    `.trim();
+
+    const fallbackCopy = (text) => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } catch (e) {
+        console.error('execCommand copy failed:', e);
+      }
+      ta.remove();
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(promptText)
+        .then(() => onCopySuccess())
+        .catch(() => {
+          fallbackCopy(promptText);
+          onCopySuccess();
+        });
+    } else {
+      fallbackCopy(promptText);
+      onCopySuccess();
+    }
+  }
+
+  function onCopySuccess() {
+    const origHTML = copyBtn.innerHTML;
+    copyBtn.innerHTML = '<span>✅ คัดลอกสำเร็จแล้ว!</span>';
+    copyBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+    copyBtn.style.color = '#fff';
+
+    if (typeof showToast === 'function') {
+      showToast('📋 คัดลอกข้อมูล Selector และรายละเอียดลง Clipboard เรียบร้อยแล้ว!', 'success');
+    }
+
+    setTimeout(() => {
+      copyBtn.innerHTML = origHTML;
+      copyBtn.style.background = '';
+      copyBtn.style.color = '';
+      closeModal();
+    }, 1200);
+  }
+
+  // --- Event Listeners ---
+
+  // Shortcut: Cmd + F (Mac) or Ctrl + F (Windows/Linux)
+  window.addEventListener('keydown', (e) => {
+    const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+    if (isCmdOrCtrl && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (modalBackdrop.style.display === 'flex') {
+        closeModal();
+        return;
+      }
+
+      if (isInspectActive) {
+        stopInspect();
+      } else {
+        startInspect();
+      }
+    } else if (e.key === 'Escape') {
+      if (modalBackdrop.style.display === 'flex') {
+        closeModal();
+      } else if (isInspectActive) {
+        stopInspect();
+      }
+    }
+  }, true);
+
+  // Mouse move / Hover
+  document.addEventListener('mouseover', (e) => {
+    if (!isInspectActive) return;
+    if (e.target.closest('[data-inspector-ui="true"]')) return;
+    hoveredEl = e.target;
+    updateHighlight(hoveredEl);
+  }, true);
+
+  // Click on element
+  document.addEventListener('click', (e) => {
+    if (!isInspectActive) return;
+    if (e.target.closest('[data-inspector-ui="true"]')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    openInspectorModal(e.target);
+  }, true);
+
+  // Modal controls
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
+  copyBtn.addEventListener('click', copyToClipboard);
+
+  modalBackdrop.addEventListener('click', (e) => {
+    if (e.target === modalBackdrop) closeModal();
+  });
+}
+window.initVisualElementPicker = initVisualElementPicker;
+
 
 
