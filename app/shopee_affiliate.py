@@ -285,6 +285,10 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         badge.innerText = `⭐ เลือกรายการนี้ (คอม ${chosen.commRate}% | ยอดขาย ${chosen.salesText})`;
         card.appendChild(badge);
 
+        // Extract Product Link directly from chosen card's anchor tag (e.g. https://affiliate.shopee.co.th/offer/product_offer/...)
+        const aTag = card.querySelector('a[href*="offer/product_offer"]') || card.querySelector('a');
+        const productLink = aTag ? aTag.href : '';
+
         // Click "เอา ลิงก์" button on this chosen card
         const btn = card.querySelector('button.AffiliateItemCard__getlinkBtn, button');
         let clicked = false;
@@ -304,13 +308,15 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         return {
             success: true,
             clicked: clicked,
+            productLink: productLink,
             chosen: {
                 idx: chosen.idx,
                 title: chosen.title,
                 salesText: chosen.salesText,
                 salesCount: chosen.salesCount,
                 commRate: chosen.commRate,
-                pool: chosen.pool
+                pool: chosen.pool,
+                productLink: productLink
             }
         };
     """)
@@ -320,7 +326,10 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         return {"success": False, "error": "selection_failed"}
 
     chosen_info = selection.get("chosen", {})
+    product_link = selection.get("productLink") or chosen_info.get("productLink") or ""
     log(f"[Shopee Step 4] ⭐ เลือกสินค้า: '{chosen_info.get('title')}' | ค่าคอม: {chosen_info.get('commRate')}% | {chosen_info.get('salesText')} ({chosen_info.get('pool')})")
+    if product_link:
+        log(f"[Shopee Step 4] 🛍️ Product Link: {product_link}")
 
     # 2. Wait for modal & extract affiliate short link
     time.sleep(1.5)
@@ -357,26 +366,44 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
     driver.execute_script("document.querySelector('.ant-modal-close, .ant-modal-close-x')?.click();")
 
     if not affiliate_link:
-        log("[Shopee Step 4] ⚠️ ไม่สามารถดึงลิงก์จาก Modal ได้")
-        return {"success": False, "error": "link_not_found", "chosen": chosen_info}
+        log("[Shopee Step 4] ⚠️ ไม่สามารถดึงลิงก์ Affiliate จาก Modal ได้")
 
-    log(f"[Shopee Step 4] 🔗 คัดลอกลิงก์สำเร็จ: {affiliate_link}")
+    log(f"[Shopee Step 4] 🔗 คัดลอก Affiliate Link สำเร็จ: {affiliate_link or '-'}")
 
-    # 3. Save affiliate link to target .md file only
+    # 3. Determine target directory for saving files
+    target_dir = folder_path
+    if not target_dir and target_file_path:
+        target_dir = os.path.dirname(target_file_path)
+
     saved_files = []
-    if target_file_path and os.path.exists(os.path.dirname(target_file_path)):
-        try:
-            with open(target_file_path, "w", encoding="utf-8") as f:
-                f.write(affiliate_link + "\n")
-            log(f"[Shopee Step 4] 💾 บันทึกลิงก์ลงไฟล์สินค้าเรียบร้อย: {os.path.basename(target_file_path)}")
-            saved_files.append(target_file_path)
-        except Exception as e:
-            log(f"[Shopee Step 4] ⚠️ บันทึกลง {target_file_path} ไม่สำเร็จ: {e}")
+    if target_dir and os.path.exists(target_dir):
+        # A) Save 'Affiliate Link.md'
+        if affiliate_link:
+            aff_path = os.path.join(target_dir, "Affiliate Link.md")
+            try:
+                with open(aff_path, "w", encoding="utf-8") as f:
+                    f.write(affiliate_link + "\n")
+                log(f"[Shopee Step 4] 💾 บันทึก Affiliate Link.md เรียบร้อย: {aff_path}")
+                saved_files.append(aff_path)
+            except Exception as e:
+                log(f"[Shopee Step 4] ⚠️ บันทึก Affiliate Link.md ไม่สำเร็จ: {e}")
+
+        # B) Save 'Product Link.md'
+        if product_link:
+            prod_path = os.path.join(target_dir, "Product Link.md")
+            try:
+                with open(prod_path, "w", encoding="utf-8") as f:
+                    f.write(product_link + "\n")
+                log(f"[Shopee Step 4] 💾 บันทึก Product Link.md เรียบร้อย: {prod_path}")
+                saved_files.append(prod_path)
+            except Exception as e:
+                log(f"[Shopee Step 4] ⚠️ บันทึก Product Link.md ไม่สำเร็จ: {e}")
 
     return {
         "success": True,
         "chosen": chosen_info,
         "affiliate_link": affiliate_link,
+        "product_link": product_link,
         "saved_files": saved_files
     }
 
@@ -388,7 +415,7 @@ def post_single_shopee_item(
     total_items: int = 1,
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> bool:
-    """Process a single Shopee Affiliate item: search keyword without number, sort, select best item, and save affiliate link."""
+    """Process a single Shopee Affiliate item: search keyword without number, sort, select best item, and save Affiliate Link.md & Product Link.md."""
     raw_keyword = item.get("keyword") or item.get("file_name") or item.get("subfolder_name") or ""
     keyword = clean_search_keyword(raw_keyword)
     target_file = item.get("file_path", "")
@@ -420,12 +447,14 @@ def post_single_shopee_item(
     if is_shopee_stopped():
         return False
 
-    # Step 4: Select best product (highest commission with sales > 10), get link and save to .md
+    # Step 4: Select best product (highest commission with sales > 10), get link and save to Affiliate Link.md & Product Link.md
     res = step_4_select_best_product_and_get_link(driver, target_file_path=target_file, folder_path=folder_path)
     if res.get("affiliate_link"):
-        item["product_link"] = res["affiliate_link"]
+        item["affiliate_link"] = res["affiliate_link"]
+    if res.get("product_link"):
+        item["product_link"] = res["product_link"]
 
-    log(f"[Shopee Affiliate] ✅ สำเร็จการค้นหาและดึงลิงก์รายการที่ {item_idx}/{total_items}: {name} (ลิงก์: {res.get('affiliate_link', '-')})")
+    log(f"[Shopee Affiliate] ✅ สำเร็จการค้นหาและดึงลิงก์รายการที่ {item_idx}/{total_items}: {name} (Affiliate: {res.get('affiliate_link', '-')}, Product: {res.get('product_link', '-')})")
     return True
 
 def run_shopee_affiliate_batch(

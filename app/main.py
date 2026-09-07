@@ -4957,15 +4957,17 @@ def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
         link_res = step_4_select_best_product_and_get_link(driver, target_file_path=target_file, folder_path=folder_path)
 
         aff_link = link_res.get("affiliate_link", "")
+        prod_link = link_res.get("product_link", "")
         chosen = link_res.get("chosen", {})
 
         return {
             "ok": True,
             "keyword": keyword,
             "affiliate_link": aff_link,
+            "product_link": prod_link,
             "chosen": chosen,
             "saved_files": link_res.get("saved_files", []),
-            "message": f"ค้นหา '{keyword}' เลือกสินค้าค่าคอม {chosen.get('commRate', '-')}% และบันทึกลิงก์ {aff_link} สำเร็จแล้ว" if aff_link else f"ค้นหา '{keyword}' สำเร็จแต่ไม่พบลำดับลิงก์"
+            "message": f"ค้นหา '{keyword}' เลือกสินค้าค่าคอม {chosen.get('commRate', '-')}% และบันทึก Affiliate Link & Product Link เรียบร้อย" if aff_link else f"ค้นหา '{keyword}' สำเร็จแต่ไม่พบลำดับลิงก์"
         }
     except HTTPException:
         raise
