@@ -100,6 +100,44 @@ def reset_shopee_stop() -> None:
     global _shopee_stop_requested
     _shopee_stop_requested = False
 
+def human_delay(min_sec: float = 1.5, max_sec: float = 3.5) -> None:
+    """Sleep for a randomized duration between min_sec and max_sec while respecting stop requests."""
+    import random
+    duration = random.uniform(min_sec, max_sec)
+    interruptible_sleep(duration)
+
+def apply_stealth_cdp(driver) -> None:
+    """Inject CDP stealth script to mask navigator.webdriver and common automation signatures."""
+    try:
+        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+                try {
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                } catch (e) {}
+                try {
+                    window.chrome = window.chrome || {};
+                    window.chrome.runtime = window.chrome.runtime || {};
+                    window.chrome.loadTimes = window.chrome.loadTimes || function() {};
+                    window.chrome.csi = window.chrome.csi || function() {};
+                    window.chrome.app = window.chrome.app || {};
+                } catch (e) {}
+                try {
+                    Object.defineProperty(navigator, 'languages', {
+                        get: () => ['th-TH', 'th', 'en-US', 'en']
+                    });
+                } catch (e) {}
+                try {
+                    Object.defineProperty(navigator, 'plugins', {
+                        get: () => [1, 2, 3, 4, 5]
+                    });
+                } catch (e) {}
+            """
+        })
+    except Exception:
+        pass
+
 class ShopeeCaptchaBlockedException(Exception):
     """Raised immediately when Shopee Anti-bot / CAPTCHA verification page is detected."""
     def __init__(self, message: str = "ตรวจพบระบบกันบอท Shopee (CAPTCHA / Traffic Verification)", captcha_url: str = ""):
@@ -155,6 +193,7 @@ def clean_search_keyword(raw_text: str) -> str:
 def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
     """Step 1: Open Shopee Affiliate Platform / Product Offer URL."""
     check_stop()
+    apply_stealth_cdp(driver)
     check_shopee_captcha(driver)
     url = page_url.strip() if page_url else "https://affiliate.shopee.co.th/offer/product_offer"
     if "offer/product_offer" not in url and url.endswith("shopee.co.th"):
@@ -170,12 +209,12 @@ def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
 
     log(f"[Shopee Step 1] กำลังเปิดหน้าเว็บ Shopee: {url}")
     driver.get(url)
-    interruptible_sleep(2.0)
+    human_delay(2.2, 3.8)
     check_shopee_captcha(driver)
     return True
 
 def step_2_search_product(driver, keyword: str) -> bool:
-    """Step 2: Enter clean keyword into search box and submit."""
+    """Step 2: Enter clean keyword into search box and submit with human-like typing simulation."""
     check_stop()
     check_shopee_captcha(driver)
     clean_kw = clean_search_keyword(keyword)
@@ -183,8 +222,26 @@ def step_2_search_product(driver, keyword: str) -> bool:
         log("[Shopee Step 2] ⚠️ ไม่พบคีย์เวิร์ดสำหรับค้นหา (ข้ามขั้นตอน)")
         return False
 
-    log(f"[Shopee Step 2] 🔍 กำลังค้นหาสินค้าด้วยคำค้น: '{clean_kw}'...")
+    log(f"[Shopee Step 2] 🔍 กำลังพิมพ์ค้นหาสินค้า: '{clean_kw}'...")
     
+    # 1. Click search input to focus and clear old value
+    driver.execute_script("""
+        const inputs = Array.from(document.querySelectorAll('input'));
+        const searchInput = inputs.find(i => 
+            (i.placeholder && (i.placeholder.includes('ค้นหาสินค้า') || i.placeholder.includes('ค้นหา'))) ||
+            i.classList.contains('ant-input-lg')
+        );
+        if (searchInput) {
+            searchInput.focus();
+            searchInput.click();
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+            nativeSetter.call(searchInput, '');
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    """)
+    human_delay(0.4, 0.8)
+
+    # 2. Enter keyword simulating input event
     res = driver.execute_script("""
         const kw = arguments[0];
         const inputs = Array.from(document.querySelectorAll('input'));
@@ -194,13 +251,22 @@ def step_2_search_product(driver, keyword: str) -> bool:
         );
         if (!searchInput) return { success: false, reason: "Search input not found" };
         
-        searchInput.focus();
-        searchInput.click();
         const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
         nativeSetter.call(searchInput, kw);
         searchInput.dispatchEvent(new Event('input', { bubbles: true }));
         searchInput.dispatchEvent(new Event('change', { bubbles: true }));
-        
+        return { success: true };
+    """, clean_kw)
+    
+    human_delay(0.6, 1.2)
+
+    # 3. Click search button or trigger enter key
+    driver.execute_script("""
+        const inputs = Array.from(document.querySelectorAll('input'));
+        const searchInput = inputs.find(i => 
+            (i.placeholder && (i.placeholder.includes('ค้นหาสินค้า') || i.placeholder.includes('ค้นหา'))) ||
+            i.classList.contains('ant-input-lg')
+        );
         const allDivs = Array.from(document.querySelectorAll('div, button, span'));
         const searchBtn = allDivs.find(el => 
             el.children.length === 0 && 
@@ -209,23 +275,14 @@ def step_2_search_product(driver, keyword: str) -> bool:
         );
         if (searchBtn) {
             searchBtn.click();
-            return { success: true, method: "search_btn", value: kw };
-        } else {
+        } else if (searchInput) {
             searchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
             searchInput.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
             searchInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-            return { success: true, method: "enter_key", value: kw };
         }
-    """, clean_kw)
-    
-    if not res or not res.get("success"):
-        try:
-            input_el = driver.find_element(By.CSS_SELECTOR, "input.ant-input-lg, input[placeholder*='ค้นหา']")
-            input_el.send_keys(Keys.ENTER)
-        except Exception:
-            pass
+    """)
             
-    interruptible_sleep(2.5)
+    human_delay(2.5, 4.0)
     check_shopee_captcha(driver)
     log(f"[Shopee Step 2] ✅ ค้นหาคำว่า '{clean_kw}' เรียบร้อยแล้ว")
     return True
@@ -251,13 +308,20 @@ def check_shopee_no_data(driver) -> bool:
     return False
 
 def step_3_sort_best_sellers(driver) -> bool:
-    """Step 3: Click 'ขายดี' (Best Seller) tab."""
+    """Step 3: Click 'ขายดี' (Best Seller) tab with natural scroll and human delay."""
     check_stop()
     check_shopee_captcha(driver)
     # Check if page has no data first
     if check_shopee_no_data(driver):
         log("[Shopee Step 3] ⚠️ ตรวจพบ 'ไม่มีข้อมูล' บนหน้าเว็บ ข้ามขั้นตอนการจัดเรียง")
         return False
+
+    # Simulate slight natural human scroll before sorting
+    try:
+        driver.execute_script("window.scrollBy({ top: Math.floor(Math.random() * 120 + 80), behavior: 'smooth' });")
+    except Exception:
+        pass
+    human_delay(1.0, 1.8)
 
     log("[Shopee Step 3] 📈 กำลังเลือกจัดเรียงตาม 'ขายดี'...")
     res = driver.execute_script("""
@@ -274,7 +338,7 @@ def step_3_sort_best_sellers(driver) -> bool:
         }
         return { success: false, reason: "Element 'ขายดี' not found" };
     """)
-    interruptible_sleep(3.0)
+    human_delay(2.5, 4.0)
     if res and res.get("success"):
         log("[Shopee Step 3] ✅ คลิกแท็บ 'ขายดี' สำเร็จ")
         return True
@@ -605,7 +669,7 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
     image_hashes = []
     if opened_new_tab and new_tab_handle:
         driver.switch_to.window(new_tab_handle)
-        interruptible_sleep(2.5)
+        human_delay(1.8, 3.0)
         current_product_url = driver.current_url or ""
         log(f"[Shopee Step 5] 🌐 เปิดแท็บหน้าสินค้าจริงสำเร็จ: {current_product_url}")
 
@@ -616,41 +680,58 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
                 captcha_url=current_product_url
             )
 
+        # Micro-scroll down naturally to mimic human reading and trigger lazy-loaded product media
+        try:
+            driver.execute_script("""
+                window.scrollBy({ top: Math.floor(Math.random() * 250 + 200), behavior: 'smooth' });
+            """)
+        except Exception:
+            pass
+        human_delay(1.5, 2.6)
+
+        try:
+            driver.execute_script("""
+                window.scrollBy({ top: -Math.floor(Math.random() * 80 + 50), behavior: 'smooth' });
+            """)
+        except Exception:
+            pass
+        human_delay(0.6, 1.2)
+
         # 2. Extract all main gallery image hashes from the real product page
-            image_hashes = driver.execute_script(r"""
-                function extractHash(url) {
-                    if (!url) return null;
-                    const m = url.match(/susercontent\.com\/file\/([a-zA-Z0-9_-]+)/);
-                    if (m) {
-                        return m[1].replace(/_tn$/, '').split('@')[0];
-                    }
-                    return null;
+        image_hashes = driver.execute_script(r"""
+            function extractHash(url) {
+                if (!url) return null;
+                const m = url.match(/susercontent\.com\/file\/([a-zA-Z0-9_-]+)/);
+                if (m) {
+                    return m[1].replace(/_tn$/, '').split('@')[0];
                 }
+                return null;
+            }
 
-                // On Shopee desktop, main gallery is inside the left media column
-                const mainImg = Array.from(document.querySelectorAll('img')).find(i => {
-                    const r = i.getBoundingClientRect();
-                    return r.width >= 300 && r.height >= 300 && r.x < 650 && r.y < 850;
-                });
-                const wrapper = mainImg ? (mainImg.closest('.flex.flex-column') || mainImg.closest('.C21rQm') || mainImg.parentElement.parentElement) : document.body;
+            // On Shopee desktop, main gallery is inside the left media column
+            const mainImg = Array.from(document.querySelectorAll('img')).find(i => {
+                const r = i.getBoundingClientRect();
+                return r.width >= 300 && r.height >= 300 && r.x < 650 && r.y < 850;
+            });
+            const wrapper = mainImg ? (mainImg.closest('.flex.flex-column') || mainImg.closest('.C21rQm') || mainImg.parentElement.parentElement) : document.body;
 
-                // Select all images in the wrapper, excluding tiny variation icons (width <= 40)
-                const galleryEls = Array.from(wrapper.querySelectorAll('img, picture source')).filter(el => {
-                    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : (el.parentElement ? el.parentElement.getBoundingClientRect() : {});
-                    return (!r.width || r.width > 40);
-                });
+            // Select all images in the wrapper, excluding tiny variation icons (width <= 40)
+            const galleryEls = Array.from(wrapper.querySelectorAll('img, picture source')).filter(el => {
+                const r = el.getBoundingClientRect ? el.getBoundingClientRect() : (el.parentElement ? el.parentElement.getBoundingClientRect() : {});
+                return (!r.width || r.width > 40);
+            });
 
-                const hashes = [];
-                galleryEls.forEach(el => {
-                    const src = el.src || el.getAttribute('srcset') || el.srcset || '';
-                    const h = extractHash(src);
-                    if (h && !src.includes('.svg') && !hashes.includes(h)) {
-                        hashes.push(h);
-                    }
-                });
+            const hashes = [];
+            galleryEls.forEach(el => {
+                const src = el.src || el.getAttribute('srcset') || el.srcset || '';
+                const h = extractHash(src);
+                if (h && !src.includes('.svg') && !hashes.includes(h)) {
+                    hashes.push(h);
+                }
+            });
 
-                return hashes;
-            """) or []
+            return hashes;
+        """) or []
 
         # Close product tab and switch back to affiliate main window
         try:
@@ -658,6 +739,7 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
         except Exception:
             pass
         driver.switch_to.window(main_window)
+        human_delay(1.0, 2.0)
     else:
         log("[Shopee Step 5] ⚠️ ไม่สามารถเปิดแท็บหน้าสินค้าจริงได้")
 
@@ -797,6 +879,7 @@ def run_shopee_affiliate_batch(
     reset_shopee_stop()
     bot = browser_manager.get(target_port=9222)
     driver = bot.driver
+    apply_stealth_cdp(driver)
     total = len(items)
 
     url = target_url.strip() if target_url else "https://affiliate.shopee.co.th"

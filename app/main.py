@@ -573,6 +573,7 @@ def sync_ensure_chrome_debug_ready(port: int = 9222) -> bool:
         chrome_binary,
         f"--remote-debugging-port={port}",
         f"--user-data-dir={profile_path}",
+        "--disable-blink-features=AutomationControlled",
         "--remote-allow-origins=*",
         f"--load-extension={ext_dir}",
         *startup_urls
@@ -993,6 +994,7 @@ async def launch_profile(payload: LaunchProfilePayload):
         chrome_binary,
         f"--remote-debugging-port={debug_port}",
         f"--user-data-dir={profile_path}",
+        "--disable-blink-features=AutomationControlled",
         "--remote-allow-origins=*",
         f"--load-extension={ext_dir}",
         *startup_urls,
