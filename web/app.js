@@ -1076,6 +1076,13 @@ async function loadConfig() {
     if (shopeePageUrl && !shopeePageUrl.value) {
       shopeePageUrl.value = config.shopee_page_url || 'https://affiliate.shopee.co.th/offer/product_offer';
     }
+    const shopeeMainFolder = document.getElementById('cfg_shopee_main_folder');
+    if (shopeeMainFolder) {
+      const defShopeeFolder = config.shopee_main_folder || localStorage.getItem('shopee_default_main_folder') || '';
+      if (defShopeeFolder && !shopeeMainFolder.value) {
+        shopeeMainFolder.value = defShopeeFolder;
+      }
+    }
     if (typeof loadShopeePresets === 'function') loadShopeePresets(config.shopee_presets);
     loadSeedancePresets(config.seedance_presets);
     
@@ -7372,6 +7379,30 @@ function initShopeeAffiliateListeners() {
   const browseBtn = document.getElementById('browseShopeeMainFolderBtn');
   if (browseBtn) browseBtn.addEventListener('click', browseShopeeMainFolder);
 
+  const setDefaultBtn = document.getElementById('setShopeeMainFolderDefaultBtn');
+  if (setDefaultBtn) {
+    setDefaultBtn.addEventListener('click', async () => {
+      const input = document.getElementById('cfg_shopee_main_folder');
+      const val = input ? input.value.trim() : '';
+      if (!val) {
+        showToast('กรุณาระบุหรือเลือกโฟลเดอร์ก่อนตั้งเป็นค่าเริ่มต้น', 'warning');
+        return;
+      }
+      localStorage.setItem('shopee_default_main_folder', val);
+      try {
+        await jsonFetch('/api/config/set-default', {
+          method: 'POST',
+          body: JSON.stringify({ key: 'shopee_main_folder', value: val })
+        });
+        showToast(`บันทึกโฟลเดอร์หลัก Shopee เป็นค่าเริ่มต้นแล้ว: ${val}`, 'success');
+        logShopeeConsole(`📌 บันทึกค่าเริ่มต้นโฟลเดอร์หลัก: ${val}`, 'success');
+      } catch (e) {
+        showToast(`บันทึกค่าเริ่มต้นสำเร็จ: ${val}`, 'success');
+        logShopeeConsole(`📌 บันทึกค่าเริ่มต้นโฟลเดอร์หลัก: ${val}`, 'success');
+      }
+    });
+  }
+
   const scanBtn = document.getElementById('btnScanShopeeBatch');
   if (scanBtn) scanBtn.addEventListener('click', scanShopeeBatch);
 
@@ -7484,6 +7515,7 @@ const staticTooltips = {
   "tabShopeeAffiliateBtn": "🛍️ แถบ Shopee Affiliate:<br>- จัดการและอัปโหลดเนื้อหา/โพสต์ Shopee Affiliate อัตโนมัติ",
   "btnOpenShopeePageUrl": "🌐 ไปที่หน้า Shopee (Open / Redirect):<br>- เปิด Chrome ไปยัง URL ของ Shopee Affiliate",
   "browseShopeeMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่บรรจุสื่อและข้อมูลสินค้า",
+  "setShopeeMainFolderDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึกพาธโฟลเดอร์นี้เป็นค่าเริ่มต้นเมื่อเปิดโปรแกรม",
   "btnScanShopeeBatch": "🔍 สแกนและเตรียมคิว (Scan Queue):<br>- สแกนหาไฟล์สื่อและข้อมูลเพื่อเตรียมรัน Shopee Affiliate",
   "btnClearShopeeBatch": "🗑️ ล้างรายการคิว Shopee ทั้งหมด",
   "runShopeeAffiliateBtn": "🚀 รัน Shopee Affiliate:<br>- เริ่มทำงานส่งข้อมูลตามคิวอัตโนมัติ",
