@@ -7264,17 +7264,7 @@ function renderShopeeQueue() {
 
     topRow.appendChild(left);
 
-    const detailRow = document.createElement('div');
-    detailRow.style.cssText = 'font-size: 0.82rem; color: rgba(255,255,255,0.7); line-height: 1.4;';
-    
-    let detailContent = `<strong>🔍 คำค้นหา:</strong> <span style="color: #ffb86c; font-weight: bold;">${item.keyword || '-'}</span>`;
-    if (item.file_name) {
-      detailContent += ` &nbsp;|&nbsp; <strong>📄 ไฟล์เป้าหมาย:</strong> ${item.file_name}`;
-    }
-    detailRow.innerHTML = detailContent;
-
     row.appendChild(topRow);
-    row.appendChild(detailRow);
     list.appendChild(row);
   });
 }
