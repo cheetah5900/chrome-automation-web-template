@@ -7258,7 +7258,12 @@ async function openShopeePageUrl() {
   }
 }
 
+let isShopeeBrowsing = false;
 async function browseShopeeMainFolder() {
+  if (isShopeeBrowsing) return;
+  isShopeeBrowsing = true;
+  const btn = document.getElementById('browseShopeeMainFolderBtn');
+  if (btn) btn.disabled = true;
   try {
     const res = await jsonFetch('/api/utils/browse-directory');
     if (res && res.path) {
@@ -7268,6 +7273,9 @@ async function browseShopeeMainFolder() {
   } catch (e) {
     console.error('Directory browse failed:', e);
     logShopeeConsole(`❌ เลือกโฟลเดอร์ไม่สำเร็จ: ${e.message}`, 'error');
+  } finally {
+    isShopeeBrowsing = false;
+    if (btn) btn.disabled = false;
   }
 }
 

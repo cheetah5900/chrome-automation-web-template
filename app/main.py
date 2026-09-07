@@ -4048,18 +4048,11 @@ def browse_directory() -> dict[str, Any]:
         try:
             script = '''
             try
-                set theApp to path to frontmost application as text
-                tell application theApp
-                    activate
-                    set myFolder to choose folder with prompt "Select Folder"
-                    return POSIX path of myFolder
-                end tell
-            on error
-                tell application "Finder"
-                    activate
-                    set myFolder to choose folder with prompt "Select Folder"
-                    return POSIX path of myFolder
-                end tell
+                tell application "System Events" to activate
+                set myFolder to choose folder with prompt "Select Folder"
+                return POSIX path of myFolder
+            on error errMsg number errNum
+                return ""
             end try
             '''
             cmd = ['osascript', '-e', script]
@@ -4071,6 +4064,7 @@ def browse_directory() -> dict[str, Any]:
             return {"ok": False, "path": ""}
         except Exception as e:
             log(f"Browse Directory AppleScript Error: {e}")
+            return {"ok": False, "path": ""}
             
     try:
         import tkinter as tk
