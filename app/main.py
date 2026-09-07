@@ -4800,7 +4800,6 @@ def scan_shopee_affiliate(req: ShopeeScanRequest) -> dict[str, Any]:
         prefix_clean = "combined"
 
     items: list[dict[str, Any]] = []
-    video_exts = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"]
 
     for idx, folder_path in enumerate(target_subfolders):
         folder_name = os.path.basename(folder_path)
@@ -4809,45 +4808,79 @@ def scan_shopee_affiliate(req: ShopeeScanRequest) -> dict[str, Any]:
         item_dt = datetime(post_day.year, post_day.month, post_day.day, target_hour, random_minute)
         scheduled_iso = item_dt.strftime("%Y-%m-%dT%H:%M")
 
-        matching_video = None
-        for f in sorted(os.listdir(folder_path), key=natural_sort_key):
-            ext = os.path.splitext(f)[1].lower()
-            if ext in video_exts and f.lower().startswith(prefix_clean):
-                matching_video = os.path.join(folder_path, f)
+        matched_file = None
+        keyword = ""
+        item_number = ""
+
+        # Scan files in subfolder starting with a number
+        all_files = sorted(os.listdir(folder_path), key=natural_sort_key)
+        for f in all_files:
+            fp = os.path.join(folder_path, f)
+            if os.path.isdir(fp):
+                continue
+            
+            # Pattern: 13 - ที่แขวนปลั๊กไฟติดผนัง.md or 13_ที่แขวนปลั๊กไฟติดผนัง.txt
+            m = re.match(r"^(\d+)\s*[-_–]\s*(.+?)(?:\.[^.]*)?$", f)
+            if m:
+                matched_file = f
+                item_number = m.group(1)
+                keyword = m.group(2).strip()
+                break
+            elif re.match(r"^\d+", f):
+                matched_file = f
+                base_f = os.path.splitext(f)[0]
+                m2 = re.match(r"^(\d+)\s*[-_–]?\s*(.*)$", base_f)
+                item_number = m2.group(1) if m2 else ""
+                keyword = m2.group(2).strip() if m2 and m2.group(2).strip() else base_f
                 break
 
-        if not matching_video:
-            for f in sorted(os.listdir(folder_path), key=natural_sort_key):
-                ext = os.path.splitext(f)[1].lower()
-                if ext in video_exts:
-                    matching_video = os.path.join(folder_path, f)
-                    break
+        # Fallback: if no numbered file found, but subfolder itself starts with a number
+        if not matched_file:
+            m_folder = re.match(r"^(\d+)\s*[-_–]\s*(.+)$", folder_name)
+            if m_folder:
+                item_number = m_folder.group(1)
+                keyword = m_folder.group(2).strip()
+            else:
+                keyword = folder_name
 
         caption_text = ""
-        txt_files = [f for f in sorted(os.listdir(folder_path), key=natural_sort_key) if f.lower().endswith(".txt")]
-        if txt_files:
-            caption_file = os.path.join(folder_path, txt_files[0])
+        caption_files = [f for f in all_files if f.lower() in ("caption.md", "caption.txt") or f.lower().endswith(".txt")]
+        if caption_files:
+            caption_file = os.path.join(folder_path, caption_files[0])
             try:
-                with open(caption_file, "r", encoding="utf-8") as tf:
-                    caption_text = tf.read().strip()
+                with open(caption_file, "r", encoding="utf-8") as cf:
+                    caption_text = cf.read().strip()
             except Exception:
                 try:
-                    with open(caption_file, "r", encoding="cp874") as tf:
-                        caption_text = tf.read().strip()
+                    with open(caption_file, "r", encoding="cp874") as cf:
+                        caption_text = cf.read().strip()
                 except Exception:
                     pass
 
-        if matching_video:
-            items.append({
-                "subfolder_name": folder_name,
-                "folder_path": folder_path,
-                "video_name": os.path.basename(matching_video),
-                "video_path": matching_video,
-                "caption": caption_text,
-                "product_link": "",
-                "scheduled_datetime": scheduled_iso,
-                "enabled": True
-            })
+        # Video/Media check if present (optional)
+        video_exts = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"]
+        matching_video = None
+        for f in all_files:
+            if os.path.splitext(f)[1].lower() in video_exts:
+                matching_video = os.path.join(folder_path, f)
+                break
+
+        matched_file_path = os.path.join(folder_path, matched_file) if matched_file else ""
+
+        items.append({
+            "subfolder_name": folder_name,
+            "folder_path": folder_path,
+            "file_name": matched_file or "",
+            "file_path": matched_file_path,
+            "keyword": keyword,
+            "number": item_number,
+            "video_name": os.path.basename(matching_video) if matching_video else "",
+            "video_path": matching_video or "",
+            "caption": caption_text,
+            "product_link": "",
+            "scheduled_datetime": scheduled_iso,
+            "enabled": True
+        })
 
     return {
         "ok": True,

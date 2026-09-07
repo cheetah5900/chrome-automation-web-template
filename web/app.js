@@ -7256,7 +7256,8 @@ function renderShopeeQueue() {
 
     const title = document.createElement('span');
     title.style.cssText = 'font-weight: bold; color: #ff7e67; font-size: 0.95rem;';
-    title.textContent = `#${idx + 1} โฟลเดอร์: ${item.subfolder_name}`;
+    const numDisplay = item.number ? `#${item.number}` : `#${idx + 1}`;
+    title.textContent = `${numDisplay} 🎯 คีย์เวิร์ด: ${item.keyword || item.subfolder_name}`;
 
     left.appendChild(chk);
     left.appendChild(title);
@@ -7264,9 +7265,16 @@ function renderShopeeQueue() {
     const right = document.createElement('div');
     right.style.cssText = 'display: flex; gap: 8px; align-items: center;';
 
+    if (item.file_name) {
+      const fileBadge = document.createElement('span');
+      fileBadge.style.cssText = 'font-size: 0.78rem; padding: 3px 8px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; color: #60a5fa;';
+      fileBadge.textContent = `📄 ${item.file_name}`;
+      right.appendChild(fileBadge);
+    }
+
     const dtBadge = document.createElement('span');
     dtBadge.style.cssText = 'font-size: 0.78rem; padding: 3px 8px; background: rgba(238, 77, 45, 0.15); border: 1px solid rgba(238, 77, 45, 0.3); border-radius: 6px; color: #ff7e67;';
-    dtBadge.textContent = `📅 ${item.scheduled_datetime.replace('T', ' เวลา ')} น.`;
+    dtBadge.textContent = item.subfolder_name ? `📁 ${item.subfolder_name}` : `📅 ${item.scheduled_datetime?.replace('T', ' เวลา ') || ''} น.`;
     right.appendChild(dtBadge);
 
     topRow.appendChild(left);
@@ -7274,7 +7282,15 @@ function renderShopeeQueue() {
 
     const detailRow = document.createElement('div');
     detailRow.style.cssText = 'font-size: 0.82rem; color: rgba(255,255,255,0.7); line-height: 1.4;';
-    detailRow.innerHTML = `<strong>🎬 ไฟล์:</strong> ${item.video_name} <br><strong>📝 ข้อความ:</strong> ${item.caption ? (item.caption.slice(0, 100) + (item.caption.length > 100 ? '...' : '')) : '<span style="color: rgba(255,255,255,0.3);">(ไม่มีข้อความ)</span>'}`;
+    
+    let detailContent = `<strong>🔍 คำค้นหา:</strong> <span style="color: #ffb86c; font-weight: bold;">${item.keyword || '-'}</span>`;
+    if (item.file_name) {
+      detailContent += ` &nbsp;|&nbsp; <strong>📄 ไฟล์เป้าหมาย:</strong> ${item.file_name}`;
+    }
+    if (item.caption) {
+      detailContent += `<br><strong>📝 ข้อความ:</strong> ${item.caption.slice(0, 100)}${item.caption.length > 100 ? '...' : ''}`;
+    }
+    detailRow.innerHTML = detailContent;
 
     row.appendChild(topRow);
     row.appendChild(detailRow);
