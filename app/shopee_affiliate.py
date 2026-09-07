@@ -46,6 +46,27 @@ def cleanup_browser_tabs(driver) -> None:
             driver.switch_to.window(main_handle)
     except Exception:
         pass
+def ensure_active_tab_valid(driver):
+    """Safely ensures driver is attached to a live valid window handle (preferring affiliate tab)."""
+    try:
+        _ = driver.current_window_handle
+        _ = driver.current_url
+    except Exception:
+        try:
+            handles = driver.window_handles
+            affiliate_h = None
+            for h in handles:
+                try:
+                    driver.switch_to.window(h)
+                    if "affiliate.shopee.co.th" in driver.current_url:
+                        affiliate_h = h
+                        break
+                except Exception:
+                    pass
+            if not affiliate_h and handles:
+                driver.switch_to.window(handles[0])
+        except Exception:
+            pass
 
 def fast_poll(driver, js_condition: str, timeout: float = 15.0, poll_interval: float = 0.1, js_args=None) -> Any:
     """Polls javascript condition at short intervals until non-null/truthy or timeout."""
@@ -190,9 +211,47 @@ def clean_search_keyword(raw_text: str) -> str:
     s = re.sub(r"^\d+\s*[-_–.]*\s*", "", s).strip()
     return s
 
+def navigate_back_to_product_offer(driver) -> bool:
+    """Navigates back to the product offer search page via sidebar/breadcrumb click without full reload."""
+    ensure_active_tab_valid(driver)
+    try:
+        current = driver.current_url or ""
+        current_base = current.split("?")[0].rstrip("/")
+        if current_base.endswith("/offer/product_offer"):
+            return True
+            
+        log("[Shopee Navigation] 🔙 กำลังคลิกกลับไปที่ 'ข้อเสนอผลิตภัณฑ์'...")
+        clicked = driver.execute_script("""
+            const link = document.querySelector('a[href="/offer/product_offer"], a[href*="offer/product_offer"]');
+            if (link) {
+                link.scrollIntoView({block: 'center'});
+                link.click();
+                return true;
+            }
+            return false;
+        """)
+        if clicked:
+            fast_poll(driver, "document.querySelector('input.ant-input-lg, input[placeholder*=\"ค้นหา\"]')", timeout=4.0)
+            log("[Shopee Navigation] ✅ กลับมาที่หน้า 'ข้อเสนอผลิตภัณฑ์' เรียบร้อย")
+            return True
+        else:
+            log("[Shopee Navigation] ⚠️ ไม่พบลิงก์นำทาง -> โหลด URL ตรง")
+            driver.get("https://affiliate.shopee.co.th/offer/product_offer")
+            human_delay(1.5, 2.5)
+            return True
+    except Exception as e:
+        log(f"[Shopee Navigation] ⚠️ นำทางกลับไม่สำเร็จ ({e}) -> โหลด URL ตรง")
+        try:
+            driver.get("https://affiliate.shopee.co.th/offer/product_offer")
+            human_delay(1.5, 2.5)
+        except Exception:
+            pass
+        return False
+
 def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
     """Step 1: Open Shopee Affiliate Platform / Product Offer URL."""
     check_stop()
+    ensure_active_tab_valid(driver)
     apply_stealth_cdp(driver)
     check_shopee_captcha(driver)
     url = page_url.strip() if page_url else "https://affiliate.shopee.co.th/offer/product_offer"
@@ -206,6 +265,12 @@ def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
         log("[Shopee Step 1] อยู่ที่หน้าข้อเสนอผลิตภัณฑ์ Shopee Affiliate อยู่แล้ว")
         check_shopee_captcha(driver)
         return True
+
+    # If already on affiliate domain, navigate via SPA link without full page reload
+    if "affiliate.shopee.co.th" in current:
+        if navigate_back_to_product_offer(driver):
+            check_shopee_captcha(driver)
+            return True
 
     log(f"[Shopee Step 1] กำลังเปิดหน้าเว็บ Shopee: {url}")
     driver.get(url)
@@ -636,6 +701,7 @@ def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "
     """Step 6: Click 'ดูสินค้า' to open the real Shopee product page in a background tab via Cmd + Click (CDP Trusted Click),
     keeping focus strictly on the current tab without switching."""
     check_stop()
+    ensure_active_tab_valid(driver)
     log("[Shopee Step 6] 🔍 กำลังค้นหาปุ่ม 'ดูสินค้า' เพื่อเปิดหน้าสินค้าจริง (Cmd + Click ในเบื้องหลัง)...")
 
     # 1. Click "ดูสินค้า" using CDP trusted mouse click with Meta (Command) modifier
@@ -695,6 +761,12 @@ def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "
             log("[Shopee Step 6] ✅ กดปุ่ม 'ดูสินค้า' ด้วย ActionChains Cmd + Click สำเร็จ")
         except Exception as e:
             log(f"[Shopee Step 6] ⚠️ ไม่สามารถกดปุ่มดูสินค้าได้: {e}")
+
+    # 2. Short pause (0.8s) for background tab to initiate cleanly without interference
+    interruptible_sleep(0.8)
+
+    # 3. Click back to 'ข้อเสนอผลิตภัณฑ์' immediately so it is ready for the next item
+    navigate_back_to_product_offer(driver)
 
     return []
 

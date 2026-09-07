@@ -103,7 +103,7 @@ _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openro
 _ensure_json(PROMPTS_FILE, {"prompts": [""]})
 _ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2": "", "reference_image_3": "", "reference_image_4": "", "reference_image_5": "", "reference_image_6": "", "reference_image_7": "", "reference_images_dir": ""})
 
-app = FastAPI(title="Chrome Automation Template")
+app = FastAPI(title="Chrome Automation Template", version="1.2.0")
 last_submit_time = 0.0
 
 import time
@@ -599,15 +599,14 @@ def sync_ensure_chrome_debug_ready(port: int = 9222) -> bool:
 def _activate_chrome(driver=None, port: int = 9222):
     if driver:
         try:
-            handles = driver.window_handles
+            _ = driver.current_window_handle
+        except Exception:
             try:
-                _ = driver.current_window_handle
-            except Exception:
+                handles = driver.window_handles
                 if handles:
                     driver.switch_to.window(handles[0])
-            driver.execute_cdp_cmd('Page.bringToFront', {})
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     if sys.platform != "darwin":
         return
