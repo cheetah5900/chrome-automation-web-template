@@ -7098,136 +7098,10 @@ function initMetaAutoPostListeners() {
 // --- Shopee Affiliate Logic ---
 let shopeeQueue = [];
 
-function loadShopeePresets(presets) {
-  const select = document.getElementById('shopeePresetSelect');
-  if (!select) return;
-  const currentVal = select.value;
-  select.innerHTML = '<option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>';
-  if (presets && typeof presets === 'object') {
-    Object.keys(presets).forEach(name => {
-      const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = name;
-      select.appendChild(opt);
-    });
-  }
-  const savedLast = localStorage.getItem('shopee_last_preset');
-  if (savedLast && presets && presets[savedLast]) {
-    select.value = savedLast;
-  } else if (currentVal && presets && presets[currentVal]) {
-    select.value = currentVal;
-  }
+function loadShopeePresets() {
+  // Preset system removed
 }
 window.loadShopeePresets = loadShopeePresets;
-
-async function saveShopeePreset() {
-  const currentKey = document.getElementById('shopeePresetSelect')?.value || '';
-  const name = prompt('ระบุชื่อ Preset สำหรับ Shopee Affiliate (หรือระบุชื่อเดิมเพื่อบันทึกทับ):', currentKey);
-  if (!name || !name.trim()) return;
-  const trimmedName = name.trim();
-
-  let currentConfig = {};
-  try {
-    currentConfig = await jsonFetch('/api/config');
-  } catch (e) {
-    console.error('Failed to fetch config:', e);
-  }
-  const presets = currentConfig.shopee_presets || {};
-
-  presets[trimmedName] = {
-    page_url: document.getElementById('cfg_shopee_page_url')?.value || '',
-    main_folder: document.getElementById('cfg_shopee_main_folder')?.value || '',
-    subfolders: document.getElementById('cfg_shopee_subfolders')?.value || '',
-    video_prefix: document.getElementById('cfg_shopee_video_prefix')?.value || 'combined',
-    start_date: document.getElementById('cfg_shopee_start_date')?.value || '',
-    start_hour: parseInt(document.getElementById('cfg_shopee_start_hour')?.value, 10) || 18,
-    delay_min: parseFloat(document.getElementById('cfg_shopee_delay_min')?.value) || 5,
-    delay_max: parseFloat(document.getElementById('cfg_shopee_delay_max')?.value) || 15
-  };
-
-  try {
-    await jsonFetch('/api/config/set-default', {
-      method: 'POST',
-      body: JSON.stringify({ shopee_presets: presets })
-    });
-    loadShopeePresets(presets);
-    const select = document.getElementById('shopeePresetSelect');
-    if (select) select.value = trimmedName;
-    localStorage.setItem('shopee_last_preset', trimmedName);
-    logShopeeConsole(`✅ บันทึก Preset "${trimmedName}" สำเร็จ`, 'success');
-  } catch (e) {
-    alert('บันทึก Preset ไม่สำเร็จ: ' + e.message);
-  }
-}
-
-async function deleteShopeePreset() {
-  const select = document.getElementById('shopeePresetSelect');
-  const name = select?.value;
-  if (!name) {
-    alert('กรุณาเลือก Preset ที่ต้องการลบ');
-    return;
-  }
-  if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ Preset "${name}"?`)) return;
-
-  let currentConfig = {};
-  try {
-    currentConfig = await jsonFetch('/api/config');
-  } catch (e) {
-    console.error('Failed to fetch config:', e);
-  }
-  const presets = currentConfig.shopee_presets || {};
-  delete presets[name];
-
-  try {
-    await jsonFetch('/api/config/set-default', {
-      method: 'POST',
-      body: JSON.stringify({ shopee_presets: presets })
-    });
-    loadShopeePresets(presets);
-    if (select) select.value = '';
-    localStorage.removeItem('shopee_last_preset');
-    logShopeeConsole(`🗑️ ลบ Preset "${name}" สำเร็จ`, 'system');
-  } catch (e) {
-    alert('ลบ Preset ไม่สำเร็จ: ' + e.message);
-  }
-}
-
-function applyShopeePreset(name) {
-  if (!name) return;
-  jsonFetch('/api/config').then(cfg => {
-    const presets = cfg.shopee_presets || {};
-    const p = presets[name];
-    if (!p) return;
-
-    localStorage.setItem('shopee_last_preset', name);
-
-    const pageUrl = document.getElementById('cfg_shopee_page_url');
-    if (pageUrl && p.page_url !== undefined) pageUrl.value = p.page_url;
-
-    const mainFolder = document.getElementById('cfg_shopee_main_folder');
-    if (mainFolder && p.main_folder !== undefined) mainFolder.value = p.main_folder;
-
-    const subfolders = document.getElementById('cfg_shopee_subfolders');
-    if (subfolders && p.subfolders !== undefined) subfolders.value = p.subfolders;
-
-    const vPref = document.getElementById('cfg_shopee_video_prefix');
-    if (vPref && p.video_prefix !== undefined) vPref.value = p.video_prefix;
-
-    const sDate = document.getElementById('cfg_shopee_start_date');
-    if (sDate && p.start_date !== undefined) sDate.value = p.start_date;
-
-    const sHour = document.getElementById('cfg_shopee_start_hour');
-    if (sHour && p.start_hour !== undefined) sHour.value = p.start_hour;
-
-    const dMin = document.getElementById('cfg_shopee_delay_min');
-    if (dMin && p.delay_min !== undefined) dMin.value = p.delay_min;
-
-    const dMax = document.getElementById('cfg_shopee_delay_max');
-    if (dMax && p.delay_max !== undefined) dMax.value = p.delay_max;
-
-    logShopeeConsole(`📋 โหลดการตั้งค่าจาก Preset "${name}" เรียบร้อย`, 'system');
-  }).catch(e => console.error('Failed to apply Shopee preset:', e));
-}
 
 function logShopeeConsole(msg, type = 'normal') {
   const consoleBox = document.getElementById('shopeeConsole');
@@ -7489,19 +7363,6 @@ async function stopShopeeAffiliate(btn) {
 }
 
 function initShopeeAffiliateListeners() {
-  const presetSelect = document.getElementById('shopeePresetSelect');
-  if (presetSelect) {
-    presetSelect.addEventListener('change', (e) => {
-      applyShopeePreset(e.target.value);
-    });
-  }
-
-  const savePresetBtn = document.getElementById('saveShopeePresetBtn');
-  if (savePresetBtn) savePresetBtn.addEventListener('click', saveShopeePreset);
-
-  const deletePresetBtn = document.getElementById('deleteShopeePresetBtn');
-  if (deletePresetBtn) deletePresetBtn.addEventListener('click', deleteShopeePreset);
-
   const openUrlBtn = document.getElementById('btnOpenShopeePageUrl');
   if (openUrlBtn) openUrlBtn.addEventListener('click', openShopeePageUrl);
 
@@ -7620,8 +7481,6 @@ const staticTooltips = {
   "tabShopeeAffiliateBtn": "🛍️ แถบ Shopee Affiliate:<br>- จัดการและอัปโหลดเนื้อหา/โพสต์ Shopee Affiliate อัตโนมัติ",
   "btnOpenShopeePageUrl": "🌐 ไปที่หน้า Shopee (Open / Redirect):<br>- เปิด Chrome ไปยัง URL ของ Shopee Affiliate",
   "browseShopeeMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่บรรจุสื่อและข้อมูลสินค้า",
-  "saveShopeePresetBtn": "💾 บันทึก Preset Shopee Affiliate",
-  "deleteShopeePresetBtn": "🗑️ ลบ Preset Shopee ที่เลือก",
   "btnScanShopeeBatch": "🔍 สแกนและเตรียมคิว (Scan Queue):<br>- สแกนหาไฟล์สื่อและข้อมูลเพื่อเตรียมรัน Shopee Affiliate",
   "btnClearShopeeBatch": "🗑️ ล้างรายการคิว Shopee ทั้งหมด",
   "runShopeeAffiliateBtn": "🚀 รัน Shopee Affiliate:<br>- เริ่มทำงานส่งข้อมูลตามคิวอัตโนมัติ",
