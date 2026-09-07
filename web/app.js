@@ -7262,7 +7262,39 @@ function renderShopeeQueue() {
     left.appendChild(chk);
     left.appendChild(title);
 
+    const right = document.createElement('div');
+    right.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+
+    const debugSelectBtn = document.createElement('button');
+    debugSelectBtn.className = 'secondary';
+    debugSelectBtn.style.cssText = 'padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; margin: 0; border-color: rgba(238, 77, 45, 0.3); color: #ff9a85; cursor: pointer;';
+    debugSelectBtn.textContent = '🎯 โหลดเข้า Debugger';
+    debugSelectBtn.title = 'โหลดคีย์เวิร์ดของรายการนี้เข้า Debugger แผงขวา';
+    debugSelectBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const kwInput = document.getElementById('shopeeDebugKeyword');
+      if (kwInput) {
+        kwInput.value = item.keyword || item.subfolder_name;
+        showToast(`โหลดคีย์เวิร์ด #${item.number || idx + 1} เรียบร้อย`, 'success');
+        logShopeeConsole(`📋 โหลด #${item.number || idx + 1} (${kwInput.value}) เข้า Step Debugger`, 'system');
+      }
+    });
+
+    const runSingleBtn = document.createElement('button');
+    runSingleBtn.className = 'secondary';
+    runSingleBtn.style.cssText = 'padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; margin: 0; background: rgba(238, 77, 45, 0.15); border-color: rgba(238, 77, 45, 0.4); color: #ff7e67; font-weight: bold; cursor: pointer;';
+    runSingleBtn.textContent = '▶ รันเฉพาะอันนี้';
+    runSingleBtn.title = 'รันโฟลเดอร์นี้เดี่ยวๆ แล้วหยุดค้างที่แท็บสินค้า';
+    runSingleBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await runShopeeSingleItem(item, runSingleBtn);
+    });
+
+    right.appendChild(debugSelectBtn);
+    right.appendChild(runSingleBtn);
+
     topRow.appendChild(left);
+    topRow.appendChild(right);
 
     row.appendChild(topRow);
     list.appendChild(row);
@@ -7458,6 +7490,185 @@ async function stopShopeeAffiliate(btn) {
   }
 }
 
+async function getShopeeDebugTarget() {
+  const customKw = document.getElementById('shopeeDebugKeyword')?.value?.trim();
+  const selectedItem = shopeeQueue.find(p => p.checked !== false);
+  return {
+    keyword: customKw || (selectedItem ? (selectedItem.keyword || selectedItem.subfolder_name) : ''),
+    item: selectedItem || null
+  };
+}
+
+async function debugShopeeStep1(btn) {
+  const pageUrl = document.getElementById('cfg_shopee_page_url')?.value?.trim() || '';
+  logShopeeConsole(`🌐 [Step 1] กำลังเปิดหน้าเว็บ Shopee: ${pageUrl || 'https://affiliate.shopee.co.th/offer/product_offer'}`, 'system');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/debug/step-1', {
+      method: 'POST',
+      body: JSON.stringify({ url: pageUrl })
+    });
+    if (res.ok) {
+      logShopeeConsole(`✅ [Step 1] ${res.message}`, 'success');
+      showToast('Step 1: เปิดหน้าเว็บสำเร็จ', 'success');
+    } else {
+      logShopeeConsole(`❌ [Step 1] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
+      showToast(res.detail || 'Step 1 ล้มเหลว', 'error');
+    }
+  } catch (e) {
+    logShopeeConsole(`❌ [Step 1] Exception: ${e.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function debugShopeeStep2(btn) {
+  const { keyword } = await getShopeeDebugTarget();
+  if (!keyword) {
+    showToast('กรุณาระบุคีย์เวิร์ด หรือสแกนและเลือกรายการในคิวก่อน', 'warning');
+    logShopeeConsole('⚠️ [Step 2] ไม่พบคีย์เวิร์ดสำหรับค้นหา', 'warning');
+    return;
+  }
+  logShopeeConsole(`🔍 [Step 2] กำลังพิมพ์ค้นหา: '${keyword}'...`, 'system');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/debug/step-2', {
+      method: 'POST',
+      body: JSON.stringify({ keyword })
+    });
+    if (res.ok) {
+      logShopeeConsole(`✅ [Step 2] ${res.message}`, 'success');
+      showToast(`Step 2: ค้นหา '${keyword}' สำเร็จ`, 'success');
+    } else {
+      logShopeeConsole(`❌ [Step 2] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
+      showToast(res.detail || 'Step 2 ล้มเหลว', 'error');
+    }
+  } catch (e) {
+    logShopeeConsole(`❌ [Step 2] Exception: ${e.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function debugShopeeStep3(btn) {
+  logShopeeConsole('📈 [Step 3] กำลังคลิกจัดเรียงตาม "ขายดี"...', 'system');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/debug/step-3', {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+    if (res.ok) {
+      logShopeeConsole(`✅ [Step 3] ${res.message}`, 'success');
+      showToast('Step 3: จัดเรียงขายดีสำเร็จ', 'success');
+    } else {
+      logShopeeConsole(`❌ [Step 3] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
+      showToast(res.detail || 'Step 3 ล้มเหลว', 'error');
+    }
+  } catch (e) {
+    logShopeeConsole(`❌ [Step 3] Exception: ${e.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function debugShopeeStep4(btn) {
+  logShopeeConsole('🎯 [Step 4] กำลังเลือกสินค้าค่าคอมสูงสุด & คลิกเข้าหน้ารายละเอียด...', 'system');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/debug/step-4', {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+    if (res.ok) {
+      logShopeeConsole(`✅ [Step 4] ${res.message}`, 'success');
+      showToast('Step 4: เลือกสินค้าและเปิดหน้ารายละเอียดสำเร็จ', 'success');
+    } else {
+      logShopeeConsole(`❌ [Step 4] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
+      showToast(res.detail || 'Step 4 ล้มเหลว', 'error');
+    }
+  } catch (e) {
+    logShopeeConsole(`❌ [Step 4] Exception: ${e.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function debugShopeeStep5(btn) {
+  const { item } = await getShopeeDebugTarget();
+  const folderPath = item?.folder_path || '';
+  const filePath = item?.file_path || '';
+  logShopeeConsole('🔗 [Step 5] กำลังกดปุ่ม "เอา ลิงก์" & บันทึกไฟล์ (ไม่กดดูสินค้า)...', 'system');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/debug/step-5', {
+      method: 'POST',
+      body: JSON.stringify({ folder_path: folderPath, file_path: filePath })
+    });
+    if (res.ok) {
+      logShopeeConsole(`✅ [Step 5] ${res.message}`, 'success');
+      if (res.affiliate_link) logShopeeConsole(`🔗 Affiliate Link: ${res.affiliate_link}`, 'success');
+      showToast('Step 5: เอาลิงก์สำเร็จ (ไม่กดดูสินค้า)', 'success');
+    } else {
+      logShopeeConsole(`❌ [Step 5] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
+      showToast(res.detail || 'Step 5 ล้มเหลว', 'error');
+    }
+  } catch (e) {
+    logShopeeConsole(`❌ [Step 5] Exception: ${e.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function debugShopeeStep6(btn) {
+  const { item } = await getShopeeDebugTarget();
+  const targetDir = item?.folder_path || '';
+  logShopeeConsole('👁️ [Step 6] กำลังกดปุ่ม "ดูสินค้า" (Trusted Click)...', 'system');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/debug/step-6', {
+      method: 'POST',
+      body: JSON.stringify({ target_dir: targetDir })
+    });
+    if (res.ok) {
+      logShopeeConsole(`✅ [Step 6] ${res.message}`, 'success');
+      showToast('Step 6: เปิดแท็บสินค้าสำเร็จ', 'success');
+    } else {
+      logShopeeConsole(`❌ [Step 6] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
+      showToast(res.detail || 'Step 6 ล้มเหลว', 'error');
+    }
+  } catch (e) {
+    logShopeeConsole(`❌ [Step 6] Exception: ${e.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function runShopeeSingleItem(item, btn) {
+  if (!item) return;
+  const numDisplay = item.number ? `#${item.number}` : item.subfolder_name;
+  logShopeeConsole(`🚀 [รันเดี่ยว] กำลังเริ่มรัน ${numDisplay} (${item.keyword || item.subfolder_name})...`, 'system');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/run', {
+      method: 'POST',
+      body: JSON.stringify({ items: [item], profile_port: 9222 })
+    });
+    if (res.ok) {
+      logShopeeConsole(`✅ [รันเดี่ยว] ส่งคำขอรันสำเร็จ: ${res.message}`, 'success');
+      showToast(`เริ่มรัน ${numDisplay} เรียบร้อย`, 'success');
+      startShopeePolling();
+    } else {
+      logShopeeConsole(`❌ [รันเดี่ยว] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
+      showToast(res.detail || 'รันเดี่ยวล้มเหลว', 'error');
+    }
+  } catch (e) {
+    logShopeeConsole(`❌ [รันเดี่ยว] Exception: ${e.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function initShopeeAffiliateListeners() {
   const openUrlBtn = document.getElementById('btnOpenShopeePageUrl');
   if (openUrlBtn) openUrlBtn.addEventListener('click', openShopeePageUrl);
@@ -7510,6 +7721,39 @@ function initShopeeAffiliateListeners() {
 
   const forceStopBtn = document.getElementById('btnShopeeForceStop');
   if (forceStopBtn) forceStopBtn.addEventListener('click', (e) => stopShopeeAffiliate(e.currentTarget));
+
+  // Step Debugger Listeners
+  const autoFillBtn = document.getElementById('btnShopeeDebugAutoFill');
+  if (autoFillBtn) {
+    autoFillBtn.addEventListener('click', () => {
+      const selected = shopeeQueue.find(p => p.checked !== false);
+      const kwInput = document.getElementById('shopeeDebugKeyword');
+      if (selected && kwInput) {
+        kwInput.value = selected.keyword || selected.subfolder_name;
+        showToast(`ดึงคีย์เวิร์ด #${selected.number || '1'}: ${kwInput.value}`, 'success');
+      } else {
+        showToast('ไม่พบรายการที่เลือกในคิว กรุณาสแกนหรือติ๊กเลือกก่อน', 'warning');
+      }
+    });
+  }
+
+  const step1Btn = document.getElementById('btnShopeeDebugStep1');
+  if (step1Btn) step1Btn.addEventListener('click', (e) => debugShopeeStep1(e.currentTarget));
+
+  const step2Btn = document.getElementById('btnShopeeDebugStep2');
+  if (step2Btn) step2Btn.addEventListener('click', (e) => debugShopeeStep2(e.currentTarget));
+
+  const step3Btn = document.getElementById('btnShopeeDebugStep3');
+  if (step3Btn) step3Btn.addEventListener('click', (e) => debugShopeeStep3(e.currentTarget));
+
+  const step4Btn = document.getElementById('btnShopeeDebugStep4');
+  if (step4Btn) step4Btn.addEventListener('click', (e) => debugShopeeStep4(e.currentTarget));
+
+  const step5Btn = document.getElementById('btnShopeeDebugStep5');
+  if (step5Btn) step5Btn.addEventListener('click', (e) => debugShopeeStep5(e.currentTarget));
+
+  const step6Btn = document.getElementById('btnShopeeDebugStep6');
+  if (step6Btn) step6Btn.addEventListener('click', (e) => debugShopeeStep6(e.currentTarget));
 
   const clearConsoleBtn = document.getElementById('clearShopeeConsoleBtn');
   if (clearConsoleBtn) {

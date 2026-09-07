@@ -345,9 +345,8 @@ def step_3_sort_best_sellers(driver) -> bool:
     log("[Shopee Step 3] ⚠️ ไม่พบปุ่ม 'ขายดี' (อาจอยู่ในหน้านี้แล้วหรือโหลดไม่ทัน)")
     return False
 
-def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", folder_path: str = "") -> dict[str, Any]:
-    """Step 4: Select product with highest commission (sales > 10 items, or fallback to lower sales),
-    click 'เอาลิงก์', copy affiliate short link, and save it to the product's .md file and Caption.md."""
+def step_4_select_and_open_product(driver) -> dict[str, Any]:
+    """Step 4: Analyze and select product with highest commission (sales > 10), highlight it, and click to enter product details page."""
     # Check if page has no data first
     if check_shopee_no_data(driver):
         log("[Shopee Step 4] ⚠️ ตรวจพบ 'ไม่มีข้อมูล' (ไม่พบสินค้าที่ค้นหา) -> ข้ามรายการนี้ทันที")
@@ -501,8 +500,22 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         else:
             log(f"[Shopee Step 4] 🌐 นำทางเข้าสู่หน้ารายละเอียดสินค้าสำเร็จ: {driver.current_url}")
 
-    # 3. Find and click the orange "เอา ลิงก์" button on the product details page
-    log("[Shopee Step 4] 🟠 กำลังกดปุ่มสีส้ม 'เอา ลิงก์' บนหน้ารายละเอียดสินค้า...")
+    return {
+        "success": True,
+        "chosen": chosen_info,
+        "product_link": product_link or driver.current_url
+    }
+
+def step_5_get_affiliate_link(driver, target_file_path: str = "", folder_path: str = "", product_link: str = "") -> dict[str, Any]:
+    """Step 5: Click orange 'เอา ลิงก์' button, copy affiliate short link, and save markdown files. (Does NOT click view product)."""
+    check_stop()
+    check_shopee_captcha(driver)
+
+    if not product_link:
+        product_link = driver.current_url or ""
+
+    # 1. Find and click the orange "เอา ลิงก์" button on the product details page
+    log("[Shopee Step 5] 🟠 กำลังกดปุ่มสีส้ม 'เอา ลิงก์' บนหน้ารายละเอียดสินค้า...")
     clicked_orange = False
     for _ in range(12):
         check_stop()
@@ -524,9 +537,9 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         interruptible_sleep(0.4)
 
     if not clicked_orange:
-        log("[Shopee Step 4] ⚠️ ไม่พบปุ่มสีส้ม 'เอา ลิงก์' บนหน้ารายละเอียดสินค้า")
+        log("[Shopee Step 5] ⚠️ ไม่พบปุ่มสีส้ม 'เอา ลิงก์' บนหน้ารายละเอียดสินค้า")
 
-    # 4. Wait for modal & extract affiliate short link
+    # 2. Wait for modal & extract affiliate short link
     interruptible_sleep(1.2)
     affiliate_link = ""
     for _ in range(15):
@@ -563,9 +576,9 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
     driver.execute_script("document.querySelector('.ant-modal-close, .ant-modal-close-x')?.click();")
 
     if not affiliate_link:
-        log("[Shopee Step 4] ⚠️ ไม่สามารถดึงลิงก์ Affiliate จาก Modal ได้")
+        log("[Shopee Step 5] ⚠️ ไม่สามารถดึงลิงก์ Affiliate จาก Modal ได้")
 
-    log(f"[Shopee Step 4] 🔗 คัดลอก Affiliate Link สำเร็จ: {affiliate_link or '-'}")
+    log(f"[Shopee Step 5] 🔗 คัดลอก Affiliate Link สำเร็จ: {affiliate_link or '-'}")
 
     # 3. Determine target directory for saving files
     target_dir = folder_path
@@ -580,10 +593,10 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
             try:
                 with open(aff_path, "w", encoding="utf-8") as f:
                     f.write(affiliate_link + "\n")
-                log(f"[Shopee Step 4] 💾 บันทึก Affiliate Link.md เรียบร้อย: {aff_path}")
+                log(f"[Shopee Step 5] 💾 บันทึก Affiliate Link.md เรียบร้อย: {aff_path}")
                 saved_files.append(aff_path)
             except Exception as e:
-                log(f"[Shopee Step 4] ⚠️ บันทึก Affiliate Link.md ไม่สำเร็จ: {e}")
+                log(f"[Shopee Step 5] ⚠️ บันทึก Affiliate Link.md ไม่สำเร็จ: {e}")
 
         # B) Save 'Product Link.md'
         if product_link:
@@ -591,45 +604,44 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
             try:
                 with open(prod_path, "w", encoding="utf-8") as f:
                     f.write(product_link + "\n")
-                log(f"[Shopee Step 4] 💾 บันทึก Product Link.md เรียบร้อย: {prod_path}")
+                log(f"[Shopee Step 5] 💾 บันทึก Product Link.md เรียบร้อย: {prod_path}")
                 saved_files.append(prod_path)
             except Exception as e:
-                log(f"[Shopee Step 4] ⚠️ บันทึก Product Link.md ไม่สำเร็จ: {e}")
-
-    # 3.5 Extract fallback image hash from current affiliate page before opening product page
-    fallback_image_hash = driver.execute_script(r"""
-        const img = document.querySelector('img.offer-img, img[src*="susercontent"]');
-        if (!img) return '';
-        const src = img.src || '';
-        const m = src.match(/susercontent\.com\/(?:file\/)?([a-zA-Z0-9_-]+)/);
-        return m ? m[1].replace(/\.[^.]+$/, '').replace(/_tn$/, '').split('@')[0] : '';
-    """) or ""
-
-    # 4. Open real product page via "ดูสินค้า" and download all main images as .jpg
-    downloaded_images = []
-    if target_dir and os.path.exists(target_dir):
-        downloaded_images = step_5_open_product_and_download_images(driver, target_dir=target_dir, fallback_hash=fallback_image_hash)
-        saved_files.extend(downloaded_images)
+                log(f"[Shopee Step 5] ⚠️ บันทึก Product Link.md ไม่สำเร็จ: {e}")
 
     return {
         "success": True,
-        "chosen": chosen_info,
         "affiliate_link": affiliate_link,
         "product_link": product_link,
-        "saved_files": saved_files,
-        "downloaded_images": downloaded_images
+        "saved_files": saved_files
     }
 
-def step_5_open_product_and_download_images(driver, target_dir: str = "", fallback_hash: str = "") -> list[str]:
-    """Step 5: Click 'ดูสินค้า' to open the real Shopee product page in a new tab, download all main product images as .jpg,
-    and fallback to affiliate image if verify/traffic error occurs."""
+def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", folder_path: str = "") -> dict[str, Any]:
+    """Legacy wrapper: Runs Step 4 (select and open product) then Step 5 (get affiliate link)."""
+    sel_res = step_4_select_and_open_product(driver)
+    if sel_res.get("skipped") or not sel_res.get("success"):
+        return sel_res
+    prod_link = sel_res.get("product_link", "")
+    link_res = step_5_get_affiliate_link(driver, target_file_path=target_file_path, folder_path=folder_path, product_link=prod_link)
+    return {
+        "success": True,
+        "chosen": sel_res.get("chosen", {}),
+        "affiliate_link": link_res.get("affiliate_link", ""),
+        "product_link": prod_link,
+        "saved_files": link_res.get("saved_files", []),
+        "downloaded_images": []
+    }
+
+def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "") -> list[str]:
+    """Step 6: Click 'ดูสินค้า' to open the real Shopee product page in a new tab via CDP Trusted Click,
+    keep the product tab open for the user to download images with their extension."""
     check_stop()
-    log("[Shopee Step 5] 🔍 กำลังค้นหาปุ่ม 'ดูสินค้า' เพื่อเปิดหน้าสินค้าจริง...")
+    log("[Shopee Step 6] 🔍 กำลังค้นหาปุ่ม 'ดูสินค้า' เพื่อเปิดหน้าสินค้าจริง...")
     
-    main_window = driver.current_window_handle
     init_handles = set(driver.window_handles)
 
-    # 1. Click "ดูสินค้า" using CDP trusted mouse click and FINISH IMMEDIATELY
+    # 1. Click "ดูสินค้า" using CDP trusted mouse click
+    clicked = False
     try:
         view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
         driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", view_btn)
@@ -647,87 +659,39 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
             driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': cx, 'y': cy, 'clickCount': 1})
             interruptible_sleep(0.08)
             driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': cx, 'y': cy, 'clickCount': 1})
-            log("[Shopee Step 5] ✅ กดปุ่ม 'ดูสินค้า' สำเร็จแล้ว (จบขั้นตอนทันทีตามต้องการ)")
-            return []
+            clicked = True
+            log("[Shopee Step 6] ✅ กดปุ่ม 'ดูสินค้า' (Trusted Click) สำเร็จแล้ว (ไม่สลับแท็บ)")
     except Exception as e:
-        log(f"[Shopee Step 5] ⚠️ CDP click ไม่สำเร็จ ({e}) -> สลับใช้ native click")
+        log(f"[Shopee Step 6] ⚠️ CDP click ไม่สำเร็จ ({e}) -> สลับใช้ native click")
 
-    try:
-        view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
-        view_btn.click()
-        log("[Shopee Step 5] ✅ กดปุ่ม 'ดูสินค้า' (Native Click) สำเร็จแล้ว (จบขั้นตอนทันทีตามต้องการ)")
-    except Exception as e:
-        log(f"[Shopee Step 5] ⚠️ ไม่สามารถกดปุ่มดูสินค้าได้: {e}")
+    if not clicked:
+        try:
+            view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
+            view_btn.click()
+            clicked = True
+            log("[Shopee Step 6] ✅ กดปุ่ม 'ดูสินค้า' (Native Click) สำเร็จแล้ว (ไม่สลับแท็บ)")
+        except Exception as e:
+            log(f"[Shopee Step 6] ⚠️ ไม่สามารถกดปุ่มดูสินค้าได้: {e}")
+
+    # # 2. Confirm new tab opened in background WITHOUT switching to it
+    # new_tab_found = False
+    # for _ in range(10):
+    #     check_stop()
+    #     interruptible_sleep(0.3)
+    #     current_handles = set(driver.window_handles)
+    #     new_handles = current_handles - init_handles
+    #     if new_handles:
+    #         new_tab_found = True
+    #         log(f"[Shopee Step 6] 🌐 ตรวจพบแท็บสินค้าใหม่เปิดขึ้นมาแล้ว ({len(new_handles)} แท็บใหม่) โดยไม่สลับแท็บ")
+    #         break
+    # 
+    # if not new_tab_found:
+    #     log("[Shopee Step 6] ℹ️ กดปุ่ม 'ดูสินค้า' เรียบร้อยแล้ว (ไม่สลับแท็บ)")
 
     return []
 
-    # If no hashes extracted from product page, use fallback_hash
-    if not image_hashes and fallback_hash:
-        log(f"[Shopee Step 5] ℹ️ ใช้รูปภาพจากหน้า Affiliate (Fallback Hash: {fallback_hash})")
-        image_hashes = [fallback_hash]
-
-    log(f"[Shopee Step 5] 📸 ได้รับรายการรูปภาพสำหรับดาวน์โหลดทั้งหมด {len(image_hashes)} รูป")
-    if not image_hashes:
-        log("[Shopee Step 5] ⚠️ ไม่พบ URL รูปภาพสำหรับดาวน์โหลด")
-        return []
-
-    if not target_dir or not os.path.exists(target_dir):
-        log(f"[Shopee Step 5] ⚠️ โฟลเดอร์เป้าหมายไม่ถูกต้อง: {target_dir}")
-        return []
-
-    # 3. Create 'main_images' directory and save .jpg images
-    main_images_dir = os.path.join(target_dir, "main_images")
-    os.makedirs(main_images_dir, exist_ok=True)
-
-    downloaded_files = []
-    import urllib.request
-    import io
-    from PIL import Image
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-
-    for idx, h in enumerate(image_hashes, 1):
-        check_stop()
-        img_url = f"https://down-th.img.susercontent.com/file/{h}"
-        dest_filename = f"{idx}.jpg"
-        dest_path = os.path.join(main_images_dir, dest_filename)
-
-        try:
-            req = urllib.request.Request(img_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = resp.read()
-
-            check_stop()
-            with Image.open(io.BytesIO(data)) as pil_img:
-                if pil_img.mode in ("RGBA", "P"):
-                    pil_img = pil_img.convert("RGB")
-                pil_img.save(dest_path, "JPEG", quality=95)
-
-            log(f"[Shopee Step 5] 💾 ดาวน์โหลดรูปหลัก #{idx}: {dest_filename} สำเร็จ")
-            downloaded_files.append(dest_path)
-
-            # Also save first image as product.jpg in target_dir root
-            if idx == 1:
-                product_jpg_path = os.path.join(target_dir, "product.jpg")
-                try:
-                    with Image.open(io.BytesIO(data)) as pil_img:
-                        if pil_img.mode in ("RGBA", "P"):
-                            pil_img = pil_img.convert("RGB")
-                        pil_img.save(product_jpg_path, "JPEG", quality=95)
-                    downloaded_files.append(product_jpg_path)
-                    log(f"[Shopee Step 5] 💾 บันทึก product.jpg ในโฟลเดอร์หลักเรียบร้อย")
-                except Exception as ep:
-                    log(f"[Shopee Step 5] ⚠️ บันทึก product.jpg ไม่สำเร็จ: {ep}")
-
-        except ForceStopException:
-            raise
-        except Exception as e:
-            log(f"[Shopee Step 5] ⚠️ ดาวน์โหลดรูป #{idx} ({img_url}) ล้มเหลว: {e}")
-
-    log(f"[Shopee Step 5] ✅ ดาวน์โหลดและบันทึกรูปหลักทั้งหมด {len(downloaded_files)} ไฟล์เรียบร้อยแล้ว")
-    return downloaded_files
+# Alias for backward compatibility
+step_5_open_product_and_download_images = step_6_open_product_tab
 
 def post_single_shopee_item(
     driver,
@@ -737,7 +701,7 @@ def post_single_shopee_item(
     total_items: int = 1,
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> bool:
-    """Process a single Shopee Affiliate item: search keyword without number, sort, select best item, and save Affiliate Link.md & Product Link.md."""
+    """Process a single Shopee Affiliate item: search keyword, sort best sellers, click product, get link, and open product tab."""
     raw_keyword = item.get("keyword") or item.get("file_name") or item.get("subfolder_name") or ""
     keyword = clean_search_keyword(raw_keyword)
     target_file = item.get("file_path", "")
@@ -767,23 +731,29 @@ def post_single_shopee_item(
     step_3_sort_best_sellers(driver)
     check_stop()
 
-    # Step 4: Select best product (highest commission with sales > 10), get link and save to Affiliate Link.md & Product Link.md
-    res = step_4_select_best_product_and_get_link(driver, target_file_path=target_file, folder_path=folder_path)
+    # Step 4: Select product with highest commission (sales > 10) and click into details
+    sel_res = step_4_select_and_open_product(driver)
     check_stop()
-    if res.get("skipped"):
+    if sel_res.get("skipped"):
         log(f"[Shopee Affiliate] ⏭️ ข้ามรายการที่ {item_idx}/{total_items}: {name} (เหตุผล: ไม่พบข้อมูลสินค้าใน Shopee)")
         item["skipped"] = True
-        item["skip_reason"] = res.get("reason", "no_data")
+        item["skip_reason"] = sel_res.get("reason", "no_data")
         return True
 
-    if res.get("affiliate_link"):
-        item["affiliate_link"] = res["affiliate_link"]
-    if res.get("product_link"):
-        item["product_link"] = res["product_link"]
-    if res.get("downloaded_images"):
-        item["downloaded_images"] = res["downloaded_images"]
+    prod_link = sel_res.get("product_link") or sel_res.get("chosen", {}).get("productLink") or ""
+    if prod_link:
+        item["product_link"] = prod_link
 
-    log(f"[Shopee Affiliate] ✅ สำเร็จการค้นหาและดึงลิงก์รายการที่ {item_idx}/{total_items}: {name} (Affiliate: {res.get('affiliate_link', '-')}, Product: {res.get('product_link', '-')}, รูปหลัก: {len(res.get('downloaded_images', []))} รูป)")
+    # Step 5: Click 'เอาลิงก์' and save markdown files (WITHOUT clicking view product)
+    link_res = step_5_get_affiliate_link(driver, target_file_path=target_file, folder_path=folder_path, product_link=prod_link)
+    check_stop()
+    if link_res.get("affiliate_link"):
+        item["affiliate_link"] = link_res["affiliate_link"]
+
+    # Step 6: Click 'ดูสินค้า' to open real Shopee product page in a new tab
+    step_6_open_product_tab(driver, target_dir=folder_path)
+
+    log(f"[Shopee Affiliate] ✅ สำเร็จการค้นหาและดึงลิงก์รายการที่ {item_idx}/{total_items}: {name} (Affiliate: {item.get('affiliate_link', '-')}, Product: {item.get('product_link', '-')})")
     return True
 
 def run_shopee_affiliate_batch(

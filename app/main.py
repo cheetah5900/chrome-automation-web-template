@@ -599,6 +599,12 @@ def sync_ensure_chrome_debug_ready(port: int = 9222) -> bool:
 def _activate_chrome(driver=None, port: int = 9222):
     if driver:
         try:
+            handles = driver.window_handles
+            try:
+                _ = driver.current_window_handle
+            except Exception:
+                if handles:
+                    driver.switch_to.window(handles[0])
             driver.execute_cdp_cmd('Page.bringToFront', {})
         except Exception:
             pass
@@ -5147,6 +5153,163 @@ def api_shopee_affiliate_stop() -> dict[str, Any]:
     global_shopee_progress["message"] = "🛑 บังคับหยุดการทำงานโดยผู้ใช้ (Force Stop)"
     log("[Shopee Affiliate] 🛑 ได้รับคำสั่ง Force Stop - กำลังหยุดการทำงาน")
     return {"ok": True, "message": "🛑 สั่ง Force Stop Shopee Affiliate เรียบร้อยแล้ว"}
+
+@app.post("/api/shopee-affiliate/debug/step-1")
+def api_shopee_debug_step_1(req: dict[str, Any] = None) -> dict[str, Any]:
+    """Debug Step 1: Open Shopee Affiliate Offer page."""
+    from app.shopee_affiliate import reset_shopee_stop, step_1_open_shopee_page, ShopeeCaptchaBlockedException
+    reset_shopee_stop()
+    url = ((req or {}).get("url") or "").strip() or "https://affiliate.shopee.co.th/offer/product_offer"
+    port = 9222
+    if not sync_ensure_chrome_debug_ready(port=port):
+        return {"ok": False, "detail": f"ไม่สามารถเปิดเบราว์เซอร์ Chrome Debug Port {port} ได้"}
+    try:
+        bot = browser_manager.get(target_port=port)
+        if not bot or not bot.driver:
+            return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"}
+        driver = bot.driver
+        _activate_chrome(driver, port=port)
+        step_1_open_shopee_page(driver, url)
+        return {"ok": True, "message": f"Step 1: เปิดหน้าเว็บ {url} สำเร็จ"}
+    except ShopeeCaptchaBlockedException as ce:
+        return {"ok": False, "captcha_blocked": True, "detail": "⚠️ ตรวจพบ CAPTCHA กรุณาแก้ในเบราว์เซอร์"}
+    except Exception as e:
+        return {"ok": False, "detail": f"Step 1 ผิดพลาด: {str(e)}"}
+
+@app.post("/api/shopee-affiliate/debug/step-2")
+def api_shopee_debug_step_2(req: dict[str, Any]) -> dict[str, Any]:
+    """Debug Step 2: Search keyword."""
+    from app.shopee_affiliate import reset_shopee_stop, step_2_search_product, clean_search_keyword, ShopeeCaptchaBlockedException
+    reset_shopee_stop()
+    raw_keyword = (req.get("keyword") or "").strip()
+    keyword = clean_search_keyword(raw_keyword)
+    if not keyword:
+        return {"ok": False, "detail": "กรุณาระบุคีย์เวิร์ดสำหรับค้นหา"}
+    port = 9222
+    if not sync_ensure_chrome_debug_ready(port=port):
+        return {"ok": False, "detail": f"ไม่สามารถเปิดเบราว์เซอร์ Chrome Debug Port {port} ได้"}
+    try:
+        bot = browser_manager.get(target_port=port)
+        if not bot or not bot.driver:
+            return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"}
+        driver = bot.driver
+        _activate_chrome(driver, port=port)
+        ok = step_2_search_product(driver, keyword)
+        if ok:
+            return {"ok": True, "keyword": keyword, "message": f"Step 2: พิมพ์ค้นหา '{keyword}' สำเร็จ"}
+        else:
+            return {"ok": False, "detail": f"Step 2: ค้นหา '{keyword}' ไม่สำเร็จ"}
+    except ShopeeCaptchaBlockedException:
+        return {"ok": False, "captcha_blocked": True, "detail": "⚠️ ตรวจพบ CAPTCHA กรุณาแก้ในเบราว์เซอร์"}
+    except Exception as e:
+        return {"ok": False, "detail": f"Step 2 ผิดพลาด: {str(e)}"}
+
+@app.post("/api/shopee-affiliate/debug/step-3")
+def api_shopee_debug_step_3() -> dict[str, Any]:
+    """Debug Step 3: Sort by best sellers."""
+    from app.shopee_affiliate import reset_shopee_stop, step_3_sort_best_sellers, ShopeeCaptchaBlockedException
+    reset_shopee_stop()
+    port = 9222
+    if not sync_ensure_chrome_debug_ready(port=port):
+        return {"ok": False, "detail": f"ไม่สามารถเปิดเบราว์เซอร์ Chrome Debug Port {port} ได้"}
+    try:
+        bot = browser_manager.get(target_port=port)
+        if not bot or not bot.driver:
+            return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"}
+        driver = bot.driver
+        _activate_chrome(driver, port=port)
+        ok = step_3_sort_best_sellers(driver)
+        if ok:
+            return {"ok": True, "message": "Step 3: คลิกจัดเรียง 'ขายดี' สำเร็จ"}
+        else:
+            return {"ok": False, "detail": "Step 3: คลิกจัดเรียง 'ขายดี' ไม่สำเร็จ (อาจไม่มีสินค้าหรือหน้านี้จัดเรียงแล้ว)"}
+    except ShopeeCaptchaBlockedException:
+        return {"ok": False, "captcha_blocked": True, "detail": "⚠️ ตรวจพบ CAPTCHA กรุณาแก้ในเบราว์เซอร์"}
+    except Exception as e:
+        return {"ok": False, "detail": f"Step 3 ผิดพลาด: {str(e)}"}
+
+@app.post("/api/shopee-affiliate/debug/step-4")
+def api_shopee_debug_step_4() -> dict[str, Any]:
+    """Debug Step 4: Select product with highest commission and click into product details page."""
+    from app.shopee_affiliate import reset_shopee_stop, step_4_select_and_open_product, ShopeeCaptchaBlockedException
+    reset_shopee_stop()
+    port = 9222
+    if not sync_ensure_chrome_debug_ready(port=port):
+        return {"ok": False, "detail": f"ไม่สามารถเปิดเบราว์เซอร์ Chrome Debug Port {port} ได้"}
+    try:
+        bot = browser_manager.get(target_port=port)
+        if not bot or not bot.driver:
+            return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"}
+        driver = bot.driver
+        _activate_chrome(driver, port=port)
+        res = step_4_select_and_open_product(driver)
+        if res.get("skipped"):
+            return {"ok": False, "detail": "Step 4: ข้ามรายการเนื่องจากไม่มีข้อมูลสินค้า"}
+        chosen = res.get("chosen", {})
+        return {
+            "ok": True,
+            "chosen": chosen,
+            "product_link": res.get("product_link", ""),
+            "message": f"Step 4: เลือกสินค้า '{chosen.get('title', '')[:30]}...' ค่าคอม {chosen.get('commRate', '-')}% และคลิกเปิดหน้ารายละเอียดสำเร็จ"
+        }
+    except ShopeeCaptchaBlockedException:
+        return {"ok": False, "captcha_blocked": True, "detail": "⚠️ ตรวจพบ CAPTCHA กรุณาแก้ในเบราว์เซอร์"}
+    except Exception as e:
+        return {"ok": False, "detail": f"Step 4 ผิดพลาด: {str(e)}"}
+
+@app.post("/api/shopee-affiliate/debug/step-5")
+def api_shopee_debug_step_5(req: dict[str, Any] = None) -> dict[str, Any]:
+    """Debug Step 5: Click orange 'เอา ลิงก์' button, copy affiliate short link, and save markdown files (NO view product click)."""
+    from app.shopee_affiliate import reset_shopee_stop, step_5_get_affiliate_link, ShopeeCaptchaBlockedException
+    reset_shopee_stop()
+    folder_path = ((req or {}).get("folder_path") or "").strip()
+    target_file = ((req or {}).get("file_path") or "").strip()
+    product_link = ((req or {}).get("product_link") or "").strip()
+    port = 9222
+    if not sync_ensure_chrome_debug_ready(port=port):
+        return {"ok": False, "detail": f"ไม่สามารถเปิดเบราว์เซอร์ Chrome Debug Port {port} ได้"}
+    try:
+        bot = browser_manager.get(target_port=port)
+        if not bot or not bot.driver:
+            return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"}
+        driver = bot.driver
+        _activate_chrome(driver, port=port)
+        res = step_5_get_affiliate_link(driver, target_file_path=target_file, folder_path=folder_path, product_link=product_link)
+        aff_link = res.get("affiliate_link", "")
+        return {
+            "ok": True,
+            "affiliate_link": aff_link,
+            "product_link": res.get("product_link", ""),
+            "saved_files": res.get("saved_files", []),
+            "message": f"Step 5: คัดลอก Affiliate Link สำเร็จ ({aff_link or '-'}) และบันทึกไฟล์เรียบร้อย (ไม่กดดูสินค้า)"
+        }
+    except ShopeeCaptchaBlockedException:
+        return {"ok": False, "captcha_blocked": True, "detail": "⚠️ ตรวจพบ CAPTCHA กรุณาแก้ในเบราว์เซอร์"}
+    except Exception as e:
+        return {"ok": False, "detail": f"Step 5 ผิดพลาด: {str(e)}"}
+
+@app.post("/api/shopee-affiliate/debug/step-6")
+def api_shopee_debug_step_6(req: dict[str, Any] = None) -> dict[str, Any]:
+    """Debug Step 6: Click view product via CDP Trusted Click to open product tab."""
+    from app.shopee_affiliate import reset_shopee_stop, step_6_open_product_tab, ShopeeCaptchaBlockedException
+    reset_shopee_stop()
+    target_dir = ((req or {}).get("target_dir") or (req or {}).get("folder_path") or "").strip()
+    fallback_hash = ((req or {}).get("fallback_hash") or "").strip()
+    port = 9222
+    if not sync_ensure_chrome_debug_ready(port=port):
+        return {"ok": False, "detail": f"ไม่สามารถเปิดเบราว์เซอร์ Chrome Debug Port {port} ได้"}
+    try:
+        bot = browser_manager.get(target_port=port)
+        if not bot or not bot.driver:
+            return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"}
+        driver = bot.driver
+        _activate_chrome(driver, port=port)
+        step_6_open_product_tab(driver, target_dir=target_dir, fallback_hash=fallback_hash)
+        return {"ok": True, "message": "Step 6: กดปุ่ม 'ดูสินค้า' (Trusted Click) เปิดแท็บสินค้าเรียบร้อย (ไม่สลับแท็บ)"}
+    except ShopeeCaptchaBlockedException:
+        return {"ok": False, "captcha_blocked": True, "detail": "⚠️ ตรวจพบ CAPTCHA กรุณาแก้ในเบราว์เซอร์"}
+    except Exception as e:
+        return {"ok": False, "detail": f"Step 6 ผิดพลาด: {str(e)}"}
 
 @app.get("/api/utils/view-image")
 def view_image(path: str) -> FileResponse:
