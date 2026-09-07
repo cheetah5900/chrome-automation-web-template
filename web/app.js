@@ -7259,15 +7259,15 @@ async function openShopeePageUrl() {
 }
 
 async function browseShopeeMainFolder() {
-  const currentVal = document.getElementById('cfg_shopee_main_folder')?.value || '';
   try {
-    const res = await jsonFetch(`/api/browse-directory?initial_path=${encodeURIComponent(currentVal)}`);
-    if (res.path) {
+    const res = await jsonFetch('/api/utils/browse-directory');
+    if (res && res.path) {
       document.getElementById('cfg_shopee_main_folder').value = res.path;
       logShopeeConsole(`📁 เลือกโฟลเดอร์หลัก: ${res.path}`, 'system');
     }
   } catch (e) {
     console.error('Directory browse failed:', e);
+    logShopeeConsole(`❌ เลือกโฟลเดอร์ไม่สำเร็จ: ${e.message}`, 'error');
   }
 }
 

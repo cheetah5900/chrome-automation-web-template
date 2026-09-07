@@ -4037,6 +4037,7 @@ def _make_video_cover_impl(
     }
 
 
+@app.get("/api/browse-directory")
 @app.get("/api/utils/browse-directory")
 def browse_directory() -> dict[str, Any]:
     import sys
