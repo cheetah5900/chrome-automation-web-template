@@ -743,6 +743,7 @@ def run_shopee_affiliate_batch(
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> dict[str, Any]:
     """Runs a batch of Shopee Affiliate automation tasks."""
+    reset_shopee_stop()
     bot = browser_manager.get(target_port=9222)
     driver = bot.driver
     total = len(items)
@@ -751,7 +752,6 @@ def run_shopee_affiliate_batch(
     errors = []
     skipped_items = []
     success_count = 0
-    reset_shopee_stop()
 
     log(f"[Shopee Affiliate Engine] เริ่มรัน {total} รายการบน Port 9222 (หน่วงเวลา: {delay_min}s - {delay_max}s)...")
 

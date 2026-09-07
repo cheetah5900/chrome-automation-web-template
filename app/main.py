@@ -153,8 +153,19 @@ def resolve_subfolder_by_prefix(base_dir: str, folder_id: str) -> str:
 async def reset_force_stop_middleware(request, call_next):
     global _force_stop_requested
     path = request.url.path
-    if request.method == "POST" and (path.startswith("/api/step/") or path.startswith("/api/video/") or path.startswith("/api/utils/")):
-        if path != "/api/profiles/force-kill" and path != "/api/step/stop-upload-google-flow":
+    if request.method == "POST" and (
+        path.startswith("/api/step/") or 
+        path.startswith("/api/video/") or 
+        path.startswith("/api/utils/") or
+        path.startswith("/api/shopee-affiliate/") or
+        path.startswith("/api/meta-autopost/")
+    ):
+        if path not in [
+            "/api/profiles/force-kill", 
+            "/api/step/stop-upload-google-flow",
+            "/api/shopee-affiliate/stop",
+            "/api/meta-autopost/stop"
+        ]:
             _force_stop_requested = False
     
     response = await call_next(request)
@@ -495,6 +506,93 @@ def _get_active_browser_app_name(browser_type: str = None) -> str:
     elif os.path.exists(edge_binary):
         return "Microsoft Edge"
     return "Google Chrome"
+
+def is_cdp_ready(port: int = 9222) -> bool:
+    import urllib.request
+    import json
+    for host in ["127.0.0.1", "localhost"]:
+        try:
+            req = urllib.request.Request(f"http://{host}:{port}/json/version", headers={"Host": f"{host}:{port}"})
+            with urllib.request.urlopen(req, timeout=0.8) as res:
+                if res.status == 200:
+                    data = json.loads(res.read().decode())
+                    if "webSocketDebuggerUrl" in data:
+                        return True
+        except Exception:
+            pass
+    return False
+
+
+def sync_ensure_chrome_debug_ready(port: int = 9222) -> bool:
+    if is_cdp_ready(port):
+        return True
+
+    # If port is occupied by a dead/stale/non-CDP process (e.g. returns 404), free it so Chrome can bind
+    if _is_local_port_open(port):
+        log(f"[Chrome Manager] Port {port} is occupied but CDP is not ready. Freeing port...")
+        _kill_port_processes(port)
+        _original_sleep(0.5)
+
+    # Find profile configured for this port
+    profile = None
+    try:
+        if DEFAULTS_FILE.exists() and PROFILES_FILE.exists():
+            defaults = _read_json(DEFAULTS_FILE)
+            selected_name = defaults.get("selected_profile", "")
+            profiles_data = _read_json(PROFILES_FILE)
+            profiles = profiles_data.get("profiles", [])
+            sel = next((p for p in profiles if p.get("name") == selected_name and int(p.get("debug_port", 9222)) == port), None)
+            if sel:
+                profile = sel
+            else:
+                profile = next((p for p in profiles if int(p.get("debug_port", 9222)) == port), None)
+    except Exception as e:
+        log(f"[Chrome Manager] Error loading profile: {e}")
+
+    if not profile:
+        profile = {
+            "name": "Generate Image Dino",
+            "path": str(BASE_DIR / "runtime" / "chrome-profiles" / "Generate Image Dino"),
+            "debug_port": port,
+            "browser_type": "chrome",
+            "startup_urls": ["https://affiliate.shopee.co.th/offer/product_offer"]
+        }
+
+    profile_path = profile.get("path")
+    if not profile_path:
+        profile_path = str(BASE_DIR / "runtime" / "chrome-profiles" / profile.get("name", "Default"))
+    os.makedirs(profile_path, exist_ok=True)
+
+    chrome_binary = _get_active_browser_binary(profile.get("browser_type", "chrome"))
+    ext_dir = str(Path(__file__).resolve().parent.parent / "extension")
+    startup_urls = _normalize_urls(profile.get("startup_urls", []))
+    if not startup_urls:
+        startup_urls = ["https://affiliate.shopee.co.th/offer/product_offer"]
+
+    cmd = [
+        chrome_binary,
+        f"--remote-debugging-port={port}",
+        f"--user-data-dir={profile_path}",
+        "--remote-allow-origins=*",
+        f"--load-extension={ext_dir}",
+        *startup_urls
+    ]
+    log(f"[Chrome Manager] Automatically launching Chrome debug profile ({profile.get('name')}) on port {port}...")
+    try:
+        subprocess.Popen(cmd)
+    except Exception as e:
+        log(f"[Chrome Manager] Failed to launch Chrome: {e}")
+        return False
+
+    # Wait for CDP to be ready (up to 8 seconds)
+    for _ in range(25):
+        _original_sleep(0.3)
+        if is_cdp_ready(port):
+            log(f"[Chrome Manager] Chrome debug port {port} is now ready!")
+            return True
+
+    log(f"[Chrome Manager] Chrome debug port {port} did not become ready in time.")
+    return False
 
 
 def _activate_chrome(driver=None, port: int = 9222):
@@ -883,25 +981,22 @@ async def launch_profile(payload: LaunchProfilePayload):
             pass
 
     chrome_binary = _get_active_browser_binary(profile.get("browser_type", "chrome"))
-    # Launch without --user-data-dir if it is the Everyday Chrome profile, to load untouched daily sessions directly
+    # Ensure all automation instances use an isolated user-data-dir and never touch the everyday Chrome profile
     from pathlib import Path
     everyday_profile = str(Path.home() / "Library/Application Support/Google/Chrome")
     ext_dir = str(Path(__file__).resolve().parent.parent / "extension")
-    if profile_path == "/Users/litar/Library/Application Support/Google/Chrome" or profile_path == everyday_profile:
-        cmd = [
-            chrome_binary,
-            f"--remote-debugging-port={debug_port}",
-            f"--load-extension={ext_dir}",
-            *startup_urls,
-        ]
-    else:
-        cmd = [
-            chrome_binary,
-            f"--remote-debugging-port={debug_port}",
-            f"--user-data-dir={profile_path}",
-            f"--load-extension={ext_dir}",
-            *startup_urls,
-        ]
+    if not profile_path or profile_path == "/Users/litar/Library/Application Support/Google/Chrome" or profile_path == everyday_profile:
+        profile_path = str(BASE_DIR / "runtime" / "chrome-profiles" / profile.get("name", "AutomationChrome"))
+
+    os.makedirs(profile_path, exist_ok=True)
+    cmd = [
+        chrome_binary,
+        f"--remote-debugging-port={debug_port}",
+        f"--user-data-dir={profile_path}",
+        "--remote-allow-origins=*",
+        f"--load-extension={ext_dir}",
+        *startup_urls,
+    ]
 
     try:
         subprocess.Popen(cmd)
@@ -4661,12 +4756,23 @@ global_shopee_progress: dict[str, Any] = {
 }
 
 def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0):
-    global global_shopee_progress
+    global global_shopee_progress, _force_stop_requested
+    _force_stop_requested = False
+    from app.shopee_affiliate import reset_shopee_stop
+    reset_shopee_stop()
+
     try:
+        ready = sync_ensure_chrome_debug_ready(port=9222)
+        if not ready:
+            global_shopee_progress["status"] = "error"
+            global_shopee_progress["message"] = "เบราว์เซอร์ Chrome 9222 ไม่พร้อมใช้งาน"
+            log("[Shopee Affiliate] Error: Chrome 9222 could not be started or attached")
+            return
+
         bot = browser_manager.get(target_port=9222)
         if not bot or not bot.driver:
             global_shopee_progress["status"] = "error"
-            global_shopee_progress["message"] = "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ (กรุณากด Launch Profile ก่อน)"
+            global_shopee_progress["message"] = "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"
             log("[Shopee Affiliate] Error: Chrome 9222 driver is not attached")
             return
 
@@ -4707,7 +4813,10 @@ def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", 
 
 @app.post("/api/shopee-affiliate/run")
 def run_shopee_affiliate(req: ShopeeRunRequest) -> dict[str, Any]:
-    global global_shopee_progress
+    global global_shopee_progress, _force_stop_requested
+    _force_stop_requested = False
+    from app.shopee_affiliate import reset_shopee_stop
+    reset_shopee_stop()
     items = req.items
     if not items:
         raise HTTPException(status_code=400, detail="ไม่มีรายการให้ดำเนินการ")
@@ -4907,25 +5016,22 @@ def get_shopee_affiliate_progress() -> dict[str, Any]:
 
 @app.post("/api/shopee-affiliate/open-url")
 def open_shopee_affiliate_url(req: dict[str, Any]) -> dict[str, Any]:
+    global _force_stop_requested
+    _force_stop_requested = False
+    from app.shopee_affiliate import reset_shopee_stop
+    reset_shopee_stop()
+
     url = (req.get("url") or "").strip()
     if not url:
         url = "https://affiliate.shopee.co.th/offer/product_offer"
     
     port = 9222
-    # Verify CDP endpoint is actually ready
-    cdp_ready = False
-    try:
-        import urllib.request
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=0.8) as cdp_res:
-            if cdp_res.status == 200:
-                cdp_ready = True
-    except Exception:
-        cdp_ready = False
-
-    if not cdp_ready:
+    # Ensure Chrome Debug on port 9222 is ready (auto-launch dedicated profile if needed)
+    ready = sync_ensure_chrome_debug_ready(port=port)
+    if not ready:
         return {
             "ok": False,
-            "detail": f"เบราว์เซอร์ Chrome Debug Port {port} ยังไม่ได้เปิดใช้งาน กรุณากดปุ่ม 'Launch Profile' ด้านบนก่อน"
+            "detail": f"ไม่สามารถเปิดเบราว์เซอร์ Chrome Debug Port {port} ได้ กรุณาลองใหม่อีกครั้ง"
         }
 
     try:
@@ -4938,12 +5044,17 @@ def open_shopee_affiliate_url(req: dict[str, Any]) -> dict[str, Any]:
             return {"ok": True, "message": f"เปิดหน้าเว็บ {url} บนเบราว์เซอร์ Chrome (Port {port}) สำเร็จ"}
     except Exception as e:
         log(f"[Shopee Affiliate] Selenium navigate error: {e}")
-        return {"ok": False, "detail": f"เกิดข้อผิดพลาดในการนำทางเบราว์เซอร์ 9222: {e}"}
+        return {"ok": False, "detail": f"เกิดข้อผิดพลาดในการนำทางเบราว์เซอร์ {port}: {e}"}
 
     return {"ok": False, "detail": f"เบราว์เซอร์ Chrome Debug Port {port} ยังไม่ได้เปิดใช้งาน"}
 
 @app.post("/api/shopee-affiliate/search-single")
 def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
+    global _force_stop_requested
+    _force_stop_requested = False
+    from app.shopee_affiliate import reset_shopee_stop
+    reset_shopee_stop()
+
     raw_keyword = (req.get("keyword") or req.get("file_name") or req.get("subfolder_name") or "").strip()
     target_file = (req.get("file_path") or "").strip()
     folder_path = (req.get("folder_path") or "").strip()
@@ -4955,10 +5066,14 @@ def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="ไม่พบคีย์เวิร์ดสำหรับค้นหา")
 
     port = 9222
+    ready = sync_ensure_chrome_debug_ready(port=port)
+    if not ready:
+        raise HTTPException(status_code=400, detail="เบราว์เซอร์ Chrome 9222 ไม่พร้อมใช้งาน")
+
     try:
         bot = browser_manager.get(target_port=port)
         if not bot or not bot.driver:
-            raise HTTPException(status_code=400, detail="เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ (กรุณากด Launch Profile ก่อน)")
+            raise HTTPException(status_code=400, detail="เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ")
         driver = bot.driver
         _activate_chrome(driver, port=port)
 
