@@ -187,93 +187,218 @@ def step_3_sort_best_sellers(driver) -> bool:
     log("[Shopee Step 3] ⚠️ ไม่พบปุ่ม 'ขายดี' (อาจอยู่ในหน้านี้แล้วหรือโหลดไม่ทัน)")
     return False
 
-def step_4_highlight_and_reorder_top3(driver) -> dict[str, Any]:
-    """Step 4: Highlight top 3 commission items among first 10 cards and move to slots 1-3."""
-    log("[Shopee Step 4] 🏆 ไฮไลต์และจัดลำดับสินค้าค่าคอมสูงสุด 3 อันดับแรก...")
-    res = driver.execute_script("""
-        document.querySelectorAll('.top-commission-badge').forEach(b => b.remove());
-        document.querySelectorAll('.product-offer-item').forEach(card => {
-            card.style.border = '';
-            card.style.boxShadow = '';
-            card.style.transform = '';
-            card.style.zIndex = '';
-            card.style.position = '';
-        });
-        
+def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", folder_path: str = "") -> dict[str, Any]:
+    """Step 4: Select product with highest commission (sales > 10 items, or fallback to lower sales),
+    click 'เอาลิงก์', copy affiliate short link, and save it to the product's .md file and Caption.md."""
+    log("[Shopee Step 4] 🎯 กำลังวิเคราะห์เลือกสินค้าที่ค่าคอมมิชชั่นสูงสุด (เงื่อนไขยอดขาย > 10 ชิ้น)...")
+    
+    # 1. Analyze and pick best card
+    selection = driver.execute_script("""
         const list = document.querySelector('.product-offer-list');
         if (!list) return { success: false, reason: "Container .product-offer-list not found" };
-        
-        const allCards = Array.from(list.querySelectorAll('.product-offer-item'));
-        if (allCards.length === 0) return { success: false, reason: "No product cards found" };
-        
-        const first10 = allCards.slice(0, 10);
-        const parsed = first10.map((card, idx) => {
-            const text = card.innerText || '';
-            const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
-            let commRate = 0;
-            for (const line of lines) {
-                if (line.includes('คอมมิชชัน') || line.includes('คอมมิชชั่น') || line.includes('%')) {
-                    const match = line.match(/([0-9]+(?:\\.[0-9]+)?)\\s*%/);
-                    if (match) {
-                        const val = parseFloat(match[1]);
-                        if (line.includes('คอมมิชชัน') || line.includes('คอมมิชชั่น') || val > commRate) {
-                            commRate = val;
-                        }
-                    }
+        const cards = Array.from(list.querySelectorAll('.product-offer-item'));
+        if (cards.length === 0) return { success: false, reason: "No product cards found" };
+
+        function parseSales(salesText) {
+            if (!salesText) return 0;
+            const m = salesText.match(/ขายได้\\s*([0-9]+(?:\\.[0-9]+)?)\\s*(พัน|หมื่น|แสน|ล้าน)?/);
+            if (!m) {
+                const m2 = salesText.match(/([0-9]+(?:\\.[0-9]+)?)/);
+                return m2 ? parseFloat(m2[1]) : 0;
+            }
+            let val = parseFloat(m[1]);
+            const unit = m[2];
+            if (unit === "พัน") val *= 1000;
+            else if (unit === "หมื่น") val *= 10000;
+            else if (unit === "แสน") val *= 100000;
+            else if (unit === "ล้าน") val *= 1000000;
+            return val;
+        }
+
+        function parseComm(lines) {
+            let commLine = lines.find(l => l.includes('คอมมิชชัน') || l.includes('คอมมิชชั่น'));
+            if (commLine) {
+                const m = commLine.match(/([0-9]+(?:\\.[0-9]+)?)\\s*%/);
+                if (m) return { rate: parseFloat(m[1]), text: commLine };
+            }
+            for (const l of lines) {
+                if (l.includes('%') && !l.includes('ลด')) {
+                    const m = l.match(/([0-9]+(?:\\.[0-9]+)?)\\s*%/);
+                    if (m) return { rate: parseFloat(m[1]), text: l };
                 }
             }
-            return { card, commRate, idx };
+            return { rate: 0, text: "" };
+        }
+
+        const parsed = cards.map((card, idx) => {
+            const text = card.innerText || '';
+            const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
+            const salesLine = lines.find(l => l.includes('ขายได้')) || '';
+            const commInfo = parseComm(lines);
+            const titleLine = lines.find(l => l.length > 15 && !l.includes('฿') && !l.includes('คอมมิชชัน') && !l.includes('ขายได้') && !l.includes('%')) || lines[0] || '';
+            const salesCount = parseSales(salesLine);
+
+            return {
+                idx: idx,
+                card: card,
+                title: titleLine,
+                salesText: salesLine,
+                salesCount: salesCount,
+                commText: commInfo.text,
+                commRate: commInfo.rate,
+                meetsSalesCondition: salesCount > 10
+            };
         });
-        
-        parsed.sort((a, b) => b.commRate - a.commRate);
-        const top3 = parsed.slice(0, 3);
-        
-        const colors = [
-            { border: '#f59e0b', shadow: 'rgba(245, 158, 11, 0.5)', badge: 'linear-gradient(135deg, #f59e0b, #ef4444)' },
-            { border: '#ec4899', shadow: 'rgba(236, 72, 153, 0.5)', badge: 'linear-gradient(135deg, #ec4899, #8b5cf6)' },
-            { border: '#3b82f6', shadow: 'rgba(59, 130, 246, 0.5)', badge: 'linear-gradient(135deg, #3b82f6, #06b6d4)' }
-        ];
-        
-        top3.forEach((item, rIdx) => {
-            const rank = rIdx + 1;
-            const card = item.card;
-            const c = colors[rIdx] || colors[0];
-            
-            card.style.position = 'relative';
-            card.style.border = `2.5px solid ${c.border}`;
-            card.style.boxShadow = `0 8px 24px ${c.shadow}`;
-            card.style.borderRadius = '14px';
-            card.style.zIndex = '10';
-            
-            const badge = document.createElement('div');
-            badge.className = 'top-commission-badge';
-            badge.style.position = 'absolute';
-            badge.style.top = '-12px';
-            badge.style.left = '12px';
-            badge.style.background = c.badge;
-            badge.style.color = '#fff';
-            badge.style.fontSize = '12px';
-            badge.style.fontWeight = 'bold';
-            badge.style.padding = '4px 12px';
-            badge.style.borderRadius = '20px';
-            badge.style.zIndex = '20';
-            badge.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-            badge.innerText = `🔥 ค่าคอมอันดับ ${rank} (${item.commRate}%)`;
-            card.appendChild(badge);
-        });
-        
-        if (top3.length >= 3) list.prepend(top3[2].card);
-        if (top3.length >= 2) list.prepend(top3[1].card);
-        if (top3.length >= 1) list.prepend(top3[0].card);
-        
-        list.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return { success: true, count: top3.length, topRates: top3.map(t => t.commRate) };
+
+        const qualified = parsed.filter(p => p.meetsSalesCondition);
+        let chosen = null;
+        if (qualified.length > 0) {
+            qualified.sort((a, b) => b.commRate - a.commRate);
+            chosen = { ...qualified[0], pool: "qualified (sales > 10)" };
+        } else {
+            parsed.sort((a, b) => b.commRate - a.commRate);
+            chosen = { ...parsed[0], pool: "fallback (highest comm available)" };
+        }
+
+        // Highlight chosen card visually on screen
+        document.querySelectorAll('.top-commission-badge').forEach(b => b.remove());
+        const card = chosen.card;
+        card.style.position = 'relative';
+        card.style.border = '3px solid #10b981';
+        card.style.boxShadow = '0 8px 24px rgba(16, 185, 129, 0.5)';
+        card.style.borderRadius = '14px';
+        card.style.zIndex = '10';
+
+        const badge = document.createElement('div');
+        badge.className = 'top-commission-badge';
+        badge.style.position = 'absolute';
+        badge.style.top = '-12px';
+        badge.style.left = '12px';
+        badge.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        badge.style.color = '#fff';
+        badge.style.fontSize = '12px';
+        badge.style.fontWeight = 'bold';
+        badge.style.padding = '4px 12px';
+        badge.style.borderRadius = '20px';
+        badge.style.zIndex = '20';
+        badge.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+        badge.innerText = `⭐ เลือกรายการนี้ (คอม ${chosen.commRate}% | ยอดขาย ${chosen.salesText})`;
+        card.appendChild(badge);
+
+        // Click "เอา ลิงก์" button on this chosen card
+        const btn = card.querySelector('button.AffiliateItemCard__getlinkBtn, button');
+        let clicked = false;
+        if (btn) {
+            btn.click();
+            clicked = true;
+        } else {
+            const btns = Array.from(card.querySelectorAll('button, a, span, div')).filter(el => 
+                (el.innerText || '').replace(/\\s+/g, '') === 'เอาลิงก์'
+            );
+            if (btns.length > 0) {
+                btns[0].click();
+                clicked = true;
+            }
+        }
+
+        return {
+            success: true,
+            clicked: clicked,
+            chosen: {
+                idx: chosen.idx,
+                title: chosen.title,
+                salesText: chosen.salesText,
+                salesCount: chosen.salesCount,
+                commRate: chosen.commRate,
+                pool: chosen.pool
+            }
+        };
     """)
-    if res and res.get("success"):
-        log(f"[Shopee Step 4] ✅ จัดเรียงและไฮไลต์สำเร็จ (Top Rates: {res.get('topRates')}%)")
-    else:
-        log(f"[Shopee Step 4] ⚠️ ไม่สามารถไฮไลต์การ์ดสินค้าได้: {res}")
-    return res or {}
+
+    if not selection or not selection.get("success"):
+        log(f"[Shopee Step 4] ❌ ไม่สามารถเลือกรายการสินค้าได้: {selection}")
+        return {"success": False, "error": "selection_failed"}
+
+    chosen_info = selection.get("chosen", {})
+    log(f"[Shopee Step 4] ⭐ เลือกสินค้า: '{chosen_info.get('title')}' | ค่าคอม: {chosen_info.get('commRate')}% | {chosen_info.get('salesText')} ({chosen_info.get('pool')})")
+
+    # 2. Wait for modal & extract affiliate short link
+    time.sleep(1.5)
+    affiliate_link = ""
+    for _ in range(12):
+        affiliate_link = driver.execute_script("""
+            const els = Array.from(document.querySelectorAll('.ant-modal textarea, .ant-modal input, textarea, input'));
+            for (const el of els) {
+                if (el.value && (el.value.includes('https://s.shopee.co.th') || el.value.includes('shopee.co.th'))) {
+                    return el.value.trim();
+                }
+            }
+            return "";
+        """)
+        if affiliate_link:
+            break
+        time.sleep(0.4)
+
+    # Click copy button inside modal
+    driver.execute_script("""
+        const copyBtn = document.querySelector('.ant-modal button.ant-btn-primary');
+        if (copyBtn && !copyBtn.disabled) copyBtn.click();
+    """)
+    time.sleep(0.3)
+
+    # Dismiss any browser alert (e.g. Copy to clipboard)
+    try:
+        alert = driver.switch_to.alert
+        alert.accept()
+    except Exception:
+        pass
+
+    # Close modal
+    driver.execute_script("document.querySelector('.ant-modal-close, .ant-modal-close-x')?.click();")
+
+    if not affiliate_link:
+        log("[Shopee Step 4] ⚠️ ไม่สามารถดึงลิงก์จาก Modal ได้")
+        return {"success": False, "error": "link_not_found", "chosen": chosen_info}
+
+    log(f"[Shopee Step 4] 🔗 คัดลอกลิงก์สำเร็จ: {affiliate_link}")
+
+    # 3. Save affiliate link to target .md file
+    saved_files = []
+    if target_file_path and os.path.exists(os.path.dirname(target_file_path)):
+        try:
+            with open(target_file_path, "w", encoding="utf-8") as f:
+                f.write(affiliate_link + "\n")
+            log(f"[Shopee Step 4] 💾 บันทึกลิงก์ลงไฟล์เป้าหมายเรียบร้อย: {os.path.basename(target_file_path)}")
+            saved_files.append(target_file_path)
+        except Exception as e:
+            log(f"[Shopee Step 4] ⚠️ บันทึกลง {target_file_path} ไม่สำเร็จ: {e}")
+
+    # Also update Caption.md if it exists in the folder
+    target_dir = folder_path or (os.path.dirname(target_file_path) if target_file_path else "")
+    if target_dir and os.path.exists(target_dir):
+        caption_path = os.path.join(target_dir, "Caption.md")
+        if os.path.exists(caption_path):
+            try:
+                with open(caption_path, "r", encoding="utf-8") as cf:
+                    c_content = cf.read()
+                # Replace placeholder or append
+                if "waiting_for_real_affiliate_link" in c_content:
+                    c_content = c_content.replace("waiting_for_real_affiliate_link", affiliate_link)
+                elif affiliate_link not in c_content:
+                    c_content = f"{affiliate_link}\n\n{c_content}"
+                with open(caption_path, "w", encoding="utf-8") as cf:
+                    cf.write(c_content)
+                log("[Shopee Step 4] 💾 อัปเดตลิงก์ใน Caption.md เรียบร้อยแล้ว")
+                saved_files.append(caption_path)
+            except Exception as e:
+                log(f"[Shopee Step 4] ⚠️ อัปเดต Caption.md ไม่สำเร็จ: {e}")
+
+    return {
+        "success": True,
+        "chosen": chosen_info,
+        "affiliate_link": affiliate_link,
+        "saved_files": saved_files
+    }
 
 def post_single_shopee_item(
     driver,
@@ -283,9 +408,11 @@ def post_single_shopee_item(
     total_items: int = 1,
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> bool:
-    """Process a single Shopee Affiliate item: search keyword without number, sort, and highlight top 3."""
+    """Process a single Shopee Affiliate item: search keyword without number, sort, select best item, and save affiliate link."""
     raw_keyword = item.get("keyword") or item.get("file_name") or item.get("subfolder_name") or ""
     keyword = clean_search_keyword(raw_keyword)
+    target_file = item.get("file_path", "")
+    folder_path = item.get("folder_path", "")
     name = f"#{item.get('number', item_idx)} {keyword}"
 
     msg = f"[{item_idx}/{total_items}] กำลังค้นหาสินค้า Shopee: {name}"
@@ -313,10 +440,12 @@ def post_single_shopee_item(
     if is_shopee_stopped():
         return False
 
-    # Step 4: Highlight top 3 commission and move to slots 1-3
-    step_4_highlight_and_reorder_top3(driver)
+    # Step 4: Select best product (highest commission with sales > 10), get link and save to .md
+    res = step_4_select_best_product_and_get_link(driver, target_file_path=target_file, folder_path=folder_path)
+    if res.get("affiliate_link"):
+        item["product_link"] = res["affiliate_link"]
 
-    log(f"[Shopee Affiliate] ✅ สำเร็จการค้นหาและจัดลำดับรายการที่ {item_idx}/{total_items}: {name}")
+    log(f"[Shopee Affiliate] ✅ สำเร็จการค้นหาและดึงลิงก์รายการที่ {item_idx}/{total_items}: {name} (ลิงก์: {res.get('affiliate_link', '-')})")
     return True
 
 def run_shopee_affiliate_batch(

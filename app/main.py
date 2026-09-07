@@ -4934,7 +4934,10 @@ def open_shopee_affiliate_url(req: dict[str, Any]) -> dict[str, Any]:
 @app.post("/api/shopee-affiliate/search-single")
 def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
     raw_keyword = (req.get("keyword") or req.get("file_name") or req.get("subfolder_name") or "").strip()
-    from app.shopee_affiliate import clean_search_keyword, step_1_open_shopee_page, step_2_search_product, step_3_sort_best_sellers, step_4_highlight_and_reorder_top3
+    target_file = (req.get("file_path") or "").strip()
+    folder_path = (req.get("folder_path") or "").strip()
+
+    from app.shopee_affiliate import clean_search_keyword, step_1_open_shopee_page, step_2_search_product, step_3_sort_best_sellers, step_4_select_best_product_and_get_link
     
     keyword = clean_search_keyword(raw_keyword)
     if not keyword:
@@ -4951,13 +4954,18 @@ def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
         step_1_open_shopee_page(driver)
         step_2_search_product(driver, keyword)
         step_3_sort_best_sellers(driver)
-        reorder_res = step_4_highlight_and_reorder_top3(driver)
+        link_res = step_4_select_best_product_and_get_link(driver, target_file_path=target_file, folder_path=folder_path)
+
+        aff_link = link_res.get("affiliate_link", "")
+        chosen = link_res.get("chosen", {})
 
         return {
             "ok": True,
             "keyword": keyword,
-            "reorder_result": reorder_res,
-            "message": f"ค้นหา '{keyword}' จัดเรียงขายดี และไฮไลต์ 3 อันดับแรกเรียบร้อยแล้ว"
+            "affiliate_link": aff_link,
+            "chosen": chosen,
+            "saved_files": link_res.get("saved_files", []),
+            "message": f"ค้นหา '{keyword}' เลือกสินค้าค่าคอม {chosen.get('commRate', '-')}% และบันทึกลิงก์ {aff_link} สำเร็จแล้ว" if aff_link else f"ค้นหา '{keyword}' สำเร็จแต่ไม่พบลำดับลิงก์"
         }
     except HTTPException:
         raise
