@@ -9,6 +9,8 @@ import json
 import httpx
 import subprocess
 import socket
+import sys
+import os
 from urllib.parse import quote_plus
 import websockets
 import asyncio
