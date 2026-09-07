@@ -719,6 +719,7 @@ def run_shopee_affiliate_batch(
 
     url = target_url.strip() if target_url else "https://affiliate.shopee.co.th"
     errors = []
+    skipped_items = []
     success_count = 0
     reset_shopee_stop()
 
@@ -741,7 +742,8 @@ def run_shopee_affiliate_batch(
                     "current": idx,
                     "total": total,
                     "percent": int((idx / max(total, 1)) * 100),
-                    "message": f"⏳ หน่วงเวลาสุ่ม {rand_delay}s ก่อนเริ่มรายการ {idx + 1}/{total}..."
+                    "message": f"⏳ หน่วงเวลาสุ่ม {rand_delay}s ก่อนเริ่มรายการ {idx + 1}/{total}...",
+                    "skipped_items": skipped_items
                 })
 
             wait_start = time.time()
@@ -763,7 +765,14 @@ def run_shopee_affiliate_batch(
                 total_items=total,
                 progress_callback=progress_callback
             )
-            if ok:
+            if item.get("skipped"):
+                folder_desc = item.get("subfolder_name") or item.get("keyword") or f"Item #{idx+1}"
+                skipped_items.append({
+                    "folder": folder_desc,
+                    "keyword": item.get("keyword", ""),
+                    "reason": item.get("skip_reason", "no_data")
+                })
+            elif ok:
                 success_count += 1
         except Exception as e:
             if is_shopee_stopped() or "Force Stop" in str(e):
@@ -781,12 +790,14 @@ def run_shopee_affiliate_batch(
             "percent": 100,
             "status": "completed" if not errors else "completed_with_errors",
             "message": f"✅ ดำเนินการสำเร็จ {success_count}/{total} รายการ" if not errors else f"เสร็จสิ้น {success_count}/{total} (พบข้อผิดพลาด {len(errors)} รายการ)",
-            "errors": errors
+            "errors": errors,
+            "skipped_items": skipped_items
         })
 
     return {
         "ok": len(errors) == 0,
         "total": total,
         "success_count": success_count,
-        "errors": errors
+        "errors": errors,
+        "skipped_items": skipped_items
     }

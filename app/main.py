@@ -4688,6 +4688,7 @@ def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", 
         global_shopee_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
         global_shopee_progress["percent"] = 100
         global_shopee_progress["current"] = len(items)
+        global_shopee_progress["skipped_items"] = res.get("skipped_items", [])
         global_shopee_progress["message"] = f"✅ ดำเนินการสำเร็จครบทั้งหมด {res['success_count']} รายการ" if res["ok"] else f"เสร็จสิ้น {res['success_count']}/{len(items)} รายการ"
 
     except Exception as e:
@@ -4708,7 +4709,8 @@ def run_shopee_affiliate(req: ShopeeRunRequest) -> dict[str, Any]:
         "current": 0,
         "percent": 0,
         "message": f"เตรียมรัน Shopee Affiliate {len(items)} รายการ...",
-        "errors": []
+        "errors": [],
+        "skipped_items": []
     }
     
     log(f"[Shopee Affiliate] Received batch run request for {len(items)} items (Delay: {req.delay_min}s - {req.delay_max}s)")

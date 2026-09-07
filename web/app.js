@@ -7329,6 +7329,40 @@ async function runShopeeAffiliate(btn) {
           shopeePollingInterval = null;
           if (btn) btn.disabled = false;
           logShopeeConsole(`🏁 กระบวนการเสร็จสิ้น: ${prog.message}`, prog.status === 'completed' ? 'success' : 'error');
+
+          // Check if any items could not find products
+          const skipped = prog.skipped_items || [];
+          if (skipped.length > 0) {
+            const listHtml = skipped.map(it => `
+              <div style="text-align: left; padding: 8px 12px; margin-bottom: 6px; background: rgba(255,255,255,0.06); border-radius: 8px; border-left: 3px solid #f59e0b;">
+                <div style="font-weight: 600; color: #ffb86c; font-size: 0.95rem;">📁 ${it.folder}</div>
+                <div style="font-size: 0.82rem; color: rgba(255,255,255,0.7); margin-top: 2px;">คำค้น: "${it.keyword || '-'}" (ไม่พบข้อมูลใน Shopee)</div>
+              </div>
+            `).join('');
+
+            if (typeof Swal !== 'undefined') {
+              Swal.fire({
+                icon: 'warning',
+                title: `พบสินค้าไม่ครบ (${skipped.length} รายการ)`,
+                html: `
+                  <div style="color: rgba(255,255,255,0.85); font-size: 0.95rem; margin-bottom: 14px; text-align: left;">
+                    ระบบขึ้นว่า <strong>"ไม่มีข้อมูล"</strong> สำหรับโฟลเดอร์ต่อไปนี้ และได้ทำการข้ามรายการอัตโนมัติ:
+                  </div>
+                  <div style="max-height: 220px; overflow-y: auto; padding-right: 4px;">
+                    ${listHtml}
+                  </div>
+                `,
+                confirmButtonText: 'รับทราบ',
+                customClass: {
+                  popup: 'swal2-shopee-popup',
+                  confirmButton: 'swal2-shopee-confirm-btn'
+                },
+                buttonsStyling: false
+              });
+            } else {
+              alert(`⚠️ ไม่พบข้อมูลสินค้าใน Shopee สำหรับโฟลเดอร์:\n` + skipped.map(s => `- ${s.folder} (คำค้น: ${s.keyword})`).join('\n'));
+            }
+          }
         }
       } catch (err) {
         console.error('Shopee progress poll error:', err);

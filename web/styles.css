@@ -1471,5 +1471,37 @@ button.gear { font-size: 1.2rem; padding: 10px 12px; }
   background: linear-gradient(135deg, #0ea5e9, #818cf8);
 }
 
+/* Custom SweetAlert2 Dark Glass Theme */
+.swal2-shopee-popup {
+  background: rgba(18, 22, 45, 0.95) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+  color: #fff !important;
+}
+
+.swal2-shopee-popup .swal2-title {
+  color: #fff !important;
+  font-size: 1.35rem !important;
+  font-weight: 700 !important;
+}
+
+.swal2-shopee-confirm-btn {
+  background: linear-gradient(135deg, #ff5722, #ff7e67) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  border-radius: 10px !important;
+  padding: 10px 24px !important;
+  font-size: 0.95rem !important;
+  border: none !important;
+  box-shadow: 0 4px 15px rgba(255, 87, 34, 0.4) !important;
+}
+
+.swal2-shopee-confirm-btn:hover {
+  background: linear-gradient(135deg, #f4511e, #ff6b52) !important;
+}
+
+
 
 
