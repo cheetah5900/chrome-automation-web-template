@@ -629,119 +629,37 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
     main_window = driver.current_window_handle
     init_handles = set(driver.window_handles)
 
-    # 1. Click "ดูสินค้า" using native element click so referrer is preserved and opens in new tab
-    clicked_view = False
+    # 1. Click "ดูสินค้า" using CDP trusted mouse click and FINISH IMMEDIATELY
     try:
         view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", view_btn)
-        interruptible_sleep(0.3)
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", view_btn)
+        interruptible_sleep(0.4)
+        rect = driver.execute_script("""
+            const r = arguments[0].getBoundingClientRect();
+            return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+        """, view_btn)
+        if rect:
+            cx, cy = rect['x'], rect['y']
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': cx - 20, 'y': cy - 15})
+            interruptible_sleep(0.08)
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': cx, 'y': cy})
+            interruptible_sleep(0.08)
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': cx, 'y': cy, 'clickCount': 1})
+            interruptible_sleep(0.08)
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': cx, 'y': cy, 'clickCount': 1})
+            log("[Shopee Step 5] ✅ กดปุ่ม 'ดูสินค้า' สำเร็จแล้ว (จบขั้นตอนทันทีตามต้องการ)")
+            return []
+    except Exception as e:
+        log(f"[Shopee Step 5] ⚠️ CDP click ไม่สำเร็จ ({e}) -> สลับใช้ native click")
+
+    try:
+        view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
         view_btn.click()
-        clicked_view = True
-    except Exception:
-        # Fallback to JS click
-        clicked_view = driver.execute_script("""
-            const viewProdBtn = Array.from(document.querySelectorAll('a, button, div[role="button"]')).find(el => 
-                el.classList.contains('view-product') || 
-                (el.innerText || '').trim() === 'ดูสินค้า' || 
-                (el.innerText || '').includes('ดูสินค้า')
-            );
-            if (viewProdBtn) {
-                viewProdBtn.scrollIntoView({block: 'center'});
-                viewProdBtn.click();
-                return true;
-            }
-            return false;
-        """)
+        log("[Shopee Step 5] ✅ กดปุ่ม 'ดูสินค้า' (Native Click) สำเร็จแล้ว (จบขั้นตอนทันทีตามต้องการ)")
+    except Exception as e:
+        log(f"[Shopee Step 5] ⚠️ ไม่สามารถกดปุ่มดูสินค้าได้: {e}")
 
-    opened_new_tab = False
-    new_tab_handle = None
-    if clicked_view:
-        for _ in range(15):
-            check_stop()
-            interruptible_sleep(0.3)
-            current_handles = set(driver.window_handles)
-            new_handles = current_handles - init_handles
-            if new_handles:
-                opened_new_tab = True
-                new_tab_handle = list(new_handles)[0]
-                break
-
-    image_hashes = []
-    if opened_new_tab and new_tab_handle:
-        driver.switch_to.window(new_tab_handle)
-        human_delay(1.8, 3.0)
-        current_product_url = driver.current_url or ""
-        log(f"[Shopee Step 5] 🌐 เปิดแท็บหน้าสินค้าจริงสำเร็จ: {current_product_url}")
-
-        if is_shopee_captcha_url(current_product_url):
-            log(f"[Shopee Step 5] 🛑 ตรวจพบระบบกันบอท Shopee (verify/captcha/traffic) -> หยุดการทำงานทันที!")
-            raise ShopeeCaptchaBlockedException(
-                "ตรวจพบระบบกันบอท Shopee (CAPTCHA / Traffic Verification) ขณะเปิดดูหน้าสินค้าจริง",
-                captcha_url=current_product_url
-            )
-
-        # Micro-scroll down naturally to mimic human reading and trigger lazy-loaded product media
-        try:
-            driver.execute_script("""
-                window.scrollBy({ top: Math.floor(Math.random() * 250 + 200), behavior: 'smooth' });
-            """)
-        except Exception:
-            pass
-        human_delay(1.5, 2.6)
-
-        try:
-            driver.execute_script("""
-                window.scrollBy({ top: -Math.floor(Math.random() * 80 + 50), behavior: 'smooth' });
-            """)
-        except Exception:
-            pass
-        human_delay(0.6, 1.2)
-
-        # 2. Extract all main gallery image hashes from the real product page
-        image_hashes = driver.execute_script(r"""
-            function extractHash(url) {
-                if (!url) return null;
-                const m = url.match(/susercontent\.com\/file\/([a-zA-Z0-9_-]+)/);
-                if (m) {
-                    return m[1].replace(/_tn$/, '').split('@')[0];
-                }
-                return null;
-            }
-
-            // On Shopee desktop, main gallery is inside the left media column
-            const mainImg = Array.from(document.querySelectorAll('img')).find(i => {
-                const r = i.getBoundingClientRect();
-                return r.width >= 300 && r.height >= 300 && r.x < 650 && r.y < 850;
-            });
-            const wrapper = mainImg ? (mainImg.closest('.flex.flex-column') || mainImg.closest('.C21rQm') || mainImg.parentElement.parentElement) : document.body;
-
-            // Select all images in the wrapper, excluding tiny variation icons (width <= 40)
-            const galleryEls = Array.from(wrapper.querySelectorAll('img, picture source')).filter(el => {
-                const r = el.getBoundingClientRect ? el.getBoundingClientRect() : (el.parentElement ? el.parentElement.getBoundingClientRect() : {});
-                return (!r.width || r.width > 40);
-            });
-
-            const hashes = [];
-            galleryEls.forEach(el => {
-                const src = el.src || el.getAttribute('srcset') || el.srcset || '';
-                const h = extractHash(src);
-                if (h && !src.includes('.svg') && !hashes.includes(h)) {
-                    hashes.push(h);
-                }
-            });
-
-            return hashes;
-        """) or []
-
-        # Close product tab and switch back to affiliate main window
-        try:
-            driver.close()
-        except Exception:
-            pass
-        driver.switch_to.window(main_window)
-        human_delay(1.0, 2.0)
-    else:
-        log("[Shopee Step 5] ⚠️ ไม่สามารถเปิดแท็บหน้าสินค้าจริงได้")
+    return []
 
     # If no hashes extracted from product page, use fallback_hash
     if not image_hashes and fallback_hash:
