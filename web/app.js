@@ -7282,8 +7282,6 @@ async function runShopeeAffiliate(btn) {
   const delayMin = parseFloat(document.getElementById('cfg_shopee_delay_min')?.value) || 5;
   const delayMax = parseFloat(document.getElementById('cfg_shopee_delay_max')?.value) || 15;
 
-  if (!confirm(`ยืนยันเริ่มรัน Shopee Affiliate ทั้งหมด ${selectedItems.length} รายการ?`)) return;
-
   logShopeeConsole(`🚀 ส่งคำขอเริ่มรัน Shopee Affiliate ${selectedItems.length} รายการ...`, 'system');
   if (btn) btn.disabled = true;
 
