@@ -105,3 +105,8 @@ Before outputting any final code, you MUST think step-by-step internally and str
   - For Prompt-Only / Text-to-Video runs where no storyboard image is attached, extract the prompt text (from `local_prompt_map`, `scene.prompt_content`, or DB scene prompt) and generate a concise 10-15 word filesystem-safe summary (max ~90 characters) via `summarize_prompt_for_filename`. If prompt text is empty, fall back to `scene_{display_order}`.
 - **Sorting Rule**:
   - Zip entries must be sorted numerically by their resolved storyboard numbers (e.g., `01.mp4`, `02.mp4`...) first. Use `(0, int(parsed_digits))` for mapped ones and `(1, display_order)` for unmapped ones in `get_sort_key` to ensure correct ordering.
+
+## Shopee Affiliate Automation & Anti-Bot Window Handles Rule
+- When clicking 'ดูสินค้า' to open a real product page, **DO NOT query or poll `driver.window_handles` in a loop** right after the click.
+- Querying `driver.window_handles` causes ChromeDriver to send DevTools Target inquiries (`Target.getTargets`) across all open targets while the new tab is performing initial TLS/cookie/WAF handshakes. Shopee's anti-bot sensor detects this DevTools instrumentation and immediately redirects the tab to `https://shopee.co.th/verify/traffic/error`.
+- Always fire the click via CDP trusted click (or native fallback) and return immediately without querying handles or switching windows.

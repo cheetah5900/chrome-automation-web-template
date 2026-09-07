@@ -633,14 +633,18 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
     }
 
 def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "") -> list[str]:
-    """Step 6: Click 'ดูสินค้า' to open the real Shopee product page in a new tab via CDP Trusted Click,
-    keep the product tab open for the user to download images with their extension."""
+    """Step 6: Click 'ดูสินค้า' to open the real Shopee product page in a background tab via Cmd + Click (CDP Trusted Click),
+    keeping focus strictly on the current tab without switching."""
     check_stop()
-    log("[Shopee Step 6] 🔍 กำลังค้นหาปุ่ม 'ดูสินค้า' เพื่อเปิดหน้าสินค้าจริง...")
-    
-    init_handles = set(driver.window_handles)
+    log("[Shopee Step 6] 🔍 กำลังค้นหาปุ่ม 'ดูสินค้า' เพื่อเปิดหน้าสินค้าจริง (Cmd + Click ในเบื้องหลัง)...")
 
-    # 1. Click "ดูสินค้า" using CDP trusted mouse click
+    # 1. Click "ดูสินค้า" using CDP trusted mouse click with Meta (Command) modifier
+    # Modifier bits: 4 = Meta (Command on macOS), 2 = Control (Windows/Linux)
+    mod_key = 4 if sys.platform == "darwin" else 2
+    key_name = "Meta" if sys.platform == "darwin" else "Control"
+    key_code = "MetaLeft" if sys.platform == "darwin" else "ControlLeft"
+    virtual_code = 91 if sys.platform == "darwin" else 17
+
     clicked = False
     try:
         view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
@@ -652,41 +656,45 @@ def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "
         """, view_btn)
         if rect:
             cx, cy = rect['x'], rect['y']
-            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': cx - 20, 'y': cy - 15})
-            interruptible_sleep(0.08)
-            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': cx, 'y': cy})
-            interruptible_sleep(0.08)
-            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': cx, 'y': cy, 'clickCount': 1})
-            interruptible_sleep(0.08)
-            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': cx, 'y': cy, 'clickCount': 1})
+            # Dispatch Meta (Command) keyDown
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {
+                'type': 'rawKeyDown',
+                'key': key_name,
+                'code': key_code,
+                'windowsVirtualKeyCode': virtual_code,
+                'modifiers': mod_key
+            })
+            interruptible_sleep(0.04)
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': cx, 'y': cy, 'modifiers': mod_key})
+            interruptible_sleep(0.04)
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': cx, 'y': cy, 'clickCount': 1, 'modifiers': mod_key})
+            interruptible_sleep(0.06)
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': cx, 'y': cy, 'clickCount': 1, 'modifiers': mod_key})
+            interruptible_sleep(0.04)
+            # Release Meta key
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {
+                'type': 'keyUp',
+                'key': key_name,
+                'code': key_code,
+                'windowsVirtualKeyCode': virtual_code,
+                'modifiers': 0
+            })
             clicked = True
-            log("[Shopee Step 6] ✅ กดปุ่ม 'ดูสินค้า' (Trusted Click) สำเร็จแล้ว (ไม่สลับแท็บ)")
+            log("[Shopee Step 6] ✅ กดปุ่ม 'ดูสินค้า' ด้วย Cmd + Click สำเร็จ (เปิดแท็บใหม่ในเบื้องหลังโดยคงอยู่ที่แท็บเดิม)")
     except Exception as e:
-        log(f"[Shopee Step 6] ⚠️ CDP click ไม่สำเร็จ ({e}) -> สลับใช้ native click")
+        log(f"[Shopee Step 6] ⚠️ CDP Cmd+Click ไม่สำเร็จ ({e}) -> สลับใช้ native action chains")
 
     if not clicked:
         try:
+            from selenium.webdriver.common.action_chains import ActionChains
+            from selenium.webdriver.common.keys import Keys
             view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
-            view_btn.click()
+            modifier = Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL
+            ActionChains(driver).key_down(modifier).click(view_btn).key_up(modifier).perform()
             clicked = True
-            log("[Shopee Step 6] ✅ กดปุ่ม 'ดูสินค้า' (Native Click) สำเร็จแล้ว (ไม่สลับแท็บ)")
+            log("[Shopee Step 6] ✅ กดปุ่ม 'ดูสินค้า' ด้วย ActionChains Cmd + Click สำเร็จ")
         except Exception as e:
             log(f"[Shopee Step 6] ⚠️ ไม่สามารถกดปุ่มดูสินค้าได้: {e}")
-
-    # # 2. Confirm new tab opened in background WITHOUT switching to it
-    # new_tab_found = False
-    # for _ in range(10):
-    #     check_stop()
-    #     interruptible_sleep(0.3)
-    #     current_handles = set(driver.window_handles)
-    #     new_handles = current_handles - init_handles
-    #     if new_handles:
-    #         new_tab_found = True
-    #         log(f"[Shopee Step 6] 🌐 ตรวจพบแท็บสินค้าใหม่เปิดขึ้นมาแล้ว ({len(new_handles)} แท็บใหม่) โดยไม่สลับแท็บ")
-    #         break
-    # 
-    # if not new_tab_found:
-    #     log("[Shopee Step 6] ℹ️ กดปุ่ม 'ดูสินค้า' เรียบร้อยแล้ว (ไม่สลับแท็บ)")
 
     return []
 
