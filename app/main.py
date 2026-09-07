@@ -4959,6 +4959,7 @@ def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
         aff_link = link_res.get("affiliate_link", "")
         prod_link = link_res.get("product_link", "")
         chosen = link_res.get("chosen", {})
+        downloaded_images = link_res.get("downloaded_images", [])
 
         return {
             "ok": True,
@@ -4967,7 +4968,8 @@ def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
             "product_link": prod_link,
             "chosen": chosen,
             "saved_files": link_res.get("saved_files", []),
-            "message": f"ค้นหา '{keyword}' เลือกสินค้าค่าคอม {chosen.get('commRate', '-')}% และบันทึก Affiliate Link & Product Link เรียบร้อย" if aff_link else f"ค้นหา '{keyword}' สำเร็จแต่ไม่พบลำดับลิงก์"
+            "downloaded_images": downloaded_images,
+            "message": f"ค้นหา '{keyword}' เลือกสินค้าค่าคอม {chosen.get('commRate', '-')}% บันทึกลิงก์และโหลดรูปหลัก {len(downloaded_images)} รูปเรียบร้อย" if aff_link else f"ค้นหา '{keyword}' สำเร็จแต่ไม่พบลำดับลิงก์"
         }
     except HTTPException:
         raise

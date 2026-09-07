@@ -427,13 +427,148 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
             except Exception as e:
                 log(f"[Shopee Step 4] ⚠️ บันทึก Product Link.md ไม่สำเร็จ: {e}")
 
+    # 4. Open real product page via "ดูสินค้า" and download all main images as .jpg
+    downloaded_images = []
+    if target_dir and os.path.exists(target_dir):
+        downloaded_images = step_5_open_product_and_download_images(driver, target_dir=target_dir)
+        saved_files.extend(downloaded_images)
+
     return {
         "success": True,
         "chosen": chosen_info,
         "affiliate_link": affiliate_link,
         "product_link": product_link,
-        "saved_files": saved_files
+        "saved_files": saved_files,
+        "downloaded_images": downloaded_images
     }
+
+def step_5_open_product_and_download_images(driver, target_dir: str = "") -> list[str]:
+    """Step 5: Click 'ดูสินค้า' to open the real Shopee product page, and download all main product images as .jpg."""
+    log("[Shopee Step 5] 🔍 กำลังค้นหาปุ่ม 'ดูสินค้า' เพื่อเปิดหน้าสินค้าจริง...")
+    
+    # 1. Click "ดูสินค้า" on the affiliate product page
+    nav_res = driver.execute_script("""
+        const viewProdBtn = Array.from(document.querySelectorAll('a, button, div[role="button"]')).find(el => 
+            el.classList.contains('view-product') || 
+            (el.innerText || '').trim() === 'ดูสินค้า' || 
+            (el.innerText || '').includes('ดูสินค้า')
+        );
+        if (viewProdBtn) {
+            const href = viewProdBtn.href || viewProdBtn.getAttribute('href');
+            viewProdBtn.removeAttribute('target');
+            viewProdBtn.click();
+            return { success: true, href: href };
+        }
+        return { success: false };
+    """)
+    
+    time.sleep(2.0)
+    real_url = driver.current_url or ""
+    # If not navigated yet and href is available, navigate directly
+    if nav_res and nav_res.get("href") and "shopee.co.th/product/" not in real_url:
+        target_href = nav_res["href"]
+        log(f"[Shopee Step 5] 🌐 กำลังเปิดหน้าสินค้าจริง: {target_href}")
+        driver.get(target_href)
+        time.sleep(3.0)
+        real_url = driver.current_url or ""
+    
+    log(f"[Shopee Step 5] 🛒 อยู่ที่หน้าสินค้าจริง: {real_url}")
+    time.sleep(2.0)
+    
+    # 2. Extract all main gallery image hashes from the real product page
+    image_hashes = driver.execute_script(r"""
+        function extractHash(url) {
+            if (!url) return null;
+            const m = url.match(/susercontent\.com\/file\/([a-zA-Z0-9_-]+)/);
+            if (m) {
+                return m[1].replace(/_tn$/, '').split('@')[0];
+            }
+            return null;
+        }
+
+        // On Shopee desktop, main gallery is inside the left media column
+        const mainImg = Array.from(document.querySelectorAll('img')).find(i => {
+            const r = i.getBoundingClientRect();
+            return r.width >= 300 && r.height >= 300 && r.x < 650 && r.y < 850;
+        });
+        const wrapper = mainImg ? (mainImg.closest('.flex.flex-column') || mainImg.closest('.C21rQm') || mainImg.parentElement.parentElement) : document.body;
+
+        // Select all images in the wrapper, excluding tiny variation icons (width <= 40)
+        const galleryEls = Array.from(wrapper.querySelectorAll('img, picture source')).filter(el => {
+            const r = el.getBoundingClientRect ? el.getBoundingClientRect() : (el.parentElement ? el.parentElement.getBoundingClientRect() : {});
+            return (!r.width || r.width > 40);
+        });
+
+        const hashes = [];
+        galleryEls.forEach(el => {
+            const src = el.src || el.getAttribute('srcset') || el.srcset || '';
+            const h = extractHash(src);
+            if (h && !src.includes('.svg') && !hashes.includes(h)) {
+                hashes.push(h);
+            }
+        });
+
+        return hashes;
+    """) or []
+
+    log(f"[Shopee Step 5] 📸 พบรูปภาพหลักทั้งหมด {len(image_hashes)} รูป")
+    if not image_hashes:
+        log("[Shopee Step 5] ⚠️ ไม่พบ URL รูปภาพหลักในหน้าสินค้า")
+        return []
+
+    if not target_dir or not os.path.exists(target_dir):
+        log(f"[Shopee Step 5] ⚠️ โฟลเดอร์เป้าหมายไม่ถูกต้อง: {target_dir}")
+        return []
+
+    # 3. Create 'main_images' directory and save .jpg images
+    main_images_dir = os.path.join(target_dir, "main_images")
+    os.makedirs(main_images_dir, exist_ok=True)
+
+    downloaded_files = []
+    import urllib.request
+    import io
+    from PIL import Image
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    for idx, h in enumerate(image_hashes, 1):
+        img_url = f"https://down-th.img.susercontent.com/file/{h}"
+        dest_filename = f"{idx}.jpg"
+        dest_path = os.path.join(main_images_dir, dest_filename)
+
+        try:
+            req = urllib.request.Request(img_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = resp.read()
+
+            with Image.open(io.BytesIO(data)) as pil_img:
+                if pil_img.mode in ("RGBA", "P"):
+                    pil_img = pil_img.convert("RGB")
+                pil_img.save(dest_path, "JPEG", quality=95)
+
+            log(f"[Shopee Step 5] 💾 ดาวน์โหลดรูปหลัก #{idx}: {dest_filename} สำเร็จ")
+            downloaded_files.append(dest_path)
+
+            # Also save first image as product.jpg in target_dir root
+            if idx == 1:
+                product_jpg_path = os.path.join(target_dir, "product.jpg")
+                try:
+                    with Image.open(io.BytesIO(data)) as pil_img:
+                        if pil_img.mode in ("RGBA", "P"):
+                            pil_img = pil_img.convert("RGB")
+                        pil_img.save(product_jpg_path, "JPEG", quality=95)
+                    downloaded_files.append(product_jpg_path)
+                    log(f"[Shopee Step 5] 💾 บันทึก product.jpg ในโฟลเดอร์หลักเรียบร้อย")
+                except Exception as ep:
+                    log(f"[Shopee Step 5] ⚠️ บันทึก product.jpg ไม่สำเร็จ: {ep}")
+
+        except Exception as e:
+            log(f"[Shopee Step 5] ⚠️ ดาวน์โหลดรูป #{idx} ({img_url}) ล้มเหลว: {e}")
+
+    log(f"[Shopee Step 5] ✅ ดาวน์โหลดและบันทึกรูปหลักทั้งหมด {len(downloaded_files)} ไฟล์เรียบร้อยแล้ว")
+    return downloaded_files
 
 def post_single_shopee_item(
     driver,
@@ -481,8 +616,10 @@ def post_single_shopee_item(
         item["affiliate_link"] = res["affiliate_link"]
     if res.get("product_link"):
         item["product_link"] = res["product_link"]
+    if res.get("downloaded_images"):
+        item["downloaded_images"] = res["downloaded_images"]
 
-    log(f"[Shopee Affiliate] ✅ สำเร็จการค้นหาและดึงลิงก์รายการที่ {item_idx}/{total_items}: {name} (Affiliate: {res.get('affiliate_link', '-')}, Product: {res.get('product_link', '-')})")
+    log(f"[Shopee Affiliate] ✅ สำเร็จการค้นหาและดึงลิงก์รายการที่ {item_idx}/{total_items}: {name} (Affiliate: {res.get('affiliate_link', '-')}, Product: {res.get('product_link', '-')}, รูปหลัก: {len(res.get('downloaded_images', []))} รูป)")
     return True
 
 def run_shopee_affiliate_batch(
