@@ -362,36 +362,16 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
 
     log(f"[Shopee Step 4] 🔗 คัดลอกลิงก์สำเร็จ: {affiliate_link}")
 
-    # 3. Save affiliate link to target .md file
+    # 3. Save affiliate link to target .md file only
     saved_files = []
     if target_file_path and os.path.exists(os.path.dirname(target_file_path)):
         try:
             with open(target_file_path, "w", encoding="utf-8") as f:
                 f.write(affiliate_link + "\n")
-            log(f"[Shopee Step 4] 💾 บันทึกลิงก์ลงไฟล์เป้าหมายเรียบร้อย: {os.path.basename(target_file_path)}")
+            log(f"[Shopee Step 4] 💾 บันทึกลิงก์ลงไฟล์สินค้าเรียบร้อย: {os.path.basename(target_file_path)}")
             saved_files.append(target_file_path)
         except Exception as e:
             log(f"[Shopee Step 4] ⚠️ บันทึกลง {target_file_path} ไม่สำเร็จ: {e}")
-
-    # Also update Caption.md if it exists in the folder
-    target_dir = folder_path or (os.path.dirname(target_file_path) if target_file_path else "")
-    if target_dir and os.path.exists(target_dir):
-        caption_path = os.path.join(target_dir, "Caption.md")
-        if os.path.exists(caption_path):
-            try:
-                with open(caption_path, "r", encoding="utf-8") as cf:
-                    c_content = cf.read()
-                # Replace placeholder or append
-                if "waiting_for_real_affiliate_link" in c_content:
-                    c_content = c_content.replace("waiting_for_real_affiliate_link", affiliate_link)
-                elif affiliate_link not in c_content:
-                    c_content = f"{affiliate_link}\n\n{c_content}"
-                with open(caption_path, "w", encoding="utf-8") as cf:
-                    cf.write(c_content)
-                log("[Shopee Step 4] 💾 อัปเดตลิงก์ใน Caption.md เรียบร้อยแล้ว")
-                saved_files.append(caption_path)
-            except Exception as e:
-                log(f"[Shopee Step 4] ⚠️ อัปเดต Caption.md ไม่สำเร็จ: {e}")
 
     return {
         "success": True,
