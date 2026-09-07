@@ -165,8 +165,31 @@ def step_2_search_product(driver, keyword: str) -> bool:
     log(f"[Shopee Step 2] ✅ ค้นหาคำว่า '{clean_kw}' เรียบร้อยแล้ว")
     return True
 
+def check_shopee_no_data(driver) -> bool:
+    """Check if the search result page shows 'ไม่มีข้อมูล' or has zero product cards."""
+    try:
+        res = driver.execute_script("""
+            const hasEmptyEl = !!document.querySelector('.empty, .ant-empty, [class*="empty"], [class*="nodata"]');
+            const hasEmptyText = document.body && document.body.innerText ? document.body.innerText.includes('ไม่มีข้อมูล') : false;
+            const cards = document.querySelectorAll('.product-offer-item, .AffiliateItemCard');
+            return {
+                noData: (hasEmptyEl || hasEmptyText) && cards.length === 0,
+                cardsCount: cards.length
+            };
+        """)
+        if res and res.get("noData"):
+            return True
+    except Exception:
+        pass
+    return False
+
 def step_3_sort_best_sellers(driver) -> bool:
     """Step 3: Click 'ขายดี' (Best Seller) tab."""
+    # Check if page has no data first
+    if check_shopee_no_data(driver):
+        log("[Shopee Step 3] ⚠️ ตรวจพบ 'ไม่มีข้อมูล' บนหน้าเว็บ ข้ามขั้นตอนการจัดเรียง")
+        return False
+
     log("[Shopee Step 3] 📈 กำลังเลือกจัดเรียงตาม 'ขายดี'...")
     res = driver.execute_script("""
         const spans = Array.from(document.querySelectorAll('span, div, button, a'));
@@ -192,13 +215,23 @@ def step_3_sort_best_sellers(driver) -> bool:
 def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", folder_path: str = "") -> dict[str, Any]:
     """Step 4: Select product with highest commission (sales > 10 items, or fallback to lower sales),
     click 'เอาลิงก์', copy affiliate short link, and save it to the product's .md file and Caption.md."""
+    # Check if page has no data first
+    if check_shopee_no_data(driver):
+        log("[Shopee Step 4] ⚠️ ตรวจพบ 'ไม่มีข้อมูล' (ไม่พบสินค้าที่ค้นหา) -> ข้ามรายการนี้ทันที")
+        return {"success": False, "skipped": True, "reason": "no_data"}
+
     log("[Shopee Step 4] 🎯 กำลังวิเคราะห์เลือกสินค้าที่ค่าคอมมิชชั่นสูงสุด (เงื่อนไขยอดขาย > 10 ชิ้น)...")
     
     # 1. Analyze and pick best card
     selection = driver.execute_script("""
+        const hasEmptyEl = !!document.querySelector('.empty, .ant-empty, [class*="empty"], [class*="nodata"]');
+        const hasEmptyText = document.body && document.body.innerText ? document.body.innerText.includes('ไม่มีข้อมูล') : false;
         const list = document.querySelector('.product-offer-list');
+        const cards = list ? Array.from(list.querySelectorAll('.product-offer-item')) : [];
+        if ((hasEmptyEl || hasEmptyText) && cards.length === 0) {
+            return { success: false, noData: true, reason: "No data found" };
+        }
         if (!list) return { success: false, reason: "Container .product-offer-list not found" };
-        const cards = Array.from(list.querySelectorAll('.product-offer-item'));
         if (cards.length === 0) return { success: false, reason: "No product cards found" };
 
         function parseSales(salesText) {
@@ -427,10 +460,19 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
             except Exception as e:
                 log(f"[Shopee Step 4] ⚠️ บันทึก Product Link.md ไม่สำเร็จ: {e}")
 
+    # 3.5 Extract fallback image hash from current affiliate page before opening product page
+    fallback_image_hash = driver.execute_script(r"""
+        const img = document.querySelector('img.offer-img, img[src*="susercontent"]');
+        if (!img) return '';
+        const src = img.src || '';
+        const m = src.match(/susercontent\.com\/(?:file\/)?([a-zA-Z0-9_-]+)/);
+        return m ? m[1].replace(/\.[^.]+$/, '').replace(/_tn$/, '').split('@')[0] : '';
+    """) or ""
+
     # 4. Open real product page via "ดูสินค้า" and download all main images as .jpg
     downloaded_images = []
     if target_dir and os.path.exists(target_dir):
-        downloaded_images = step_5_open_product_and_download_images(driver, target_dir=target_dir)
+        downloaded_images = step_5_open_product_and_download_images(driver, target_dir=target_dir, fallback_hash=fallback_image_hash)
         saved_files.extend(downloaded_images)
 
     return {
@@ -442,78 +484,113 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         "downloaded_images": downloaded_images
     }
 
-def step_5_open_product_and_download_images(driver, target_dir: str = "") -> list[str]:
-    """Step 5: Click 'ดูสินค้า' to open the real Shopee product page, and download all main product images as .jpg."""
+def step_5_open_product_and_download_images(driver, target_dir: str = "", fallback_hash: str = "") -> list[str]:
+    """Step 5: Click 'ดูสินค้า' to open the real Shopee product page in a new tab, download all main product images as .jpg,
+    and fallback to affiliate image if verify/traffic error occurs."""
     log("[Shopee Step 5] 🔍 กำลังค้นหาปุ่ม 'ดูสินค้า' เพื่อเปิดหน้าสินค้าจริง...")
     
-    # 1. Click "ดูสินค้า" on the affiliate product page
-    nav_res = driver.execute_script("""
-        const viewProdBtn = Array.from(document.querySelectorAll('a, button, div[role="button"]')).find(el => 
-            el.classList.contains('view-product') || 
-            (el.innerText || '').trim() === 'ดูสินค้า' || 
-            (el.innerText || '').includes('ดูสินค้า')
-        );
-        if (viewProdBtn) {
-            const href = viewProdBtn.href || viewProdBtn.getAttribute('href');
-            viewProdBtn.removeAttribute('target');
-            viewProdBtn.click();
-            return { success: true, href: href };
-        }
-        return { success: false };
-    """)
-    
-    time.sleep(2.0)
-    real_url = driver.current_url or ""
-    # If not navigated yet and href is available, navigate directly
-    if nav_res and nav_res.get("href") and "shopee.co.th/product/" not in real_url:
-        target_href = nav_res["href"]
-        log(f"[Shopee Step 5] 🌐 กำลังเปิดหน้าสินค้าจริง: {target_href}")
-        driver.get(target_href)
-        time.sleep(3.0)
-        real_url = driver.current_url or ""
-    
-    log(f"[Shopee Step 5] 🛒 อยู่ที่หน้าสินค้าจริง: {real_url}")
-    time.sleep(2.0)
-    
-    # 2. Extract all main gallery image hashes from the real product page
-    image_hashes = driver.execute_script(r"""
-        function extractHash(url) {
-            if (!url) return null;
-            const m = url.match(/susercontent\.com\/file\/([a-zA-Z0-9_-]+)/);
-            if (m) {
-                return m[1].replace(/_tn$/, '').split('@')[0];
+    main_window = driver.current_window_handle
+    init_handles = set(driver.window_handles)
+
+    # 1. Click "ดูสินค้า" using native element click so referrer is preserved and opens in new tab
+    clicked_view = False
+    try:
+        view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", view_btn)
+        time.sleep(0.3)
+        view_btn.click()
+        clicked_view = True
+    except Exception:
+        # Fallback to JS click
+        clicked_view = driver.execute_script("""
+            const viewProdBtn = Array.from(document.querySelectorAll('a, button, div[role="button"]')).find(el => 
+                el.classList.contains('view-product') || 
+                (el.innerText || '').trim() === 'ดูสินค้า' || 
+                (el.innerText || '').includes('ดูสินค้า')
+            );
+            if (viewProdBtn) {
+                viewProdBtn.scrollIntoView({block: 'center'});
+                viewProdBtn.click();
+                return true;
             }
-            return null;
-        }
+            return false;
+        """)
 
-        // On Shopee desktop, main gallery is inside the left media column
-        const mainImg = Array.from(document.querySelectorAll('img')).find(i => {
-            const r = i.getBoundingClientRect();
-            return r.width >= 300 && r.height >= 300 && r.x < 650 && r.y < 850;
-        });
-        const wrapper = mainImg ? (mainImg.closest('.flex.flex-column') || mainImg.closest('.C21rQm') || mainImg.parentElement.parentElement) : document.body;
+    opened_new_tab = False
+    new_tab_handle = None
+    if clicked_view:
+        for _ in range(15):
+            time.sleep(0.3)
+            current_handles = set(driver.window_handles)
+            new_handles = current_handles - init_handles
+            if new_handles:
+                opened_new_tab = True
+                new_tab_handle = list(new_handles)[0]
+                break
 
-        // Select all images in the wrapper, excluding tiny variation icons (width <= 40)
-        const galleryEls = Array.from(wrapper.querySelectorAll('img, picture source')).filter(el => {
-            const r = el.getBoundingClientRect ? el.getBoundingClientRect() : (el.parentElement ? el.parentElement.getBoundingClientRect() : {});
-            return (!r.width || r.width > 40);
-        });
+    image_hashes = []
+    if opened_new_tab and new_tab_handle:
+        driver.switch_to.window(new_tab_handle)
+        time.sleep(2.5)
+        current_product_url = driver.current_url or ""
+        log(f"[Shopee Step 5] 🌐 เปิดแท็บหน้าสินค้าจริงสำเร็จ: {current_product_url}")
 
-        const hashes = [];
-        galleryEls.forEach(el => {
-            const src = el.src || el.getAttribute('srcset') || el.srcset || '';
-            const h = extractHash(src);
-            if (h && !src.includes('.svg') && !hashes.includes(h)) {
-                hashes.push(h);
-            }
-        });
+        if "verify/traffic" in current_product_url:
+            log(f"[Shopee Step 5] ⚠️ ตรวจพบระบบกันบอท Shopee (verify/traffic/error) -> ใช้งานรูปสำรองจากหน้า Affiliate แทน")
+        else:
+            # 2. Extract all main gallery image hashes from the real product page
+            image_hashes = driver.execute_script(r"""
+                function extractHash(url) {
+                    if (!url) return null;
+                    const m = url.match(/susercontent\.com\/file\/([a-zA-Z0-9_-]+)/);
+                    if (m) {
+                        return m[1].replace(/_tn$/, '').split('@')[0];
+                    }
+                    return null;
+                }
 
-        return hashes;
-    """) or []
+                // On Shopee desktop, main gallery is inside the left media column
+                const mainImg = Array.from(document.querySelectorAll('img')).find(i => {
+                    const r = i.getBoundingClientRect();
+                    return r.width >= 300 && r.height >= 300 && r.x < 650 && r.y < 850;
+                });
+                const wrapper = mainImg ? (mainImg.closest('.flex.flex-column') || mainImg.closest('.C21rQm') || mainImg.parentElement.parentElement) : document.body;
 
-    log(f"[Shopee Step 5] 📸 พบรูปภาพหลักทั้งหมด {len(image_hashes)} รูป")
+                // Select all images in the wrapper, excluding tiny variation icons (width <= 40)
+                const galleryEls = Array.from(wrapper.querySelectorAll('img, picture source')).filter(el => {
+                    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : (el.parentElement ? el.parentElement.getBoundingClientRect() : {});
+                    return (!r.width || r.width > 40);
+                });
+
+                const hashes = [];
+                galleryEls.forEach(el => {
+                    const src = el.src || el.getAttribute('srcset') || el.srcset || '';
+                    const h = extractHash(src);
+                    if (h && !src.includes('.svg') && !hashes.includes(h)) {
+                        hashes.push(h);
+                    }
+                });
+
+                return hashes;
+            """) or []
+
+        # Close product tab and switch back to affiliate main window
+        try:
+            driver.close()
+        except Exception:
+            pass
+        driver.switch_to.window(main_window)
+    else:
+        log("[Shopee Step 5] ⚠️ ไม่สามารถเปิดแท็บหน้าสินค้าจริงได้")
+
+    # If no hashes extracted from product page, use fallback_hash
+    if not image_hashes and fallback_hash:
+        log(f"[Shopee Step 5] ℹ️ ใช้รูปภาพจากหน้า Affiliate (Fallback Hash: {fallback_hash})")
+        image_hashes = [fallback_hash]
+
+    log(f"[Shopee Step 5] 📸 ได้รับรายการรูปภาพสำหรับดาวน์โหลดทั้งหมด {len(image_hashes)} รูป")
     if not image_hashes:
-        log("[Shopee Step 5] ⚠️ ไม่พบ URL รูปภาพหลักในหน้าสินค้า")
+        log("[Shopee Step 5] ⚠️ ไม่พบ URL รูปภาพสำหรับดาวน์โหลด")
         return []
 
     if not target_dir or not os.path.exists(target_dir):
@@ -612,6 +689,12 @@ def post_single_shopee_item(
 
     # Step 4: Select best product (highest commission with sales > 10), get link and save to Affiliate Link.md & Product Link.md
     res = step_4_select_best_product_and_get_link(driver, target_file_path=target_file, folder_path=folder_path)
+    if res.get("skipped"):
+        log(f"[Shopee Affiliate] ⏭️ ข้ามรายการที่ {item_idx}/{total_items}: {name} (เหตุผล: ไม่พบข้อมูลสินค้าใน Shopee)")
+        item["skipped"] = True
+        item["skip_reason"] = res.get("reason", "no_data")
+        return True
+
     if res.get("affiliate_link"):
         item["affiliate_link"] = res["affiliate_link"]
     if res.get("product_link"):

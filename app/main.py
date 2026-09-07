@@ -4961,6 +4961,15 @@ def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
         chosen = link_res.get("chosen", {})
         downloaded_images = link_res.get("downloaded_images", [])
 
+        if link_res.get("skipped"):
+            return {
+                "ok": True,
+                "skipped": True,
+                "keyword": keyword,
+                "reason": link_res.get("reason", "no_data"),
+                "message": f"ข้ามคำค้น '{keyword}' เนื่องจากไม่มีข้อมูลสินค้าในระบบ Shopee"
+            }
+
         return {
             "ok": True,
             "keyword": keyword,
