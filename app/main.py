@@ -4470,29 +4470,18 @@ def open_meta_channel_url(req: MetaOpenUrlRequest) -> dict[str, Any]:
     
     # Try selenium driver first if Chrome is attached
     try:
-        bot = browser_manager.get()
+        port = 9222
+        bot = browser_manager.get(target_port=port)
         if bot and bot.driver:
             driver = bot.driver
-            _activate_chrome()
+            _activate_chrome(driver, port=port)
             driver.get(url)
-            log(f"[Meta Auto Post] Navigated Chrome to: {url}")
-            return {"ok": True, "message": f"เปิดหน้าเว็บ {url} บนเบราว์เซอร์สำเร็จ"}
+            log(f"[Meta Auto Post] Navigated Chrome (Port {port}) to: {url}")
+            return {"ok": True, "message": f"เปิดหน้าเว็บ {url} บนเบราว์เซอร์ Chrome (Port {port}) สำเร็จ"}
     except Exception as e:
         log(f"[Meta Auto Post] Selenium navigate error: {e}")
-    
-    # Fallback to system browser opening
-    import subprocess
-    import sys
-    try:
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", url])
-        else:
-            import webbrowser
-            webbrowser.open(url)
-        return {"ok": True, "message": f"เปิดหน้าเว็บ {url} สำเร็จ"}
-    except Exception as err:
-        log(f"[Meta Auto Post] Open URL error: {err}")
-        return {"ok": False, "message": str(err)}
+        return {"ok": False, "detail": "เบราว์เซอร์ Chrome Debug Port 9222 ยังไม่ได้เปิดใช้งาน กรุณากด 'Launch Profile' ด้านบนก่อน"}
+    return {"ok": False, "detail": "เบราว์เซอร์ Chrome Debug Port 9222 ยังไม่ได้เปิดใช้งาน"}
 
 # ==============================================================================
 # Meta Step-by-Step Manual Controller Endpoints
@@ -4672,11 +4661,11 @@ global_shopee_progress: dict[str, Any] = {
 def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0):
     global global_shopee_progress
     try:
-        bot = browser_manager.get()
+        bot = browser_manager.get(target_port=9222)
         if not bot or not bot.driver:
             global_shopee_progress["status"] = "error"
-            global_shopee_progress["message"] = "เบราว์เซอร์ Chrome ไม่ได้เชื่อมต่อ (กรุณากด Launch Browser ก่อน)"
-            log("[Shopee Affiliate] Error: Chrome driver is not attached")
+            global_shopee_progress["message"] = "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ (กรุณากด Launch Profile ก่อน)"
+            log("[Shopee Affiliate] Error: Chrome 9222 driver is not attached")
             return
 
         from app.shopee_affiliate import run_shopee_affiliate_batch
@@ -4876,43 +4865,36 @@ def open_shopee_affiliate_url(req: dict[str, Any]) -> dict[str, Any]:
     if not url:
         url = "https://affiliate.shopee.co.th/offer/product_offer"
     
-    # 1. Try Selenium driver if Chrome debug port is open and CDP is ready
+    port = 9222
+    # Verify CDP endpoint is actually ready
+    cdp_ready = False
     try:
-        port = 9222
-        # Verify CDP endpoint is actually ready
+        import urllib.request
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=0.8) as cdp_res:
+            if cdp_res.status == 200:
+                cdp_ready = True
+    except Exception:
         cdp_ready = False
-        try:
-            import urllib.request
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=0.8) as cdp_res:
-                if cdp_res.status == 200:
-                    cdp_ready = True
-        except Exception:
-            cdp_ready = False
 
-        if cdp_ready:
-            bot = browser_manager.get()
-            if bot and bot.driver:
-                driver = bot.driver
-                _activate_chrome(driver, port=port)
-                driver.get(url)
-                log(f"[Shopee Affiliate] Navigated Chrome to: {url}")
-                return {"ok": True, "message": f"เปิดหน้าเว็บ {url} บนเบราว์เซอร์ Chrome (Port {port}) สำเร็จ"}
+    if not cdp_ready:
+        return {
+            "ok": False,
+            "detail": f"เบราว์เซอร์ Chrome Debug Port {port} ยังไม่ได้เปิดใช้งาน กรุณากดปุ่ม 'Launch Profile' ด้านบนก่อน"
+        }
+
+    try:
+        bot = browser_manager.get(target_port=port)
+        if bot and bot.driver:
+            driver = bot.driver
+            _activate_chrome(driver, port=port)
+            driver.get(url)
+            log(f"[Shopee Affiliate] Navigated Chrome (Port {port}) to: {url}")
+            return {"ok": True, "message": f"เปิดหน้าเว็บ {url} บนเบราว์เซอร์ Chrome (Port {port}) สำเร็จ"}
     except Exception as e:
         log(f"[Shopee Affiliate] Selenium navigate error: {e}")
+        return {"ok": False, "detail": f"เกิดข้อผิดพลาดในการนำทางเบราว์เซอร์ 9222: {e}"}
 
-    # 2. Fallback to system browser opening if Chrome debug session is not running
-    import subprocess
-    import sys
-    try:
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", url])
-        else:
-            import webbrowser
-            webbrowser.open(url)
-        return {"ok": True, "message": f"เปิดหน้าเว็บ {url} บนเบราว์เซอร์ระบบสำเร็จ"}
-    except Exception as err:
-        log(f"[Shopee Affiliate] Open URL error: {err}")
-        return {"ok": False, "message": str(err)}
+    return {"ok": False, "detail": f"เบราว์เซอร์ Chrome Debug Port {port} ยังไม่ได้เปิดใช้งาน"}
 
 @app.post("/api/shopee-affiliate/stop")
 def api_shopee_affiliate_stop() -> dict[str, Any]:

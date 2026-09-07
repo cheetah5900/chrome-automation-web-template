@@ -7125,10 +7125,13 @@ async function openShopeePageUrl() {
     if (res.ok) {
       logShopeeConsole(`✅ ${res.message}`, 'success');
     } else {
-      logShopeeConsole(`❌ ${res.detail || 'เกิดข้อผิดพลาดในการเปิดหน้าเว็บ'}`, 'error');
+      const errMsg = res.detail || 'เกิดข้อผิดพลาดในการเปิดหน้าเว็บ';
+      logShopeeConsole(`❌ ${errMsg}`, 'error');
+      alert(`⚠️ ${errMsg}`);
     }
   } catch (e) {
     logShopeeConsole(`❌ เกิดข้อผิดพลาด: ${e.message}`, 'error');
+    alert(`⚠️ เกิดข้อผิดพลาด: ${e.message}`);
   }
 }
 

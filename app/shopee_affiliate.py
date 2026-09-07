@@ -169,7 +169,7 @@ def run_shopee_affiliate_batch(
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> dict[str, Any]:
     """Runs a batch of Shopee Affiliate automation tasks."""
-    bot = browser_manager.get()
+    bot = browser_manager.get(target_port=9222)
     driver = bot.driver
     total = len(items)
 
