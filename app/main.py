@@ -4791,7 +4791,12 @@ def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", 
             progress_callback=_on_progress
         )
 
-        if res.get("stopped"):
+        if res.get("captcha_blocked"):
+            global_shopee_progress["status"] = "captcha_blocked"
+            global_shopee_progress["captcha_url"] = res.get("captcha_url", "")
+            global_shopee_progress["blocked_folder"] = res.get("blocked_folder", "")
+            global_shopee_progress["message"] = "⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA) - กรุณาแก้ CAPTCHA ในเบราว์เซอร์ 9222"
+        elif res.get("stopped"):
             global_shopee_progress["status"] = "stopped"
             global_shopee_progress["message"] = "🛑 บังคับหยุดการทำงานเรียบร้อยแล้ว (Force Stopped)"
         else:
@@ -4803,8 +4808,12 @@ def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", 
 
     except Exception as e:
         log(f"[Shopee Affiliate Error] {e}")
-        from app.shopee_affiliate import is_shopee_stopped
-        if is_shopee_stopped() or "Force Stop" in str(e):
+        from app.shopee_affiliate import is_shopee_stopped, ShopeeCaptchaBlockedException
+        if isinstance(e, ShopeeCaptchaBlockedException) or "captcha" in str(e).lower() or "verify/traffic" in str(e).lower():
+            global_shopee_progress["status"] = "captcha_blocked"
+            global_shopee_progress["captcha_url"] = getattr(e, "captcha_url", "")
+            global_shopee_progress["message"] = "⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA) - กรุณาแก้ CAPTCHA ในเบราว์เซอร์ 9222"
+        elif is_shopee_stopped() or "Force Stop" in str(e):
             global_shopee_progress["status"] = "stopped"
             global_shopee_progress["message"] = "🛑 บังคับหยุดการทำงานเรียบร้อยแล้ว (Force Stopped)"
         else:
@@ -5059,7 +5068,14 @@ def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
     target_file = (req.get("file_path") or "").strip()
     folder_path = (req.get("folder_path") or "").strip()
 
-    from app.shopee_affiliate import clean_search_keyword, step_1_open_shopee_page, step_2_search_product, step_3_sort_best_sellers, step_4_select_best_product_and_get_link
+    from app.shopee_affiliate import (
+        clean_search_keyword, 
+        step_1_open_shopee_page, 
+        step_2_search_product, 
+        step_3_sort_best_sellers, 
+        step_4_select_best_product_and_get_link,
+        ShopeeCaptchaBlockedException
+    )
     
     keyword = clean_search_keyword(raw_keyword)
     if not keyword:
@@ -5108,6 +5124,13 @@ def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
         }
     except HTTPException:
         raise
+    except ShopeeCaptchaBlockedException as ce:
+        return {
+            "ok": False,
+            "captcha_blocked": True,
+            "captcha_url": ce.captcha_url or getattr(driver, "current_url", "") or "",
+            "detail": "⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA) กรุณาเลื่อนแก้ CAPTCHA ในหน้าต่าง Chrome 9222 ก่อนทำรายการต่อ"
+        }
     except Exception as e:
         log(f"[Shopee Search Single Error] {e}")
         return {"ok": False, "detail": f"เกิดข้อผิดพลาดในการค้นหา: {str(e)}"}

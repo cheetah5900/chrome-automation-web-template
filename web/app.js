@@ -7324,6 +7324,57 @@ async function runShopeeAffiliate(btn) {
           logShopeeConsole(prog.message, prog.status === 'error' ? 'error' : 'normal');
         }
 
+        if (prog.status === 'captcha_blocked') {
+          clearInterval(shopeePollingInterval);
+          shopeePollingInterval = null;
+          if (btn) btn.disabled = false;
+          logShopeeConsole(`🛑 ตรวจพบระบบกันบอท Shopee (CAPTCHA / Verification): ${prog.captcha_url || ''}`, 'error');
+          showToast('⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA)', 'error');
+
+          const folderMsg = prog.blocked_folder ? `
+            <div style="margin-bottom: 12px; padding: 8px 12px; background: rgba(255,255,255,0.06); border-radius: 8px; border-left: 3px solid #f59e0b;">
+              <span style="color: #ffb86c; font-weight: 600;">📁 โฟลเดอร์ที่ติดปัญหา:</span>
+              <span style="color: #fff; font-weight: 500; margin-left: 6px;">${prog.blocked_folder}</span>
+            </div>
+          ` : '';
+
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'warning',
+              title: '⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA)',
+              html: `
+                <div style="text-align: left; font-size: 0.92rem; line-height: 1.6; color: rgba(255,255,255,0.9);">
+                  <p style="margin-bottom: 12px; color: #ff7e67; font-weight: 600;">
+                    🛑 ระบบได้หยุดการทำงานทันที เนื่องจาก Shopee ตรวจพบการร้องขออัตโนมัติ และแสดงหน้ายืนยันความปลอดภัย (Anti-bot / CAPTCHA Verification)
+                  </p>
+                  ${folderMsg}
+                  <div style="background: rgba(238, 77, 45, 0.12); border-left: 4px solid #ee4d2d; padding: 12px 14px; border-radius: 8px; margin-bottom: 14px;">
+                    <strong style="color: #ffb86c; font-size: 0.95rem;">📌 คำแนะนำสำหรับผู้ใช้งาน:</strong>
+                    <ol style="margin: 8px 0 0 18px; padding: 0;">
+                      <li style="margin-bottom: 4px;">สลับไปที่หน้าต่างเบราว์เซอร์ <strong>Chrome (Port 9222)</strong></li>
+                      <li style="margin-bottom: 4px;">ทำการ <strong>เลื่อนจิ๊กซอว์ / แก้ไข CAPTCHA</strong> หรือยืนยันตัวตนบนหน้า Shopee ให้เสร็จสิ้น</li>
+                      <li style="margin-bottom: 4px;">รอให้หน้าเว็บโหลดกลับเข้าสู่หน้าสินค้าปกติหรือหน้า Shopee Affiliate</li>
+                      <li>เมื่อผ่านแล้ว ให้กลับมากด <strong>"🚀 เริ่มรัน Shopee Affiliate"</strong> เพื่อทำงานต่อทันที</li>
+                    </ol>
+                  </div>
+                  <p style="font-size: 0.82rem; color: rgba(255,255,255,0.6); margin: 0;">
+                    💡 <em>คำแนะนำ: หากเจอบ่อย แนะนำให้ปรับเพิ่มช่วง Delay (เช่น ขั้นต่ำ 10 - 20 วินาที) เพื่อลดความถี่ในการเรียกดูสินค้าครับ</em>
+                  </p>
+                </div>
+              `,
+              confirmButtonText: 'รับทราบ (ไปปลดล็อค CAPTCHA ใน Chrome 9222)',
+              customClass: {
+                popup: 'swal2-shopee-popup',
+                confirmButton: 'swal2-shopee-confirm-btn'
+              },
+              buttonsStyling: false
+            });
+          } else {
+            alert(`⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA)!\nกรุณาไปที่หน้าต่าง Chrome 9222 เพื่อเลื่อนแก้ CAPTCHA ด้วยตนเอง แล้วจึงกลับมากดรันใหม่`);
+          }
+          return;
+        }
+
         if (prog.status === 'completed' || prog.status === 'completed_with_errors' || prog.status === 'error' || prog.status === 'stopped') {
           clearInterval(shopeePollingInterval);
           shopeePollingInterval = null;

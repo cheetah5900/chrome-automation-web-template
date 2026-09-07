@@ -100,6 +100,46 @@ def reset_shopee_stop() -> None:
     global _shopee_stop_requested
     _shopee_stop_requested = False
 
+class ShopeeCaptchaBlockedException(Exception):
+    """Raised immediately when Shopee Anti-bot / CAPTCHA verification page is detected."""
+    def __init__(self, message: str = "ตรวจพบระบบกันบอท Shopee (CAPTCHA / Traffic Verification)", captcha_url: str = ""):
+        super().__init__(message)
+        self.captcha_url = captcha_url
+
+def is_shopee_captcha_url(url: str) -> bool:
+    if not url:
+        return False
+    u = url.lower()
+    return (
+        "verify/captcha" in u or
+        "verify/traffic" in u or
+        "anti_bot_tracking_id" in u or
+        ("shopee.co.th/verify" in u)
+    )
+
+def check_shopee_captcha(driver) -> None:
+    """Checks if the current active tab or any window is stuck on Shopee CAPTCHA / Traffic verification."""
+    check_stop()
+    try:
+        current_url = getattr(driver, "current_url", "") or ""
+        if is_shopee_captcha_url(current_url):
+            log(f"[Shopee Anti-Bot] 🛑 ตรวจพบหน้า CAPTCHA/Traffic Verification: {current_url[:120]}...")
+            raise ShopeeCaptchaBlockedException(
+                "ตรวจพบระบบกันบอท Shopee (CAPTCHA / Traffic Verification) ระบบหยุดทำงานอัตโนมัติ",
+                captcha_url=current_url
+            )
+
+        title = (getattr(driver, "title", "") or "").lower()
+        if "verify" in title and ("captcha" in title or "traffic" in title or "security" in title):
+            raise ShopeeCaptchaBlockedException(
+                "ตรวจพบระบบกันบอท Shopee (CAPTCHA) จาก Title หน้าเว็บ",
+                captcha_url=current_url
+            )
+    except ShopeeCaptchaBlockedException:
+        raise
+    except Exception:
+        pass
+
 # ==============================================================================
 # Shopee Affiliate Core Steps
 # ==============================================================================
@@ -115,6 +155,7 @@ def clean_search_keyword(raw_text: str) -> str:
 def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
     """Step 1: Open Shopee Affiliate Platform / Product Offer URL."""
     check_stop()
+    check_shopee_captcha(driver)
     url = page_url.strip() if page_url else "https://affiliate.shopee.co.th/offer/product_offer"
     if "offer/product_offer" not in url and url.endswith("shopee.co.th"):
         url = "https://affiliate.shopee.co.th/offer/product_offer"
@@ -124,16 +165,19 @@ def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
     target_base = url.split("?")[0].rstrip("/")
     if current_base == target_base:
         log("[Shopee Step 1] อยู่ที่หน้าข้อเสนอผลิตภัณฑ์ Shopee Affiliate อยู่แล้ว")
+        check_shopee_captcha(driver)
         return True
 
     log(f"[Shopee Step 1] กำลังเปิดหน้าเว็บ Shopee: {url}")
     driver.get(url)
     interruptible_sleep(2.0)
+    check_shopee_captcha(driver)
     return True
 
 def step_2_search_product(driver, keyword: str) -> bool:
     """Step 2: Enter clean keyword into search box and submit."""
     check_stop()
+    check_shopee_captcha(driver)
     clean_kw = clean_search_keyword(keyword)
     if not clean_kw:
         log("[Shopee Step 2] ⚠️ ไม่พบคีย์เวิร์ดสำหรับค้นหา (ข้ามขั้นตอน)")
@@ -182,12 +226,14 @@ def step_2_search_product(driver, keyword: str) -> bool:
             pass
             
     interruptible_sleep(2.5)
+    check_shopee_captcha(driver)
     log(f"[Shopee Step 2] ✅ ค้นหาคำว่า '{clean_kw}' เรียบร้อยแล้ว")
     return True
 
 def check_shopee_no_data(driver) -> bool:
     """Check if the search result page shows 'ไม่มีข้อมูล' or has zero product cards."""
     check_stop()
+    check_shopee_captcha(driver)
     try:
         res = driver.execute_script("""
             const hasEmptyEl = !!document.querySelector('.empty, .ant-empty, [class*="empty"], [class*="nodata"]');
@@ -207,6 +253,7 @@ def check_shopee_no_data(driver) -> bool:
 def step_3_sort_best_sellers(driver) -> bool:
     """Step 3: Click 'ขายดี' (Best Seller) tab."""
     check_stop()
+    check_shopee_captcha(driver)
     # Check if page has no data first
     if check_shopee_no_data(driver):
         log("[Shopee Step 3] ⚠️ ตรวจพบ 'ไม่มีข้อมูล' บนหน้าเว็บ ข้ามขั้นตอนการจัดเรียง")
@@ -562,10 +609,14 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
         current_product_url = driver.current_url or ""
         log(f"[Shopee Step 5] 🌐 เปิดแท็บหน้าสินค้าจริงสำเร็จ: {current_product_url}")
 
-        if "verify/traffic" in current_product_url:
-            log(f"[Shopee Step 5] ⚠️ ตรวจพบระบบกันบอท Shopee (verify/traffic/error) -> ใช้งานรูปสำรองจากหน้า Affiliate แทน")
-        else:
-            # 2. Extract all main gallery image hashes from the real product page
+        if is_shopee_captcha_url(current_product_url):
+            log(f"[Shopee Step 5] 🛑 ตรวจพบระบบกันบอท Shopee (verify/captcha/traffic) -> หยุดการทำงานทันที!")
+            raise ShopeeCaptchaBlockedException(
+                "ตรวจพบระบบกันบอท Shopee (CAPTCHA / Traffic Verification) ขณะเปิดดูหน้าสินค้าจริง",
+                captcha_url=current_product_url
+            )
+
+        # 2. Extract all main gallery image hashes from the real product page
             image_hashes = driver.execute_script(r"""
                 function extractHash(url) {
                     if (!url) return null;
@@ -804,6 +855,21 @@ def run_shopee_affiliate_batch(
                 })
             elif ok:
                 success_count += 1
+        except ShopeeCaptchaBlockedException as ce:
+            stopped_by_user = True
+            folder_desc = item.get("subfolder_name") or item.get("keyword") or f"Item #{idx+1}"
+            log(f"[Shopee Affiliate] 🛑 หยุดทำงานทันทีเนื่องจากติดระบบกันบอท Shopee (CAPTCHA): {ce}")
+            errors.append(f"🛑 ติดระบบกันบอท Shopee (CAPTCHA) ที่โฟลเดอร์: {folder_desc}")
+            return {
+                "ok": False,
+                "stopped": True,
+                "captcha_blocked": True,
+                "captcha_url": ce.captcha_url or getattr(driver, "current_url", "") or "",
+                "blocked_folder": folder_desc,
+                "success_count": success_count,
+                "skipped_items": skipped_items,
+                "errors": errors
+            }
         except ForceStopException:
             stopped_by_user = True
             log("[Shopee Affiliate] 🛑 หยุดทำงานทันทีตามคำสั่ง Force Stop")
