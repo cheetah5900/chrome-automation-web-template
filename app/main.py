@@ -4685,16 +4685,25 @@ def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", 
             progress_callback=_on_progress
         )
 
-        global_shopee_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
-        global_shopee_progress["percent"] = 100
-        global_shopee_progress["current"] = len(items)
-        global_shopee_progress["skipped_items"] = res.get("skipped_items", [])
-        global_shopee_progress["message"] = f"✅ ดำเนินการสำเร็จครบทั้งหมด {res['success_count']} รายการ" if res["ok"] else f"เสร็จสิ้น {res['success_count']}/{len(items)} รายการ"
+        if res.get("stopped"):
+            global_shopee_progress["status"] = "stopped"
+            global_shopee_progress["message"] = "🛑 บังคับหยุดการทำงานเรียบร้อยแล้ว (Force Stopped)"
+        else:
+            global_shopee_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
+            global_shopee_progress["percent"] = 100
+            global_shopee_progress["current"] = len(items)
+            global_shopee_progress["skipped_items"] = res.get("skipped_items", [])
+            global_shopee_progress["message"] = f"✅ ดำเนินการสำเร็จครบทั้งหมด {res['success_count']} รายการ" if res["ok"] else f"เสร็จสิ้น {res['success_count']}/{len(items)} รายการ"
 
     except Exception as e:
         log(f"[Shopee Affiliate Error] {e}")
-        global_shopee_progress["status"] = "error"
-        global_shopee_progress["message"] = f"เกิดข้อผิดพลาด: {str(e)}"
+        from app.shopee_affiliate import is_shopee_stopped
+        if is_shopee_stopped() or "Force Stop" in str(e):
+            global_shopee_progress["status"] = "stopped"
+            global_shopee_progress["message"] = "🛑 บังคับหยุดการทำงานเรียบร้อยแล้ว (Force Stopped)"
+        else:
+            global_shopee_progress["status"] = "error"
+            global_shopee_progress["message"] = f"เกิดข้อผิดพลาด: {str(e)}"
 
 @app.post("/api/shopee-affiliate/run")
 def run_shopee_affiliate(req: ShopeeRunRequest) -> dict[str, Any]:
@@ -4992,8 +5001,10 @@ def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
 def api_shopee_affiliate_stop() -> dict[str, Any]:
     from app.shopee_affiliate import stop_shopee_affiliate
     stop_shopee_affiliate()
-    global _force_stop_requested
+    global _force_stop_requested, global_shopee_progress
     _force_stop_requested = True
+    global_shopee_progress["status"] = "stopped"
+    global_shopee_progress["message"] = "🛑 บังคับหยุดการทำงานโดยผู้ใช้ (Force Stop)"
     log("[Shopee Affiliate] 🛑 ได้รับคำสั่ง Force Stop - กำลังหยุดการทำงาน")
     return {"ok": True, "message": "🛑 สั่ง Force Stop Shopee Affiliate เรียบร้อยแล้ว"}
 

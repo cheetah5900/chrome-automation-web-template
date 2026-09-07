@@ -69,6 +69,10 @@ def fast_poll(driver, js_condition: str, timeout: float = 15.0, poll_interval: f
 # Global cancellation event
 _shopee_stop_requested = False
 
+class ForceStopException(Exception):
+    """Raised immediately when a Force Stop signal is received."""
+    pass
+
 def stop_shopee_affiliate() -> None:
     global _shopee_stop_requested
     _shopee_stop_requested = True
@@ -77,6 +81,20 @@ def stop_shopee_affiliate() -> None:
 def is_shopee_stopped() -> bool:
     global _shopee_stop_requested
     return _shopee_stop_requested
+
+def check_stop() -> None:
+    """Raise ForceStopException immediately if stop was requested."""
+    if is_shopee_stopped():
+        raise ForceStopException("🛑 บังคับหยุดทำงาน (Force Stop)")
+
+def interruptible_sleep(duration: float, step: float = 0.1) -> None:
+    """Sleeps for duration seconds in small increments, raising ForceStopException if stopped."""
+    check_stop()
+    start_time = time.time()
+    while time.time() - start_time < duration:
+        check_stop()
+        time.sleep(min(step, max(0.01, duration - (time.time() - start_time))))
+    check_stop()
 
 def reset_shopee_stop() -> None:
     global _shopee_stop_requested
@@ -96,6 +114,7 @@ def clean_search_keyword(raw_text: str) -> str:
 
 def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
     """Step 1: Open Shopee Affiliate Platform / Product Offer URL."""
+    check_stop()
     url = page_url.strip() if page_url else "https://affiliate.shopee.co.th/offer/product_offer"
     if "offer/product_offer" not in url and url.endswith("shopee.co.th"):
         url = "https://affiliate.shopee.co.th/offer/product_offer"
@@ -109,11 +128,12 @@ def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
 
     log(f"[Shopee Step 1] กำลังเปิดหน้าเว็บ Shopee: {url}")
     driver.get(url)
-    time.sleep(2.0)
+    interruptible_sleep(2.0)
     return True
 
 def step_2_search_product(driver, keyword: str) -> bool:
     """Step 2: Enter clean keyword into search box and submit."""
+    check_stop()
     clean_kw = clean_search_keyword(keyword)
     if not clean_kw:
         log("[Shopee Step 2] ⚠️ ไม่พบคีย์เวิร์ดสำหรับค้นหา (ข้ามขั้นตอน)")
@@ -161,12 +181,13 @@ def step_2_search_product(driver, keyword: str) -> bool:
         except Exception:
             pass
             
-    time.sleep(2.5)
+    interruptible_sleep(2.5)
     log(f"[Shopee Step 2] ✅ ค้นหาคำว่า '{clean_kw}' เรียบร้อยแล้ว")
     return True
 
 def check_shopee_no_data(driver) -> bool:
     """Check if the search result page shows 'ไม่มีข้อมูล' or has zero product cards."""
+    check_stop()
     try:
         res = driver.execute_script("""
             const hasEmptyEl = !!document.querySelector('.empty, .ant-empty, [class*="empty"], [class*="nodata"]');
@@ -185,6 +206,7 @@ def check_shopee_no_data(driver) -> bool:
 
 def step_3_sort_best_sellers(driver) -> bool:
     """Step 3: Click 'ขายดี' (Best Seller) tab."""
+    check_stop()
     # Check if page has no data first
     if check_shopee_no_data(driver):
         log("[Shopee Step 3] ⚠️ ตรวจพบ 'ไม่มีข้อมูล' บนหน้าเว็บ ข้ามขั้นตอนการจัดเรียง")
@@ -205,7 +227,7 @@ def step_3_sort_best_sellers(driver) -> bool:
         }
         return { success: false, reason: "Element 'ขายดี' not found" };
     """)
-    time.sleep(3.0)
+    interruptible_sleep(3.0)
     if res and res.get("success"):
         log("[Shopee Step 3] ✅ คลิกแท็บ 'ขายดี' สำเร็จ")
         return True
@@ -357,14 +379,14 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
     log(f"[Shopee Step 4] ⭐ เลือกสินค้า: '{chosen_info.get('title')}' | ค่าคอม: {chosen_info.get('commRate')}% | {chosen_info.get('salesText')} ({chosen_info.get('pool')})")
     
     # 2. Navigate to product detail page if not already navigating
-    time.sleep(1.5)
+    interruptible_sleep(1.5)
     if product_link:
         current_url = driver.current_url or ""
         # If still on the search page, force navigate using driver.get(product_link)
         if current_url.split("?")[0].rstrip("/").endswith("product_offer"):
             log(f"[Shopee Step 4] 🌐 กำลังเปิดหน้าลิงก์สินค้า: {product_link}")
             driver.get(product_link)
-            time.sleep(2.0)
+            interruptible_sleep(2.0)
         else:
             log(f"[Shopee Step 4] 🌐 นำทางเข้าสู่หน้ารายละเอียดสินค้าสำเร็จ: {driver.current_url}")
 
@@ -372,6 +394,7 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
     log("[Shopee Step 4] 🟠 กำลังกดปุ่มสีส้ม 'เอา ลิงก์' บนหน้ารายละเอียดสินค้า...")
     clicked_orange = False
     for _ in range(12):
+        check_stop()
         clicked_orange = driver.execute_script("""
             const btns = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
             const orangeBtn = btns.find(b => {
@@ -387,15 +410,16 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         """)
         if clicked_orange:
             break
-        time.sleep(0.4)
+        interruptible_sleep(0.4)
 
     if not clicked_orange:
         log("[Shopee Step 4] ⚠️ ไม่พบปุ่มสีส้ม 'เอา ลิงก์' บนหน้ารายละเอียดสินค้า")
 
     # 4. Wait for modal & extract affiliate short link
-    time.sleep(1.2)
+    interruptible_sleep(1.2)
     affiliate_link = ""
     for _ in range(15):
+        check_stop()
         affiliate_link = driver.execute_script("""
             const els = Array.from(document.querySelectorAll('.ant-modal textarea, .ant-modal input, textarea, input'));
             for (const el of els) {
@@ -407,14 +431,15 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         """)
         if affiliate_link:
             break
-        time.sleep(0.4)
+        interruptible_sleep(0.4)
 
     # Click copy button inside modal
+    check_stop()
     driver.execute_script("""
         const copyBtn = document.querySelector('.ant-modal button.ant-btn-primary');
         if (copyBtn && !copyBtn.disabled) copyBtn.click();
     """)
-    time.sleep(0.3)
+    interruptible_sleep(0.3)
 
     # Dismiss any browser alert (e.g. Copy to clipboard)
     try:
@@ -487,6 +512,7 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
 def step_5_open_product_and_download_images(driver, target_dir: str = "", fallback_hash: str = "") -> list[str]:
     """Step 5: Click 'ดูสินค้า' to open the real Shopee product page in a new tab, download all main product images as .jpg,
     and fallback to affiliate image if verify/traffic error occurs."""
+    check_stop()
     log("[Shopee Step 5] 🔍 กำลังค้นหาปุ่ม 'ดูสินค้า' เพื่อเปิดหน้าสินค้าจริง...")
     
     main_window = driver.current_window_handle
@@ -497,7 +523,7 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
     try:
         view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", view_btn)
-        time.sleep(0.3)
+        interruptible_sleep(0.3)
         view_btn.click()
         clicked_view = True
     except Exception:
@@ -520,7 +546,8 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
     new_tab_handle = None
     if clicked_view:
         for _ in range(15):
-            time.sleep(0.3)
+            check_stop()
+            interruptible_sleep(0.3)
             current_handles = set(driver.window_handles)
             new_handles = current_handles - init_handles
             if new_handles:
@@ -531,7 +558,7 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
     image_hashes = []
     if opened_new_tab and new_tab_handle:
         driver.switch_to.window(new_tab_handle)
-        time.sleep(2.5)
+        interruptible_sleep(2.5)
         current_product_url = driver.current_url or ""
         log(f"[Shopee Step 5] 🌐 เปิดแท็บหน้าสินค้าจริงสำเร็จ: {current_product_url}")
 
@@ -611,6 +638,7 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
     }
 
     for idx, h in enumerate(image_hashes, 1):
+        check_stop()
         img_url = f"https://down-th.img.susercontent.com/file/{h}"
         dest_filename = f"{idx}.jpg"
         dest_path = os.path.join(main_images_dir, dest_filename)
@@ -620,6 +648,7 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = resp.read()
 
+            check_stop()
             with Image.open(io.BytesIO(data)) as pil_img:
                 if pil_img.mode in ("RGBA", "P"):
                     pil_img = pil_img.convert("RGB")
@@ -641,6 +670,8 @@ def step_5_open_product_and_download_images(driver, target_dir: str = "", fallba
                 except Exception as ep:
                     log(f"[Shopee Step 5] ⚠️ บันทึก product.jpg ไม่สำเร็จ: {ep}")
 
+        except ForceStopException:
+            raise
         except Exception as e:
             log(f"[Shopee Step 5] ⚠️ ดาวน์โหลดรูป #{idx} ({img_url}) ล้มเหลว: {e}")
 
@@ -673,22 +704,21 @@ def post_single_shopee_item(
         })
 
     # Step 1: Open Shopee Product Offer Page
+    check_stop()
     step_1_open_shopee_page(driver, page_url)
-    if is_shopee_stopped():
-        return False
+    check_stop()
 
     # Step 2: Search keyword (clean without numbers)
     step_2_search_product(driver, keyword)
-    if is_shopee_stopped():
-        return False
+    check_stop()
 
     # Step 3: Sort by 'ขายดี'
     step_3_sort_best_sellers(driver)
-    if is_shopee_stopped():
-        return False
+    check_stop()
 
     # Step 4: Select best product (highest commission with sales > 10), get link and save to Affiliate Link.md & Product Link.md
     res = step_4_select_best_product_and_get_link(driver, target_file_path=target_file, folder_path=folder_path)
+    check_stop()
     if res.get("skipped"):
         log(f"[Shopee Affiliate] ⏭️ ข้ามรายการที่ {item_idx}/{total_items}: {name} (เหตุผล: ไม่พบข้อมูลสินค้าใน Shopee)")
         item["skipped"] = True
@@ -725,8 +755,10 @@ def run_shopee_affiliate_batch(
 
     log(f"[Shopee Affiliate Engine] เริ่มรัน {total} รายการบน Port 9222 (หน่วงเวลา: {delay_min}s - {delay_max}s)...")
 
+    stopped_by_user = False
     for idx, item in enumerate(items):
         if is_shopee_stopped():
+            stopped_by_user = True
             log("[Shopee Affiliate] 🛑 ยกเลิกการทำงานเนื่องจาก Force Stop")
             errors.append("🛑 การทำงานถูกยกเลิกด้วย Force Stop")
             break
@@ -746,17 +778,15 @@ def run_shopee_affiliate_batch(
                     "skipped_items": skipped_items
                 })
 
-            wait_start = time.time()
-            while time.time() - wait_start < rand_delay:
-                if is_shopee_stopped():
-                    break
-                time.sleep(0.3)
-
-            if is_shopee_stopped():
+            try:
+                interruptible_sleep(rand_delay)
+            except ForceStopException:
+                stopped_by_user = True
                 errors.append("🛑 บังคับหยุดทำงาน (Force Stop)")
                 break
 
         try:
+            check_stop()
             ok = post_single_shopee_item(
                 driver=driver,
                 item=item,
@@ -774,8 +804,14 @@ def run_shopee_affiliate_batch(
                 })
             elif ok:
                 success_count += 1
+        except ForceStopException:
+            stopped_by_user = True
+            log("[Shopee Affiliate] 🛑 หยุดทำงานทันทีตามคำสั่ง Force Stop")
+            errors.append("🛑 บังคับหยุดทำงาน (Force Stop)")
+            break
         except Exception as e:
             if is_shopee_stopped() or "Force Stop" in str(e):
+                stopped_by_user = True
                 log("[Shopee Affiliate] 🛑 หยุดทำงานทันทีตามคำสั่ง Force Stop")
                 errors.append("🛑 บังคับหยุดทำงาน (Force Stop)")
                 break
@@ -784,18 +820,23 @@ def run_shopee_affiliate_batch(
             errors.append(err_msg)
 
     if progress_callback:
+        final_status = "stopped" if stopped_by_user else ("completed" if not errors else "completed_with_errors")
+        final_msg = "🛑 บังคับหยุดการทำงานแล้ว (Force Stopped)" if stopped_by_user else (
+            f"✅ ดำเนินการสำเร็จ {success_count}/{total} รายการ" if not errors else f"เสร็จสิ้น {success_count}/{total} (พบข้อผิดพลาด {len(errors)} รายการ)"
+        )
         progress_callback({
-            "current": total,
+            "current": total if not stopped_by_user else max(0, success_count),
             "total": total,
-            "percent": 100,
-            "status": "completed" if not errors else "completed_with_errors",
-            "message": f"✅ ดำเนินการสำเร็จ {success_count}/{total} รายการ" if not errors else f"เสร็จสิ้น {success_count}/{total} (พบข้อผิดพลาด {len(errors)} รายการ)",
+            "percent": 100 if not stopped_by_user else int((success_count / max(total, 1)) * 100),
+            "status": final_status,
+            "message": final_msg,
             "errors": errors,
             "skipped_items": skipped_items
         })
 
     return {
-        "ok": len(errors) == 0,
+        "ok": len(errors) == 0 and not stopped_by_user,
+        "stopped": stopped_by_user,
         "total": total,
         "success_count": success_count,
         "errors": errors,

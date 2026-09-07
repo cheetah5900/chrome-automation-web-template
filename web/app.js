@@ -7324,11 +7324,17 @@ async function runShopeeAffiliate(btn) {
           logShopeeConsole(prog.message, prog.status === 'error' ? 'error' : 'normal');
         }
 
-        if (prog.status === 'completed' || prog.status === 'completed_with_errors' || prog.status === 'error') {
+        if (prog.status === 'completed' || prog.status === 'completed_with_errors' || prog.status === 'error' || prog.status === 'stopped') {
           clearInterval(shopeePollingInterval);
           shopeePollingInterval = null;
           if (btn) btn.disabled = false;
-          logShopeeConsole(`🏁 กระบวนการเสร็จสิ้น: ${prog.message}`, prog.status === 'completed' ? 'success' : 'error');
+          const isStop = prog.status === 'stopped';
+          logShopeeConsole(`🏁 ${prog.message}`, isStop ? 'error' : (prog.status === 'completed' ? 'success' : 'error'));
+
+          if (isStop) {
+            showToast('🛑 บังคับหยุดการทำงาน Shopee Affiliate สำเร็จ', 'warning');
+            return;
+          }
 
           // Check if any items could not find products
           const skipped = prog.skipped_items || [];
@@ -7377,17 +7383,27 @@ async function runShopeeAffiliate(btn) {
 
 async function stopShopeeAffiliate(btn) {
   logShopeeConsole('🛑 กำลังส่งสัญญาณ Force Stop ไปยัง Shopee Affiliate Engine...', 'error');
+  if (btn) btn.disabled = true;
+
+  // Immediate UI update
+  const progText = document.getElementById('shopeeBatchProgressText');
+  if (progText) progText.textContent = '🛑 หยุดการทำงานแล้ว (Stopped)';
+  
   try {
     const res = await jsonFetch('/api/shopee-affiliate/stop', { method: 'POST' });
     logShopeeConsole(`🛑 ${res.message || 'สั่งหยุดการทำงานเรียบร้อยแล้ว'}`, 'error');
+    showToast('🛑 ส่งคำสั่ง Force Stop เรียบร้อยแล้ว', 'warning');
     if (shopeePollingInterval) {
       clearInterval(shopeePollingInterval);
       shopeePollingInterval = null;
     }
-    const runBtn = document.getElementById('runShopeeAffiliateBtn');
-    if (runBtn) runBtn.disabled = false;
   } catch (e) {
     logShopeeConsole(`❌ ไม่สามารถส่งคำสั่งหยุดได้: ${e.message}`, 'error');
+    showToast(`❌ ส่งคำสั่งหยุดล้มเหลว: ${e.message}`, 'error');
+  } finally {
+    const runBtn = document.getElementById('runShopeeAffiliateBtn');
+    if (runBtn) runBtn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 
