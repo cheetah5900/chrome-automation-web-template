@@ -7277,6 +7277,37 @@ function renderShopeeQueue() {
     dtBadge.textContent = item.subfolder_name ? `📁 ${item.subfolder_name}` : `📅 ${item.scheduled_datetime?.replace('T', ' เวลา ') || ''} น.`;
     right.appendChild(dtBadge);
 
+    const searchBtn = document.createElement('button');
+    searchBtn.className = 'secondary';
+    searchBtn.style.cssText = 'padding: 4px 10px; font-size: 0.8rem; border-radius: 8px; margin: 0; background: rgba(238, 77, 45, 0.2); border-color: rgba(238, 77, 45, 0.4); color: #ff7e67; cursor: pointer; display: flex; align-items: center; gap: 4px;';
+    searchBtn.innerHTML = `🔍 ค้นหาสินค้านี้`;
+    searchBtn.title = `ค้นหาคำว่า "${item.keyword}" บน Shopee ทันที`;
+    searchBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      searchBtn.disabled = true;
+      searchBtn.innerHTML = `⏳ กำลังค้นหา...`;
+      try {
+        logShopeeConsole(`🔍 กำลังส่งคำค้นหา: "${item.keyword}" ไปยัง Chrome 9222...`, 'system');
+        const res = await jsonFetch('/api/shopee-affiliate/search-single', {
+          method: 'POST',
+          body: JSON.stringify({ keyword: item.keyword, file_name: item.file_name, subfolder_name: item.subfolder_name })
+        });
+        if (res.ok) {
+          logShopeeConsole(`✅ ${res.message}`, 'success');
+          showToast(`ค้นหา "${item.keyword}" และไฮไลต์สินค้าสำเร็จ!`, 'success');
+        } else {
+          logShopeeConsole(`❌ ค้นหาล้มเหลว: ${res.detail || res.message}`, 'error');
+          alert('ค้นหาล้มเหลว: ' + (res.detail || res.message));
+        }
+      } catch (err) {
+        logShopeeConsole(`❌ ข้อผิดพลาด: ${err.message}`, 'error');
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = `🔍 ค้นหาสินค้านี้`;
+      }
+    });
+    right.appendChild(searchBtn);
+
     topRow.appendChild(left);
     topRow.appendChild(right);
 

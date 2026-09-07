@@ -4931,6 +4931,40 @@ def open_shopee_affiliate_url(req: dict[str, Any]) -> dict[str, Any]:
 
     return {"ok": False, "detail": f"เบราว์เซอร์ Chrome Debug Port {port} ยังไม่ได้เปิดใช้งาน"}
 
+@app.post("/api/shopee-affiliate/search-single")
+def api_shopee_affiliate_search_single(req: dict[str, Any]) -> dict[str, Any]:
+    raw_keyword = (req.get("keyword") or req.get("file_name") or req.get("subfolder_name") or "").strip()
+    from app.shopee_affiliate import clean_search_keyword, step_1_open_shopee_page, step_2_search_product, step_3_sort_best_sellers, step_4_highlight_and_reorder_top3
+    
+    keyword = clean_search_keyword(raw_keyword)
+    if not keyword:
+        raise HTTPException(status_code=400, detail="ไม่พบคีย์เวิร์ดสำหรับค้นหา")
+
+    port = 9222
+    try:
+        bot = browser_manager.get(target_port=port)
+        if not bot or not bot.driver:
+            raise HTTPException(status_code=400, detail="เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ (กรุณากด Launch Profile ก่อน)")
+        driver = bot.driver
+        _activate_chrome(driver, port=port)
+
+        step_1_open_shopee_page(driver)
+        step_2_search_product(driver, keyword)
+        step_3_sort_best_sellers(driver)
+        reorder_res = step_4_highlight_and_reorder_top3(driver)
+
+        return {
+            "ok": True,
+            "keyword": keyword,
+            "reorder_result": reorder_res,
+            "message": f"ค้นหา '{keyword}' จัดเรียงขายดี และไฮไลต์ 3 อันดับแรกเรียบร้อยแล้ว"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log(f"[Shopee Search Single Error] {e}")
+        return {"ok": False, "detail": f"เกิดข้อผิดพลาดในการค้นหา: {str(e)}"}
+
 @app.post("/api/shopee-affiliate/stop")
 def api_shopee_affiliate_stop() -> dict[str, Any]:
     from app.shopee_affiliate import stop_shopee_affiliate
