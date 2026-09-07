@@ -7318,9 +7318,6 @@ function renderShopeeQueue() {
     if (item.file_name) {
       detailContent += ` &nbsp;|&nbsp; <strong>📄 ไฟล์เป้าหมาย:</strong> ${item.file_name}`;
     }
-    if (item.caption) {
-      detailContent += `<br><strong>📝 ข้อความ:</strong> ${item.caption.slice(0, 100)}${item.caption.length > 100 ? '...' : ''}`;
-    }
     detailRow.innerHTML = detailContent;
 
     row.appendChild(topRow);
