@@ -101,7 +101,9 @@ def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
         url = "https://affiliate.shopee.co.th/offer/product_offer"
     
     current = driver.current_url or ""
-    if "offer/product_offer" in current:
+    current_base = current.split("?")[0].rstrip("/")
+    target_base = url.split("?")[0].rstrip("/")
+    if current_base == target_base:
         log("[Shopee Step 1] อยู่ที่หน้าข้อเสนอผลิตภัณฑ์ Shopee Affiliate อยู่แล้ว")
         return True
 
@@ -285,24 +287,16 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         badge.innerText = `⭐ เลือกรายการนี้ (คอม ${chosen.commRate}% | ยอดขาย ${chosen.salesText})`;
         card.appendChild(badge);
 
-        // Extract Product Link directly from chosen card's anchor tag (e.g. https://affiliate.shopee.co.th/offer/product_offer/...)
+        // Extract Product Link directly from chosen card's anchor tag
         const aTag = card.querySelector('a[href*="offer/product_offer"]') || card.querySelector('a');
         const productLink = aTag ? aTag.href : '';
 
-        // Click "เอา ลิงก์" button on this chosen card
-        const btn = card.querySelector('button.AffiliateItemCard__getlinkBtn, button');
+        // Navigate directly into product details page by clicking the anchor
         let clicked = false;
-        if (btn) {
-            btn.click();
+        if (aTag) {
+            aTag.removeAttribute('target');
+            aTag.click();
             clicked = true;
-        } else {
-            const btns = Array.from(card.querySelectorAll('button, a, span, div')).filter(el => 
-                (el.innerText || '').replace(/\\s+/g, '') === 'เอาลิงก์'
-            );
-            if (btns.length > 0) {
-                btns[0].click();
-                clicked = true;
-            }
         }
 
         return {
@@ -328,13 +322,47 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
     chosen_info = selection.get("chosen", {})
     product_link = selection.get("productLink") or chosen_info.get("productLink") or ""
     log(f"[Shopee Step 4] ⭐ เลือกสินค้า: '{chosen_info.get('title')}' | ค่าคอม: {chosen_info.get('commRate')}% | {chosen_info.get('salesText')} ({chosen_info.get('pool')})")
-    if product_link:
-        log(f"[Shopee Step 4] 🛍️ Product Link: {product_link}")
-
-    # 2. Wait for modal & extract affiliate short link
+    
+    # 2. Navigate to product detail page if not already navigating
     time.sleep(1.5)
-    affiliate_link = ""
+    if product_link:
+        current_url = driver.current_url or ""
+        # If still on the search page, force navigate using driver.get(product_link)
+        if current_url.split("?")[0].rstrip("/").endswith("product_offer"):
+            log(f"[Shopee Step 4] 🌐 กำลังเปิดหน้าลิงก์สินค้า: {product_link}")
+            driver.get(product_link)
+            time.sleep(2.0)
+        else:
+            log(f"[Shopee Step 4] 🌐 นำทางเข้าสู่หน้ารายละเอียดสินค้าสำเร็จ: {driver.current_url}")
+
+    # 3. Find and click the orange "เอา ลิงก์" button on the product details page
+    log("[Shopee Step 4] 🟠 กำลังกดปุ่มสีส้ม 'เอา ลิงก์' บนหน้ารายละเอียดสินค้า...")
+    clicked_orange = False
     for _ in range(12):
+        clicked_orange = driver.execute_script("""
+            const btns = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+            const orangeBtn = btns.find(b => {
+                const txt = (b.innerText || '').trim().replace(/\\s+/g, '');
+                return (txt === 'เอาลิงก์' || b.classList.contains('get-link-btn')) && !b.disabled;
+            });
+            if (orangeBtn) {
+                orangeBtn.scrollIntoView({ block: 'center' });
+                orangeBtn.click();
+                return true;
+            }
+            return false;
+        """)
+        if clicked_orange:
+            break
+        time.sleep(0.4)
+
+    if not clicked_orange:
+        log("[Shopee Step 4] ⚠️ ไม่พบปุ่มสีส้ม 'เอา ลิงก์' บนหน้ารายละเอียดสินค้า")
+
+    # 4. Wait for modal & extract affiliate short link
+    time.sleep(1.2)
+    affiliate_link = ""
+    for _ in range(15):
         affiliate_link = driver.execute_script("""
             const els = Array.from(document.querySelectorAll('.ant-modal textarea, .ant-modal input, textarea, input'));
             for (const el of els) {
