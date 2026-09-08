@@ -1316,6 +1316,13 @@
                     </button>
                   </div>
 
+                  <!-- Subfolder Images Name Container (collapsible) -->
+                  <div id="seedanceSubfolderImgContainer" style="display: block; margin-top: 10px; padding: 12px; background: rgba(58, 160, 255, 0.08); border: 1px dashed rgba(58, 160, 255, 0.3); border-radius: 10px;">
+                    <label for="cfg_seedance_image_subfolder" style="font-size: 0.85rem; font-weight: bold; color: #8da6ff; display: block; margin-bottom: 4px;">📁 ชื่อโฟลเดอร์สำหรับค้นหารูปภาพในแต่ละโฟลเดอร์ย่อย (Image Subfolder)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-bottom: 6px;">ระบบจะค้นหารูปทั้งหมดในโฟลเดอร์ชื่อนี้ของแต่ละโฟลเดอร์ย่อยมาแนบ (เช่น <code>images</code> หรือระบุชื่ออื่น)</div>
+                    <input id="cfg_seedance_image_subfolder" placeholder="เช่น images" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+
                   <!-- Character Sheet File Picker Container (collapsible) -->
                   <div id="seedanceCharSheetContainer" style="display: none; margin-top: 10px; padding: 12px; background: rgba(127, 92, 255, 0.08); border: 1px dashed rgba(127, 92, 255, 0.3); border-radius: 10px;">
                     <label for="cfg_seedance_character_sheet" style="font-size: 0.85rem; font-weight: bold; color: #c4b5fd; display: block; margin-bottom: 4px;">เลือกไฟล์รูป Character Sheet / Reference Image</label>
@@ -2027,6 +2034,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=58"></script>
+  <script src="/web/app.js?v=63"></script>
 </body>
 </html>
