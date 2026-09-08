@@ -57,142 +57,192 @@ def extract_leading_number(folder_name: str) -> Optional[int]:
         return int(match.group(1))
     return None
 
-def find_image_in_folder(folder_path: str, prefer_number: Optional[int] = None) -> tuple[Optional[str], Optional[str]]:
-    """Finds an image file in folder_path.
-    Returns (filename, filepath) or (None, None).
+def find_all_images_in_folder(
+    folder_path: str,
+    subfolder_name: str = "images"
+) -> list[tuple[str, str]]:
+    """
+    Finds all image files in folder_path.
+    If subfolder_name is provided and exists inside folder_path (e.g. 'images'),
+    searches inside that subfolder first.
+    Returns list of (filename, filepath) sorted naturally.
     """
     valid_exts = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff', '.tif'}
     if not os.path.isdir(folder_path):
-        return None, None
-    
+        return []
+
+    target_dir = folder_path
+    if subfolder_name and subfolder_name.strip():
+        clean_name = subfolder_name.strip().strip('/')
+        sub_dir = os.path.join(folder_path, clean_name)
+        if os.path.isdir(sub_dir):
+            target_dir = sub_dir
+        else:
+            # Case-insensitive match for subfolder
+            for entry in os.listdir(folder_path):
+                if entry.lower() == clean_name.lower() and os.path.isdir(os.path.join(folder_path, entry)):
+                    target_dir = os.path.join(folder_path, entry)
+                    break
+
     candidates = []
-    for fname in sorted(os.listdir(folder_path)):
-        if fname.startswith('.'):
-            continue
-        ext = os.path.splitext(fname)[1].lower()
-        if ext in valid_exts:
-            candidates.append(fname)
-            
-    if not candidates:
+    if os.path.isdir(target_dir):
+        for fname in sorted(os.listdir(target_dir)):
+            if fname.startswith('.'):
+                continue
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in valid_exts:
+                candidates.append((fname, os.path.join(target_dir, fname)))
+
+    # Fallback to parent folder if subfolder had no images and target_dir was a subfolder
+    if not candidates and target_dir != folder_path and os.path.isdir(folder_path):
+        for fname in sorted(os.listdir(folder_path)):
+            if fname.startswith('.'):
+                continue
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in valid_exts:
+                candidates.append((fname, os.path.join(folder_path, fname)))
+
+    # Sort naturally by number if present (e.g. 1.png, 2.png, 10.png)
+    def _sort_key(item):
+        name = item[0]
+        num = extract_leading_number(name)
+        if num is not None:
+            return (0, num, name)
+        return (1, 0, name)
+
+    candidates.sort(key=_sort_key)
+    return candidates
+
+def find_image_in_folder(
+    folder_path: str,
+    prefer_number: Optional[int] = None,
+    subfolder_name: str = "images"
+) -> tuple[Optional[str], Optional[str]]:
+    """Finds an image file in folder_path or its images subfolder.
+    Returns (filename, filepath) or (None, None).
+    """
+    all_imgs = find_all_images_in_folder(folder_path, subfolder_name)
+    if not all_imgs:
         return None, None
-        
+
     # 1. Match subfolder number (e.g. '01.png', '1.png', '1_cover.png')
     if prefer_number is not None:
         num_str = str(prefer_number)
         num_pad = f"{prefer_number:02d}"
-        for c in candidates:
-            c_base = os.path.splitext(c)[0].lower()
+        for fname, fpath in all_imgs:
+            c_base = os.path.splitext(fname)[0].lower()
             if c_base == num_str or c_base == num_pad or c_base.startswith(f"{num_str}_") or c_base.startswith(f"{num_pad}_"):
-                return c, os.path.join(folder_path, c)
-                
+                return fname, fpath
+
     # 2. Match keywords: 'storyboard', 'image', 'ref', 'char', 'cover', 'start'
     for kw in ['storyboard', 'ref', 'image', 'char', 'start', 'cover']:
-        for c in candidates:
-            if kw in c.lower():
-                return c, os.path.join(folder_path, c)
-                
-    # 3. Fallback: first candidate alphabetically
-    return candidates[0], os.path.join(folder_path, candidates[0])
+        for fname, fpath in all_imgs:
+            if kw in fname.lower():
+                return fname, fpath
+
+    # 3. Fallback: first candidate
+    return all_imgs[0][0], all_imgs[0][1]
 
 def clear_seedance_image(driver) -> bool:
-    """Removes any currently attached reference image from Dreamina."""
+    """Removes all currently attached reference images from Dreamina."""
     try:
         from selenium.webdriver.common.action_chains import ActionChains
-        from selenium.webdriver.common.by import By
 
-        # Loop up to 4 attempts in case multiple images exist or hover takes a beat
-        for attempt in range(4):
-            # 1. Check if there are any attached reference images in composer
-            has_img = driver.execute_script("""
+        # Loop up to 15 attempts to ensure ALL images are deleted if multiple exist
+        total_removed = 0
+        for iteration in range(15):
+            # Check how many images are currently attached in composer
+            img_count = driver.execute_script("""
                 const refs = document.querySelector('[data-content-generator-references="true"]');
-                if (!refs) return false;
-                return refs.querySelectorAll('img').length > 0;
+                if (!refs) return 0;
+                return refs.querySelectorAll('img').length;
             """)
-            if not has_img:
-                if attempt == 0:
-                    log("[Seedance] ไม่พบรูปภาพอ้างอิงที่ต้องลบบน Dreamina")
-                else:
-                    log("[Seedance] 🗑️ นำรูปภาพอ้างอิงเดิมออกเรียบร้อยแล้ว")
-                return True
+            if img_count == 0:
+                break
 
-            # 2. Try direct click if remove button is already rendered
-            clicked = driver.execute_script("""
+            # 1. Click any remove buttons that are already rendered in the DOM
+            clicked_any = driver.execute_script("""
                 const refs = document.querySelector('[data-content-generator-references="true"]');
-                if (!refs) return false;
-                const btn = refs.querySelector('[data-reference-remove-button="true"]') ||
-                            refs.querySelector('.remove-button-f7uCBH') ||
-                            refs.querySelector('div[class*="remove-button"]');
-                if (btn) {
+                if (!refs) return 0;
+                const btns = Array.from(refs.querySelectorAll('[data-reference-remove-button="true"], .remove-button-f7uCBH, div[class*="remove-button"], button[class*="remove"], [class*="delete"]'));
+                let clicked = 0;
+                for (const btn of btns) {
                     btn.click();
-                    return true;
+                    clicked++;
                 }
-                return false;
+                return clicked;
             """)
 
-            # 3. If button wasn't already rendered, hover over the specific reference item containing an image
-            if not clicked:
-                try:
-                    target_elem = driver.execute_script("""
-                        const refs = document.querySelector('[data-content-generator-references="true"]');
-                        if (!refs) return null;
-                        const img = refs.querySelector('img');
-                        if (img) {
-                            return img.closest('div[data-index]') ||
-                                   img.closest('.reference-item-ZGVyJs') ||
-                                   img.closest('.reference-a5qJDc') ||
-                                   img;
-                        }
-                        const items = refs.querySelectorAll('div[data-index]');
-                        for (const item of items) {
-                            if (!item.querySelector('input[type="file"]')) return item;
-                        }
-                        return null;
-                    """)
+            if clicked_any > 0:
+                total_removed += clicked_any
+                time.sleep(0.4)
+                continue
 
-                    if target_elem:
-                        ActionChains(driver).move_to_element(target_elem).perform()
-                        time.sleep(0.3)
+            # 2. If buttons are only visible on hover, hover over each reference item containing an img
+            try:
+                target_elems = driver.execute_script("""
+                    const refs = document.querySelector('[data-content-generator-references="true"]');
+                    if (!refs) return [];
+                    const imgs = refs.querySelectorAll('img');
+                    const targets = [];
+                    for (const img of imgs) {
+                        const container = img.closest('div[data-index]') ||
+                                          img.closest('.reference-item-ZGVyJs') ||
+                                          img.closest('.reference-a5qJDc') ||
+                                          img.parentElement ||
+                                          img;
+                        if (container && !targets.includes(container)) {
+                            targets.push(container);
+                        }
+                    }
+                    return targets;
+                """)
 
-                        # Click remove button via JS
-                        clicked = driver.execute_script("""
-                            const refs = document.querySelector('[data-content-generator-references="true"]');
-                            if (!refs) return false;
-                            const btn = refs.querySelector('[data-reference-remove-button="true"]') ||
-                                        refs.querySelector('.remove-button-f7uCBH') ||
-                                        refs.querySelector('div[class*="remove-button"]');
-                            if (btn) {
-                                btn.click();
-                                return true;
+                for target in target_elems:
+                    try:
+                        ActionChains(driver).move_to_element(target).perform()
+                        time.sleep(0.2)
+                        driver.execute_script("""
+                            const target = arguments[0];
+                            let clicked = false;
+                            if (target) {
+                                const btn = target.querySelector('[data-reference-remove-button="true"], .remove-button-f7uCBH, div[class*="remove-button"], button[class*="remove"], [class*="delete"]');
+                                if (btn) {
+                                    btn.click();
+                                    clicked = true;
+                                }
                             }
-                            return false;
-                        """)
-
-                        if not clicked:
-                            # Fallback to Selenium click if element is present
-                            btns = driver.find_elements(By.CSS_SELECTOR,
-                                '[data-content-generator-references="true"] [data-reference-remove-button="true"], '
-                                '[data-content-generator-references="true"] .remove-button-f7uCBH'
-                            )
-                            if btns:
-                                btns[0].click()
-                                clicked = True
-                except Exception as hover_err:
-                    log(f"[Seedance] Warning on hover remove button: {hover_err}")
+                            if (!clicked) {
+                                const refs = document.querySelector('[data-content-generator-references="true"]');
+                                if (refs) {
+                                    const btn = refs.querySelector('[data-reference-remove-button="true"], .remove-button-f7uCBH, div[class*="remove-button"], button[class*="remove"], [class*="delete"]');
+                                    if (btn) btn.click();
+                                }
+                            }
+                        """, target)
+                        time.sleep(0.3)
+                    except Exception:
+                        pass
+            except Exception as hover_err:
+                log(f"[Seedance] Warning on hover remove button: {hover_err}")
 
             time.sleep(0.4)
 
         # Final verification
-        still_has_img = driver.execute_script("""
+        remaining_count = driver.execute_script("""
             const refs = document.querySelector('[data-content-generator-references="true"]');
-            if (!refs) return false;
-            return refs.querySelectorAll('img').length > 0;
+            if (!refs) return 0;
+            return refs.querySelectorAll('img').length;
         """)
 
-        if not still_has_img:
-            log("[Seedance] 🗑️ นำรูปภาพอ้างอิงเดิมออกเรียบร้อยแล้ว")
+        if remaining_count == 0:
+            if total_removed > 0:
+                log(f"[Seedance] 🗑️ นำรูปภาพอ้างอิงทั้งหมด ({total_removed} รูป) ออกเรียบร้อยแล้ว")
+            else:
+                log("[Seedance] 🗑️ นำรูปภาพอ้างอิงเดิมออกเรียบร้อยแล้ว")
             return True
         else:
-            log("[Seedance] ⚠️ รูปภาพอ้างอิงยังไม่ถูกลบออก")
+            log(f"[Seedance] ⚠️ ยังมีรูปภาพอ้างอิงเหลืออยู่ {remaining_count} รูปบน Dreamina")
             return False
 
     except Exception as e:
@@ -257,56 +307,164 @@ def clear_seedance_image_and_prompt(driver) -> dict[str, bool]:
     prompt_cleared = clear_seedance_prompt(driver)
     return {"image_cleared": img_cleared, "prompt_cleared": prompt_cleared}
 
-def set_seedance_image(driver, image_path: str) -> bool:
-    """Uploads/attaches an image to Dreamina via the hidden file input."""
-    if not image_path or not os.path.isfile(image_path):
-        raise ValueError(f"ไม่พบไฟล์รูปภาพ: {image_path}")
+def set_seedance_images(driver, image_paths: list[str]) -> bool:
+    """Uploads/attaches multiple images to Dreamina via React handler, synthetic drop, or file input."""
+    import base64
+    import mimetypes
 
-    log(f"[Seedance] 🖼️ กำลังแนบรูปภาพ: {os.path.basename(image_path)}...")
-
-    # Clear existing image if any first
-    clear_seedance_image(driver)
-
-    # Locate input[type="file"]
-    file_inp = fast_poll(driver, """
-        return document.querySelector('[data-content-generator-references="true"] input[type="file"]') ||
-               document.querySelector('input.file-input-AykBQ0') ||
-               document.querySelector('.reference-upload-goGAYf input[type="file"]') ||
-               document.querySelector('input[type="file"][accept*="image"]');
-    """, timeout=8.0, poll_interval=0.2)
-
-    if not file_inp:
-        raise RuntimeError("ไม่พบช่องอัปโหลดรูปภาพ (input[type=file]) บนหน้าเว็บ Dreamina")
-
-    file_inp.send_keys(os.path.abspath(image_path))
-    time.sleep(0.8)
-
-    # Verify upload thumbnail
-    uploaded = fast_poll(driver, """
-        const refs = document.querySelector('[data-content-generator-references="true"]');
-        if (!refs) return null;
-        const img = refs.querySelector('img');
-        return (img && img.complete && img.naturalWidth > 0) ? img : null;
-    """, timeout=8.0, poll_interval=0.3)
-
-    if not uploaded:
-        log("[Seedance] ⚠️ ตรวจไม่พบ thumbnail รูปภาพหลัง send_keys")
+    valid_paths = [p for p in image_paths if p and os.path.isfile(p)]
+    if not valid_paths:
+        log("[Seedance] ⚠️ ไม่มีไฟล์รูปภาพที่ถูกต้องสำหรับอัปโหลด")
         return False
 
-    log(f"[Seedance] ✅ แนบรูปภาพ {os.path.basename(image_path)} บน Dreamina สำเร็จ")
-    time.sleep(0.3)
+    log(f"[Seedance] 🖼️ กำลังแนบรูปภาพ {len(valid_paths)} รูป: {', '.join([os.path.basename(p) for p in valid_paths])}...")
+
+    # Clear existing images if any first
+    clear_seedance_image(driver)
+    time.sleep(0.4)
+
+    # Tier 1: Check if direct input[type="file"] is already present in DOM
+    try:
+        file_inp = driver.execute_script("""
+            return document.querySelector('[data-content-generator-references="true"] input[type="file"]') ||
+                   document.querySelector('input.file-input-AykBQ0') ||
+                   document.querySelector('.reference-upload-goGAYf input[type="file"]') ||
+                   document.querySelector('input[type="file"][accept*="image"]');
+        """)
+        if file_inp:
+            for idx, img_path in enumerate(valid_paths):
+                file_inp.send_keys(os.path.abspath(img_path))
+                time.sleep(0.5)
+            log(f"[Seedance] 📤 แนบไฟล์ผ่าน input[type=file] สำเร็จ {len(valid_paths)} รูป")
+            return True
+    except Exception as e:
+        log(f"[Seedance] Direct file input check notice: {e}")
+
+    # Tier 2 & 3: React Fiber onChange handler or synthetic onDrop
+    payload = []
+    for p in valid_paths:
+        mime = mimetypes.guess_type(p)[0] or "image/jpeg"
+        try:
+            with open(p, "rb") as f:
+                payload.append({
+                    "name": os.path.basename(p),
+                    "mime": mime,
+                    "b64": base64.b64encode(f.read()).decode("utf-8")
+                })
+        except Exception as read_err:
+            log(f"[Seedance] ⚠️ ไม่สามารถอ่านไฟล์รูป {os.path.basename(p)}: {read_err}")
+
+    if not payload:
+        return False
+
+    res = driver.execute_script("""
+        const payload = arguments[0];
+        if (!payload || payload.length === 0) return { ok: false, error: "Empty payload" };
+
+        // Convert base64 payload to File objects
+        const files = payload.map(item => {
+            const byteChars = atob(item.b64);
+            const byteNumbers = new Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) {
+                byteNumbers[i] = byteChars.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: item.mime });
+            return new File([blob], item.name, { type: item.mime, lastModified: Date.now() });
+        });
+
+        // Find visible reference upload button/container
+        const visibleEl = Array.from(document.querySelectorAll(".reference-upload-goGAYf, div[class*=reference-upload]"))
+                               .find(el => el.getBoundingClientRect().width > 0);
+        if (!visibleEl) {
+            return { ok: false, error: "ไม่พบปุ่มอัปโหลดรูปภาพบนหน้าเว็บ Dreamina" };
+        }
+
+        // Method A: React Fiber onChange handler (invokes videoGeneratorManager.importResourcesFromLocal)
+        const fiberKey = Object.keys(visibleEl).find(k => k.startsWith("__reactFiber") || k.startsWith("__reactInternalInstance"));
+        let f = visibleEl[fiberKey];
+        let targetFn = null;
+        while (f) {
+            if (f.memoizedProps && typeof f.memoizedProps.onChange === "function") {
+                targetFn = f.memoizedProps.onChange;
+                break;
+            }
+            f = f.return;
+        }
+
+        if (targetFn) {
+            try {
+                targetFn(files);
+                return { ok: true, method: "react_fiber_onChange", count: files.length };
+            } catch (err) {
+                console.warn("React fiber onChange error:", err);
+            }
+        }
+
+        // Method B: Synthetic Drag & Drop Event
+        const propsKey = Object.keys(visibleEl).find(k => k.startsWith("__reactProps"));
+        if (propsKey && visibleEl[propsKey] && typeof visibleEl[propsKey].onDrop === "function") {
+            try {
+                const dt = new DataTransfer();
+                for (const file of files) dt.items.add(file);
+                const fakeEvent = {
+                    preventDefault: () => {},
+                    stopPropagation: () => {},
+                    dataTransfer: dt
+                };
+                visibleEl[propsKey].onDrop(fakeEvent);
+                return { ok: true, method: "react_props_onDrop", count: files.length };
+            } catch (err) {
+                console.warn("React props onDrop error:", err);
+            }
+        }
+
+        // Method C: Native DOM drop dispatch
+        try {
+            const dt = new DataTransfer();
+            for (const file of files) dt.items.add(file);
+            const dropEvt = new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt });
+            visibleEl.dispatchEvent(dropEvt);
+            return { ok: true, method: "dom_dispatch_drop", count: files.length };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
+    """, payload)
+
+    if not res or not res.get("ok"):
+        log(f"[Seedance] ⚠️ แนบรูปภาพไม่สำเร็จ: {res.get('error') if res else 'Unknown error'}")
+        return False
+
+    log(f"[Seedance] 📤 แนบไฟล์ผ่าน {res.get('method')} สำเร็จ {res.get('count')} รูป")
+    time.sleep(0.8)
+
+    # Verify upload thumbnail count
+    img_count = driver.execute_script("""
+        const refs = document.querySelectorAll("[data-content-generator-references=true] img, .reference-item-ZGVyJs img, img[class*=reference], img[class*=image-]");
+        return Array.from(refs).filter(img => img.src && (img.src.startsWith("blob:") || img.src.includes("byteimg") || img.src.includes("dreamina"))).length;
+    """)
+
+    log(f"[Seedance] ✅ แนบรูปภาพสำเร็จ {len(valid_paths)} รูป (แสดงบนเว็บ {img_count} รูป)")
     return True
+
+def set_seedance_image(driver, image_path: str) -> bool:
+    """Uploads/attaches a single image to Dreamina."""
+    if not image_path:
+        return False
+    return set_seedance_images(driver, [image_path])
 
 def scan_seedance_folders(
     main_folder: str,
     subfolders_str: str = "",
     image_mode: str = "none",
-    character_sheet_path: str = ""
+    character_sheet_path: str = "",
+    image_subfolder: str = "images"
 ) -> dict[str, Any]:
     """
     Scans main folder, filters subfolders by numbers/ranges,
     and locates markdown prompt files containing 'prompt' (case-insensitive) in filename.
     Also detects images based on image_mode: 'subfolder', 'character_sheet', or 'none'.
+    In 'subfolder' mode, searches for images in the folder named image_subfolder (default: 'images').
     """
     if not main_folder or not os.path.isdir(main_folder):
         raise ValueError(f"ไม่พบโฟลเดอร์หลัก: {main_folder}")
@@ -363,23 +521,33 @@ def scan_seedance_folders(
                         pass
                     break
 
-        # 2. Image Detection based on image_mode
+        # 2. Image Detection: Always scan subfolder images so UI or batch mode can access them
+        subfolder_imgs = find_all_images_in_folder(sub_path, subfolder_name=image_subfolder)
+        subfolder_image_files = [item[0] for item in subfolder_imgs]
+        subfolder_image_paths = [item[1] for item in subfolder_imgs]
+
+        image_files = []
+        image_paths = []
         image_file = None
         image_path = None
         has_image = False
 
         if image_mode == "subfolder":
-            img_fname, img_fpath = find_image_in_folder(sub_path, prefer_number=num)
-            if img_fname and img_fpath:
-                image_file = img_fname
-                image_path = img_fpath
+            if subfolder_imgs:
+                image_files = subfolder_image_files
+                image_paths = subfolder_image_paths
+                image_file = ", ".join(image_files) if len(image_files) <= 2 else f"{len(image_files)} รูป ({', '.join(image_files[:2])}...)"
+                image_path = image_paths[0]
                 has_image = True
         elif image_mode == "character_sheet":
             if character_sheet_path and os.path.isfile(character_sheet_path):
-                image_file = os.path.basename(character_sheet_path)
+                char_name = os.path.basename(character_sheet_path)
+                image_files = [char_name]
+                image_paths = [character_sheet_path]
+                image_file = char_name
                 image_path = character_sheet_path
                 has_image = True
-        # If "none", image_file and image_path remain None / empty
+        # If "none", image_files and image_paths remain empty
 
         items.append({
             "id": idx,
@@ -391,8 +559,13 @@ def scan_seedance_folders(
             "prompt_text": prompt_text,
             "has_prompt": bool(prompt_file and prompt_text),
             "image_mode": image_mode,
+            "image_subfolder": image_subfolder,
             "image_file": image_file or "",
             "image_path": image_path or "",
+            "image_files": image_files,
+            "image_paths": image_paths,
+            "subfolder_image_files": subfolder_image_files,
+            "subfolder_image_paths": subfolder_image_paths,
             "has_image": has_image,
             "status": "ready" if (prompt_file and prompt_text) else "warning"
         })
@@ -673,6 +846,7 @@ def apply_all_seedance_settings(
     duration: Optional[int] = None,
     prompt_text: Optional[str] = None,
     image_path: Optional[str] = None,
+    image_paths: Optional[list[str]] = None,
     clear_image: bool = False,
     clear_mode: str = "both",
     click_generate: bool = False
@@ -690,16 +864,23 @@ def apply_all_seedance_settings(
     if duration is not None and duration > 0:
         results["duration"] = set_seedance_duration(driver, duration)
 
+    # Determine target image paths
+    target_imgs = []
+    if image_paths:
+        target_imgs = [p for p in image_paths if p and os.path.isfile(p)]
+    elif image_path and os.path.isfile(image_path):
+        target_imgs = [image_path]
+
     # 1. Handle Image based on clear_mode
     if clear_mode in ("both", "image"):
-        if image_path and os.path.isfile(image_path):
-            results["image"] = set_seedance_image(driver, image_path)
+        if target_imgs:
+            results["image"] = set_seedance_images(driver, target_imgs)
         elif clear_image or clear_mode == "image":
             results["image"] = clear_seedance_image(driver)
     else:
-        # clear_mode == "prompt" -> Do NOT clear image on Dreamina
-        if image_path and os.path.isfile(image_path):
-            results["image"] = set_seedance_image(driver, image_path)
+        # clear_mode == "prompt" -> Do NOT clear image on Dreamina unless target_imgs provided
+        if target_imgs:
+            results["image"] = set_seedance_images(driver, target_imgs)
 
     # 2. Handle Prompt based on clear_mode
     if prompt_text and prompt_text.strip():
@@ -732,6 +913,7 @@ def run_seedance_batch(
     click_generate: bool = False,
     image_mode: str = "none",
     character_sheet_path: str = "",
+    image_subfolder: str = "images",
     clear_mode: str = "both",
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> dict[str, Any]:
@@ -807,7 +989,17 @@ def run_seedance_batch(
             prompt_text = item.get("prompt_text", "")
             sub_name = item.get("subfolder_name", f"Item #{idx+1}")
             item_mode = image_mode or item.get("image_mode", "none")
-            item_img = item.get("image_path")
+            item_img_paths = item.get("image_paths") or item.get("subfolder_image_paths") or ([item.get("image_path")] if item.get("image_path") else [])
+            item_img_paths = [p for p in item_img_paths if p and os.path.isfile(p)]
+
+            # If subfolder mode but paths are empty, dynamically scan subfolder_path on disk
+            if item_mode == "subfolder" and not item_img_paths:
+                sub_path = item.get("subfolder_path")
+                if sub_path and os.path.isdir(sub_path):
+                    found_imgs = find_all_images_in_folder(sub_path, subfolder_name=image_subfolder)
+                    if found_imgs:
+                        item_img_paths = [tpl[1] for tpl in found_imgs]
+                        log(f"[Seedance] 🔍 ค้นพบรูปภาพเพิ่มเติมใน '{sub_name}': {len(item_img_paths)} รูป")
             log(f"[Seedance] 🎬 กำลังประมวลผล [{idx+1}/{total}] โฟลเดอร์: {sub_name} (Image Mode: {item_mode}, Clear: {clear_mode})...")
 
             if progress_callback:
@@ -821,14 +1013,14 @@ def run_seedance_batch(
             # 1. Handle Image Attachment based on mode and clear_mode
             if clear_mode in ("both", "image"):
                 if item_mode == "subfolder":
-                    if item_img and os.path.isfile(item_img):
-                        log(f"[Seedance] 🖼️ กำลังแนบรูปภาพประจำโฟลเดอร์: {os.path.basename(item_img)}")
-                        set_seedance_image(driver, item_img)
+                    if item_img_paths:
+                        log(f"[Seedance] 🖼️ กำลังแนบรูปภาพประจำโฟลเดอร์ {len(item_img_paths)} รูป: {', '.join([os.path.basename(p) for p in item_img_paths])}")
+                        set_seedance_images(driver, item_img_paths)
                     else:
                         log(f"[Seedance] ℹ️ โฟลเดอร์ {sub_name} ไม่มีไฟล์รูปภาพ -> ลบรูปอ้างอิงเดิม (ถ้ามี)")
                         clear_seedance_image(driver)
                 elif item_mode == "character_sheet":
-                    target_char_img = character_sheet_path or item_img
+                    target_char_img = character_sheet_path or (item_img_paths[0] if item_img_paths else None)
                     if target_char_img and os.path.isfile(target_char_img):
                         has_img = driver.execute_script("""
                             const refs = document.querySelector('[data-content-generator-references="true"]');
@@ -836,24 +1028,24 @@ def run_seedance_batch(
                         """)
                         if not has_img:
                             log(f"[Seedance] 👤 แนบรูป Character Sheet: {os.path.basename(target_char_img)}")
-                            set_seedance_image(driver, target_char_img)
+                            set_seedance_images(driver, [target_char_img])
                     else:
                         clear_seedance_image(driver)
                 elif item_mode == "none":
                     clear_seedance_image(driver)
             else:
                 # clear_mode == "prompt" -> Do NOT clear existing image on Dreamina!
-                if item_mode == "subfolder" and item_img and os.path.isfile(item_img):
-                    set_seedance_image(driver, item_img)
+                if item_mode == "subfolder" and item_img_paths:
+                    set_seedance_images(driver, item_img_paths)
                 elif item_mode == "character_sheet":
-                    target_char_img = character_sheet_path or item_img
+                    target_char_img = character_sheet_path or (item_img_paths[0] if item_img_paths else None)
                     if target_char_img and os.path.isfile(target_char_img):
                         has_img = driver.execute_script("""
                             const refs = document.querySelector('[data-content-generator-references="true"]');
                             return !!(refs && refs.querySelector('img'));
                         """)
                         if not has_img:
-                            set_seedance_image(driver, target_char_img)
+                            set_seedance_images(driver, [target_char_img])
                 else:
                     log("[Seedance] ℹ️ ข้ามการลบรูปภาพตาม Clear Mode: ล้างเฉพาะ Prompt (คงรูปเดิมไว้)")
 

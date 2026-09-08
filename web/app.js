@@ -8039,6 +8039,11 @@ function setSeedanceImageMode(mode) {
     }
   });
 
+  const subfolderImgContainer = document.getElementById('seedanceSubfolderImgContainer');
+  if (subfolderImgContainer) {
+    subfolderImgContainer.style.display = (targetMode === 'subfolder') ? 'block' : 'none';
+  }
+
   const charContainer = document.getElementById('seedanceCharSheetContainer');
   if (charContainer) {
     charContainer.style.display = (targetMode === 'character_sheet') ? 'block' : 'none';
@@ -8090,7 +8095,8 @@ async function loadSeedancePresets(presets) {
       presets = {};
     }
   }
-  const currentVal = select.value || localStorage.getItem('seedance_last_preset') || '';
+  const lastPreset = localStorage.getItem('seedance_last_preset') || '';
+  const currentVal = select.value || lastPreset || '';
   select.innerHTML = '<option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>';
   if (presets && typeof presets === 'object') {
     Object.keys(presets).forEach(name => {
@@ -8102,6 +8108,7 @@ async function loadSeedancePresets(presets) {
   }
   if (currentVal && presets && presets[currentVal]) {
     select.value = currentVal;
+    await applySeedancePreset(true);
   }
 }
 window.loadSeedancePresets = loadSeedancePresets;
@@ -8119,11 +8126,13 @@ async function saveSeedancePreset() {
     console.error('Failed to fetch config:', e);
   }
   const presets = currentConfig.seedance_presets || {};
+  const imageSubfolderVal = document.getElementById('cfg_seedance_image_subfolder')?.value?.trim() || 'images';
 
   presets[trimmedName] = {
     main_folder: document.getElementById('cfg_seedance_main_folder')?.value || '',
     subfolders: document.getElementById('cfg_seedance_subfolders')?.value || '',
     image_mode: getSeedanceImageMode(),
+    image_subfolder: imageSubfolderVal,
     clear_mode: getSeedanceClearMode(),
     character_sheet: document.getElementById('cfg_seedance_character_sheet')?.value || '',
     model: document.getElementById('cfg_seedance_model')?.value || 'fast',
@@ -8140,10 +8149,11 @@ async function saveSeedancePreset() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'seedance_presets', value: presets })
     });
-    loadSeedancePresets(presets);
+    await loadSeedancePresets(presets);
     const select = document.getElementById('seedancePresetSelect');
     if (select) select.value = trimmedName;
     localStorage.setItem('seedance_last_preset', trimmedName);
+    localStorage.setItem('seedance_image_subfolder', imageSubfolderVal);
     writeConsoleLine(`💾 บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว`, 'success', 'seedanceConsole');
     if (typeof showToast === 'function') showToast(`บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว!`, 'success');
   } catch (e) {
@@ -8177,8 +8187,8 @@ async function deleteSeedancePreset() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'seedance_presets', value: presets })
     });
-    loadSeedancePresets(presets);
     localStorage.removeItem('seedance_last_preset');
+    await loadSeedancePresets(presets);
     writeConsoleLine(`🗑️ ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'seedanceConsole');
     if (typeof showToast === 'function') showToast(`ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info');
   } catch (e) {
@@ -8188,7 +8198,7 @@ async function deleteSeedancePreset() {
 }
 window.deleteSeedancePreset = deleteSeedancePreset;
 
-async function applySeedancePreset() {
+async function applySeedancePreset(silent = false) {
   const select = document.getElementById('seedancePresetSelect');
   const currentName = select ? select.value : '';
   if (!currentName) return;
@@ -8204,6 +8214,11 @@ async function applySeedancePreset() {
 
   if (document.getElementById('cfg_seedance_main_folder')) document.getElementById('cfg_seedance_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_seedance_subfolders')) document.getElementById('cfg_seedance_subfolders').value = preset.subfolders || '';
+  if (document.getElementById('cfg_seedance_image_subfolder')) {
+    const subVal = (preset.image_subfolder !== undefined && preset.image_subfolder !== null && preset.image_subfolder !== '') ? preset.image_subfolder : 'images';
+    document.getElementById('cfg_seedance_image_subfolder').value = subVal;
+    localStorage.setItem('seedance_image_subfolder', subVal);
+  }
   if (preset.image_mode) {
     setSeedanceImageMode(preset.image_mode);
   }
@@ -8227,8 +8242,10 @@ async function applySeedancePreset() {
 
   updateSeedanceQuickBtnStyles();
   updateTooltips();
-  writeConsoleLine(`🎯 โหลด Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'seedanceConsole');
-  if (typeof showToast === 'function') showToast(`โหลด Preset "${currentName}" เรียบร้อยแล้ว!`, 'success');
+  if (!silent) {
+    writeConsoleLine(`🎯 โหลด Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'seedanceConsole');
+    if (typeof showToast === 'function') showToast(`โหลด Preset "${currentName}" เรียบร้อยแล้ว!`, 'success');
+  }
 }
 window.applySeedancePreset = applySeedancePreset;
 
@@ -8244,11 +8261,15 @@ async function applySeedanceDirectSettings(customOptions = {}) {
   const aspectRatio = customOptions.aspect_ratio || document.getElementById('cfg_seedance_aspect_ratio')?.value || '9:16';
   const duration = customOptions.duration !== undefined ? parseInt(customOptions.duration, 10) : (parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15);
   const promptText = customOptions.prompt_text !== undefined ? customOptions.prompt_text : '';
-  const imagePath = customOptions.image_path !== undefined ? customOptions.image_path : null;
+  const imagePaths = customOptions.image_paths !== undefined ? customOptions.image_paths : (customOptions.image_path ? [customOptions.image_path] : null);
+  const imagePath = (imagePaths && imagePaths.length > 0) ? imagePaths[0] : (customOptions.image_path !== undefined ? customOptions.image_path : null);
   const clearImage = customOptions.clear_image !== undefined ? customOptions.clear_image : false;
+  const clearMode = customOptions.clear_mode !== undefined ? customOptions.clear_mode : getSeedanceClearMode();
+  const clickGenerate = customOptions.click_generate !== undefined ? customOptions.click_generate : false;
 
   const logParts = [`Model: ${model}`, `Ratio: ${aspectRatio}`, `Duration: ${duration}s`];
-  if (imagePath) logParts.push(`Image: ${imagePath.split('/').pop()}`);
+  if (imagePaths && imagePaths.length > 0) logParts.push(`Images: ${imagePaths.length} files`);
+  else if (imagePath) logParts.push(`Image: ${imagePath.split('/').pop()}`);
   else if (clearImage) logParts.push(`Clear Image`);
   if (promptText) logParts.push(`Prompt: ${promptText.substring(0, 30)}...`);
 
@@ -8264,7 +8285,10 @@ async function applySeedanceDirectSettings(customOptions = {}) {
         duration: duration,
         prompt_text: promptText,
         image_path: imagePath,
-        clear_image: clearImage
+        image_paths: imagePaths,
+        clear_image: clearImage,
+        clear_mode: clearMode,
+        click_generate: clickGenerate
       })
     });
 
@@ -8487,11 +8511,17 @@ function updateSeedanceRunButtonUI() {
       imgBadge.style.borderRadius = '6px';
       const curImageMode = getSeedanceImageMode();
       if (curImageMode === 'subfolder') {
-        if (item.has_image && item.image_file) {
+        const itemImgPaths = (item.image_paths && item.image_paths.length > 0) ? item.image_paths : (item.subfolder_image_paths || []);
+        const itemImgFiles = (item.image_files && item.image_files.length > 0) ? item.image_files : (item.subfolder_image_files || []);
+        const hasImgs = item.has_image || (itemImgPaths.length > 0);
+
+        if (hasImgs && itemImgPaths.length > 0) {
           imgBadge.style.background = 'rgba(56, 189, 248, 0.15)';
           imgBadge.style.color = '#38bdf8';
-          imgBadge.textContent = `🖼️ ${item.image_file}`;
-          imgBadge.title = item.image_path || '';
+          const count = itemImgPaths.length;
+          const names = itemImgFiles.length > 0 ? itemImgFiles.join(', ') : (item.image_file || '');
+          imgBadge.textContent = count > 1 ? `🖼️ ${count} รูป: ${names}` : `🖼️ ${names || item.image_file || '1 รูป'}`;
+          imgBadge.title = itemImgPaths.join('\n');
         } else {
           imgBadge.style.background = 'rgba(239, 68, 68, 0.12)';
           imgBadge.style.color = '#f87171';
@@ -8535,19 +8565,22 @@ function updateSeedanceRunButtonUI() {
         applyBtn.addEventListener('click', () => {
           seedanceStepIndex = index;
           const curMode = getSeedanceImageMode();
-          let targetImg = null;
+          let targetImgs = null;
           let shouldClear = false;
 
           if (curMode === 'subfolder') {
-            if (item.image_path) {
-              targetImg = item.image_path;
+            const rowImgPaths = (item.image_paths && item.image_paths.length > 0) ? item.image_paths : (item.subfolder_image_paths || []);
+            if (rowImgPaths.length > 0) {
+              targetImgs = rowImgPaths;
+            } else if (item.image_path) {
+              targetImgs = [item.image_path];
             } else {
               shouldClear = true;
             }
           } else if (curMode === 'character_sheet') {
             const charSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
             if (charSheetPath) {
-              targetImg = charSheetPath;
+              targetImgs = [charSheetPath];
             } else {
               shouldClear = true;
             }
@@ -8557,7 +8590,7 @@ function updateSeedanceRunButtonUI() {
 
           applySeedanceDirectSettings({
             prompt_text: item.prompt_text,
-            image_path: targetImg,
+            image_paths: targetImgs,
             clear_image: shouldClear
           });
           updateSeedanceRunButtonUI();
@@ -8596,6 +8629,7 @@ function updateSeedanceRunButtonUI() {
     const subfoldersStr = document.getElementById('cfg_seedance_subfolders')?.value.trim() || '';
     const imageMode = getSeedanceImageMode();
     const characterSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
+    const imageSubfolder = document.getElementById('cfg_seedance_image_subfolder')?.value.trim() || 'images';
 
     if (!mainFolder) {
       alert('กรุณาระบุหรือเลือกโฟลเดอร์หลักก่อน');
@@ -8603,7 +8637,7 @@ function updateSeedanceRunButtonUI() {
     }
 
     seedanceStepIndex = -1;
-    writeConsoleLine(`[Seedance Scanner] กำลังสแกนหาไฟล์ Prompt ใน "${mainFolder}" (ช่วงโฟลเดอร์: ${subfoldersStr || 'ทั้งหมด'}, Mode: ${imageMode})...`, 'system', 'seedanceConsole');
+    writeConsoleLine(`[Seedance Scanner] กำลังสแกนหาไฟล์ Prompt ใน "${mainFolder}" (ช่วงโฟลเดอร์: ${subfoldersStr || 'ทั้งหมด'}, Mode: ${imageMode}, โฟลเดอร์รูป: ${imageSubfolder})...`, 'system', 'seedanceConsole');
 
     try {
       const res = await jsonFetch('/api/seedance/scan', {
@@ -8613,7 +8647,8 @@ function updateSeedanceRunButtonUI() {
           main_folder: mainFolder,
           subfolders_str: subfoldersStr,
           image_mode: imageMode,
-          character_sheet_path: characterSheetPath
+          character_sheet_path: characterSheetPath,
+          image_subfolder: imageSubfolder
         })
       });
 
@@ -8674,9 +8709,10 @@ function updateSeedanceRunButtonUI() {
       const delayMax = parseFloat(document.getElementById('cfg_seedance_delay_max')?.value) || 15;
       const imageMode = getSeedanceImageMode();
       const characterSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
+      const imageSubfolder = document.getElementById('cfg_seedance_image_subfolder')?.value.trim() || 'images';
 
       const clearMode = getSeedanceClearMode();
-      writeConsoleLine(`🚀 [Auto Mode] เริ่มส่งคำสั่งรัน Seedance ${selectedItems.length} รายการ (Mode: ${imageMode}, Clear: ${clearMode}, กด Generate อัตโนมัติ)...`, 'system', 'seedanceConsole');
+      writeConsoleLine(`🚀 [Auto Mode] เริ่มส่งคำสั่งรัน Seedance ${selectedItems.length} รายการ (Mode: ${imageMode}, Clear: ${clearMode}, โฟลเดอร์รูป: ${imageSubfolder}, กด Generate อัตโนมัติ)...`, 'system', 'seedanceConsole');
 
       try {
         const res = await jsonFetch('/api/seedance/run', {
@@ -8692,6 +8728,7 @@ function updateSeedanceRunButtonUI() {
             click_generate: true,
             image_mode: imageMode,
             character_sheet_path: characterSheetPath,
+            image_subfolder: imageSubfolder,
             clear_mode: clearMode
           })
         });
@@ -8763,19 +8800,22 @@ function updateSeedanceRunButtonUI() {
 
     const imageMode = getSeedanceImageMode();
     const clearMode = getSeedanceClearMode();
-    let stepImg = null;
+    let stepImgs = null;
     let stepClearImg = false;
     if (clearMode === 'both' || clearMode === 'image') {
       if (imageMode === 'subfolder') {
-        if (currentItem.image_path) {
-          stepImg = currentItem.image_path;
+        const stepImgPaths = (currentItem.image_paths && currentItem.image_paths.length > 0) ? currentItem.image_paths : (currentItem.subfolder_image_paths || []);
+        if (stepImgPaths.length > 0) {
+          stepImgs = stepImgPaths;
+        } else if (currentItem.image_path) {
+          stepImgs = [currentItem.image_path];
         } else {
           stepClearImg = true;
         }
       } else if (imageMode === 'character_sheet') {
         const charSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
         if (charSheetPath) {
-          stepImg = charSheetPath;
+          stepImgs = [charSheetPath];
         } else {
           stepClearImg = true;
         }
@@ -8784,16 +8824,21 @@ function updateSeedanceRunButtonUI() {
       }
     } else {
       // clearMode === 'prompt' -> do not clear image, only attach if present
-      if (imageMode === 'subfolder' && currentItem.image_path) {
-        stepImg = currentItem.image_path;
+      if (imageMode === 'subfolder') {
+        const stepImgPaths = (currentItem.image_paths && currentItem.image_paths.length > 0) ? currentItem.image_paths : (currentItem.subfolder_image_paths || []);
+        if (stepImgPaths.length > 0) {
+          stepImgs = stepImgPaths;
+        } else if (currentItem.image_path) {
+          stepImgs = [currentItem.image_path];
+        }
       } else if (imageMode === 'character_sheet') {
         const charSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
-        if (charSheetPath) stepImg = charSheetPath;
+        if (charSheetPath) stepImgs = [charSheetPath];
       }
     }
 
     const stepPrompt = currentItem.prompt_text || '';
-    const imgDesc = stepImg ? `, รูป: ${stepImg.split('/').pop()}` : (stepClearImg ? ', ล้างรูป' : '');
+    const imgDesc = stepImgs && stepImgs.length > 0 ? `, รูป: ${stepImgs.map(p => p.split('/').pop()).join(', ')}` : (stepClearImg ? ', ล้างรูป' : '');
     const clearLabel = clearMode === 'both' ? 'ล้างทั้งคู่หลังส่ง' : (clearMode === 'prompt' ? 'ล้าง Prompt หลังส่ง' : 'ล้างรูปหลังส่ง');
     writeConsoleLine(`[Seedance Step ${stepNum}/${total}] ✍️ กำลังวางข้อมูลและกด Generate สำหรับ "${currentItem.subfolder_name}" (${stepPrompt.length} chars${imgDesc}, ${clearLabel})...`, 'info', 'seedanceConsole');
 
@@ -8806,7 +8851,8 @@ function updateSeedanceRunButtonUI() {
           aspect_ratio: null,
           duration: null,
           prompt_text: stepPrompt,
-          image_path: stepImg,
+          image_path: (stepImgs && stepImgs.length > 0) ? stepImgs[0] : null,
+          image_paths: stepImgs,
           clear_image: stepClearImg,
           clear_mode: clearMode,
           click_generate: true
@@ -8839,7 +8885,6 @@ function updateSeedanceRunButtonUI() {
   async function stopSeedanceBatch() {
     const isAuto = document.getElementById('chkSeedanceClickSubmit') ? document.getElementById('chkSeedanceClickSubmit').checked : true;
     if (isAuto) {
-      if (!confirm('ต้องการบังคับหยุดการทำงานของ Seedance หรือไม่?')) return;
       writeConsoleLine('🛑 กำลังส่งคำสั่ง Force Stop ไปยัง Seedance...', 'warning', 'seedanceConsole');
       try {
         const res = await jsonFetch('/api/seedance/stop', { method: 'POST' });
@@ -9120,12 +9165,37 @@ function initSeedanceGenListeners() {
     });
   }
 
+  const imgSubfolderInput = document.getElementById('cfg_seedance_image_subfolder');
+  if (imgSubfolderInput) {
+    const savedSubfolder = localStorage.getItem('seedance_image_subfolder');
+    if (savedSubfolder) {
+      imgSubfolderInput.value = savedSubfolder;
+    } else if (!imgSubfolderInput.value) {
+      imgSubfolderInput.value = 'images';
+    }
+    imgSubfolderInput.addEventListener('input', () => {
+      localStorage.setItem('seedance_image_subfolder', imgSubfolderInput.value);
+    });
+    imgSubfolderInput.addEventListener('change', () => {
+      localStorage.setItem('seedance_image_subfolder', imgSubfolderInput.value);
+    });
+  }
+
   // Image Attachment Mode 3-Option Toggle Group
   const toggleButtons = document.querySelectorAll('.seedance-mode-toggle');
   toggleButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.getAttribute('data-mode');
       setSeedanceImageMode(mode);
+      if (mode === 'subfolder' && typeof seedanceBatchQueue !== 'undefined' && seedanceBatchQueue.length > 0) {
+        seedanceBatchQueue.forEach(it => {
+          if (it.subfolder_image_paths && it.subfolder_image_paths.length > 0) {
+            it.image_paths = it.subfolder_image_paths;
+            it.image_files = it.subfolder_image_files;
+            it.has_image = true;
+          }
+        });
+      }
       renderSeedanceQueue();
     });
   });

@@ -7149,6 +7149,7 @@ class SeedanceScanRequest(BaseModel):
     subfolders_str: str = ""
     image_mode: str = "none"
     character_sheet_path: str = ""
+    image_subfolder: str = "images"
 
 class SeedanceRunRequest(BaseModel):
     items: list[dict[str, Any]]
@@ -7160,6 +7161,7 @@ class SeedanceRunRequest(BaseModel):
     click_generate: bool = False
     image_mode: str = "none"
     character_sheet_path: str = ""
+    image_subfolder: str = "images"
     clear_mode: str = "both"
 
 class SeedanceApplySettingsRequest(BaseModel):
@@ -7168,6 +7170,7 @@ class SeedanceApplySettingsRequest(BaseModel):
     duration: Optional[int] = None
     prompt_text: Optional[str] = None
     image_path: Optional[str] = None
+    image_paths: Optional[list[str]] = None
     clear_image: bool = False
     clear_mode: Optional[str] = "both"
     click_generate: bool = False
@@ -7180,6 +7183,7 @@ class SeedanceDebugStepRequest(BaseModel):
     aspect_ratio: Optional[str] = "9:16"
     duration: Optional[int] = 15
     image_path: Optional[str] = None
+    image_paths: Optional[list[str]] = None
     prompt_text: Optional[str] = None
     click_generate: bool = False
     clear_mode: Optional[str] = "both"
@@ -7247,7 +7251,8 @@ def api_seedance_scan(req: SeedanceScanRequest) -> dict[str, Any]:
             req.main_folder,
             req.subfolders_str,
             image_mode=req.image_mode,
-            character_sheet_path=req.character_sheet_path
+            character_sheet_path=req.character_sheet_path,
+            image_subfolder=req.image_subfolder or "images"
         )
         return res
     except Exception as e:
@@ -7268,6 +7273,7 @@ def api_seedance_apply_settings(req: SeedanceApplySettingsRequest) -> dict[str, 
             duration=req.duration,
             prompt_text=req.prompt_text,
             image_path=req.image_path,
+            image_paths=req.image_paths,
             clear_image=req.clear_image,
             clear_mode=req.clear_mode or "both",
             click_generate=req.click_generate
@@ -7296,6 +7302,7 @@ def _seedance_worker(req: SeedanceRunRequest):
             click_generate=req.click_generate,
             image_mode=req.image_mode,
             character_sheet_path=req.character_sheet_path,
+            image_subfolder=req.image_subfolder or "images",
             clear_mode=req.clear_mode,
             progress_callback=_on_prog
         )
@@ -7347,6 +7354,7 @@ def api_seedance_debug_step(req: SeedanceDebugStepRequest) -> dict[str, Any]:
         set_seedance_aspect_ratio,
         set_seedance_duration,
         set_seedance_image,
+        set_seedance_images,
         clear_seedance_image,
         clear_seedance_prompt,
         clear_seedance_image_and_prompt,
@@ -7379,9 +7387,15 @@ def api_seedance_debug_step(req: SeedanceDebugStepRequest) -> dict[str, Any]:
             return {"ok": True, "message": f"ตั้งค่าระยะเวลา {dur}s สำเร็จ", "result": dur}
 
         elif step == "image":
+            if req.image_paths:
+                valid_paths = [p for p in req.image_paths if p and os.path.isfile(p)]
+                if not valid_paths:
+                    return {"ok": False, "detail": "ไม่พบไฟล์รูปภาพตามพาธที่ระบุ"}
+                res = set_seedance_images(driver, valid_paths)
+                return {"ok": True, "message": f"แนบรูปภาพ {len(valid_paths)} รูป สำเร็จ", "result": res}
             if not req.image_path or not os.path.isfile(req.image_path):
                 return {"ok": False, "detail": f"ไม่พบไฟล์รูปภาพ: {req.image_path}"}
-            res = set_seedance_image(driver, req.image_path)
+            res = set_seedance_images(driver, [req.image_path])
             return {"ok": True, "message": f"แนบรูปภาพ '{os.path.basename(req.image_path)}' สำเร็จ", "result": res}
 
         elif step == "clear_image":
@@ -7434,8 +7448,13 @@ def api_seedance_debug_step(req: SeedanceDebugStepRequest) -> dict[str, Any]:
             if req.duration:
                 set_seedance_duration(driver, req.duration)
                 log_steps.append(f"Duration: {req.duration}s")
-            if req.image_path and os.path.isfile(req.image_path):
-                set_seedance_image(driver, req.image_path)
+            if req.image_paths:
+                valid_paths = [p for p in req.image_paths if p and os.path.isfile(p)]
+                if valid_paths:
+                    set_seedance_images(driver, valid_paths)
+                    log_steps.append(f"Images: {len(valid_paths)} files")
+            elif req.image_path and os.path.isfile(req.image_path):
+                set_seedance_images(driver, [req.image_path])
                 log_steps.append(f"Image: {os.path.basename(req.image_path)}")
             elif req.image_path == "clear":
                 clear_seedance_image(driver)
@@ -7465,6 +7484,9 @@ def api_seedance_debug_step(req: SeedanceDebugStepRequest) -> dict[str, Any]:
 
 @app.get("/")
 def index():
-    return FileResponse(BASE_DIR / "web" / "index.html")
+    return FileResponse(
+        BASE_DIR / "web" / "index.html",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+    )
 
 app.mount("/web", StaticFiles(directory=BASE_DIR / "web"), name="web")
