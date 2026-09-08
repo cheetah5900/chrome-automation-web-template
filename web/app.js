@@ -1073,8 +1073,11 @@ async function loadConfig() {
     
     // Shopee Affiliate Defaults
     const shopeePageUrl = document.getElementById('cfg_shopee_page_url');
-    if (shopeePageUrl && !shopeePageUrl.value) {
-      shopeePageUrl.value = config.shopee_page_url || 'https://affiliate.shopee.co.th/offer/product_offer';
+    if (shopeePageUrl) {
+      const defPageUrl = config.shopee_page_url || localStorage.getItem('shopee_default_page_url') || 'https://affiliate.shopee.co.th/offer/product_offer';
+      if (!shopeePageUrl.value) {
+        shopeePageUrl.value = defPageUrl;
+      }
     }
     const shopeeMainFolder = document.getElementById('cfg_shopee_main_folder');
     if (shopeeMainFolder) {
@@ -7608,6 +7611,7 @@ async function debugShopeeStep5(btn) {
     if (res.ok) {
       logShopeeConsole(`✅ [Step 5] ${res.message}`, 'success');
       if (res.affiliate_link) logShopeeConsole(`🔗 Affiliate Link: ${res.affiliate_link}`, 'success');
+      if (res.real_product_link || res.product_link) logShopeeConsole(`🛒 Real Product Link: ${res.real_product_link || res.product_link}`, 'info');
       showToast('Step 5: เอาลิงก์สำเร็จ (ไม่กดดูสินค้า)', 'success');
     } else {
       logShopeeConsole(`❌ [Step 5] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
@@ -7632,6 +7636,7 @@ async function debugShopeeStep6(btn) {
     });
     if (res.ok) {
       logShopeeConsole(`✅ [Step 6] ${res.message}`, 'success');
+      if (res.real_product_link) logShopeeConsole(`🛒 Real Product Link: ${res.real_product_link}`, 'info');
       showToast('Step 6: เปิดแท็บสินค้าสำเร็จ', 'success');
     } else {
       logShopeeConsole(`❌ [Step 6] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
@@ -7672,6 +7677,30 @@ async function runShopeeSingleItem(item, btn) {
 function initShopeeAffiliateListeners() {
   const openUrlBtn = document.getElementById('btnOpenShopeePageUrl');
   if (openUrlBtn) openUrlBtn.addEventListener('click', openShopeePageUrl);
+
+  const setPageUrlDefaultBtn = document.getElementById('setShopeePageUrlDefaultBtn');
+  if (setPageUrlDefaultBtn) {
+    setPageUrlDefaultBtn.addEventListener('click', async () => {
+      const input = document.getElementById('cfg_shopee_page_url');
+      const val = input ? input.value.trim() : '';
+      if (!val) {
+        showToast('กรุณาระบุ URL หน้า Shopee ก่อนตั้งเป็นค่าเริ่มต้น', 'warning');
+        return;
+      }
+      localStorage.setItem('shopee_default_page_url', val);
+      try {
+        await jsonFetch('/api/config/set-default', {
+          method: 'POST',
+          body: JSON.stringify({ key: 'shopee_page_url', value: val })
+        });
+        showToast(`บันทึก Shopee URL เป็นค่าเริ่มต้นแล้ว: ${val}`, 'success');
+        logShopeeConsole(`📌 บันทึกค่าเริ่มต้น Shopee URL: ${val}`, 'success');
+      } catch (err) {
+        console.error('Failed to save default Shopee URL:', err);
+        showToast(`บันทึกในเครื่องแล้ว แต่บันทึกลงเซิร์ฟเวอร์ไม่สำเร็จ: ${err.message}`, 'warning');
+      }
+    });
+  }
 
   const browseBtn = document.getElementById('browseShopeeMainFolderBtn');
   if (browseBtn) browseBtn.addEventListener('click', browseShopeeMainFolder);
@@ -7844,6 +7873,7 @@ const staticTooltips = {
   // Shopee Affiliate
   "tabShopeeAffiliateBtn": "🛍️ แถบ Shopee Affiliate:<br>- จัดการและอัปโหลดเนื้อหา/โพสต์ Shopee Affiliate อัตโนมัติ",
   "btnOpenShopeePageUrl": "🌐 ไปที่หน้า Shopee (Open / Redirect):<br>- เปิด Chrome ไปยัง URL ของ Shopee Affiliate",
+  "setShopeePageUrlDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึก Shopee URL นี้เป็นค่าเริ่มต้นเมื่อเปิดโปรแกรม",
   "browseShopeeMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่บรรจุสื่อและข้อมูลสินค้า",
   "setShopeeMainFolderDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึกพาธโฟลเดอร์นี้เป็นค่าเริ่มต้นเมื่อเปิดโปรแกรม",
   "btnScanShopeeBatch": "🔍 สแกนและเตรียมคิว (Scan Queue):<br>- สแกนหาไฟล์สื่อและข้อมูลเพื่อเตรียมรัน Shopee Affiliate",

@@ -571,6 +571,61 @@ def step_4_select_and_open_product(driver) -> dict[str, Any]:
         "product_link": product_link or driver.current_url
     }
 
+def extract_real_shopee_product_url(driver) -> str:
+    """Extract real Shopee product URL (e.g. https://shopee.co.th/product/... or https://shopee.co.th/...)
+    from the product details page DOM instead of internal affiliate URLs."""
+    try:
+        url = driver.execute_script("""
+            function isRealShopeeUrl(u) {
+                if (!u || typeof u !== 'string') return false;
+                const clean = u.trim().toLowerCase();
+                if (!clean.startsWith('http')) return false;
+                if (clean.includes('affiliate.shopee.co.th')) return false;
+                return clean.includes('shopee.co.th');
+            }
+
+            // 1. Check 'ดูสินค้า' element or .view-product
+            const allElements = Array.from(document.querySelectorAll('a, button, div[role="button"], span'));
+            for (const el of allElements) {
+                const txt = (el.innerText || '').trim().replace(/\\s+/g, '');
+                if (txt === 'ดูสินค้า' || el.classList.contains('view-product')) {
+                    if (el.tagName === 'A' && isRealShopeeUrl(el.href)) return el.href;
+                    const parentA = el.closest('a');
+                    if (parentA && isRealShopeeUrl(parentA.href)) return parentA.href;
+                    const attrHref = el.getAttribute('href') || el.getAttribute('data-href');
+                    if (isRealShopeeUrl(attrHref)) return attrHref;
+                    const childA = el.querySelector('a');
+                    if (childA && isRealShopeeUrl(childA.href)) return childA.href;
+                }
+            }
+
+            // 2. Direct query for view-product or product links
+            const directAnchor = document.querySelector("a.view-product, a[href*='shopee.co.th/product/'], a[href*='-i.']");
+            if (directAnchor && isRealShopeeUrl(directAnchor.href)) return directAnchor.href;
+
+            // 3. Fallback: Any link pointing to main shopee.co.th domain
+            const shopeeAnchors = Array.from(document.querySelectorAll("a[href*='shopee.co.th']"));
+            for (const a of shopeeAnchors) {
+                if (isRealShopeeUrl(a.href)) return a.href;
+            }
+            return "";
+        """)
+        if url and isinstance(url, str) and url.strip():
+            return url.strip()
+    except Exception:
+        pass
+
+    try:
+        candidates = driver.find_elements(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/'], a[href*='shopee.co.th']")
+        for c in candidates:
+            href = c.get_attribute("href") or ""
+            if href.startswith("http") and "shopee.co.th" in href and "affiliate.shopee.co.th" not in href:
+                return href.strip()
+    except Exception:
+        pass
+
+    return ""
+
 def step_5_get_affiliate_link(driver, target_file_path: str = "", folder_path: str = "", product_link: str = "") -> dict[str, Any]:
     """Step 5: Click orange 'เอา ลิงก์' button, copy affiliate short link, and save markdown files. (Does NOT click view product)."""
     check_stop()
@@ -645,7 +700,16 @@ def step_5_get_affiliate_link(driver, target_file_path: str = "", folder_path: s
 
     log(f"[Shopee Step 5] 🔗 คัดลอก Affiliate Link สำเร็จ: {affiliate_link or '-'}")
 
-    # 3. Determine target directory for saving files
+    # 3. Extract real Shopee product URL from the DOM
+    real_product_link = extract_real_shopee_product_url(driver)
+    if real_product_link:
+        log(f"[Shopee Step 5] 🛒 พบลิงก์สินค้าจริง (Real Product URL): {real_product_link}")
+    else:
+        # Check if passed product_link is already a real product URL
+        if product_link and "affiliate.shopee.co.th" not in product_link and "shopee.co.th" in product_link:
+            real_product_link = product_link
+
+    # 4. Determine target directory for saving files
     target_dir = folder_path
     if not target_dir and target_file_path:
         target_dir = os.path.dirname(target_file_path)
@@ -663,21 +727,24 @@ def step_5_get_affiliate_link(driver, target_file_path: str = "", folder_path: s
             except Exception as e:
                 log(f"[Shopee Step 5] ⚠️ บันทึก Affiliate Link.md ไม่สำเร็จ: {e}")
 
-        # B) Save 'Product Link.md'
-        if product_link:
+        # B) Save 'Product Link.md' (Strictly store the REAL product URL, NOT internal affiliate link)
+        if real_product_link:
             prod_path = os.path.join(target_dir, "Product Link.md")
             try:
                 with open(prod_path, "w", encoding="utf-8") as f:
-                    f.write(product_link + "\n")
-                log(f"[Shopee Step 5] 💾 บันทึก Product Link.md เรียบร้อย: {prod_path}")
+                    f.write(real_product_link + "\n")
+                log(f"[Shopee Step 5] 💾 บันทึก Product Link.md (ลิงก์สินค้าจริง) เรียบร้อย: {prod_path}")
                 saved_files.append(prod_path)
             except Exception as e:
                 log(f"[Shopee Step 5] ⚠️ บันทึก Product Link.md ไม่สำเร็จ: {e}")
+        else:
+            log("[Shopee Step 5] ℹ️ ยังไม่พบลิงก์สินค้าจริงใน Step 5 (จะถูกดึงและบันทึกใน Step 6 เมื่อกดดูสินค้า)")
 
     return {
         "success": True,
         "affiliate_link": affiliate_link,
-        "product_link": product_link,
+        "product_link": real_product_link or product_link,
+        "real_product_link": real_product_link,
         "saved_files": saved_files
     }
 
@@ -688,18 +755,20 @@ def step_4_select_best_product_and_get_link(driver, target_file_path: str = "", 
         return sel_res
     prod_link = sel_res.get("product_link", "")
     link_res = step_5_get_affiliate_link(driver, target_file_path=target_file_path, folder_path=folder_path, product_link=prod_link)
+    real_link = link_res.get("real_product_link") or link_res.get("product_link") or prod_link
     return {
         "success": True,
         "chosen": sel_res.get("chosen", {}),
         "affiliate_link": link_res.get("affiliate_link", ""),
-        "product_link": prod_link,
+        "product_link": real_link,
+        "real_product_link": real_link,
         "saved_files": link_res.get("saved_files", []),
         "downloaded_images": []
     }
 
-def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "") -> list[str]:
+def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "") -> dict[str, Any]:
     """Step 6: Click 'ดูสินค้า' to open the real Shopee product page in a background tab via Cmd + Click (CDP Trusted Click),
-    keeping focus strictly on the current tab without switching."""
+    keeping focus strictly on the current tab without switching. Also extracts and saves the real product link to Product Link.md."""
     check_stop()
     ensure_active_tab_valid(driver)
     log("[Shopee Step 6] 🔍 กำลังค้นหาปุ่ม 'ดูสินค้า' เพื่อเปิดหน้าสินค้าจริง (Cmd + Click ในเบื้องหลัง)...")
@@ -712,8 +781,14 @@ def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "
     virtual_code = 91 if sys.platform == "darwin" else 17
 
     clicked = False
+    real_product_url = ""
     try:
         view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
+        # Extract real Shopee product URL directly from the anchor href
+        candidate_href = view_btn.get_attribute("href") or ""
+        if candidate_href.startswith("http") and "shopee.co.th" in candidate_href and "affiliate.shopee.co.th" not in candidate_href:
+            real_product_url = candidate_href.strip()
+
         driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", view_btn)
         interruptible_sleep(0.4)
         rect = driver.execute_script("""
@@ -755,6 +830,10 @@ def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "
             from selenium.webdriver.common.action_chains import ActionChains
             from selenium.webdriver.common.keys import Keys
             view_btn = driver.find_element(By.CSS_SELECTOR, "a.view-product, [href*='shopee.co.th/product/']")
+            candidate_href = view_btn.get_attribute("href") or ""
+            if candidate_href.startswith("http") and "shopee.co.th" in candidate_href and "affiliate.shopee.co.th" not in candidate_href:
+                real_product_url = candidate_href.strip()
+
             modifier = Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL
             ActionChains(driver).key_down(modifier).click(view_btn).key_up(modifier).perform()
             clicked = True
@@ -762,13 +841,30 @@ def step_6_open_product_tab(driver, target_dir: str = "", fallback_hash: str = "
         except Exception as e:
             log(f"[Shopee Step 6] ⚠️ ไม่สามารถกดปุ่มดูสินค้าได้: {e}")
 
-    # 2. Short pause (0.8s) for background tab to initiate cleanly without interference
+    # Fallback to DOM extractor if href was not captured from view_btn
+    if not real_product_url:
+        real_product_url = extract_real_shopee_product_url(driver)
+
+    # 2. Save / update Product Link.md with the real product URL if target_dir is available
+    if real_product_url and target_dir and os.path.exists(target_dir):
+        prod_path = os.path.join(target_dir, "Product Link.md")
+        try:
+            with open(prod_path, "w", encoding="utf-8") as f:
+                f.write(real_product_url + "\n")
+            log(f"[Shopee Step 6] 💾 บันทึก Product Link.md (ลิงก์สินค้าจริง) เรียบร้อย: {prod_path}")
+        except Exception as e:
+            log(f"[Shopee Step 6] ⚠️ บันทึก Product Link.md ไม่สำเร็จ: {e}")
+
+    # 3. Short pause (0.8s) for background tab to initiate cleanly without interference
     interruptible_sleep(0.8)
 
-    # 3. Click back to 'ข้อเสนอผลิตภัณฑ์' immediately so it is ready for the next item
+    # 4. Click back to 'ข้อเสนอผลิตภัณฑ์' immediately so it is ready for the next item
     navigate_back_to_product_offer(driver)
 
-    return []
+    return {
+        "success": clicked,
+        "real_product_link": real_product_url
+    }
 
 # Alias for backward compatibility
 step_5_open_product_and_download_images = step_6_open_product_tab
@@ -829,9 +925,13 @@ def post_single_shopee_item(
     check_stop()
     if link_res.get("affiliate_link"):
         item["affiliate_link"] = link_res["affiliate_link"]
+    if link_res.get("real_product_link"):
+        item["product_link"] = link_res["real_product_link"]
 
-    # Step 6: Click 'ดูสินค้า' to open real Shopee product page in a new tab
-    step_6_open_product_tab(driver, target_dir=folder_path)
+    # Step 6: Click 'ดูสินค้า' to open real Shopee product page in a new tab and save Product Link.md
+    step_6_res = step_6_open_product_tab(driver, target_dir=folder_path)
+    if isinstance(step_6_res, dict) and step_6_res.get("real_product_link"):
+        item["product_link"] = step_6_res["real_product_link"]
 
     log(f"[Shopee Affiliate] ✅ สำเร็จการค้นหาและดึงลิงก์รายการที่ {item_idx}/{total_items}: {name} (Affiliate: {item.get('affiliate_link', '-')}, Product: {item.get('product_link', '-')})")
     return True

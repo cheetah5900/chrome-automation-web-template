@@ -110,3 +110,7 @@ Before outputting any final code, you MUST think step-by-step internally and str
 - When clicking 'ดูสินค้า' to open a real product page, **DO NOT query or poll `driver.window_handles` in a loop** right after the click.
 - Querying `driver.window_handles` causes ChromeDriver to send DevTools Target inquiries (`Target.getTargets`) across all open targets while the new tab is performing initial TLS/cookie/WAF handshakes. Shopee's anti-bot sensor detects this DevTools instrumentation and immediately redirects the tab to `https://shopee.co.th/verify/traffic/error`.
 - Always fire the click via CDP trusted click (or native fallback) and return immediately without querying handles or switching windows.
+- **Product Link.md vs Affiliate Link.md Storage Rule**:
+  - `Product Link.md` must store the **REAL Shopee product link** (e.g. `https://shopee.co.th/product/...`), extracted from the `ดูสินค้า` link/button or product details DOM, NEVER the internal affiliate offer URL (`https://affiliate.shopee.co.th/...`).
+  - `Affiliate Link.md` strictly stores the affiliate short link (e.g. `https://s.shopee.co.th/...`) generated from the modal.
+

@@ -5275,10 +5275,12 @@ def api_shopee_debug_step_5(req: dict[str, Any] = None) -> dict[str, Any]:
         _activate_chrome(driver, port=port)
         res = step_5_get_affiliate_link(driver, target_file_path=target_file, folder_path=folder_path, product_link=product_link)
         aff_link = res.get("affiliate_link", "")
+        real_link = res.get("real_product_link", "")
         return {
             "ok": True,
             "affiliate_link": aff_link,
             "product_link": res.get("product_link", ""),
+            "real_product_link": real_link,
             "saved_files": res.get("saved_files", []),
             "message": f"Step 5: คัดลอก Affiliate Link สำเร็จ ({aff_link or '-'}) และบันทึกไฟล์เรียบร้อย (ไม่กดดูสินค้า)"
         }
@@ -5303,8 +5305,13 @@ def api_shopee_debug_step_6(req: dict[str, Any] = None) -> dict[str, Any]:
             return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"}
         driver = bot.driver
         _activate_chrome(driver, port=port)
-        step_6_open_product_tab(driver, target_dir=target_dir, fallback_hash=fallback_hash)
-        return {"ok": True, "message": "Step 6: กดปุ่ม 'ดูสินค้า' (Trusted Click) เปิดแท็บสินค้าเรียบร้อย (ไม่สลับแท็บ)"}
+        res = step_6_open_product_tab(driver, target_dir=target_dir, fallback_hash=fallback_hash)
+        real_link = res.get("real_product_link", "") if isinstance(res, dict) else ""
+        return {
+            "ok": True,
+            "real_product_link": real_link,
+            "message": "Step 6: กดปุ่ม 'ดูสินค้า' (Trusted Click) เปิดแท็บสินค้าเรียบร้อย (ไม่สลับแท็บ)"
+        }
     except ShopeeCaptchaBlockedException:
         return {"ok": False, "captcha_blocked": True, "detail": "⚠️ ตรวจพบ CAPTCHA กรุณาแก้ในเบราว์เซอร์"}
     except Exception as e:
