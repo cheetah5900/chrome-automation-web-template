@@ -4710,6 +4710,52 @@ class MetaStepViewScheduledRequest(BaseModel):
 
 MetaStepViewScheduledRequest.model_rebuild()
 
+class MetaDateDebugRequest(BaseModel):
+    step: str
+    date_val: str = "1/10/2026"
+    platform_idx: str = "all"
+
+MetaDateDebugRequest.model_rebuild()
+
+@app.post("/api/meta-autopost/debug/date-step")
+def api_meta_date_debug_step(req: MetaDateDebugRequest) -> dict[str, Any]:
+    driver = _get_meta_driver()
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน"}
+    from app.meta_autopost import (
+        debug_date_open_calendar,
+        debug_date_click_next_month,
+        debug_date_pick_day,
+        debug_date_calendar_full_flow,
+        debug_date_focus_select,
+        debug_date_type_first,
+        debug_date_type_remaining,
+        debug_date_tab_out,
+        debug_date_full_simulate
+    )
+    step = req.step.strip().lower()
+    date_val = (req.date_val or "1/10/2026").strip()
+    platform_idx = (req.platform_idx or "all").strip()
+
+    try:
+        if step in ("open_calendar", "focus_select"):
+            res = debug_date_open_calendar(driver, platform_idx=platform_idx)
+        elif step in ("click_next_month", "type_first"):
+            res = debug_date_click_next_month(driver)
+        elif step in ("pick_day", "type_remaining"):
+            res = debug_date_pick_day(driver, date_val=date_val)
+        elif step in ("tab_out", "verify"):
+            res = debug_date_tab_out(driver, platform_idx=platform_idx)
+        elif step in ("calendar_full_flow", "full_simulate"):
+            res = debug_date_calendar_full_flow(driver, date_val=date_val, platform_idx=platform_idx)
+        else:
+            return {"ok": False, "detail": f"Unknown debug step: {step}"}
+        
+        return {"ok": res.get("success", False), "data": res, "message": res.get("message", "")}
+    except Exception as e:
+        log(f"[Meta Date Debug Error] {e}")
+        return {"ok": False, "detail": str(e)}
+
 @app.post("/api/meta-autopost/step/view-scheduled")
 def api_meta_step_view_scheduled(req: MetaStepViewScheduledRequest) -> dict[str, Any]:
     url = (req.url or "").strip()

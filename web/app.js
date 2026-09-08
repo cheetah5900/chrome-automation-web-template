@@ -7096,6 +7096,22 @@ function initMetaAutoPostListeners() {
   const step7Btn = document.getElementById('btnMetaStep7');
   if (step7Btn) step7Btn.addEventListener('click', (e) => runMetaStep7(e.currentTarget));
 
+  // Date Input Debugger Listeners (Calendar Mode)
+  const debugStep1Btn = document.getElementById('btnMetaDebugStep1');
+  if (debugStep1Btn) debugStep1Btn.addEventListener('click', (e) => executeMetaDateDebugStep('open_calendar', e.currentTarget));
+
+  const debugStep2Btn = document.getElementById('btnMetaDebugStep2');
+  if (debugStep2Btn) debugStep2Btn.addEventListener('click', (e) => executeMetaDateDebugStep('click_next_month', e.currentTarget));
+
+  const debugStep3Btn = document.getElementById('btnMetaDebugStep3');
+  if (debugStep3Btn) debugStep3Btn.addEventListener('click', (e) => executeMetaDateDebugStep('pick_day', e.currentTarget));
+
+  const debugStep4Btn = document.getElementById('btnMetaDebugStep4');
+  if (debugStep4Btn) debugStep4Btn.addEventListener('click', (e) => executeMetaDateDebugStep('verify', e.currentTarget));
+
+  const debugStepAllBtn = document.getElementById('btnMetaDebugStepAll');
+  if (debugStepAllBtn) debugStepAllBtn.addEventListener('click', (e) => executeMetaDateDebugStep('calendar_full_flow', e.currentTarget));
+
   const clearConsoleBtn = document.getElementById('clearMetaConsoleBtn');
   if (clearConsoleBtn) {
     clearConsoleBtn.addEventListener('click', () => {
@@ -7104,6 +7120,46 @@ function initMetaAutoPostListeners() {
     });
   }
 }
+
+async function executeMetaDateDebugStep(stepName, btn) {
+  const dateInput = document.getElementById('metaDebugDateVal');
+  const platformSelect = document.getElementById('metaDebugPlatformIdx');
+  const dateVal = (dateInput ? dateInput.value : '1/10/2026').trim();
+  const platformIdx = (platformSelect ? platformSelect.value : 'all').trim();
+
+  writeConsoleLine(`[Date Debug] ⏳ กำลังรัน: ${stepName} (Date: ${dateVal}, Platform: ${platformIdx})...`, 'system', 'metaConsole');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await jsonFetch('/api/meta-autopost/debug/date-step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: stepName, date_val: dateVal, platform_idx: platformIdx })
+    });
+
+    if (res.ok) {
+      writeConsoleLine(`[Date Debug] ✅ ${res.message || 'สำเร็จ'}`, 'success', 'metaConsole');
+      if (res.data && res.data.results) {
+        res.data.results.forEach(r => {
+          writeConsoleLine(`  -> Platform #${r.idx}: ${JSON.stringify(r)}`, 'info', 'metaConsole');
+        });
+      }
+      if (res.data && res.data.final_values) {
+        writeConsoleLine(`  -> Final Inputs: ${JSON.stringify(res.data.final_values)}`, 'info', 'metaConsole');
+      }
+      showToast(`Date Debug: ${res.message || 'สำเร็จ'}`, 'success');
+    } else {
+      writeConsoleLine(`[Date Debug Error] ❌ ${res.detail || res.message}`, 'error', 'metaConsole');
+      showToast(res.detail || 'เกิดข้อผิดพลาด', 'error');
+    }
+  } catch (err) {
+    writeConsoleLine(`[Date Debug Exception] ❌ ${err.message}`, 'error', 'metaConsole');
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+window.executeMetaDateDebugStep = executeMetaDateDebugStep;
 
 // --- Shopee Affiliate Logic ---
 let shopeeQueue = [];

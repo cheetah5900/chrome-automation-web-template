@@ -448,51 +448,57 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
         try:
             dt = datetime.fromisoformat(scheduled_dt_str)
             target_day = dt.day
+            target_month = dt.month
             target_month_name = dt.strftime('%B')
             target_year = dt.year
+            # Format according to d/m/yyyy as supported by Meta input (e.g. 1/10/2026)
+            date_str = f"{target_day}/{target_month}/{target_year}"
             target_date_label = f"{target_day} {target_month_name} {target_year}"
             hour_str = f"{dt.hour:02d}"
             min_str = f"{dt.minute:02d}"
 
-            log(f"[Meta Step 5] กำหนดวันโพสต์: {target_date_label}, เวลา: {hour_str}:{min_str}")
+            log(f"[Meta Step 5] กำหนดวันโพสต์: {target_date_label} ({date_str}), เวลา: {hour_str}:{min_str}")
 
-            # 1. Set Date for ALL available platforms dynamically (Facebook only or Facebook + Instagram)
+            # 1. Set Date for ALL available platforms dynamically via Calendar Navigation
             date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
             platform_count = len(date_inputs)
             log(f"[Meta Step 5] ตรวจพบช่องตั้งเวลาทั้งหมด {platform_count} แพลตฟอร์ม (Facebook {'+ Instagram' if platform_count > 1 else 'อย่างเดียว'})")
 
+            now = datetime.now()
+            months_ahead = (target_year - now.year) * 12 + (target_month - now.month)
+            log(f"[Meta Step 5] เป้าหมาย: วันที่ {target_day} เดือน {target_month_name} {target_year} (ต้องเลื่อนเดือนไปข้างหน้า {months_ahead} ครั้ง)")
+
             for d_idx, date_input in enumerate(date_inputs):
+                log(f"[Meta Step 5] แพลตฟอร์ม #{d_idx}: กำลังเปิดปฏิทินเพื่อเลือกวัน...")
                 try:
-                    ActionChains(driver).move_to_element(date_input).pause(0.1).click().perform()
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", date_input)
                 except Exception:
-                    driver.execute_script("arguments[0].click();", date_input)
+                    date_input.click()
+                time.sleep(0.4)
 
-                # Loop check: poll until target day in Calendar popover is found
-                day_clicked = fast_poll(driver, '''
-                    const targetText = arguments[0];
-                    const allEls = Array.from(document.querySelectorAll('div[role="gridcell"], [role="button"], span, div'));
-                    const dayEl = allEls.find(el => el.getAttribute('aria-label') && el.getAttribute('aria-label').includes(targetText));
-                    if (dayEl) {
-                        dayEl.click();
-                        return true;
-                    }
-                    return false;
-                ''', timeout=8.0, poll_interval=0.2, js_args=target_date_label)
+                # If target month is ahead, click Next Month
+                if months_ahead > 0:
+                    for m_step in range(months_ahead):
+                        log(f"[Meta Step 5] แพลตฟอร์ม #{d_idx}: คลิกปุ่มเดือนถัดไป (ครั้งที่ {m_step + 1}/{months_ahead})...")
+                        debug_date_click_next_month(driver)
+                        time.sleep(0.25)
 
-                if not day_clicked:
-                    driver.execute_script('''
-                        const dayNum = String(arguments[0]);
-                        const allEls = Array.from(document.querySelectorAll('div[role="gridcell"], [role="button"]'));
-                        const dayEl = allEls.find(el => el.innerText && el.innerText.trim() === dayNum);
-                        if (dayEl) dayEl.click();
-                    ''', target_day)
-                time.sleep(0.2)
+                # Pick target day
+                log(f"[Meta Step 5] แพลตฟอร์ม #{d_idx}: คลิกเลือกวันที่ {target_day} ในปฏิทิน...")
+                debug_date_pick_day(driver, day_str=str(target_day), date_val=date_str)
+                time.sleep(0.3)
 
-            # Loop check: verify all Date values updated
+            # Loop check: verify all Date values updated to target day/month
             fast_poll(driver, '''
                 const dates = Array.from(document.querySelectorAll('input[placeholder="dd/mm/yyyy"]'));
-                return dates.length > 0 && dates.every(d => d.value && d.value.includes(String(arguments[0])));
-            ''', timeout=5.0, poll_interval=0.2, js_args=target_day)
+                const dayNum = String(arguments[0]);
+                const monthName = String(arguments[1]);
+                const yearNum = String(arguments[2]);
+                return dates.length > 0 && dates.every(d => {
+                    const v = d.value || '';
+                    return (v.includes(dayNum) && v.includes(yearNum)) || v.includes(monthName);
+                });
+            ''', timeout=5.0, poll_interval=0.2, js_args=[target_day, target_month_name, target_year])
 
             # 2. Set Hours for ALL platforms (Facebook, Instagram, etc.)
             hours_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
@@ -532,7 +538,245 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
             raise ex_dt
     return True
 
+# --- Granular Date Debug Helpers for Step-by-Step UI Control ---
+def debug_date_open_calendar(driver, platform_idx: str = "all") -> dict[str, Any]:
+    """Calendar Step 1: Click date input to open the Calendar popup."""
+    date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+    if not date_inputs:
+        return {"success": False, "error": "ไม่พบช่อง input[placeholder='dd/mm/yyyy'] บนหน้าจอ"}
+    targets = date_inputs if platform_idx == "all" else [date_inputs[int(platform_idx)]] if int(platform_idx) < len(date_inputs) else []
+    if not targets:
+        return {"success": False, "error": f"ไม่พบช่องตาม index {platform_idx}"}
+    
+    target = targets[0]
+    try:
+        ActionChains(driver).move_to_element(target).pause(0.1).click().perform()
+    except Exception:
+        driver.execute_script("arguments[0].click();", target)
+    time.sleep(0.35)
+    
+    status = driver.execute_script('''
+        const grid = document.querySelector('[role="grid"]');
+        const dialog = document.querySelector('div[role="dialog"]');
+        const cells = document.querySelectorAll('[role="gridcell"]');
+        return {
+            hasGrid: !!grid,
+            hasDialog: !!dialog,
+            cellsCount: cells.length
+        };
+    ''')
+    return {"success": True, "data": status, "message": f"คลิกเปิดปฏิทินสำเร็จ (ตรวจพบ {status.get('cellsCount', 0)} วันในตาราง)"}
+
+def debug_date_click_next_month(driver) -> dict[str, Any]:
+    """Calendar Step 2: Click the 'Next Month' button in the open Calendar."""
+    res = driver.execute_script('''
+        const allEls = Array.from(document.querySelectorAll('div, span, button, a'));
+        
+        // 1. By innerText or aria-label containing "next month" / "เดือนถัดไป"
+        let nextEl = allEls.find(el => {
+            const t = (el.innerText || '').toLowerCase().trim();
+            const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+            const isNext = t.includes('next month') || t.includes('เดือนถัดไป') || aria.includes('next month') || aria.includes('เดือนถัดไป');
+            const isEnabled = el.getAttribute('aria-disabled') !== 'true';
+            return isNext && isEnabled && el.offsetWidth > 15 && el.offsetWidth < 120 && el.offsetHeight > 15 && el.offsetHeight < 120;
+        });
+
+        // 2. By chevron-right SVG icon
+        if (!nextEl) {
+            nextEl = allEls.find(b => {
+                const isEnabled = b.getAttribute('aria-disabled') !== 'true';
+                if (!isEnabled || b.offsetWidth < 15 || b.offsetWidth > 120) return false;
+                const html = b.innerHTML.toLowerCase();
+                return (html.includes('chevron-right') || html.includes('arrow-right') || html.includes('chevron_right')) && b.querySelector('svg');
+            });
+        }
+
+        // 3. Fallback: buttons positioned in calendar header above the true calendar grid
+        if (!nextEl) {
+            const calGrid = Array.from(document.querySelectorAll('[role="grid"]')).find(g => g.querySelectorAll('[role="gridcell"]').length >= 20);
+            if (calGrid) {
+                const popover = calGrid.closest('div[role="dialog"]') || calGrid.parentElement?.parentElement?.parentElement || document.body;
+                const gRect = calGrid.getBoundingClientRect();
+                const topBtns = Array.from(popover.querySelectorAll('button, div[role="button"], div[tabindex="0"]')).filter(b => {
+                    const bRect = b.getBoundingClientRect();
+                    return bRect.y < gRect.y && b.offsetWidth > 15 && b.offsetHeight > 15 && b.getAttribute('aria-disabled') !== 'true';
+                });
+                if (topBtns.length >= 2) {
+                    topBtns.sort((a, b) => a.getBoundingClientRect().x - b.getBoundingClientRect().x);
+                    nextEl = topBtns[topBtns.length - 1]; // Rightmost is Next Month
+                } else if (topBtns.length === 1) {
+                    nextEl = topBtns[0];
+                }
+            }
+        }
+
+        if (nextEl) {
+            const clickBtn = nextEl.closest('[role="button"]') || nextEl.querySelector('[role="button"]') || nextEl;
+            const info = {
+                text: (clickBtn.innerText || '').trim(),
+                ariaLabel: clickBtn.getAttribute('aria-label') || '',
+                tag: clickBtn.tagName
+            };
+            clickBtn.click();
+            return { success: true, info: info };
+        }
+        return { success: false, error: "ไม่พบปุ่มเดือนถัดไป (Next Month)" };
+    ''')
+    
+    time.sleep(0.35)
+    if res.get("success"):
+        return {"success": True, "data": res.get("info"), "message": f"กดปุ่มเดือนถัดไปสำเร็จ: {res.get('info')}"}
+    return {"success": False, "error": res.get("error", "ไม่พบปุ่มเดือนถัดไป")}
+
+def debug_date_pick_day(driver, day_str: str = "1", date_val: str = "1/10/2026") -> dict[str, Any]:
+    """Calendar Step 3: Click target day in the open Calendar grid."""
+    day_num = "1"
+    month_name = ""
+    try:
+        if "/" in date_val:
+            parts = date_val.split("/")
+            day_num = parts[0].strip()
+            month_idx = int(parts[1].strip())
+            from datetime import date
+            month_name = date(2026, month_idx, 1).strftime('%B')
+        elif "-" in date_val:
+            dt = datetime.fromisoformat(date_val)
+            day_num = str(dt.day)
+            month_name = dt.strftime('%B')
+        else:
+            day_num = day_str.strip()
+    except Exception:
+        day_num = day_str.strip() or "1"
+        
+    res = driver.execute_script('''
+        const targetDay = String(arguments[0]);
+        const targetMonth = (arguments[1] || '').toLowerCase();
+        
+        // Find the actual calendar grid (must have >= 20 cells)
+        const calGrid = Array.from(document.querySelectorAll('[role="grid"]')).find(g => g.querySelectorAll('[role="gridcell"]').length >= 20);
+        const searchScope = calGrid || document;
+        const allCandidates = Array.from(searchScope.querySelectorAll('[role="button"], div[role="gridcell"], button, div'));
+
+        // Strategy 1: Match by exact text and small button dimensions (15px to 60px)
+        let dayEl = allCandidates.find(b => {
+            if ((b.innerText || '').trim() !== targetDay) return false;
+            const isEnabled = b.getAttribute('aria-disabled') !== 'true';
+            return isEnabled && b.offsetWidth > 15 && b.offsetWidth < 60 && b.offsetHeight > 15 && b.offsetHeight < 60;
+        });
+
+        // Strategy 2: Match by aria-label containing day number and month
+        if (!dayEl) {
+            dayEl = allCandidates.find(el => {
+                const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                if (!aria) return false;
+                const hasDay = aria.includes(targetDay);
+                const hasMonth = targetMonth ? (aria.includes(targetMonth) || (targetMonth === 'october' && aria.includes('ตุลาคม'))) : true;
+                const isDisabled = el.getAttribute('aria-disabled') === 'true';
+                return hasDay && hasMonth && !isDisabled;
+            });
+        }
+
+        if (dayEl) {
+            const clickTarget = dayEl.querySelector('[role="button"]') || dayEl;
+            const info = {
+                text: (clickTarget.innerText || '').trim(),
+                ariaLabel: clickTarget.getAttribute('aria-label') || '',
+                tag: clickTarget.tagName
+            };
+            clickTarget.click();
+            return { success: true, info: info };
+        }
+        return { success: false, error: `ไม่พบวันที่ ${targetDay} ในปฏิทิน` };
+    ''', day_num, month_name)
+
+    time.sleep(0.4)
+    date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+    current_values = [d.get_attribute("value") for d in date_inputs]
+    
+    if res.get("success"):
+        return {"success": True, "data": res.get("info"), "current_values": current_values, "message": f"เลือกวันที่ {day_num} ในปฏิทินสำเร็จ ค่าช่องวันที่ปัจจุบัน: {current_values}"}
+    return {"success": False, "error": res.get("error", f"ไม่พบวันที่ {day_num}"), "current_values": current_values}
+
+def debug_date_calendar_full_flow(driver, date_val: str = "1/10/2026", platform_idx: str = "all") -> dict[str, Any]:
+    """Full Calendar Flow: Open Calendar -> Click Next Month if target is future month -> Pick Day."""
+    day_num = 1
+    month_num = 10
+    year_num = 2026
+    try:
+        if "/" in date_val:
+            parts = date_val.split("/")
+            day_num = int(parts[0].strip())
+            month_num = int(parts[1].strip())
+            year_num = int(parts[2].strip())
+        elif "-" in date_val:
+            dt = datetime.fromisoformat(date_val)
+            day_num = dt.day
+            month_num = dt.month
+            year_num = dt.year
+    except Exception:
+        pass
+        
+    now = datetime.now()
+    months_ahead = (year_num - now.year) * 12 + (month_num - now.month)
+    
+    date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+    if not date_inputs:
+        return {"success": False, "error": "ไม่พบช่อง input[placeholder='dd/mm/yyyy']"}
+    targets = date_inputs if platform_idx == "all" else [date_inputs[int(platform_idx)]] if int(platform_idx) < len(date_inputs) else []
+
+    results = []
+    for idx, inp in enumerate(targets):
+        # 1. Open calendar
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", inp)
+        except Exception:
+            inp.click()
+        time.sleep(0.4)
+        
+        # 2. Click next month if target is ahead
+        if months_ahead > 0:
+            for m in range(months_ahead):
+                debug_date_click_next_month(driver)
+                time.sleep(0.3)
+                
+        # 3. Pick day
+        pick_res = debug_date_pick_day(driver, day_str=str(day_num), date_val=date_val)
+        results.append({"platform_idx": idx, "pick_result": pick_res})
+        time.sleep(0.4)
+
+    time.sleep(0.3)
+    final_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+    final_values = [d.get_attribute("value") for d in final_inputs]
+    return {
+        "success": True,
+        "results": results,
+        "final_values": final_values,
+        "message": f"รัน Calendar Flow ครบทุกขั้นตอนสำเร็จ ค่าที่ได้: {final_values}"
+    }
+
+# Backward compatible simulated keystroke helpers
+def debug_date_focus_select(driver, platform_idx: str = "all") -> dict[str, Any]:
+    return debug_date_open_calendar(driver, platform_idx=platform_idx)
+
+def debug_date_type_first(driver, date_str: str, platform_idx: str = "all") -> dict[str, Any]:
+    return debug_date_click_next_month(driver)
+
+def debug_date_type_remaining(driver, date_str: str, platform_idx: str = "all") -> dict[str, Any]:
+    return debug_date_pick_day(driver, date_val=date_str)
+
+def debug_date_tab_out(driver, platform_idx: str = "all") -> dict[str, Any]:
+    date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+    values = [d.get_attribute("value") for d in date_inputs]
+    return {"success": True, "values": values, "message": f"ค่าปัจจุบันในช่อง: {values}"}
+
+def debug_date_full_simulate(driver, date_str: str, platform_idx: str = "all") -> dict[str, Any]:
+    return debug_date_calendar_full_flow(driver, date_val=date_str, platform_idx=platform_idx)
+
 def step_6_submit_schedule(driver) -> bool:
+    """Step 6: Submit schedule button using verified semantic targeting."""
+    return _real_step_6_submit_schedule(driver)
+
+def _real_step_6_submit_schedule(driver) -> bool:
     """Step 6: Poll for final Schedule submit button (distinguished from Radio and Nav Header) and click."""
     log("[Meta Step 6] กำลังตรวจจับปุ่มกดยืนยัน Schedule (ตัดตัวเลือก Radio และแท็บด้านบนออก)...")
 
@@ -599,8 +843,18 @@ def step_6_submit_schedule(driver) -> bool:
     else:
         raise RuntimeError("ไม่พบปุ่ม Schedule ยืนยันที่พร้อมคลิก (กรุณาตรวจสอบว่ากรอกวัน-เวลาถูกต้อง)")
 
-    log("[Meta Step 6] ✅ กดปุ่ม Schedule ยืนยันเรียบร้อยแล้ว (รอระบบประมวลผล 2.5 วินาที)")
-    time.sleep(2.5)
+    log("[Meta Step 6] ✅ กดปุ่ม Schedule ยืนยันเรียบร้อยแล้ว (กำลังรอการบันทึกข้อมูลโพสต์)...")
+    time.sleep(2.0)
+
+    # Fast poll for modal closure / submission confirmation
+    fast_poll(driver, '''
+        const onPlanner = window.location.href.includes('planner') || window.location.href.includes('posts');
+        const modalClosed = !document.querySelector('div[role="textbox"][contenteditable="true"]') &&
+                            !Array.from(document.querySelectorAll('div, span')).find(el => el.innerText && el.innerText.trim() === 'Scheduling options');
+        return onPlanner || modalClosed;
+    ''', timeout=25.0, poll_interval=0.3)
+
+    log("[Meta Step 6] ✅ การตั้งเวลาโพสต์เสร็จสมบูรณ์")
     return True
 
 def get_scheduled_posts_url(composer_url: str) -> str:
@@ -699,10 +953,10 @@ def _post_single_reel_core(
     # Step 4: Click Share Tab to reach Step 3
     step_4_click_share_tab(driver, timeout=100.0)
 
-    # Step 5: Set Schedule Date & Time
+    # Step 5: Set Schedule Date & Time (Calendar Navigation)
     step_5_set_schedule(driver, scheduled_dt_str)
 
-    # Step 6: Submit Schedule (with 5s cooldown)
+    # Step 6: Submit Schedule
     step_6_submit_schedule(driver)
 
     log(f"[Meta Auto Post Script] ✅ สำเร็จการตั้งเวลาโพสต์รายการที่ {item_idx}/{total_items}: {subfolder_name or video_name}")

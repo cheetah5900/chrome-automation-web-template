@@ -21,6 +21,17 @@ class BrowserBot:
         options = webdriver.ChromeOptions()
         
         if attach:
+            # Check if port is open before attempting to attach
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1.0)
+            try:
+                sock.connect(('127.0.0.1', port))
+                sock.close()
+            except Exception:
+                print(f"Cannot attach: 127.0.0.1:{port} is not listening or reachable.")
+                return False
+
             # Connect to existing Chrome opened with --remote-debugging-port
             options.add_experimental_option("debuggerAddress", f"127.0.0.1:{port}")
             print(f"Attempting to attach to existing Chrome on port {port}...")
