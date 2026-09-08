@@ -7138,16 +7138,21 @@ async function executeMetaDateDebugStep(stepName, btn) {
     });
 
     if (res.ok) {
-      writeConsoleLine(`[Date Debug] ✅ ${res.message || 'สำเร็จ'}`, 'success', 'metaConsole');
+      if (res.data && res.data.skipped) {
+        writeConsoleLine(`[Date Debug] ℹ️ ${res.message || 'ไม่มีช่อง Instagram -> ข้ามไปกดปุ่ม Schedule ได้เลย'}`, 'info', 'metaConsole');
+        showToast(res.message || 'ไม่มีช่อง IG -> ข้ามไปกดปุ่ม Schedule ได้เลย', 'info');
+      } else {
+        writeConsoleLine(`[Date Debug] ✅ ${res.message || 'สำเร็จ'}`, 'success', 'metaConsole');
+        showToast(`Date Debug: ${res.message || 'สำเร็จ'}`, 'success');
+      }
       if (res.data && res.data.results) {
         res.data.results.forEach(r => {
-          writeConsoleLine(`  -> Platform #${r.idx}: ${JSON.stringify(r)}`, 'info', 'metaConsole');
+          writeConsoleLine(`  -> Platform #${r.idx !== undefined ? r.idx : r.platform_idx}: ${JSON.stringify(r)}`, 'info', 'metaConsole');
         });
       }
       if (res.data && res.data.final_values) {
         writeConsoleLine(`  -> Final Inputs: ${JSON.stringify(res.data.final_values)}`, 'info', 'metaConsole');
       }
-      showToast(`Date Debug: ${res.message || 'สำเร็จ'}`, 'success');
     } else {
       writeConsoleLine(`[Date Debug Error] ❌ ${res.detail || res.message}`, 'error', 'metaConsole');
       showToast(res.detail || 'เกิดข้อผิดพลาด', 'error');

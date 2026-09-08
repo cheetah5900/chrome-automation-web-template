@@ -419,8 +419,73 @@ def step_4_click_share_tab(driver, timeout: float = 60.0) -> bool:
     log("[Meta Step 4] ✅ เข้าสู่หน้า Step 3 (Share Screen) เรียบร้อยแล้ว")
     return True
 
+def detect_schedule_platforms(driver) -> dict[str, Any]:
+    """Inspects the Schedule section to detect date/time inputs for Facebook and Instagram.
+    Returns details on whether an Instagram scheduling box is present or absent, allowing the system
+    to skip Instagram cleanly if missing and proceed directly to Schedule button.
+    """
+    try:
+        res = driver.execute_script('''
+            const dateInputs = Array.from(document.querySelectorAll('input[placeholder="dd/mm/yyyy"]'));
+            const hoursInputs = Array.from(document.querySelectorAll('input[aria-label="hours"]'));
+            const minsInputs = Array.from(document.querySelectorAll('input[aria-label="minutes"]'));
+
+            const items = dateInputs.map((inp, idx) => {
+                let cur = inp;
+                let detectedPlatform = null;
+                for (let i = 0; i < 8 && cur && cur !== document.body; i++) {
+                    const text = (cur.innerText || '').toLowerCase();
+                    const aria = (cur.getAttribute('aria-label') || '').toLowerCase();
+                    const hasIg = text.includes('instagram') || aria.includes('instagram') || !!cur.querySelector('[aria-label*="Instagram" i], svg[aria-label*="Instagram" i]');
+                    const hasFb = text.includes('facebook') || aria.includes('facebook') || !!cur.querySelector('[aria-label*="Facebook" i], svg[aria-label*="Facebook" i]');
+                    if (hasIg && !hasFb) {
+                        detectedPlatform = 'instagram';
+                        break;
+                    }
+                    if (hasFb && !hasIg) {
+                        detectedPlatform = 'facebook';
+                        break;
+                    }
+                    cur = cur.parentElement;
+                }
+                if (!detectedPlatform) {
+                    detectedPlatform = idx === 0 ? 'facebook' : (idx === 1 ? 'instagram' : `platform_${idx}`);
+                }
+                return {
+                    idx: idx,
+                    platform: detectedPlatform,
+                    hasHours: idx < hoursInputs.length,
+                    hasMins: idx < minsInputs.length
+                };
+            });
+
+            // True check: Instagram box exists if any item is 'instagram' OR if there are >= 2 date inputs
+            const hasFb = dateInputs.length > 0;
+            const hasIg = dateInputs.length >= 2 || items.some(it => it.platform === 'instagram');
+
+            return {
+                totalDateInputs: dateInputs.length,
+                totalHoursInputs: hoursInputs.length,
+                totalMinsInputs: minsInputs.length,
+                hasFb: hasFb,
+                hasIg: hasIg,
+                platforms: items
+            };
+        ''')
+        return res or {"totalDateInputs": 0, "hasFb": False, "hasIg": False, "platforms": []}
+    except Exception as e:
+        log(f"[Meta Step 5] ⚠️ ไม่สามารถตรวจจับแพลตฟอร์มผ่านสคริปต์ได้ ({e}) -> ใช้ fallback ตรวจตามจำนวนช่อง")
+        d_len = len(driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]'))
+        return {
+            "totalDateInputs": d_len,
+            "hasFb": d_len > 0,
+            "hasIg": d_len >= 2,
+            "platforms": [{"idx": i, "platform": "facebook" if i == 0 else "instagram"} for i in range(d_len)]
+        }
+
 def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
-    """Step 5: Poll for Schedule option, select it, input Date via Calendar & Time via spinbutton, loop verify values."""
+    """Step 5: Poll for Schedule option, select it, input Date via Calendar & Time via spinbutton, loop verify values.
+    Specifically checks if an Instagram schedule box exists; if not, skips Instagram and proceeds to Schedule submit."""
     log("[Meta Step 5] กำลังรอตัวเลือก 'Schedule'...")
     
     sched_tab = fast_poll(driver, '''
@@ -459,17 +524,26 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
 
             log(f"[Meta Step 5] กำหนดวันโพสต์: {target_date_label} ({date_str}), เวลา: {hour_str}:{min_str}")
 
-            # 1. Set Date for ALL available platforms dynamically via Calendar Navigation
+            # 1. Detect platforms (Check if Instagram date/time box exists)
+            platform_info = detect_schedule_platforms(driver)
+            has_ig = platform_info.get("hasIg", False)
             date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
             platform_count = len(date_inputs)
-            log(f"[Meta Step 5] ตรวจพบช่องตั้งเวลาทั้งหมด {platform_count} แพลตฟอร์ม (Facebook {'+ Instagram' if platform_count > 1 else 'อย่างเดียว'})")
+
+            if not has_ig:
+                log(f"[Meta Step 5] 🔍 ตรวจสอบแพลตฟอร์ม: ตรวจพบช่องตั้งเวลาเฉพาะ Facebook ({platform_count} ช่อง) | ไม่พบช่อง Instagram")
+                log(f"[Meta Step 5] ⏩ ระบบจะตั้งเวลาเฉพาะ Facebook และข้าม Instagram เพื่อไปกดยืนยัน Schedule ทันที")
+            else:
+                log(f"[Meta Step 5] 🔍 ตรวจสอบแพลตฟอร์ม: ตรวจพบช่องตั้งเวลาครบทั้ง Facebook และ Instagram ({platform_count} ช่อง)")
 
             now = datetime.now()
             months_ahead = (target_year - now.year) * 12 + (target_month - now.month)
             log(f"[Meta Step 5] เป้าหมาย: วันที่ {target_day} เดือน {target_month_name} {target_year} (ต้องเลื่อนเดือนไปข้างหน้า {months_ahead} ครั้ง)")
 
+            # Set Date for available platforms dynamically via Calendar Navigation
             for d_idx, date_input in enumerate(date_inputs):
-                log(f"[Meta Step 5] แพลตฟอร์ม #{d_idx}: กำลังเปิดปฏิทินเพื่อเลือกวัน...")
+                plat_label = "Facebook" if d_idx == 0 else ("Instagram" if d_idx == 1 else f"Platform #{d_idx}")
+                log(f"[Meta Step 5] แพลตฟอร์ม {plat_label} (#{d_idx}): กำลังเปิดปฏิทินเพื่อเลือกวัน...")
                 try:
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", date_input)
                 except Exception:
@@ -479,14 +553,18 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
                 # If target month is ahead, click Next Month
                 if months_ahead > 0:
                     for m_step in range(months_ahead):
-                        log(f"[Meta Step 5] แพลตฟอร์ม #{d_idx}: คลิกปุ่มเดือนถัดไป (ครั้งที่ {m_step + 1}/{months_ahead})...")
+                        log(f"[Meta Step 5] แพลตฟอร์ม {plat_label} (#{d_idx}): คลิกปุ่มเดือนถัดไป (ครั้งที่ {m_step + 1}/{months_ahead})...")
                         debug_date_click_next_month(driver)
                         time.sleep(0.25)
 
                 # Pick target day
-                log(f"[Meta Step 5] แพลตฟอร์ม #{d_idx}: คลิกเลือกวันที่ {target_day} ในปฏิทิน...")
+                log(f"[Meta Step 5] แพลตฟอร์ม {plat_label} (#{d_idx}): คลิกเลือกวันที่ {target_day} ในปฏิทิน...")
                 debug_date_pick_day(driver, day_str=str(target_day), date_val=date_str)
                 time.sleep(0.3)
+
+            # If no IG was found, log that IG is skipped
+            if not has_ig:
+                log("[Meta Step 5] ℹ️ ไม่มีช่องวันที่/เวลาของ Instagram -> ข้ามขั้นตอนของ IG เรียบร้อย")
 
             # Loop check: verify all Date values updated to target day/month
             fast_poll(driver, '''
@@ -500,7 +578,7 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
                 });
             ''', timeout=5.0, poll_interval=0.2, js_args=[target_day, target_month_name, target_year])
 
-            # 2. Set Hours for ALL platforms (Facebook, Instagram, etc.)
+            # 2. Set Hours for ALL available platforms
             hours_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="hours"]')
             for h_input in hours_inputs:
                 try:
@@ -510,7 +588,7 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
                 time.sleep(0.05)
                 h_input.send_keys(Keys.BACKSPACE, Keys.BACKSPACE, hour_str)
 
-            # 3. Set Minutes for ALL platforms (Facebook, Instagram, etc.)
+            # 3. Set Minutes for ALL available platforms
             mins_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[aria-label="minutes"]')
             for m_input in mins_inputs:
                 try:
@@ -529,8 +607,10 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
                 return hOk && mOk;
             ''', timeout=5.0, poll_interval=0.2, js_args=[hour_str, min_str])
 
-            platform_str = "Facebook & Instagram" if platform_count > 1 else "Facebook"
-            log(f"[Meta Step 5] ✅ กำหนดวัน-เวลาและตรวจสอบค่าใน Schedule ({platform_str}: {platform_count} แพลตฟอร์ม) สำเร็จเรียบร้อยแล้ว")
+            if not has_ig:
+                log(f"[Meta Step 5] ✅ กำหนดวัน-เวลา Facebook เรียบร้อยแล้ว (ไม่มีช่อง Instagram จึงข้าม) -> พร้อมกดปุ่ม Schedule ทันที")
+            else:
+                log(f"[Meta Step 5] ✅ กำหนดวัน-เวลา Facebook & Instagram ({platform_count} แพลตฟอร์ม) สำเร็จเรียบร้อยแล้ว -> พร้อมกดปุ่ม Schedule ทันที")
             return True
 
         except Exception as ex_dt:
@@ -540,10 +620,21 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
 
 # --- Granular Date Debug Helpers for Step-by-Step UI Control ---
 def debug_date_open_calendar(driver, platform_idx: str = "all") -> dict[str, Any]:
-    """Calendar Step 1: Click date input to open the Calendar popup."""
+    """Calendar Step 1: Click date input to open the Calendar popup.
+    Gracefully detects if Instagram is requested but not present."""
     date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
     if not date_inputs:
         return {"success": False, "error": "ไม่พบช่อง input[placeholder='dd/mm/yyyy'] บนหน้าจอ"}
+    
+    # Check if Instagram is specifically selected but no IG box exists
+    if platform_idx == "1" and len(date_inputs) < 2:
+        return {
+            "success": True,
+            "skipped": True,
+            "has_ig": False,
+            "message": "ℹ️ ตรวจสอบแล้ว: ไม่พบช่องวันที่และเวลาของ Instagram บนหน้านี้ (มีเฉพาะ Facebook) -> ข้ามการตั้งค่า IG เรียบร้อย สามารถไปขั้นตอนกดปุ่ม Schedule ได้เลย"
+        }
+
     targets = date_inputs if platform_idx == "all" else [date_inputs[int(platform_idx)]] if int(platform_idx) < len(date_inputs) else []
     if not targets:
         return {"success": False, "error": f"ไม่พบช่องตาม index {platform_idx}"}
@@ -698,7 +789,24 @@ def debug_date_pick_day(driver, day_str: str = "1", date_val: str = "1/10/2026")
     return {"success": False, "error": res.get("error", f"ไม่พบวันที่ {day_num}"), "current_values": current_values}
 
 def debug_date_calendar_full_flow(driver, date_val: str = "1/10/2026", platform_idx: str = "all") -> dict[str, Any]:
-    """Full Calendar Flow: Open Calendar -> Click Next Month if target is future month -> Pick Day."""
+    """Full Calendar Flow: Open Calendar -> Click Next Month if target is future month -> Pick Day.
+    Specifically checks for Instagram: if no IG box exists, skips IG and reports ready for Schedule submit."""
+    date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
+    if not date_inputs:
+        return {"success": False, "error": "ไม่พบช่อง input[placeholder='dd/mm/yyyy']"}
+        
+    plat_info = detect_schedule_platforms(driver)
+    has_ig = plat_info.get("hasIg", False)
+
+    # If Instagram was selected specifically but no IG box exists
+    if platform_idx == "1" and not has_ig:
+        return {
+            "success": True,
+            "skipped": True,
+            "has_ig": False,
+            "message": "ℹ️ ตรวจสอบแล้ว: ไม่พบช่องวันที่และเวลาของ Instagram บนหน้านี้ (มีเฉพาะ Facebook) -> ข้ามการตั้งค่า IG เรียบร้อย สามารถไปขั้นตอนกดปุ่ม Schedule ได้เลย"
+        }
+
     day_num = 1
     month_num = 10
     year_num = 2026
@@ -719,13 +827,11 @@ def debug_date_calendar_full_flow(driver, date_val: str = "1/10/2026", platform_
     now = datetime.now()
     months_ahead = (year_num - now.year) * 12 + (month_num - now.month)
     
-    date_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
-    if not date_inputs:
-        return {"success": False, "error": "ไม่พบช่อง input[placeholder='dd/mm/yyyy']"}
     targets = date_inputs if platform_idx == "all" else [date_inputs[int(platform_idx)]] if int(platform_idx) < len(date_inputs) else []
 
     results = []
     for idx, inp in enumerate(targets):
+        plat_label = "Facebook" if idx == 0 else ("Instagram" if idx == 1 else f"Platform #{idx}")
         # 1. Open calendar
         try:
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", inp)
@@ -741,17 +847,25 @@ def debug_date_calendar_full_flow(driver, date_val: str = "1/10/2026", platform_
                 
         # 3. Pick day
         pick_res = debug_date_pick_day(driver, day_str=str(day_num), date_val=date_val)
-        results.append({"platform_idx": idx, "pick_result": pick_res})
+        results.append({"platform_idx": idx, "platform_label": plat_label, "pick_result": pick_res})
         time.sleep(0.4)
 
     time.sleep(0.3)
     final_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="dd/mm/yyyy"]')
     final_values = [d.get_attribute("value") for d in final_inputs]
+    
+    if not has_ig:
+        msg = f"รัน Calendar Flow ครบทุกขั้นตอนสำเร็จ (Facebook: ตั้งค่าเรียบร้อย | ไม่มีช่อง Instagram จึงข้ามและพร้อมกดปุ่ม Schedule) ค่าที่ได้: {final_values}"
+    else:
+        msg = f"รัน Calendar Flow ครบทุกขั้นตอนสำเร็จ (Facebook & Instagram: ตั้งค่าเรียบร้อย) ค่าที่ได้: {final_values}"
+        
     return {
         "success": True,
         "results": results,
         "final_values": final_values,
-        "message": f"รัน Calendar Flow ครบทุกขั้นตอนสำเร็จ ค่าที่ได้: {final_values}"
+        "has_ig": has_ig,
+        "skipped_ig": not has_ig,
+        "message": msg
     }
 
 # Backward compatible simulated keystroke helpers
