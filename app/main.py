@@ -103,7 +103,7 @@ _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openro
 _ensure_json(PROMPTS_FILE, {"prompts": [""]})
 _ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2": "", "reference_image_3": "", "reference_image_4": "", "reference_image_5": "", "reference_image_6": "", "reference_image_7": "", "reference_images_dir": ""})
 
-app = FastAPI(title="Chrome Automation Template", version="1.5.0")
+app = FastAPI(title="Chrome Automation Template", version="1.6.0")
 last_submit_time = 0.0
 
 import time
