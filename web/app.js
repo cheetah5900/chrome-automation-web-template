@@ -7915,6 +7915,7 @@ const staticTooltips = {
   "addVideoCombineSetBtn": "➕ เพิ่มเซ็ตวิดีโอ (Add Set):<br>- สร้างช่วงการรวมโฟลเดอร์อัตโนมัติ",
   
   // Seedance
+  "runSeedanceBatchBtn": "🚀 วาง Prompt / รัน Seedance:<br>- วาง Prompt, แนบ/ล้างรูปภาพ และกดปุ่ม Generate บน Dreamina (ไม่เปลี่ยนแปลงโมเดล, สัดส่วน, หรือระยะเวลา)",
   "addSeedancePromptBtn": "➕ เพิ่มพรอพต์ (Add Prompt)",
   "saveSeedancePromptsBtn": "💾 บันทึกพรอพต์ (Save)",
   "deleteAllSeedancePromptsBtn": "🗑️ ลบทั้งหมด (Delete All)",
@@ -8014,6 +8015,69 @@ async function loadFlowImageModels() {
 
 let seedanceBatchQueue = [];
 
+function getSeedanceImageMode() {
+  const hiddenInput = document.getElementById('cfg_seedance_image_mode');
+  if (hiddenInput && hiddenInput.value) return hiddenInput.value;
+  const activeBtn = document.querySelector('.seedance-mode-toggle.active');
+  if (activeBtn) return activeBtn.getAttribute('data-mode') || 'subfolder';
+  return localStorage.getItem('seedance_image_mode') || 'subfolder';
+}
+window.getSeedanceImageMode = getSeedanceImageMode;
+
+function setSeedanceImageMode(mode) {
+  const targetMode = mode || 'subfolder';
+  const hiddenInput = document.getElementById('cfg_seedance_image_mode');
+  if (hiddenInput) hiddenInput.value = targetMode;
+
+  const toggleButtons = document.querySelectorAll('.seedance-mode-toggle');
+  toggleButtons.forEach(btn => {
+    const btnMode = btn.getAttribute('data-mode');
+    if (btnMode === targetMode) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  const charContainer = document.getElementById('seedanceCharSheetContainer');
+  if (charContainer) {
+    charContainer.style.display = (targetMode === 'character_sheet') ? 'block' : 'none';
+  }
+  localStorage.setItem('seedance_image_mode', targetMode);
+}
+window.setSeedanceImageMode = setSeedanceImageMode;
+
+function getSeedanceClearMode() {
+  const hiddenInput = document.getElementById('cfg_seedance_clear_mode');
+  if (hiddenInput && hiddenInput.value) return hiddenInput.value;
+  const activeBtn = document.querySelector('.seedance-clear-toggle.active');
+  if (activeBtn) return activeBtn.getAttribute('data-clear') || 'both';
+  return localStorage.getItem('seedance_clear_mode') || 'both';
+}
+window.getSeedanceClearMode = getSeedanceClearMode;
+
+function setSeedanceClearMode(mode) {
+  const targetMode = mode || 'both';
+  const hiddenInput = document.getElementById('cfg_seedance_clear_mode');
+  if (hiddenInput) hiddenInput.value = targetMode;
+
+  const toggleButtons = document.querySelectorAll('.seedance-clear-toggle');
+  toggleButtons.forEach(btn => {
+    const btnMode = btn.getAttribute('data-clear');
+    if (btnMode === targetMode) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  localStorage.setItem('seedance_clear_mode', targetMode);
+  if (typeof updateSeedanceRunButtonUI === 'function') {
+    updateSeedanceRunButtonUI();
+  }
+}
+window.setSeedanceClearMode = setSeedanceClearMode;
+
 // --- Seedance Preset Functions ---
 async function loadSeedancePresets(presets) {
   const select = document.getElementById('seedancePresetSelect');
@@ -8059,6 +8123,9 @@ async function saveSeedancePreset() {
   presets[trimmedName] = {
     main_folder: document.getElementById('cfg_seedance_main_folder')?.value || '',
     subfolders: document.getElementById('cfg_seedance_subfolders')?.value || '',
+    image_mode: getSeedanceImageMode(),
+    clear_mode: getSeedanceClearMode(),
+    character_sheet: document.getElementById('cfg_seedance_character_sheet')?.value || '',
     model: document.getElementById('cfg_seedance_model')?.value || 'fast',
     aspect_ratio: document.getElementById('cfg_seedance_aspect_ratio')?.value || '9:16',
     duration: parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15,
@@ -8137,6 +8204,16 @@ async function applySeedancePreset() {
 
   if (document.getElementById('cfg_seedance_main_folder')) document.getElementById('cfg_seedance_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_seedance_subfolders')) document.getElementById('cfg_seedance_subfolders').value = preset.subfolders || '';
+  if (preset.image_mode) {
+    setSeedanceImageMode(preset.image_mode);
+  }
+  if (preset.clear_mode) {
+    setSeedanceClearMode(preset.clear_mode);
+  }
+  if (document.getElementById('cfg_seedance_character_sheet')) {
+    document.getElementById('cfg_seedance_character_sheet').value = preset.character_sheet || '';
+    if (preset.character_sheet) localStorage.setItem('seedance_character_sheet', preset.character_sheet);
+  }
   if (document.getElementById('cfg_seedance_model')) document.getElementById('cfg_seedance_model').value = preset.model || 'fast';
   if (document.getElementById('cfg_seedance_aspect_ratio')) document.getElementById('cfg_seedance_aspect_ratio').value = preset.aspect_ratio || '9:16';
   if (document.getElementById('cfg_seedance_duration')) document.getElementById('cfg_seedance_duration').value = preset.duration || 15;
@@ -8167,8 +8244,15 @@ async function applySeedanceDirectSettings(customOptions = {}) {
   const aspectRatio = customOptions.aspect_ratio || document.getElementById('cfg_seedance_aspect_ratio')?.value || '9:16';
   const duration = customOptions.duration !== undefined ? parseInt(customOptions.duration, 10) : (parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15);
   const promptText = customOptions.prompt_text !== undefined ? customOptions.prompt_text : '';
+  const imagePath = customOptions.image_path !== undefined ? customOptions.image_path : null;
+  const clearImage = customOptions.clear_image !== undefined ? customOptions.clear_image : false;
 
-  writeConsoleLine(`[Seedance Direct] ⚡ กำลังส่งการตั้งค่าไปยัง Dreamina (Model: ${model}, Ratio: ${aspectRatio}, Duration: ${duration}s${promptText ? ', Prompt: ' + promptText.substring(0, 35) + '...' : ''})...`, 'info', 'seedanceConsole');
+  const logParts = [`Model: ${model}`, `Ratio: ${aspectRatio}`, `Duration: ${duration}s`];
+  if (imagePath) logParts.push(`Image: ${imagePath.split('/').pop()}`);
+  else if (clearImage) logParts.push(`Clear Image`);
+  if (promptText) logParts.push(`Prompt: ${promptText.substring(0, 30)}...`);
+
+  writeConsoleLine(`[Seedance Direct] ⚡ กำลังส่งการตั้งค่าไปยัง Dreamina (${logParts.join(', ')})...`, 'info', 'seedanceConsole');
 
   try {
     const res = await jsonFetch('/api/seedance/apply-settings', {
@@ -8178,7 +8262,9 @@ async function applySeedanceDirectSettings(customOptions = {}) {
         model: model,
         aspect_ratio: aspectRatio,
         duration: duration,
-        prompt_text: promptText
+        prompt_text: promptText,
+        image_path: imagePath,
+        clear_image: clearImage
       })
     });
 
@@ -8231,7 +8317,7 @@ window.updateSeedanceQuickBtnStyles = updateSeedanceQuickBtnStyles;
 let seedanceStepIndex = -1;
 
 function updateSeedanceRunButtonUI() {
-    const isAuto = document.getElementById('chkSeedanceClickSubmit')?.checked || false;
+    const isAuto = document.getElementById('chkSeedanceClickSubmit') ? document.getElementById('chkSeedanceClickSubmit').checked : true;
     const btn = document.getElementById('runSeedanceBatchBtn');
     const modeDesc = document.getElementById('seedanceModeDesc');
     const stopBtn = document.getElementById('btnSeedanceForceStop');
@@ -8240,9 +8326,12 @@ function updateSeedanceRunButtonUI() {
     const validItems = seedanceBatchQueue.filter(p => p.checked !== false && p.has_prompt);
     const total = validItems.length;
 
+    const clearMode = getSeedanceClearMode();
+    const clearDesc = clearMode === 'both' ? 'ล้างทั้งคู่หลังส่ง' : (clearMode === 'prompt' ? 'ล้าง Prompt หลังส่ง' : 'ล้างรูปหลังส่ง');
+
     if (isAuto) {
       if (modeDesc) {
-        modeDesc.textContent = '⚡ โหมดอัตโนมัติ: ระบบจะลบข้อความเดิม วาง Prompt ใหม่ และกดปุ่ม Generate บนเว็บ Dreamina ให้อัตโนมัติทุกรายการตามคิว';
+        modeDesc.textContent = `⚡ โหมดอัตโนมัติ (${clearDesc}): ระบบจะส่งข้อมูลตามคิวและกด Generate บนเว็บ Dreamina ให้อัตโนมัติทุกรายการ`;
         modeDesc.style.color = '#34d399';
       }
       const textSpan = btn.querySelector('.btn-text');
@@ -8254,7 +8343,7 @@ function updateSeedanceRunButtonUI() {
       }
     } else {
       if (modeDesc) {
-        modeDesc.textContent = '✍️ โหมดทีละขั้นตอน: เมื่อกดปุ่ม ระบบจะลบข้อความเดิมในช่อง และวาง Prompt ของลำดับต่อไปลงบนเว็บ Dreamina';
+        modeDesc.textContent = `✍️ โหมดทีละขั้นตอน (${clearDesc}): เมื่อกดปุ่ม ระบบจะส่งข้อมูลของลำดับต่อไปลงบนเว็บ Dreamina และกด Generate ให้อัตโนมัติ`;
         modeDesc.style.color = '#c4b5fd';
       }
       const textSpan = btn.querySelector('.btn-text');
@@ -8301,7 +8390,7 @@ function updateSeedanceRunButtonUI() {
     }
 
     container.innerHTML = '';
-    const isAuto = document.getElementById('chkSeedanceClickSubmit')?.checked || false;
+    const isAuto = document.getElementById('chkSeedanceClickSubmit') ? document.getElementById('chkSeedanceClickSubmit').checked : true;
 
     seedanceBatchQueue.forEach((item, index) => {
       const isCurrentStep = !isAuto && seedanceStepIndex === index;
@@ -8390,8 +8479,44 @@ function updateSeedanceRunButtonUI() {
       fileBadge.style.background = item.has_prompt ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
       fileBadge.style.color = item.has_prompt ? '#34d399' : '#f87171';
       fileBadge.textContent = item.prompt_file;
-
       right.appendChild(fileBadge);
+
+      const imgBadge = document.createElement('span');
+      imgBadge.style.fontSize = '0.78rem';
+      imgBadge.style.padding = '2px 8px';
+      imgBadge.style.borderRadius = '6px';
+      const curImageMode = getSeedanceImageMode();
+      if (curImageMode === 'subfolder') {
+        if (item.has_image && item.image_file) {
+          imgBadge.style.background = 'rgba(56, 189, 248, 0.15)';
+          imgBadge.style.color = '#38bdf8';
+          imgBadge.textContent = `🖼️ ${item.image_file}`;
+          imgBadge.title = item.image_path || '';
+        } else {
+          imgBadge.style.background = 'rgba(239, 68, 68, 0.12)';
+          imgBadge.style.color = '#f87171';
+          imgBadge.textContent = '⚠️ ไม่พบรูปภาพ';
+          imgBadge.title = 'ไม่พบไฟล์รูปภาพในโฟลเดอร์ย่อยนี้';
+        }
+      } else if (curImageMode === 'character_sheet') {
+        const charSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
+        if (charSheetPath) {
+          const charName = charSheetPath.split('/').pop() || 'char_sheet';
+          imgBadge.style.background = 'rgba(168, 85, 247, 0.15)';
+          imgBadge.style.color = '#c084fc';
+          imgBadge.textContent = `👤 ${charName}`;
+          imgBadge.title = charSheetPath;
+        } else {
+          imgBadge.style.background = 'rgba(239, 68, 68, 0.12)';
+          imgBadge.style.color = '#f87171';
+          imgBadge.textContent = '⚠️ ยังไม่เลือกรูป Character Sheet';
+        }
+      } else {
+        imgBadge.style.background = 'rgba(255, 255, 255, 0.08)';
+        imgBadge.style.color = 'rgba(255, 255, 255, 0.5)';
+        imgBadge.textContent = '🚫 ไม่แนบรูป';
+      }
+      right.appendChild(imgBadge);
 
       if (item.has_prompt && item.prompt_text) {
         const applyBtn = document.createElement('button');
@@ -8409,7 +8534,32 @@ function updateSeedanceRunButtonUI() {
         applyBtn.title = 'ลบข้อความเดิมในช่อง และวาง Prompt นี้ลงบน Dreamina ทันที';
         applyBtn.addEventListener('click', () => {
           seedanceStepIndex = index;
-          applySeedanceDirectSettings({ prompt_text: item.prompt_text });
+          const curMode = getSeedanceImageMode();
+          let targetImg = null;
+          let shouldClear = false;
+
+          if (curMode === 'subfolder') {
+            if (item.image_path) {
+              targetImg = item.image_path;
+            } else {
+              shouldClear = true;
+            }
+          } else if (curMode === 'character_sheet') {
+            const charSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
+            if (charSheetPath) {
+              targetImg = charSheetPath;
+            } else {
+              shouldClear = true;
+            }
+          } else {
+            shouldClear = true;
+          }
+
+          applySeedanceDirectSettings({
+            prompt_text: item.prompt_text,
+            image_path: targetImg,
+            clear_image: shouldClear
+          });
           updateSeedanceRunButtonUI();
           renderSeedanceQueue();
         });
@@ -8444,6 +8594,8 @@ function updateSeedanceRunButtonUI() {
   async function scanSeedanceBatch() {
     const mainFolder = document.getElementById('cfg_seedance_main_folder')?.value.trim() || '';
     const subfoldersStr = document.getElementById('cfg_seedance_subfolders')?.value.trim() || '';
+    const imageMode = getSeedanceImageMode();
+    const characterSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
 
     if (!mainFolder) {
       alert('กรุณาระบุหรือเลือกโฟลเดอร์หลักก่อน');
@@ -8451,7 +8603,7 @@ function updateSeedanceRunButtonUI() {
     }
 
     seedanceStepIndex = -1;
-    writeConsoleLine(`[Seedance Scanner] กำลังสแกนหาไฟล์ Prompt ใน "${mainFolder}" (ช่วงโฟลเดอร์: ${subfoldersStr || 'ทั้งหมด'})...`, 'system', 'seedanceConsole');
+    writeConsoleLine(`[Seedance Scanner] กำลังสแกนหาไฟล์ Prompt ใน "${mainFolder}" (ช่วงโฟลเดอร์: ${subfoldersStr || 'ทั้งหมด'}, Mode: ${imageMode})...`, 'system', 'seedanceConsole');
 
     try {
       const res = await jsonFetch('/api/seedance/scan', {
@@ -8459,14 +8611,17 @@ function updateSeedanceRunButtonUI() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           main_folder: mainFolder,
-          subfolders_str: subfoldersStr
+          subfolders_str: subfoldersStr,
+          image_mode: imageMode,
+          character_sheet_path: characterSheetPath
         })
       });
 
       if (res.ok && res.items) {
         seedanceBatchQueue = res.items;
         renderSeedanceQueue();
-        writeConsoleLine(`[Seedance Scanner] ✅ สแกนพบทั้งหมด ${res.total} โฟลเดอร์ (พบไฟล์ Prompt ${res.valid_count} รายการ)`, 'success', 'seedanceConsole');
+        const imgCount = res.items.filter(i => i.has_image).length;
+        writeConsoleLine(`[Seedance Scanner] ✅ สแกนพบทั้งหมด ${res.total} โฟลเดอร์ (Prompt ${res.valid_count} รายการ, รูปภาพ ${imgCount} รายการ)`, 'success', 'seedanceConsole');
       } else {
         writeConsoleLine(`[Seedance Scanner Error] ${res.detail || 'ไม่พบข้อมูล'}`, 'error', 'seedanceConsole');
       }
@@ -8496,18 +8651,15 @@ function updateSeedanceRunButtonUI() {
       return;
     }
 
-    const isAuto = document.getElementById('chkSeedanceClickSubmit')?.checked || false;
+    const isAuto = document.getElementById('chkSeedanceClickSubmit') ? document.getElementById('chkSeedanceClickSubmit').checked : true;
 
-    // --- MODE 1: AUTO GENERATE MODE ---
+    // --- MODE 1: AUTO RUN MODE ---
     if (isAuto) {
-      const ok = confirm(`⚠️ คำเตือน: คุณได้เลือกให้ "กดปุ่ม Generate ในเว็บด้วย"\nระบบจะทำการส่งคำสั่งและใช้เครดิตจริง ${selectedItems.length} ครั้ง\n\nต้องการเริ่มทำงานหรือไม่?`);
-      if (!ok) return;
-
       if (btnElement) {
         btnElement.disabled = true;
         btnElement.classList.add('loading');
         const textSpan = btnElement.querySelector('.btn-text');
-        if (textSpan) textSpan.textContent = 'กำลังดำเนินการ Seedance อัตโนมัติ...';
+        if (textSpan) textSpan.textContent = 'กำลังดำเนินการ Seedance อัตโนมัติ (และกด Generate)...';
       }
 
       const progressContainer = document.getElementById('seedanceProgressContainer');
@@ -8520,8 +8672,11 @@ function updateSeedanceRunButtonUI() {
 
       const delayMin = parseFloat(document.getElementById('cfg_seedance_delay_min')?.value) || 5;
       const delayMax = parseFloat(document.getElementById('cfg_seedance_delay_max')?.value) || 15;
+      const imageMode = getSeedanceImageMode();
+      const characterSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
 
-      writeConsoleLine(`🚀 [Auto Mode] เริ่มส่งคำสั่งรัน Seedance ${selectedItems.length} รายการ (Auto Generate)...`, 'system', 'seedanceConsole');
+      const clearMode = getSeedanceClearMode();
+      writeConsoleLine(`🚀 [Auto Mode] เริ่มส่งคำสั่งรัน Seedance ${selectedItems.length} รายการ (Mode: ${imageMode}, Clear: ${clearMode}, กด Generate อัตโนมัติ)...`, 'system', 'seedanceConsole');
 
       try {
         const res = await jsonFetch('/api/seedance/run', {
@@ -8529,9 +8684,15 @@ function updateSeedanceRunButtonUI() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             items: selectedItems,
+            model: null,
+            aspect_ratio: null,
+            duration: null,
             delay_min: delayMin,
             delay_max: delayMax,
-            click_generate: true
+            click_generate: true,
+            image_mode: imageMode,
+            character_sheet_path: characterSheetPath,
+            clear_mode: clearMode
           })
         });
 
@@ -8597,27 +8758,68 @@ function updateSeedanceRunButtonUI() {
     if (btnElement) {
       btnElement.disabled = true;
       const textSpan = btnElement.querySelector('.btn-text');
-      if (textSpan) textSpan.textContent = `⏳ กำลังวาง Prompt #${stepNum}...`;
+      if (textSpan) textSpan.textContent = `⏳ กำลังวาง Prompt และกด Generate #${stepNum}...`;
     }
 
-    writeConsoleLine(`[Seedance Step ${stepNum}/${total}] ✍️ กำลังลบข้อความเดิมและวาง Prompt สำหรับ "${currentItem.subfolder_name}"...`, 'info', 'seedanceConsole');
+    const imageMode = getSeedanceImageMode();
+    const clearMode = getSeedanceClearMode();
+    let stepImg = null;
+    let stepClearImg = false;
+    if (clearMode === 'both' || clearMode === 'image') {
+      if (imageMode === 'subfolder') {
+        if (currentItem.image_path) {
+          stepImg = currentItem.image_path;
+        } else {
+          stepClearImg = true;
+        }
+      } else if (imageMode === 'character_sheet') {
+        const charSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
+        if (charSheetPath) {
+          stepImg = charSheetPath;
+        } else {
+          stepClearImg = true;
+        }
+      } else {
+        stepClearImg = true;
+      }
+    } else {
+      // clearMode === 'prompt' -> do not clear image, only attach if present
+      if (imageMode === 'subfolder' && currentItem.image_path) {
+        stepImg = currentItem.image_path;
+      } else if (imageMode === 'character_sheet') {
+        const charSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
+        if (charSheetPath) stepImg = charSheetPath;
+      }
+    }
+
+    const stepPrompt = currentItem.prompt_text || '';
+    const imgDesc = stepImg ? `, รูป: ${stepImg.split('/').pop()}` : (stepClearImg ? ', ล้างรูป' : '');
+    const clearLabel = clearMode === 'both' ? 'ล้างทั้งคู่หลังส่ง' : (clearMode === 'prompt' ? 'ล้าง Prompt หลังส่ง' : 'ล้างรูปหลังส่ง');
+    writeConsoleLine(`[Seedance Step ${stepNum}/${total}] ✍️ กำลังวางข้อมูลและกด Generate สำหรับ "${currentItem.subfolder_name}" (${stepPrompt.length} chars${imgDesc}, ${clearLabel})...`, 'info', 'seedanceConsole');
 
     try {
       const res = await jsonFetch('/api/seedance/apply-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt_text: currentItem.prompt_text
+          model: null,
+          aspect_ratio: null,
+          duration: null,
+          prompt_text: stepPrompt,
+          image_path: stepImg,
+          clear_image: stepClearImg,
+          clear_mode: clearMode,
+          click_generate: true
         })
       });
 
       if (res && res.ok) {
-        writeConsoleLine(`[Seedance Step ${stepNum}/${total}] ✅ ลบข้อความเดิมและวาง Prompt สำหรับ "${currentItem.subfolder_name}" เรียบร้อยแล้ว!`, 'success', 'seedanceConsole');
+        writeConsoleLine(`[Seedance Step ${stepNum}/${total}] ✅ วางข้อมูลและกด Generate สำหรับ "${currentItem.subfolder_name}" เรียบร้อยแล้ว!`, 'success', 'seedanceConsole');
         if (typeof showToast === 'function') {
-          showToast(`วาง Prompt #${stepNum}/${total} สำเร็จ!`, 'success');
+          showToast(`วางข้อมูลและกด Generate #${stepNum}/${total} สำเร็จ!`, 'success');
         }
       } else {
-        const errMsg = res?.detail || res?.message || 'ไม่สามารถวาง Prompt ได้';
+        const errMsg = res?.detail || res?.message || 'ไม่สามารถวางข้อมูลหรือกด Generate ได้';
         writeConsoleLine(`[Seedance Step Error] ❌ ${errMsg}`, 'error', 'seedanceConsole');
         if (typeof showToast === 'function') showToast(`Error: ${errMsg}`, 'error');
       }
@@ -8635,7 +8837,7 @@ function updateSeedanceRunButtonUI() {
   window.runSeedanceBatch = runSeedanceBatch;
 
   async function stopSeedanceBatch() {
-    const isAuto = document.getElementById('chkSeedanceClickSubmit')?.checked || false;
+    const isAuto = document.getElementById('chkSeedanceClickSubmit') ? document.getElementById('chkSeedanceClickSubmit').checked : true;
     if (isAuto) {
       if (!confirm('ต้องการบังคับหยุดการทำงานของ Seedance หรือไม่?')) return;
       writeConsoleLine('🛑 กำลังส่งคำสั่ง Force Stop ไปยัง Seedance...', 'warning', 'seedanceConsole');
@@ -8713,6 +8915,175 @@ window.handlePasteSeedanceFolder = async function() {
   }
 };
 
+window.handleBrowseSeedanceCharSheet = async function() {
+  try {
+    const res = await jsonFetch('/api/seedance/browse-file', { method: 'POST' });
+    if (res && res.path) {
+      const input = document.getElementById('cfg_seedance_character_sheet');
+      if (input) {
+        input.value = res.path;
+        input.dispatchEvent(new Event('input'));
+        input.dispatchEvent(new Event('change'));
+      }
+      localStorage.setItem('seedance_character_sheet', res.path);
+      writeConsoleLine(`🖼️ เลือกภาพ Character Sheet: ${res.path}`, 'success', 'seedanceConsole');
+      renderSeedanceQueue();
+    }
+  } catch (err) {
+    console.error('Browse Seedance Character Sheet error:', err);
+    writeConsoleLine(`Browse error: ${err.message}`, 'error', 'seedanceConsole');
+  }
+};
+
+window.handlePasteSeedanceCharSheet = async function() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text && text.trim()) {
+      const cleanPath = text.trim();
+      const input = document.getElementById('cfg_seedance_character_sheet');
+      if (input) {
+        input.value = cleanPath;
+        input.dispatchEvent(new Event('input'));
+        input.dispatchEvent(new Event('change'));
+      }
+      localStorage.setItem('seedance_character_sheet', cleanPath);
+      writeConsoleLine(`📋 วาง Path รูปภาพจาก Clipboard สำเร็จ: ${cleanPath}`, 'success', 'seedanceConsole');
+      if (typeof showToast === 'function') showToast('วาง Path รูปภาพสำเร็จ!', 'success');
+      renderSeedanceQueue();
+    } else {
+      alert('ไม่พบข้อความใน Clipboard (ใน Finder ให้เลือกไฟล์รูปภาพแล้วกด Cmd+Option+C เพื่อคัดลอก Path)');
+    }
+  } catch (clipErr) {
+    const promptPath = prompt('วาง Path รูปภาพ Character Sheet:', document.getElementById('cfg_seedance_character_sheet')?.value || '');
+    if (promptPath && promptPath.trim()) {
+      const input = document.getElementById('cfg_seedance_character_sheet');
+      if (input) {
+        input.value = promptPath.trim();
+        input.dispatchEvent(new Event('input'));
+        input.dispatchEvent(new Event('change'));
+      }
+      localStorage.setItem('seedance_character_sheet', promptPath.trim());
+      if (typeof showToast === 'function') showToast('บันทึก Path รูปภาพสำเร็จ!', 'success');
+      renderSeedanceQueue();
+    }
+  }
+};
+
+async function executeSeedanceDebugStep(stepName, btnEl = null, customOptions = {}) {
+  const originalHtml = btnEl ? btnEl.innerHTML : '';
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.innerHTML = '<span>⏳...</span>';
+  }
+
+  const model = document.getElementById('cfg_seedance_model')?.value || 'fast';
+  const aspectRatio = document.getElementById('cfg_seedance_aspect_ratio')?.value || '9:16';
+  const duration = parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15;
+
+  let promptText = document.getElementById('seedanceDebugPromptInput')?.value?.trim();
+  if (!promptText && seedanceBatchQueue.length > 0) {
+    const idx = (seedanceStepIndex >= 0 && seedanceStepIndex < seedanceBatchQueue.length) ? seedanceStepIndex : 0;
+    promptText = seedanceBatchQueue[idx]?.prompt_text || '';
+    const pInput = document.getElementById('seedanceDebugPromptInput');
+    if (pInput && promptText) pInput.value = promptText;
+  }
+
+  let imagePath = document.getElementById('seedanceDebugImageInput')?.value?.trim();
+  if (!imagePath && seedanceBatchQueue.length > 0) {
+    const idx = (seedanceStepIndex >= 0 && seedanceStepIndex < seedanceBatchQueue.length) ? seedanceStepIndex : 0;
+    const curItem = seedanceBatchQueue[idx];
+    const curMode = getSeedanceImageMode();
+    if (curMode === 'subfolder' && curItem?.image_path) {
+      imagePath = curItem.image_path;
+    } else if (curMode === 'character_sheet') {
+      imagePath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
+    }
+    const imgInput = document.getElementById('seedanceDebugImageInput');
+    if (imgInput && imagePath) imgInput.value = imagePath;
+  }
+
+  writeConsoleLine(`[Seedance Debug] 🧪 กำลังทดสอบขั้นตอน "${stepName}"...`, 'system', 'seedanceConsole');
+
+  try {
+    const res = await jsonFetch('/api/seedance/debug-step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        step: stepName,
+        model: model,
+        aspect_ratio: aspectRatio,
+        duration: duration,
+        image_path: customOptions.image_path !== undefined ? customOptions.image_path : imagePath,
+        prompt_text: customOptions.prompt_text !== undefined ? customOptions.prompt_text : promptText,
+        click_generate: customOptions.click_generate || false,
+        clear_mode: customOptions.clear_mode !== undefined ? customOptions.clear_mode : getSeedanceClearMode()
+      })
+    });
+
+    if (res && res.ok) {
+      writeConsoleLine(`[Seedance Debug] ✅ ${res.message || 'ดำเนินการสำเร็จ'}`, 'success', 'seedanceConsole');
+      if (typeof showToast === 'function') showToast(`[Debug] ${res.message || stepName + ' สำเร็จ!'}`, 'success');
+      return true;
+    } else {
+      const errMsg = res?.detail || res?.message || 'เกิดข้อผิดพลาด';
+      writeConsoleLine(`[Seedance Debug Error] ❌ จุดที่ผิดพลาด (${stepName}): ${errMsg}`, 'error', 'seedanceConsole');
+      if (typeof showToast === 'function') showToast(`[Debug Error] ${stepName}: ${errMsg}`, 'error');
+      return false;
+    }
+  } catch (err) {
+    writeConsoleLine(`[Seedance Debug Error] ❌ ${stepName}: ${err.message}`, 'error', 'seedanceConsole');
+    if (typeof showToast === 'function') showToast(`[Debug Error] ${stepName}: ${err.message}`, 'error');
+    return false;
+  } finally {
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.innerHTML = originalHtml;
+    }
+  }
+}
+window.executeSeedanceDebugStep = executeSeedanceDebugStep;
+
+function autoFillSeedanceDebugInputs() {
+  if (seedanceBatchQueue.length === 0) {
+    alert('ยังไม่มีรายการในคิว กรุณาสแกนโฟลเดอร์ก่อน หรือสามารถพิมพ์ข้อความทดสอบลงในช่องได้โดยตรง');
+    return;
+  }
+  const idx = (seedanceStepIndex >= 0 && seedanceStepIndex < seedanceBatchQueue.length) ? seedanceStepIndex : 0;
+  const item = seedanceBatchQueue[idx];
+  if (item) {
+    const promptInput = document.getElementById('seedanceDebugPromptInput');
+    const imgInput = document.getElementById('seedanceDebugImageInput');
+    if (promptInput) promptInput.value = item.prompt_text || '';
+
+    const curMode = getSeedanceImageMode();
+    let imgPath = '';
+    if (curMode === 'subfolder') {
+      imgPath = item.image_path || '';
+    } else if (curMode === 'character_sheet') {
+      imgPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
+    }
+    if (imgInput) imgInput.value = imgPath;
+
+    writeConsoleLine(`[Seedance Debug] 📋 ดึงข้อมูลทดสอบจากคิว [#${idx + 1}] ${item.subfolder_name} เรียบร้อยแล้ว`, 'info', 'seedanceConsole');
+    if (typeof showToast === 'function') showToast(`ดึงข้อมูลจาก [#${idx + 1}] ${item.subfolder_name} สำเร็จ`, 'info');
+  }
+}
+window.autoFillSeedanceDebugInputs = autoFillSeedanceDebugInputs;
+
+async function browseSeedanceDebugImage() {
+  try {
+    const res = await jsonFetch('/api/seedance/browse-file', { method: 'POST' });
+    if (res && res.path) {
+      const input = document.getElementById('seedanceDebugImageInput');
+      if (input) input.value = res.path;
+      writeConsoleLine(`[Seedance Debug] 🖼️ เลือกไฟล์ภาพทดสอบ: ${res.path}`, 'info', 'seedanceConsole');
+    }
+  } catch (e) {
+    console.error('Browse debug image error:', e);
+  }
+}
+window.browseSeedanceDebugImage = browseSeedanceDebugImage;
+
 function initSeedanceGenListeners() {
   const mainFolderInput = document.getElementById('cfg_seedance_main_folder');
   if (mainFolderInput) {
@@ -8747,6 +9118,56 @@ function initSeedanceGenListeners() {
     subfoldersInput.addEventListener('input', () => {
       localStorage.setItem('seedance_subfolders', subfoldersInput.value);
     });
+  }
+
+  // Image Attachment Mode 3-Option Toggle Group
+  const toggleButtons = document.querySelectorAll('.seedance-mode-toggle');
+  toggleButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.getAttribute('data-mode');
+      setSeedanceImageMode(mode);
+      renderSeedanceQueue();
+    });
+  });
+  const savedMode = localStorage.getItem('seedance_image_mode') || 'subfolder';
+  setSeedanceImageMode(savedMode);
+
+  // Clear Mode 3-Option Toggle Group
+  const clearToggleButtons = document.querySelectorAll('.seedance-clear-toggle');
+  clearToggleButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.getAttribute('data-clear');
+      setSeedanceClearMode(mode);
+    });
+  });
+  const savedClearMode = localStorage.getItem('seedance_clear_mode') || 'both';
+  setSeedanceClearMode(savedClearMode);
+
+  // Character Sheet Input & Buttons
+  const charInput = document.getElementById('cfg_seedance_character_sheet');
+  if (charInput) {
+    const savedChar = localStorage.getItem('seedance_character_sheet');
+    if (savedChar && !charInput.value) {
+      charInput.value = savedChar;
+    }
+    charInput.addEventListener('input', () => {
+      localStorage.setItem('seedance_character_sheet', charInput.value);
+      renderSeedanceQueue();
+    });
+    charInput.addEventListener('change', () => {
+      localStorage.setItem('seedance_character_sheet', charInput.value);
+      renderSeedanceQueue();
+    });
+  }
+
+  const browseCharBtn = document.getElementById('browseSeedanceCharSheetBtn');
+  if (browseCharBtn) {
+    browseCharBtn.addEventListener('click', handleBrowseSeedanceCharSheet);
+  }
+
+  const pasteCharBtn = document.getElementById('pasteSeedanceCharSheetBtn');
+  if (pasteCharBtn) {
+    pasteCharBtn.addEventListener('click', handlePasteSeedanceCharSheet);
   }
 
   // Quick Setting Buttons (Model, Ratio, Duration)
@@ -8846,6 +9267,67 @@ function initSeedanceGenListeners() {
     submitChk.addEventListener('change', () => {
       updateSeedanceRunButtonUI();
       renderSeedanceQueue();
+    });
+  }
+
+  // Seedance Step Debugger Listeners
+  const debugAutoFillBtn = document.getElementById('btnSeedanceDebugAutoFill');
+  if (debugAutoFillBtn) debugAutoFillBtn.addEventListener('click', autoFillSeedanceDebugInputs);
+
+  const debugBrowseImgBtn = document.getElementById('btnSeedanceDebugBrowseImg');
+  if (debugBrowseImgBtn) debugBrowseImgBtn.addEventListener('click', browseSeedanceDebugImage);
+
+  const debugStep1Btn = document.getElementById('btnSeedanceDebugStep1');
+  if (debugStep1Btn) debugStep1Btn.addEventListener('click', (e) => executeSeedanceDebugStep('tab', e.currentTarget));
+
+  const debugStep2Btn = document.getElementById('btnSeedanceDebugStep2');
+  if (debugStep2Btn) debugStep2Btn.addEventListener('click', (e) => executeSeedanceDebugStep('model', e.currentTarget));
+
+  const debugStep3Btn = document.getElementById('btnSeedanceDebugStep3');
+  if (debugStep3Btn) debugStep3Btn.addEventListener('click', (e) => executeSeedanceDebugStep('aspect_ratio', e.currentTarget));
+
+  const debugStep4Btn = document.getElementById('btnSeedanceDebugStep4');
+  if (debugStep4Btn) debugStep4Btn.addEventListener('click', (e) => executeSeedanceDebugStep('duration', e.currentTarget));
+
+  const debugStep5Btn = document.getElementById('btnSeedanceDebugStep5');
+  if (debugStep5Btn) debugStep5Btn.addEventListener('click', (e) => executeSeedanceDebugStep('image', e.currentTarget));
+
+  const debugStep5ClearBtn = document.getElementById('btnSeedanceDebugStep5Clear');
+  if (debugStep5ClearBtn) {
+    debugStep5ClearBtn.addEventListener('click', async (e) => {
+      const ok = await executeSeedanceDebugStep('clear_image', e.currentTarget);
+      if (ok) {
+        const imgInp = document.getElementById('seedanceDebugImageInput');
+        if (imgInp) imgInp.value = '';
+      }
+    });
+  }
+
+  const debugStep6Btn = document.getElementById('btnSeedanceDebugStep6');
+  if (debugStep6Btn) debugStep6Btn.addEventListener('click', (e) => executeSeedanceDebugStep('prompt', e.currentTarget));
+
+  const debugStep7Btn = document.getElementById('btnSeedanceDebugStep7');
+  if (debugStep7Btn) debugStep7Btn.addEventListener('click', (e) => executeSeedanceDebugStep('generate', e.currentTarget));
+
+  const debugStepAllBtn = document.getElementById('btnSeedanceDebugStepAll');
+  if (debugStepAllBtn) debugStepAllBtn.addEventListener('click', (e) => executeSeedanceDebugStep('all', e.currentTarget));
+
+  const debugStepAllGenBtn = document.getElementById('btnSeedanceDebugStepAllGen');
+  if (debugStepAllGenBtn) debugStepAllGenBtn.addEventListener('click', (e) => executeSeedanceDebugStep('all', e.currentTarget, { click_generate: true }));
+
+  const debugDirectGenBtn = document.getElementById('btnSeedanceDebugDirectGen');
+  if (debugDirectGenBtn) debugDirectGenBtn.addEventListener('click', (e) => executeSeedanceDebugStep('generate', e.currentTarget));
+
+  const debugClearBothBtn = document.getElementById('btnSeedanceDebugClearBoth');
+  if (debugClearBothBtn) {
+    debugClearBothBtn.addEventListener('click', async (e) => {
+      const ok = await executeSeedanceDebugStep('clear_both', e.currentTarget);
+      if (ok) {
+        const pInp = document.getElementById('seedanceDebugPromptInput');
+        if (pInp) pInp.value = '';
+        const imgInp = document.getElementById('seedanceDebugImageInput');
+        if (imgInp) imgInp.value = '';
+      }
     });
   }
 
