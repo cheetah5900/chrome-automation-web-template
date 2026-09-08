@@ -57,10 +57,256 @@ def extract_leading_number(folder_name: str) -> Optional[int]:
         return int(match.group(1))
     return None
 
-def scan_seedance_folders(main_folder: str, subfolders_str: str = "") -> dict[str, Any]:
+def find_image_in_folder(folder_path: str, prefer_number: Optional[int] = None) -> tuple[Optional[str], Optional[str]]:
+    """Finds an image file in folder_path.
+    Returns (filename, filepath) or (None, None).
+    """
+    valid_exts = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff', '.tif'}
+    if not os.path.isdir(folder_path):
+        return None, None
+    
+    candidates = []
+    for fname in sorted(os.listdir(folder_path)):
+        if fname.startswith('.'):
+            continue
+        ext = os.path.splitext(fname)[1].lower()
+        if ext in valid_exts:
+            candidates.append(fname)
+            
+    if not candidates:
+        return None, None
+        
+    # 1. Match subfolder number (e.g. '01.png', '1.png', '1_cover.png')
+    if prefer_number is not None:
+        num_str = str(prefer_number)
+        num_pad = f"{prefer_number:02d}"
+        for c in candidates:
+            c_base = os.path.splitext(c)[0].lower()
+            if c_base == num_str or c_base == num_pad or c_base.startswith(f"{num_str}_") or c_base.startswith(f"{num_pad}_"):
+                return c, os.path.join(folder_path, c)
+                
+    # 2. Match keywords: 'storyboard', 'image', 'ref', 'char', 'cover', 'start'
+    for kw in ['storyboard', 'ref', 'image', 'char', 'start', 'cover']:
+        for c in candidates:
+            if kw in c.lower():
+                return c, os.path.join(folder_path, c)
+                
+    # 3. Fallback: first candidate alphabetically
+    return candidates[0], os.path.join(folder_path, candidates[0])
+
+def clear_seedance_image(driver) -> bool:
+    """Removes any currently attached reference image from Dreamina."""
+    try:
+        from selenium.webdriver.common.action_chains import ActionChains
+        from selenium.webdriver.common.by import By
+
+        # Loop up to 4 attempts in case multiple images exist or hover takes a beat
+        for attempt in range(4):
+            # 1. Check if there are any attached reference images in composer
+            has_img = driver.execute_script("""
+                const refs = document.querySelector('[data-content-generator-references="true"]');
+                if (!refs) return false;
+                return refs.querySelectorAll('img').length > 0;
+            """)
+            if not has_img:
+                if attempt == 0:
+                    log("[Seedance] ไม่พบรูปภาพอ้างอิงที่ต้องลบบน Dreamina")
+                else:
+                    log("[Seedance] 🗑️ นำรูปภาพอ้างอิงเดิมออกเรียบร้อยแล้ว")
+                return True
+
+            # 2. Try direct click if remove button is already rendered
+            clicked = driver.execute_script("""
+                const refs = document.querySelector('[data-content-generator-references="true"]');
+                if (!refs) return false;
+                const btn = refs.querySelector('[data-reference-remove-button="true"]') ||
+                            refs.querySelector('.remove-button-f7uCBH') ||
+                            refs.querySelector('div[class*="remove-button"]');
+                if (btn) {
+                    btn.click();
+                    return true;
+                }
+                return false;
+            """)
+
+            # 3. If button wasn't already rendered, hover over the specific reference item containing an image
+            if not clicked:
+                try:
+                    target_elem = driver.execute_script("""
+                        const refs = document.querySelector('[data-content-generator-references="true"]');
+                        if (!refs) return null;
+                        const img = refs.querySelector('img');
+                        if (img) {
+                            return img.closest('div[data-index]') ||
+                                   img.closest('.reference-item-ZGVyJs') ||
+                                   img.closest('.reference-a5qJDc') ||
+                                   img;
+                        }
+                        const items = refs.querySelectorAll('div[data-index]');
+                        for (const item of items) {
+                            if (!item.querySelector('input[type="file"]')) return item;
+                        }
+                        return null;
+                    """)
+
+                    if target_elem:
+                        ActionChains(driver).move_to_element(target_elem).perform()
+                        time.sleep(0.3)
+
+                        # Click remove button via JS
+                        clicked = driver.execute_script("""
+                            const refs = document.querySelector('[data-content-generator-references="true"]');
+                            if (!refs) return false;
+                            const btn = refs.querySelector('[data-reference-remove-button="true"]') ||
+                                        refs.querySelector('.remove-button-f7uCBH') ||
+                                        refs.querySelector('div[class*="remove-button"]');
+                            if (btn) {
+                                btn.click();
+                                return true;
+                            }
+                            return false;
+                        """)
+
+                        if not clicked:
+                            # Fallback to Selenium click if element is present
+                            btns = driver.find_elements(By.CSS_SELECTOR,
+                                '[data-content-generator-references="true"] [data-reference-remove-button="true"], '
+                                '[data-content-generator-references="true"] .remove-button-f7uCBH'
+                            )
+                            if btns:
+                                btns[0].click()
+                                clicked = True
+                except Exception as hover_err:
+                    log(f"[Seedance] Warning on hover remove button: {hover_err}")
+
+            time.sleep(0.4)
+
+        # Final verification
+        still_has_img = driver.execute_script("""
+            const refs = document.querySelector('[data-content-generator-references="true"]');
+            if (!refs) return false;
+            return refs.querySelectorAll('img').length > 0;
+        """)
+
+        if not still_has_img:
+            log("[Seedance] 🗑️ นำรูปภาพอ้างอิงเดิมออกเรียบร้อยแล้ว")
+            return True
+        else:
+            log("[Seedance] ⚠️ รูปภาพอ้างอิงยังไม่ถูกลบออก")
+            return False
+
+    except Exception as e:
+        log(f"[Seedance] ⚠️ ข้อผิดพลาดขณะลบรูปภาพ: {e}")
+        return False
+
+def clear_seedance_prompt(driver) -> bool:
+    """Clears prompt text from ProseMirror editor on Dreamina."""
+    try:
+        cleared = driver.execute_script("""
+        const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]') ||
+                       document.querySelector('div.tiptap.ProseMirror');
+        if (editor) {
+            // 1. TipTap API
+            if (editor.editor && typeof editor.editor.commands?.setContent === 'function') {
+                editor.editor.commands.setContent('');
+            } else if (editor.editor && typeof editor.editor.commands?.clearContent === 'function') {
+                editor.editor.commands.clearContent();
+            }
+
+            // 2. ProseMirror internal view transaction
+            if (editor.pmViewDesc && editor.pmViewDesc.view) {
+                try {
+                    const view = editor.pmViewDesc.view;
+                    const tr = view.state.tr;
+                    tr.delete(0, view.state.doc.content.size);
+                    view.dispatch(tr);
+                } catch(e) {}
+            }
+
+            // 3. Selection delete
+            editor.focus();
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(editor);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            document.execCommand('delete', false, null);
+
+            // 4. Force empty paragraph if text still remains
+            if (editor.innerText && editor.innerText.trim() !== '') {
+                editor.innerHTML = '<p></p>';
+            }
+
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+            editor.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        }
+        return false;
+        """)
+        time.sleep(0.3)
+        if cleared:
+            log("[Seedance] 🗑️ ลบข้อความ Prompt บน Dreamina เรียบร้อยแล้ว")
+        return bool(cleared)
+    except Exception as e:
+        log(f"[Seedance] ⚠️ ข้อผิดพลาดขณะเคลียร์ Prompt: {e}")
+        return False
+
+def clear_seedance_image_and_prompt(driver) -> dict[str, bool]:
+    """Clears both reference image and prompt text on Dreamina."""
+    img_cleared = clear_seedance_image(driver)
+    prompt_cleared = clear_seedance_prompt(driver)
+    return {"image_cleared": img_cleared, "prompt_cleared": prompt_cleared}
+
+def set_seedance_image(driver, image_path: str) -> bool:
+    """Uploads/attaches an image to Dreamina via the hidden file input."""
+    if not image_path or not os.path.isfile(image_path):
+        raise ValueError(f"ไม่พบไฟล์รูปภาพ: {image_path}")
+
+    log(f"[Seedance] 🖼️ กำลังแนบรูปภาพ: {os.path.basename(image_path)}...")
+
+    # Clear existing image if any first
+    clear_seedance_image(driver)
+
+    # Locate input[type="file"]
+    file_inp = fast_poll(driver, """
+        return document.querySelector('[data-content-generator-references="true"] input[type="file"]') ||
+               document.querySelector('input.file-input-AykBQ0') ||
+               document.querySelector('.reference-upload-goGAYf input[type="file"]') ||
+               document.querySelector('input[type="file"][accept*="image"]');
+    """, timeout=8.0, poll_interval=0.2)
+
+    if not file_inp:
+        raise RuntimeError("ไม่พบช่องอัปโหลดรูปภาพ (input[type=file]) บนหน้าเว็บ Dreamina")
+
+    file_inp.send_keys(os.path.abspath(image_path))
+    time.sleep(0.8)
+
+    # Verify upload thumbnail
+    uploaded = fast_poll(driver, """
+        const refs = document.querySelector('[data-content-generator-references="true"]');
+        if (!refs) return null;
+        const img = refs.querySelector('img');
+        return (img && img.complete && img.naturalWidth > 0) ? img : null;
+    """, timeout=8.0, poll_interval=0.3)
+
+    if not uploaded:
+        log("[Seedance] ⚠️ ตรวจไม่พบ thumbnail รูปภาพหลัง send_keys")
+        return False
+
+    log(f"[Seedance] ✅ แนบรูปภาพ {os.path.basename(image_path)} บน Dreamina สำเร็จ")
+    time.sleep(0.3)
+    return True
+
+def scan_seedance_folders(
+    main_folder: str,
+    subfolders_str: str = "",
+    image_mode: str = "none",
+    character_sheet_path: str = ""
+) -> dict[str, Any]:
     """
     Scans main folder, filters subfolders by numbers/ranges,
     and locates markdown prompt files containing 'prompt' (case-insensitive) in filename.
+    Also detects images based on image_mode: 'subfolder', 'character_sheet', or 'none'.
     """
     if not main_folder or not os.path.isdir(main_folder):
         raise ValueError(f"ไม่พบโฟลเดอร์หลัก: {main_folder}")
@@ -83,7 +329,9 @@ def scan_seedance_folders(main_folder: str, subfolders_str: str = "") -> dict[st
 
     items = []
     for idx, (_, sub_name, sub_path) in enumerate(all_subdirs, 1):
-        # Find markdown file with 'prompt' in name
+        num = extract_leading_number(sub_name)
+
+        # 1. Find markdown file with 'prompt' in name
         prompt_file = None
         prompt_path = None
         prompt_text = ""
@@ -115,6 +363,24 @@ def scan_seedance_folders(main_folder: str, subfolders_str: str = "") -> dict[st
                         pass
                     break
 
+        # 2. Image Detection based on image_mode
+        image_file = None
+        image_path = None
+        has_image = False
+
+        if image_mode == "subfolder":
+            img_fname, img_fpath = find_image_in_folder(sub_path, prefer_number=num)
+            if img_fname and img_fpath:
+                image_file = img_fname
+                image_path = img_fpath
+                has_image = True
+        elif image_mode == "character_sheet":
+            if character_sheet_path and os.path.isfile(character_sheet_path):
+                image_file = os.path.basename(character_sheet_path)
+                image_path = character_sheet_path
+                has_image = True
+        # If "none", image_file and image_path remain None / empty
+
         items.append({
             "id": idx,
             "checked": True if (prompt_file and prompt_text) else False,
@@ -124,6 +390,10 @@ def scan_seedance_folders(main_folder: str, subfolders_str: str = "") -> dict[st
             "prompt_path": prompt_path or "",
             "prompt_text": prompt_text,
             "has_prompt": bool(prompt_file and prompt_text),
+            "image_mode": image_mode,
+            "image_file": image_file or "",
+            "image_path": image_path or "",
+            "has_image": has_image,
             "status": "ready" if (prompt_file and prompt_text) else "warning"
         })
 
@@ -305,12 +575,12 @@ def set_seedance_duration(driver, duration_seconds: int = 15) -> bool:
     return True
 
 def set_seedance_prompt(driver, prompt_text: str) -> bool:
-    """Inserts prompt text into ProseMirror editor via Select All -> Delete -> Insert/Paste."""
+    """Inserts prompt text into ProseMirror editor cleanly without duplicates."""
     if not prompt_text or not prompt_text.strip():
         raise ValueError("ข้อความ Prompt ว่างเปล่า")
 
     clean_prompt = prompt_text.strip()
-    log(f"[Seedance] กำลังลบข้อความเดิมและวาง Prompt ({len(clean_prompt)} ตัวอักษร)...")
+    log(f"[Seedance] กำลังวาง Prompt ({len(clean_prompt)} ตัวอักษร)...")
 
     # Locate editor
     editor = fast_poll(driver, """
@@ -320,58 +590,32 @@ def set_seedance_prompt(driver, prompt_text: str) -> bool:
     if not editor:
         raise RuntimeError("ไม่พบกล่องข้อความ Prompt (ProseMirror Editor)")
 
-    # 1. Primary: selectAll + delete + insertText
-    driver.execute_script("""
+    res = driver.execute_script("""
     const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
-    if (editor) {
+    if (!editor) return false;
+
+    // 1. Primary: Use native TipTap API if exposed on the DOM element
+    if (editor.editor && typeof editor.editor.commands?.setContent === 'function') {
+        editor.editor.commands.setContent(arguments[0]);
+    } else {
+        // 2. Fallback: Select all node contents across all paragraphs, delete, and insert text
         editor.focus();
-        document.execCommand('selectAll', false, null);
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        sel.removeAllRanges();
+        sel.addRange(range);
         document.execCommand('delete', false, null);
         document.execCommand('insertText', false, arguments[0]);
-        editor.dispatchEvent(new Event('input', { bubbles: true }));
-        editor.dispatchEvent(new Event('change', { bubbles: true }));
     }
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    editor.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
     """, clean_prompt)
 
     time.sleep(0.4)
-
-    # 2. Verify content
-    verified_text = driver.execute_script("""
-    const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
-    return editor ? (editor.innerText || editor.textContent || '').trim() : '';
-    """)
-
-    # Verify that clean_prompt snippet is in verified_text
-    prompt_snippet = clean_prompt[:60]
-    if prompt_snippet not in verified_text:
-        log("[Seedance] ⚠️ ข้อความในกล่องยังไม่ตรงกับ Prompt ใหม่ -> ลองใช้ DataTransfer Paste...")
-        driver.execute_script("""
-        const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
-        if (editor) {
-            editor.focus();
-            document.execCommand('selectAll', false, null);
-            document.execCommand('delete', false, null);
-            
-            const dt = new DataTransfer();
-            dt.setData('text/plain', arguments[0]);
-            const pasteEvt = new ClipboardEvent('paste', {
-                bubbles: true,
-                cancelable: true,
-                clipboardData: dt
-            });
-            editor.dispatchEvent(pasteEvt);
-            editor.dispatchEvent(new Event('input', { bubbles: true }));
-            editor.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        """, clean_prompt)
-        time.sleep(0.4)
-        verified_text = driver.execute_script("""
-        const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
-        return editor ? (editor.innerText || editor.textContent || '').trim() : '';
-        """)
-
-    log(f"[Seedance] ✅ วางข้อความ Prompt ใหม่สำเร็จ ({len(verified_text)} ตัวอักษร)")
-    return True
+    log(f"[Seedance] ✅ วางข้อความ Prompt สำเร็จ ({len(clean_prompt)} ตัวอักษร)")
+    return bool(res)
 
 def click_seedance_generate(driver, timeout: float = 6.0) -> bool:
     """Clicks the active Generate/Submit button on Dreamina, avoiding collapsed dummy buttons."""
@@ -427,9 +671,13 @@ def apply_all_seedance_settings(
     model: Optional[str] = None,
     aspect_ratio: Optional[str] = None,
     duration: Optional[int] = None,
-    prompt_text: Optional[str] = None
+    prompt_text: Optional[str] = None,
+    image_path: Optional[str] = None,
+    clear_image: bool = False,
+    clear_mode: str = "both",
+    click_generate: bool = False
 ) -> dict[str, Any]:
-    """Applies generation settings (model, ratio, duration, prompt) to Dreamina without clicking submit."""
+    """Applies generation settings (prompt, image) to Dreamina and optionally clicks generate."""
     bot = browser_manager.get()
     if bot:
         ensure_seedance_tab(bot)
@@ -441,23 +689,55 @@ def apply_all_seedance_settings(
         results["aspect_ratio"] = set_seedance_aspect_ratio(driver, aspect_ratio)
     if duration is not None and duration > 0:
         results["duration"] = set_seedance_duration(driver, duration)
+
+    # 1. Handle Image based on clear_mode
+    if clear_mode in ("both", "image"):
+        if image_path and os.path.isfile(image_path):
+            results["image"] = set_seedance_image(driver, image_path)
+        elif clear_image or clear_mode == "image":
+            results["image"] = clear_seedance_image(driver)
+    else:
+        # clear_mode == "prompt" -> Do NOT clear image on Dreamina
+        if image_path and os.path.isfile(image_path):
+            results["image"] = set_seedance_image(driver, image_path)
+
+    # 2. Handle Prompt based on clear_mode
     if prompt_text and prompt_text.strip():
         results["prompt"] = set_seedance_prompt(driver, prompt_text)
+    elif clear_mode in ("both", "prompt"):
+        results["prompt"] = clear_seedance_prompt(driver)
+
+    # 3. Click Generate if requested
+    if click_generate:
+        results["generate"] = click_seedance_generate(driver)
+
+        # 4. Post-Generate Clearing (ล้างข้อมูลหลังกดสั่งงานและกดส่งเรียบร้อยแล้ว)
+        time.sleep(1.2)
+        if clear_mode in ("both", "prompt"):
+            log("[Seedance] 🧹 กำลังล้างข้อความ Prompt หลังกดส่งตาม Clear Mode...")
+            results["post_clear_prompt"] = clear_seedance_prompt(driver)
+        if clear_mode in ("both", "image"):
+            log("[Seedance] 🧹 กำลังล้างรูปภาพอ้างอิงหลังกดส่งตาม Clear Mode...")
+            results["post_clear_image"] = clear_seedance_image(driver)
+
     return results
 
 def run_seedance_batch(
     items: list[dict[str, Any]],
-    model: str = "fast",
-    aspect_ratio: str = "9:16",
-    duration: int = 15,
+    model: Optional[str] = None,
+    aspect_ratio: Optional[str] = None,
+    duration: Optional[int] = None,
     delay_min: float = 5.0,
     delay_max: float = 15.0,
     click_generate: bool = False,
+    image_mode: str = "none",
+    character_sheet_path: str = "",
+    clear_mode: str = "both",
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
 ) -> dict[str, Any]:
     """
     Runs a batch of Seedance prompt submissions.
-    If click_generate is False, only sets the model, ratio, duration, and prompt without submitting.
+    If click_generate is False, only sets the prompt and image without submitting.
     """
     bot = browser_manager.get()
     if not bot or not bot.driver:
@@ -469,7 +749,29 @@ def run_seedance_batch(
     success_count = 0
     reset_seedance_stop()
 
-    log(f"[Seedance Engine] เริ่มกระบวนการ Seedance Batch จำนวน {total} รายการ (Model: {model}, Ratio: {aspect_ratio}, Duration: {duration}s, Submit: {click_generate})...")
+    model_desc = model or "คงเดิม"
+    ratio_desc = aspect_ratio or "คงเดิม"
+    dur_desc = f"{duration}s" if duration else "คงเดิม"
+    log(f"[Seedance Engine] เริ่มกระบวนการ Seedance Batch จำนวน {total} รายการ (Model: {model_desc}, Ratio: {ratio_desc}, Duration: {dur_desc}, Image Mode: {image_mode}, Clear Mode: {clear_mode}, Submit: {click_generate})...")
+
+    # Switch to Dreamina tab
+    ensure_seedance_tab(bot)
+
+    # 1. Apply global settings upfront before item loop
+    try:
+        if model:
+            set_seedance_model(driver, model)
+        if aspect_ratio:
+            set_seedance_aspect_ratio(driver, aspect_ratio)
+        if duration and duration > 0:
+            set_seedance_duration(driver, duration)
+    except Exception as setup_err:
+        log(f"[Seedance Setup Warning] {setup_err}")
+
+    # For character sheet mode, check if global character sheet path exists
+    char_sheet_valid = character_sheet_path and os.path.isfile(character_sheet_path)
+    if image_mode == "character_sheet" and not char_sheet_valid:
+        log(f"[Seedance Warning] ⚠️ ไม่พบไฟล์ Character Sheet: {character_sheet_path}")
 
     for idx, item in enumerate(items):
         if is_seedance_stopped():
@@ -504,25 +806,78 @@ def run_seedance_batch(
         try:
             prompt_text = item.get("prompt_text", "")
             sub_name = item.get("subfolder_name", f"Item #{idx+1}")
-            log(f"[Seedance] 🎬 กำลังประมวลผล [{idx+1}/{total}] โฟลเดอร์: {sub_name}...")
+            item_mode = image_mode or item.get("image_mode", "none")
+            item_img = item.get("image_path")
+            log(f"[Seedance] 🎬 กำลังประมวลผล [{idx+1}/{total}] โฟลเดอร์: {sub_name} (Image Mode: {item_mode}, Clear: {clear_mode})...")
 
             if progress_callback:
                 progress_callback({
                     "current": idx,
                     "total": total,
                     "percent": int((idx / max(total, 1)) * 100),
-                    "message": f"[{idx+1}/{total}] กำลังลบข้อความเดิมและวาง Prompt สำหรับ {sub_name}..."
+                    "message": f"[{idx+1}/{total}] กำลังตั้งค่าและวางข้อมูลสำหรับ {sub_name}..."
                 })
 
-            # Insert prompt (clears existing text in editor and inserts new prompt)
-            set_seedance_prompt(driver, prompt_text)
+            # 1. Handle Image Attachment based on mode and clear_mode
+            if clear_mode in ("both", "image"):
+                if item_mode == "subfolder":
+                    if item_img and os.path.isfile(item_img):
+                        log(f"[Seedance] 🖼️ กำลังแนบรูปภาพประจำโฟลเดอร์: {os.path.basename(item_img)}")
+                        set_seedance_image(driver, item_img)
+                    else:
+                        log(f"[Seedance] ℹ️ โฟลเดอร์ {sub_name} ไม่มีไฟล์รูปภาพ -> ลบรูปอ้างอิงเดิม (ถ้ามี)")
+                        clear_seedance_image(driver)
+                elif item_mode == "character_sheet":
+                    target_char_img = character_sheet_path or item_img
+                    if target_char_img and os.path.isfile(target_char_img):
+                        has_img = driver.execute_script("""
+                            const refs = document.querySelector('[data-content-generator-references="true"]');
+                            return !!(refs && refs.querySelector('img'));
+                        """)
+                        if not has_img:
+                            log(f"[Seedance] 👤 แนบรูป Character Sheet: {os.path.basename(target_char_img)}")
+                            set_seedance_image(driver, target_char_img)
+                    else:
+                        clear_seedance_image(driver)
+                elif item_mode == "none":
+                    clear_seedance_image(driver)
+            else:
+                # clear_mode == "prompt" -> Do NOT clear existing image on Dreamina!
+                if item_mode == "subfolder" and item_img and os.path.isfile(item_img):
+                    set_seedance_image(driver, item_img)
+                elif item_mode == "character_sheet":
+                    target_char_img = character_sheet_path or item_img
+                    if target_char_img and os.path.isfile(target_char_img):
+                        has_img = driver.execute_script("""
+                            const refs = document.querySelector('[data-content-generator-references="true"]');
+                            return !!(refs && refs.querySelector('img'));
+                        """)
+                        if not has_img:
+                            set_seedance_image(driver, target_char_img)
+                else:
+                    log("[Seedance] ℹ️ ข้ามการลบรูปภาพตาม Clear Mode: ล้างเฉพาะ Prompt (คงรูปเดิมไว้)")
 
-            # 5. Click generate IF AND ONLY IF explicitly requested
+            # 2. Handle Prompt based on clear_mode
+            if prompt_text and prompt_text.strip():
+                set_seedance_prompt(driver, prompt_text)
+            elif clear_mode in ("both", "prompt"):
+                clear_seedance_prompt(driver)
+
+            # Click generate IF AND ONLY IF explicitly requested
             if click_generate:
                 log(f"[Seedance] 🚀 กำลังกดปุ่ม Generate สำหรับ {sub_name}...")
                 click_seedance_generate(driver)
+
+                # Post-Generate Clearing (ล้างข้อมูลหลังกดสั่งงานและกดส่งเรียบร้อยแล้ว)
+                time.sleep(1.2)
+                if clear_mode in ("both", "prompt"):
+                    log(f"[Seedance] 🧹 ล้างข้อความ Prompt หลังส่งสำเร็จ ({sub_name})")
+                    clear_seedance_prompt(driver)
+                if clear_mode in ("both", "image"):
+                    log(f"[Seedance] 🧹 ล้างรูปภาพหลังส่งสำเร็จ ({sub_name})")
+                    clear_seedance_image(driver)
             else:
-                log(f"[Seedance] 🛡️ โหมด Safe: ตั้งค่าและวาง Prompt เรียบร้อยแล้ว (ไม่กด Generate ตามคำสั่ง)")
+                log(f"[Seedance] 🛡️ โหมด Safe: ตั้งค่าและวาง Prompt/รูปภาพ เรียบร้อยแล้ว (ไม่กด Generate ตามคำสั่ง)")
 
             success_count += 1
 

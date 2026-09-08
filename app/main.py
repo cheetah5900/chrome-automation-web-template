@@ -7147,23 +7147,44 @@ async def stop_storyboard_autofill() -> dict[str, Any]:
 class SeedanceScanRequest(BaseModel):
     main_folder: str
     subfolders_str: str = ""
+    image_mode: str = "none"
+    character_sheet_path: str = ""
 
 class SeedanceRunRequest(BaseModel):
     items: list[dict[str, Any]]
-    model: str = "fast"
-    aspect_ratio: str = "9:16"
-    duration: int = 15
+    model: Optional[str] = None
+    aspect_ratio: Optional[str] = None
+    duration: Optional[int] = None
     delay_min: float = 5.0
     delay_max: float = 15.0
     click_generate: bool = False
+    image_mode: str = "none"
+    character_sheet_path: str = ""
+    clear_mode: str = "both"
 
 class SeedanceApplySettingsRequest(BaseModel):
     model: Optional[str] = None
     aspect_ratio: Optional[str] = None
     duration: Optional[int] = None
     prompt_text: Optional[str] = None
+    image_path: Optional[str] = None
+    clear_image: bool = False
+    clear_mode: Optional[str] = "both"
+    click_generate: bool = False
 
 SeedanceApplySettingsRequest.model_rebuild()
+
+class SeedanceDebugStepRequest(BaseModel):
+    step: str
+    model: Optional[str] = "fast"
+    aspect_ratio: Optional[str] = "9:16"
+    duration: Optional[int] = 15
+    image_path: Optional[str] = None
+    prompt_text: Optional[str] = None
+    click_generate: bool = False
+    clear_mode: Optional[str] = "both"
+
+SeedanceDebugStepRequest.model_rebuild()
 
 global_seedance_progress: dict[str, Any] = {
     "status": "idle",
@@ -7196,11 +7217,38 @@ async def api_seedance_browse_folder():
         log(f"[Seedance Browse Folder Error] {e}")
         return {"ok": False, "path": None, "error": str(e)}
 
+@app.post("/api/seedance/browse-file")
+async def api_seedance_browse_file():
+    """Trigger native macOS file browser dialog for image files and return selected absolute path."""
+    script = 'POSIX path of (choose file of type {"png", "jpg", "jpeg", "webp", "bmp"} with prompt "Select Character Sheet Image")'
+    try:
+        def run_script():
+            return subprocess.run(
+                ['osascript', '-e', script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+        proc = await asyncio.to_thread(run_script)
+        if proc.returncode == 0:
+            path = proc.stdout.strip()
+            return {"ok": True, "path": path}
+        else:
+            return {"ok": False, "path": None}
+    except Exception as e:
+        log(f"[Seedance Browse File Error] {e}")
+        return {"ok": False, "path": None, "error": str(e)}
+
 @app.post("/api/seedance/scan")
 def api_seedance_scan(req: SeedanceScanRequest) -> dict[str, Any]:
     from app.seedance import scan_seedance_folders
     try:
-        res = scan_seedance_folders(req.main_folder, req.subfolders_str)
+        res = scan_seedance_folders(
+            req.main_folder,
+            req.subfolders_str,
+            image_mode=req.image_mode,
+            character_sheet_path=req.character_sheet_path
+        )
         return res
     except Exception as e:
         log(f"[Seedance Scan Error] {e}")
@@ -7218,9 +7266,14 @@ def api_seedance_apply_settings(req: SeedanceApplySettingsRequest) -> dict[str, 
             model=req.model,
             aspect_ratio=req.aspect_ratio,
             duration=req.duration,
-            prompt_text=req.prompt_text
+            prompt_text=req.prompt_text,
+            image_path=req.image_path,
+            clear_image=req.clear_image,
+            clear_mode=req.clear_mode or "both",
+            click_generate=req.click_generate
         )
-        return {"ok": True, "message": "ตั้งค่าโมเดล อัตราส่วน ระยะเวลา และพรอพต์สำเร็จ", "results": res}
+        msg = "ตั้งค่าข้อมูลและกด Generate สำเร็จ" if req.click_generate else "ตั้งค่ารูปภาพและพรอพต์สำเร็จ"
+        return {"ok": True, "message": msg, "results": res}
     except Exception as e:
         log(f"[Seedance Apply Error] {e}")
         return {"ok": False, "detail": str(e)}
@@ -7241,6 +7294,9 @@ def _seedance_worker(req: SeedanceRunRequest):
             delay_min=req.delay_min,
             delay_max=req.delay_max,
             click_generate=req.click_generate,
+            image_mode=req.image_mode,
+            character_sheet_path=req.character_sheet_path,
+            clear_mode=req.clear_mode,
             progress_callback=_on_prog
         )
         global_seedance_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
@@ -7278,6 +7334,134 @@ def api_seedance_stop() -> dict[str, Any]:
 def api_seedance_progress() -> dict[str, Any]:
     global global_seedance_progress
     return global_seedance_progress
+
+@app.post("/api/seedance/debug-step")
+def api_seedance_debug_step(req: SeedanceDebugStepRequest) -> dict[str, Any]:
+    bot = browser_manager.get()
+    if not bot or not bot.driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ยังไม่ได้เปิดใช้งาน"}
+    driver = bot.driver
+    from app.seedance import (
+        ensure_seedance_tab,
+        set_seedance_model,
+        set_seedance_aspect_ratio,
+        set_seedance_duration,
+        set_seedance_image,
+        clear_seedance_image,
+        clear_seedance_prompt,
+        clear_seedance_image_and_prompt,
+        set_seedance_prompt,
+        click_seedance_generate
+    )
+
+    step = (req.step or "").lower().strip()
+    try:
+        if step == "tab":
+            switched = ensure_seedance_tab(bot)
+            if not switched:
+                return {"ok": False, "detail": "ไม่พบแท็บ Dreamina (กรุณาเปิดแท็บ Dreamina บน Chrome 9222 ก่อน)"}
+            return {"ok": True, "message": "สลับไปยังแท็บ Dreamina เรียบร้อยแล้ว"}
+
+        # Ensure active tab is Dreamina for other steps
+        ensure_seedance_tab(bot)
+
+        if step == "model":
+            res = set_seedance_model(driver, req.model or "fast")
+            return {"ok": True, "message": f"ตั้งค่าโมเดล '{res}' สำเร็จ", "result": res}
+
+        elif step == "aspect_ratio":
+            res = set_seedance_aspect_ratio(driver, req.aspect_ratio or "9:16")
+            return {"ok": True, "message": f"ตั้งค่าอัตราส่วน '{req.aspect_ratio}' สำเร็จ", "result": res}
+
+        elif step == "duration":
+            dur = req.duration or 15
+            res = set_seedance_duration(driver, dur)
+            return {"ok": True, "message": f"ตั้งค่าระยะเวลา {dur}s สำเร็จ", "result": dur}
+
+        elif step == "image":
+            if not req.image_path or not os.path.isfile(req.image_path):
+                return {"ok": False, "detail": f"ไม่พบไฟล์รูปภาพ: {req.image_path}"}
+            res = set_seedance_image(driver, req.image_path)
+            return {"ok": True, "message": f"แนบรูปภาพ '{os.path.basename(req.image_path)}' สำเร็จ", "result": res}
+
+        elif step == "clear_image":
+            res = clear_seedance_image(driver)
+            if not res:
+                return {"ok": False, "detail": "ไม่สามารถลบรูปภาพอ้างอิงบน Dreamina ได้ (อาจยังคงมีรูปภาพติดอยู่)"}
+            return {"ok": True, "message": "ลบรูปภาพอ้างอิงบน Dreamina เรียบร้อยแล้ว", "result": res}
+
+        elif step == "clear_prompt":
+            res = clear_seedance_prompt(driver)
+            if not res:
+                return {"ok": False, "detail": "ไม่สามารถลบข้อความ Prompt บน Dreamina ได้"}
+            return {"ok": True, "message": "ลบข้อความ Prompt บน Dreamina เรียบร้อยแล้ว", "result": res}
+
+        elif step in ("clear_all", "clear_both", "clear_image_and_prompt"):
+            res = clear_seedance_image_and_prompt(driver)
+            img_ok = res.get("image_cleared", False)
+            prompt_ok = res.get("prompt_cleared", False)
+            if not img_ok and not prompt_ok:
+                return {"ok": False, "detail": "ไม่สามารถเคลียร์รูปภาพหรือข้อความ Prompt ได้", "result": res}
+            detail_msg = []
+            if img_ok:
+                detail_msg.append("ลบรูปภาพสำเร็จ")
+            else:
+                detail_msg.append("ลบรูปภาพไม่สำเร็จ")
+            if prompt_ok:
+                detail_msg.append("ลบ Prompt สำเร็จ")
+            else:
+                detail_msg.append("ลบ Prompt ไม่สำเร็จ")
+            return {"ok": img_ok and prompt_ok, "message": f"ผลการเคลียร์: {', '.join(detail_msg)}", "result": res}
+
+        elif step == "prompt":
+            if not req.prompt_text or not req.prompt_text.strip():
+                return {"ok": False, "detail": "ข้อความ Prompt ว่างเปล่า กรุณาระบุข้อความก่อน"}
+            res = set_seedance_prompt(driver, req.prompt_text)
+            return {"ok": True, "message": f"ลบข้อความเดิมและวาง Prompt ใหม่สำเร็จ ({len(req.prompt_text.strip())} ตัวอักษร)", "result": res}
+
+        elif step == "generate":
+            res = click_seedance_generate(driver)
+            return {"ok": True, "message": "กดปุ่ม Generate บน Dreamina สำเร็จ", "result": res}
+
+        elif step == "all":
+            log_steps = []
+            if req.model:
+                m = set_seedance_model(driver, req.model)
+                log_steps.append(f"Model: {m}")
+            if req.aspect_ratio:
+                set_seedance_aspect_ratio(driver, req.aspect_ratio)
+                log_steps.append(f"Ratio: {req.aspect_ratio}")
+            if req.duration:
+                set_seedance_duration(driver, req.duration)
+                log_steps.append(f"Duration: {req.duration}s")
+            if req.image_path and os.path.isfile(req.image_path):
+                set_seedance_image(driver, req.image_path)
+                log_steps.append(f"Image: {os.path.basename(req.image_path)}")
+            elif req.image_path == "clear":
+                clear_seedance_image(driver)
+                log_steps.append("Cleared Image")
+            if req.prompt_text and req.prompt_text.strip():
+                set_seedance_prompt(driver, req.prompt_text)
+                log_steps.append(f"Prompt: {len(req.prompt_text.strip())} chars")
+            if req.click_generate:
+                click_seedance_generate(driver)
+                log_steps.append("Submitted!")
+                time.sleep(1.2)
+                clear_m = getattr(req, "clear_mode", "both") or "both"
+                if clear_m in ("both", "prompt"):
+                    clear_seedance_prompt(driver)
+                    log_steps.append("Cleared Prompt")
+                if clear_m in ("both", "image"):
+                    clear_seedance_image(driver)
+                    log_steps.append("Cleared Image")
+            return {"ok": True, "message": "ทดสอบทุกขั้นตอนสำเร็จ: " + ", ".join(log_steps)}
+
+        else:
+            return {"ok": False, "detail": f"ไม่รู้จักขั้นตอน debug: '{step}'"}
+
+    except Exception as e:
+        log(f"[Seedance Debug Step Error] Step '{step}': {e}")
+        return {"ok": False, "detail": str(e), "step": step}
 
 @app.get("/")
 def index():

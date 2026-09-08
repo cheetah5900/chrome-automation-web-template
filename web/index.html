@@ -1299,6 +1299,34 @@
                   <input id="cfg_seedance_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
                 </div>
 
+                <!-- Image Attachment Mode Selection -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label style="font-weight: bold; color: #8da6ff; display: block; margin-bottom: 6px;">🖼️ โหมดการแนบรูปภาพ (Reference Image Mode)</label>
+                  <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin-bottom: 8px;">เลือกว่าต้องการแนบรูปภาพอ้างอิงเข้า Dreamina หรือไม่ และใช้รูปภาพจากแหล่งใด</div>
+                  <input type="hidden" id="cfg_seedance_image_mode" value="subfolder" />
+                  <div class="seedance-mode-toggle-group">
+                    <button type="button" class="seedance-mode-toggle active" data-mode="subfolder" title="ดึงรูปจากแต่ละโฟลเดอร์ย่อย (Subfolder Image)">
+                      <span>📁 รูปในโฟลเดอร์ย่อย</span>
+                    </button>
+                    <button type="button" class="seedance-mode-toggle" data-mode="character_sheet" title="ใช้รูป Character Sheet เดียวกันทุกช็อต">
+                      <span>👤 Character Sheet</span>
+                    </button>
+                    <button type="button" class="seedance-mode-toggle" data-mode="none" title="ไม่แนบรูป (Text-to-Video Only)">
+                      <span>🚫 ไม่แนบรูป</span>
+                    </button>
+                  </div>
+
+                  <!-- Character Sheet File Picker Container (collapsible) -->
+                  <div id="seedanceCharSheetContainer" style="display: none; margin-top: 10px; padding: 12px; background: rgba(127, 92, 255, 0.08); border: 1px dashed rgba(127, 92, 255, 0.3); border-radius: 10px;">
+                    <label for="cfg_seedance_character_sheet" style="font-size: 0.85rem; font-weight: bold; color: #c4b5fd; display: block; margin-bottom: 4px;">เลือกไฟล์รูป Character Sheet / Reference Image</label>
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                      <input id="cfg_seedance_character_sheet" placeholder="เช่น /Users/litar/Downloads/character_sheet.png" style="margin-bottom: 0; flex-grow: 1;" />
+                      <button id="browseSeedanceCharSheetBtn" type="button" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse Image...</button>
+                      <button id="pasteSeedanceCharSheetBtn" type="button" class="secondary" title="วาง path รูปจาก Clipboard" style="padding: 10px 14px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: rgba(58, 160, 255, 0.12); border-color: rgba(58, 160, 255, 0.3); color: #8da6ff;">📋 วาง Path</button>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Settings Grid: Model, Aspect Ratio, Duration & Delay -->
                 <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.2fr; gap: 14px; margin-bottom: 14px;">
                   <!-- Model Selection -->
@@ -1416,27 +1444,113 @@
 
               <!-- Safety Options & Run Buttons -->
               <div style="margin: 15px 0 16px 0; display: flex; flex-direction: column; gap: 12px;">
-                <!-- Submit checkbox with Warning -->
-                <div style="padding: 10px 14px; background: rgba(255, 184, 108, 0.08); border: 1px solid rgba(255, 184, 108, 0.25); border-radius: 10px; display: flex; align-items: center; gap: 10px;">
-                  <input type="checkbox" id="chkSeedanceClickSubmit" style="cursor: pointer; width: 18px; height: 18px; margin: 0;" />
-                  <label for="chkSeedanceClickSubmit" style="margin: 0; font-size: 0.85rem; color: #ffb86c; font-weight: bold; cursor: pointer;">
-                    ⚡ กดปุ่ม Generate ในเว็บด้วย (ใช้เครดิตจริง)
-                  </label>
+                <!-- Clear Mode Selection for Normal Run -->
+                <div style="background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label style="font-size: 0.82rem; font-weight: bold; color: #8da6ff; margin: 0;">🧹 โหมดการล้างข้อมูลหลังกดส่ง (Clear Mode)</label>
+                  </div>
+                  <input type="hidden" id="cfg_seedance_clear_mode" value="both" />
+                  <div class="seedance-clear-toggle-group">
+                    <button type="button" class="seedance-clear-toggle active" data-clear="both" title="ล้างทั้งข้อความ Prompt และรูปภาพอ้างอิงบนเว็บ Dreamina หลังกดส่งงานเรียบร้อยแล้ว">
+                      <span>🧹 ล้างทั้งคู่</span>
+                    </button>
+                    <button type="button" class="seedance-clear-toggle" data-clear="prompt" title="ล้างเฉพาะข้อความ Prompt บนเว็บ Dreamina หลังกดส่งงานเรียบร้อยแล้ว (คงรูปภาพอ้างอิงไว้)">
+                      <span>✍️ ล้าง Prompt</span>
+                    </button>
+                    <button type="button" class="seedance-clear-toggle" data-clear="image" title="ล้างเฉพาะรูปภาพอ้างอิงบนเว็บ Dreamina หลังกดส่งงานเรียบร้อยแล้ว (คงข้อความ Prompt ไว้)">
+                      <span>🖼️ ล้างรูป</span>
+                    </button>
+                  </div>
                 </div>
 
                 <!-- Dynamic Mode Explanation -->
-                <div id="seedanceModeDesc" style="font-size: 0.82rem; color: #c4b5fd; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 8px 12px; line-height: 1.4;">
-                  ✍️ โหมดทีละขั้นตอน: เมื่อกดปุ่ม ระบบจะลบข้อความเดิมในช่อง และวาง Prompt ของลำดับต่อไปลงบนเว็บ Dreamina
+                <div id="seedanceModeDesc" style="font-size: 0.82rem; color: #34d399; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 8px 12px; line-height: 1.4;">
+                  ⚡ โหมดอัตโนมัติ: ระบบจะส่งข้อมูลตามคิวและกด Generate บนเว็บ Dreamina ให้อัตโนมัติทุกรายการ
                 </div>
 
                 <div style="display: flex; gap: 10px;">
-                  <button id="runSeedanceBatchBtn" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #7f5cff, #3aa0ff); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(127, 92, 255, 0.3); transition: all 0.2s ease;">
-                    <span class="btn-text">🚀 เริ่มวาง Prompt แรก</span>
+                  <button id="runSeedanceBatchBtn" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); transition: all 0.2s ease;">
+                    <span class="btn-text">🚀 เริ่มรัน Seedance อัตโนมัติ</span>
                     <div class="custom-tooltip" id="tooltip_runSeedanceBatchBtn"></div>
                   </button>
                   <button id="btnSeedanceForceStop" class="secondary has-tooltip" style="padding: 14px 18px; font-size: 0.9rem; font-weight: bold; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #f87171; white-space: nowrap;">
-                    🔄 รีเซ็ตคิว
+                    🛑 Force Stop
                     <div class="custom-tooltip" id="tooltip_btnSeedanceForceStop"></div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Seedance Step Debugger Panel -->
+              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(127, 92, 255, 0.25); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
+                  <span style="font-weight: bold; color: #c4b5fd; font-size: 0.92rem; display: flex; align-items: center; gap: 6px;">
+                    <span>🛠️ Seedance Step Debugger (ทดสอบทีละขั้นตอน)</span>
+                  </span>
+                  <span style="font-size: 0.75rem; color: rgba(255,255,255,0.45);">กดทดสอบเพื่อตรวจหาจุดผิดพลาด</span>
+                </div>
+
+                <!-- Debug Target: Prompt & Image Auto Fill or Custom -->
+                <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 0.78rem; font-weight: bold; color: #8da6ff;">🎯 ข้อมูลทดสอบ (Debug Inputs)</span>
+                    <button id="btnSeedanceDebugAutoFill" type="button" class="secondary" style="padding: 3px 8px; font-size: 0.74rem; margin: 0; border-radius: 6px; background: rgba(127, 92, 255, 0.15); border-color: rgba(127, 92, 255, 0.35); color: #c4b5fd;" title="ดึง Prompt และรูปภาพจากคิวที่เลือกหรือรายการแรก">
+                      📋 ดึงจากคิว (Auto Fill)
+                    </button>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <input id="seedanceDebugPromptInput" placeholder="ข้อความ Prompt สำหรับทดสอบ..." style="margin-bottom: 0; font-size: 0.8rem; padding: 6px 10px; border-radius: 6px;" />
+                    <div style="display: flex; gap: 6px;">
+                      <input id="seedanceDebugImageInput" placeholder="Path รูปภาพสำหรับทดสอบ..." style="margin-bottom: 0; font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; flex-grow: 1;" />
+                      <button id="btnSeedanceDebugBrowseImg" type="button" class="secondary" style="padding: 6px 10px; font-size: 0.75rem; margin: 0; border-radius: 6px; white-space: nowrap;">Browse...</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step Buttons Grid (7 steps) -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                  <button id="btnSeedanceDebugStep1" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                    <span>🌐 1. สลับแท็บ</span>
+                  </button>
+                  <button id="btnSeedanceDebugStep2" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                    <span>🤖 2. เลือกโมเดล</span>
+                  </button>
+                  <button id="btnSeedanceDebugStep3" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                    <span>📐 3. เลือกสัดส่วน</span>
+                  </button>
+                  <button id="btnSeedanceDebugStep4" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                    <span>⏱️ 4. เลือกระยะเวลา</span>
+                  </button>
+                  <button id="btnSeedanceDebugStep5" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(56, 189, 248, 0.3); color: #38bdf8; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                    <span>🖼️ 5. แนบรูปภาพ</span>
+                  </button>
+                  <button id="btnSeedanceDebugStep5Clear" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(239, 68, 68, 0.3); color: #f87171; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                    <span>🗑️ 5. ลบรูปภาพ</span>
+                  </button>
+                  <button id="btnSeedanceDebugStep6" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                    <span>✍️ 6. วาง Prompt</span>
+                  </button>
+                  <button id="btnSeedanceDebugStep7" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #34d399; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
+                    <span>🚀 7. กด Generate</span>
+                  </button>
+                </div>
+
+                <!-- All Steps Runner Grid -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                  <button id="btnSeedanceDebugStepAll" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; margin: 0; font-weight: bold; border-radius: 8px; background: linear-gradient(135deg, rgba(127, 92, 255, 0.2), rgba(58, 160, 255, 0.2)); border: 1px solid rgba(127, 92, 255, 0.4); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="รันสลับแท็บ, โมเดล, สัดส่วน, ระยะเวลา, แนบรูป และวาง Prompt โดยไม่กด Generate">
+                    <span>▶️ รัน 1 -> 6 (ไม่กด Generate)</span>
+                  </button>
+                  <button id="btnSeedanceDebugStepAllGen" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.25)); border: 1px solid rgba(16, 185, 129, 0.45); color: #34d399; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="รันครบทุกขั้นตอน 1 ถึง 7 พร้อมกดปุ่ม Generate บน Dreamina">
+                    <span>🚀 รัน 1 -> 7 (กด Generate ปกติ)</span>
+                  </button>
+                </div>
+
+                <!-- Action Controls: Direct Generate & Clear Both -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <button id="btnSeedanceDebugDirectGen" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="กดปุ่ม Generate บนเว็บ Dreamina เพื่อสร้างวิดีโอทันที">
+                    <span>🚀 กด Generate ปกติ</span>
+                  </button>
+                  <button id="btnSeedanceDebugClearBoth" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="ลบรูปภาพอ้างอิงและเคลียร์ข้อความ Prompt ทั้งบน Dreamina และในช่อง Debug">
+                    <span>🧹 เคลียร์รูปภาพ + Prompt</span>
                   </button>
                 </div>
               </div>
