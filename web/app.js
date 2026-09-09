@@ -8422,6 +8422,10 @@ function updateSeedanceRunButtonUI() {
 
       const card = document.createElement('div');
       card.className = 'seedance-queue-card';
+      card.id = `seedance-card-${index}`;
+      if (item.num !== undefined && item.num !== null) {
+        card.setAttribute('data-num', item.num);
+      }
       if (isCurrentStep) {
         card.style.background = 'rgba(139, 92, 246, 0.15)';
         card.style.border = '1px solid #c084fc';
@@ -8465,7 +8469,8 @@ function updateSeedanceRunButtonUI() {
       folderTitle.style.fontWeight = 'bold';
       folderTitle.style.color = isCurrentStep ? '#f3e8ff' : '#c4b5fd';
       folderTitle.style.fontSize = '0.95rem';
-      folderTitle.textContent = `[#${index + 1}] โฟลเดอร์: ${item.subfolder_name}`;
+      const numLabel = (item.num !== undefined && item.num !== null) ? `[#${item.num}] ` : `[#${index + 1}] `;
+      folderTitle.textContent = `${numLabel}${item.subfolder_name}`;
 
       left.appendChild(checkbox);
       left.appendChild(folderTitle);
@@ -8599,6 +8604,25 @@ function updateSeedanceRunButtonUI() {
         right.appendChild(applyBtn);
       }
 
+      const downloadItemBtn = document.createElement('button');
+      downloadItemBtn.type = 'button';
+      downloadItemBtn.className = 'secondary';
+      downloadItemBtn.style.padding = '4px 10px';
+      downloadItemBtn.style.fontSize = '0.78rem';
+      downloadItemBtn.style.fontWeight = 'bold';
+      downloadItemBtn.style.borderRadius = '6px';
+      downloadItemBtn.style.background = 'rgba(16, 185, 129, 0.15)';
+      downloadItemBtn.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+      downloadItemBtn.style.color = '#34d399';
+      downloadItemBtn.style.cursor = 'pointer';
+      downloadItemBtn.textContent = '📥 ดาวน์โหลด';
+      downloadItemBtn.title = `สั่งดาวน์โหลดวิดีโอสำหรับ ${item.subfolder_name} บน Dreamina`;
+      downloadItemBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        downloadSeedanceItems([item]);
+      });
+      right.appendChild(downloadItemBtn);
+
       header.appendChild(left);
       header.appendChild(right);
       card.appendChild(header);
@@ -8678,6 +8702,197 @@ function updateSeedanceRunButtonUI() {
     writeConsoleLine('ล้างรายการคิวทั้งหมดเรียบร้อยแล้ว', 'info', 'seedanceConsole');
   }
   window.clearSeedanceBatch = clearSeedanceBatch;
+
+  // --- Quick Select & Download by Number Helpers ---
+  function parseNumberListOrRange(str) {
+    if (!str || typeof str !== 'string') return [];
+    const res = new Set();
+    const parts = str.split(/[,;\s]+/);
+    for (const part of parts) {
+      if (!part) continue;
+      if (part.includes('-')) {
+        const subParts = part.split('-').map(x => parseInt(x.trim(), 10));
+        if (subParts.length === 2 && !isNaN(subParts[0]) && !isNaN(subParts[1])) {
+          const min = Math.min(subParts[0], subParts[1]);
+          const max = Math.max(subParts[0], subParts[1]);
+          for (let i = min; i <= max; i++) res.add(i);
+        }
+      } else {
+        const n = parseInt(part, 10);
+        if (!isNaN(n)) res.add(n);
+      }
+    }
+    return Array.from(res);
+  }
+
+  function selectSeedanceByNumber(numberQuery, autoScroll = true) {
+    const feedback = document.getElementById('seedanceNumberSelectFeedback');
+    const query = (numberQuery || '').trim();
+
+    if (!query) {
+      if (feedback) {
+        feedback.innerHTML = '<span style="color: rgba(255,255,255,0.5);">💡 พิมพ์หมายเลขโฟลเดอร์ (เช่น 211 หรือ 211, 215, 220-225) เพื่อเลือกรายการทันที</span>';
+      }
+      return [];
+    }
+
+    if (!seedanceBatchQueue || seedanceBatchQueue.length === 0) {
+      if (feedback) {
+        feedback.innerHTML = '<span style="color: #fbbf24;">⚠️ ยังไม่มีรายการในระบบ กรุณากดปุ่ม <strong>"📚 รวบรวม Prompt ทั้งหมด"</strong> ก่อน</span>';
+      }
+      return [];
+    }
+
+    const targetNumbers = parseNumberListOrRange(query);
+    const matchedIndices = [];
+
+    seedanceBatchQueue.forEach((item, idx) => {
+      let isMatch = false;
+      const itemNum = (item.num !== undefined && item.num !== null) ? Number(item.num) : null;
+      const nameStr = (item.subfolder_name || '').toLowerCase();
+
+      if (targetNumbers.length > 0) {
+        if (itemNum !== null && targetNumbers.includes(itemNum)) {
+          isMatch = true;
+        } else {
+          for (const tn of targetNumbers) {
+            if (nameStr.startsWith(`${tn} -`) || nameStr.startsWith(`${tn}-`) || nameStr.startsWith(`${tn} `) || nameStr === `${tn}`) {
+              isMatch = true;
+              break;
+            }
+          }
+        }
+      } else {
+        if (nameStr.includes(query.toLowerCase())) {
+          isMatch = true;
+        }
+      }
+
+      if (isMatch) {
+        item.checked = true;
+        matchedIndices.push(idx);
+      } else {
+        item.checked = false;
+      }
+    });
+
+    renderSeedanceQueue();
+
+    if (matchedIndices.length > 0) {
+      const matchedItems = matchedIndices.map(i => seedanceBatchQueue[i]);
+      const previewText = matchedItems.length === 1 
+        ? matchedItems[0].subfolder_name 
+        : `${matchedItems.length} รายการ (${matchedItems.slice(0, 3).map(m => m.subfolder_name).join(', ')}${matchedItems.length > 3 ? '...' : ''})`;
+
+      if (feedback) {
+        feedback.innerHTML = `
+          <span style="color: #34d399; font-weight: bold; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span>🎯 เลือกแล้ว:</span>
+            <span style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 2px 8px; border-radius: 6px; color: #a7f3d0;">${previewText}</span>
+          </span>
+        `;
+      }
+
+      if (autoScroll) {
+        setTimeout(() => {
+          const targetCard = document.getElementById(`seedance-card-${matchedIndices[0]}`);
+          if (targetCard) {
+            targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetCard.classList.add('seedance-highlight-pulse');
+            setTimeout(() => targetCard.classList.remove('seedance-highlight-pulse'), 3000);
+          }
+        }, 60);
+      }
+      return matchedItems;
+    } else {
+      if (feedback) {
+        feedback.innerHTML = `<span style="color: #f87171;">⚠️ ไม่พบโฟลเดอร์หมายเลข "${query}" ในระบบ (ลองกด '📚 รวบรวม Prompt ทั้งหมด')</span>`;
+      }
+      return [];
+    }
+  }
+  window.selectSeedanceByNumber = selectSeedanceByNumber;
+
+  function clearSeedanceNumberSelection() {
+    const input = document.getElementById('seedanceNumberSelectInput');
+    if (input) input.value = '';
+    seedanceBatchQueue.forEach(item => item.checked = true);
+    renderSeedanceQueue();
+    const feedback = document.getElementById('seedanceNumberSelectFeedback');
+    if (feedback) {
+      feedback.innerHTML = '<span style="color: rgba(255,255,255,0.5);">💡 พิมพ์หมายเลขโฟลเดอร์ (เช่น 211 หรือ 211, 215, 220-225) เพื่อเลือกรายการทันที</span>';
+    }
+  }
+  window.clearSeedanceNumberSelection = clearSeedanceNumberSelection;
+
+  async function scanAllSeedancePrompts() {
+    const subfoldersInput = document.getElementById('cfg_seedance_subfolders');
+    if (subfoldersInput) subfoldersInput.value = '';
+    writeConsoleLine('[Seedance] 📚 สแกนรวบรวม Prompt ทั้งหมดในโฟลเดอร์หลัก...', 'system', 'seedanceConsole');
+    await scanSeedanceBatch();
+    const input = document.getElementById('seedanceNumberSelectInput');
+    if (input && input.value.trim()) {
+      selectSeedanceByNumber(input.value.trim(), true);
+    }
+  }
+  window.scanAllSeedancePrompts = scanAllSeedancePrompts;
+
+  async function downloadSeedanceItems(itemsToDownload) {
+    if (!itemsToDownload || itemsToDownload.length === 0) {
+      alert('ไม่มีรายการที่เลือกสำหรับดาวน์โหลด กรุณาเลือกรายการก่อน');
+      return;
+    }
+
+    const count = itemsToDownload.length;
+    const names = itemsToDownload.map(i => i.subfolder_name).slice(0, 3).join(', ');
+    const displayLabel = count === 1 ? itemsToDownload[0].subfolder_name : `${count} รายการ (${names}${count > 3 ? '...' : ''})`;
+
+    writeConsoleLine(`[Seedance Downloader] 🚀 กำลังเริ่มดาวน์โหลด ${displayLabel} บน Dreamina...`, 'system', 'seedanceConsole');
+
+    const dlBtn = document.getElementById('btnSeedanceDownloadSelected');
+    if (dlBtn) {
+      dlBtn.disabled = true;
+      dlBtn.innerHTML = '⏳ กำลังดาวน์โหลด...';
+    }
+
+    try {
+      const res = await jsonFetch('/api/seedance/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: itemsToDownload,
+          save_to_subfolder: true
+        })
+      });
+
+      if (res.ok) {
+        writeConsoleLine(`[Seedance Downloader] ✅ ดาวน์โหลดเสร็จสิ้น ${res.success_count}/${res.total} รายการ`, 'success', 'seedanceConsole');
+        if (res.results) {
+          res.results.forEach(r => {
+            if (r.ok) {
+              const savedStr = r.saved_file ? ` (บันทึกไฟล์: ${r.saved_file})` : '';
+              writeConsoleLine(`  - ✅ [${r.num || '-'}] ${r.name}: ดาวน์โหลดสำเร็จ${savedStr}`, 'success', 'seedanceConsole');
+            } else {
+              writeConsoleLine(`  - ⚠️ [${r.num || '-'}] ${r.name}: ${r.detail || 'เกิดข้อผิดพลาด'}`, 'warning', 'seedanceConsole');
+            }
+          });
+        }
+      } else {
+        writeConsoleLine(`[Seedance Downloader Error] ${res.detail || 'ไม่สามารถดาวน์โหลดได้'}`, 'error', 'seedanceConsole');
+        alert(`ดาวน์โหลดไม่สำเร็จ: ${res.detail || 'ไม่พบวิดีโอบน Dreamina'}`);
+      }
+    } catch (err) {
+      writeConsoleLine(`[Seedance Downloader Error] ${err.message}`, 'error', 'seedanceConsole');
+      alert(`ดาวน์โหลดผิดพลาด: ${err.message}`);
+    } finally {
+      if (dlBtn) {
+        dlBtn.disabled = false;
+        dlBtn.innerHTML = '<span class="btn-text">📥 สั่งดาวน์โหลดบน Dreamina</span><div class="custom-tooltip" id="tooltip_btnSeedanceDownloadSelected">สั่งดาวน์โหลดวิดีโอบนเว็บ Dreamina ตามรายการที่เลือกไว้ พร้อมบันทึกไฟล์ MP4 ลงในโฟลเดอร์ย่อยโดยตรง</div>';
+      }
+    }
+  }
+  window.downloadSeedanceItems = downloadSeedanceItems;
+
 
   async function runSeedanceBatch(btnElement) {
     const selectedItems = seedanceBatchQueue.filter(p => p.checked !== false && p.has_prompt);
@@ -9421,6 +9636,50 @@ function initSeedanceGenListeners() {
       seedanceBatchQueue.forEach(p => p.checked = !allChecked);
       renderSeedanceQueue();
     });
+  }
+
+  // Quick Select & Download by Number Listeners
+  const numSelectInput = document.getElementById('seedanceNumberSelectInput');
+  if (numSelectInput) {
+    numSelectInput.addEventListener('input', (e) => {
+      selectSeedanceByNumber(e.target.value, false);
+    });
+    numSelectInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        selectSeedanceByNumber(e.target.value, true);
+      }
+    });
+  }
+
+  const selectByNumBtn = document.getElementById('btnSeedanceSelectByNumber');
+  if (selectByNumBtn) {
+    selectByNumBtn.addEventListener('click', () => {
+      const val = document.getElementById('seedanceNumberSelectInput')?.value || '';
+      selectSeedanceByNumber(val, true);
+    });
+  }
+
+  const dlSelectedBtn = document.getElementById('btnSeedanceDownloadSelected');
+  if (dlSelectedBtn) {
+    dlSelectedBtn.addEventListener('click', () => {
+      const checkedItems = seedanceBatchQueue.filter(p => p.checked !== false);
+      if (checkedItems.length === 0) {
+        alert('กรุณาพิมพ์เลือกหมายเลข หรือติ๊กเลือกรายการที่ต้องการดาวน์โหลดก่อน');
+        return;
+      }
+      downloadSeedanceItems(checkedItems);
+    });
+  }
+
+  const scanAllBtn = document.getElementById('btnSeedanceScanAllPrompts');
+  if (scanAllBtn) {
+    scanAllBtn.addEventListener('click', scanAllSeedancePrompts);
+  }
+
+  const clearNumBtn = document.getElementById('btnSeedanceClearNumberSelection');
+  if (clearNumBtn) {
+    clearNumBtn.addEventListener('click', clearSeedanceNumberSelection);
   }
 
   const runBtn = document.getElementById('runSeedanceBatchBtn');

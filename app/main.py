@@ -7195,6 +7195,12 @@ class SeedanceToggleDownloadEnhancerRequest(BaseModel):
 
 SeedanceToggleDownloadEnhancerRequest.model_rebuild()
 
+class SeedanceDownloadRequest(BaseModel):
+    items: list[dict[str, Any]]
+    save_to_subfolder: bool = True
+
+SeedanceDownloadRequest.model_rebuild()
+
 global_seedance_progress: dict[str, Any] = {
     "status": "idle",
     "total": 0,
@@ -7509,6 +7515,28 @@ def api_seedance_toggle_download_enhancer(req: Optional[SeedanceToggleDownloadEn
         return res
     except Exception as e:
         log(f"[Seedance Download Enhancer Error]: {e}")
+        return {"ok": False, "detail": str(e)}
+
+@app.post("/api/seedance/download")
+def api_seedance_download(req: SeedanceDownloadRequest) -> dict[str, Any]:
+    bot = browser_manager.get()
+    if not bot or not bot.driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ยังไม่ได้เปิดใช้งาน"}
+
+    from app.seedance import ensure_seedance_tab, download_seedance_videos
+    switched = ensure_seedance_tab(bot)
+    if not switched:
+        return {"ok": False, "detail": "ไม่พบแท็บ Dreamina (กรุณาเปิดแท็บ Dreamina บน Chrome 9222 ก่อน)"}
+
+    try:
+        res = download_seedance_videos(
+            bot.driver,
+            req.items,
+            save_to_subfolder=req.save_to_subfolder
+        )
+        return res
+    except Exception as e:
+        log(f"[Seedance Download Error]: {e}")
         return {"ok": False, "detail": str(e)}
 
 @app.get("/")

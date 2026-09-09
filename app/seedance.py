@@ -551,6 +551,7 @@ def scan_seedance_folders(
 
         items.append({
             "id": idx,
+            "num": num,
             "checked": True if (prompt_file and prompt_text) else False,
             "subfolder_name": sub_name,
             "subfolder_path": sub_path,
@@ -1035,6 +1036,180 @@ def toggle_seedance_download_enhancer(driver, enabled: Optional[bool] = None) ->
     status_str = "เปิดใช้งาน (ON 3x)" if res.get("enabled") else "ปิดการใช้งาน (OFF)"
     log(f"[Seedance] 📥 {status_str}: ปุ่ม Download บน Dreamina แสดงตลอดเวลา และขยาย 3 เท่า (พบ {res.get('count', 0)} จุด)")
     return res
+
+def download_seedance_videos(
+    driver,
+    items: list[dict[str, Any]],
+    save_to_subfolder: bool = True,
+    progress_callback: Optional[Callable[[dict[str, Any]], None]] = None
+) -> dict[str, Any]:
+    """
+    Downloads generated videos from Dreamina for the specified items.
+    For each item:
+      1. Finds matching record in Dreamina DOM (by subfolder name, number, or prompt snippet).
+      2. Clicks the download button on Dreamina.
+      3. If direct video src is found, streams and saves the MP4 directly into the item's subfolder
+         (or ~/Downloads as fallback).
+    """
+    if not items:
+        return {"ok": False, "detail": "ไม่มีรายการที่เลือกสำหรับดาวน์โหลด"}
+
+    # Ensure download enhancer is active so buttons & overlays are visible
+    try:
+        toggle_seedance_download_enhancer(driver, enabled=True)
+    except Exception as enh_err:
+        log(f"[Seedance Download Enhancer Warning]: {enh_err}")
+
+    results = []
+    success_count = 0
+    total = len(items)
+
+    for idx, item in enumerate(items):
+        if is_seedance_stopped():
+            log("[Seedance Download] 🛑 ยกเลิกการดาวน์โหลดเนื่องจากคำสั่ง Force Stop")
+            break
+
+        num = item.get("num")
+        sub_name = item.get("subfolder_name", f"Item #{idx+1}")
+        sub_path = item.get("subfolder_path", "")
+        prompt_text = item.get("prompt_text", "")
+        prompt_snippet = prompt_text.strip().replace("\n", " ")[:50] if prompt_text else ""
+
+        log(f"[Seedance Download] 🔍 กำลังค้นหาวิดีโอสำหรับ [{idx+1}/{total}] {sub_name} (เลข: {num})...")
+        if progress_callback:
+            progress_callback({
+                "current": idx,
+                "total": total,
+                "percent": int((idx / max(total, 1)) * 100),
+                "message": f"กำลังดาวน์โหลด [{idx+1}/{total}] {sub_name}..."
+            })
+
+        find_script = """
+        const num = arguments[0];
+        const subName = (arguments[1] || '').trim();
+        const promptSnippet = (arguments[2] || '').trim();
+
+        const records = document.querySelectorAll('[class*="record-"]');
+        let targetRec = null;
+        let matchReason = '';
+
+        for (const rec of records) {
+            const text = (rec.innerText || '');
+            if (subName && text.includes(subName)) {
+                targetRec = rec;
+                matchReason = 'subfolder_name';
+                break;
+            }
+            if (num !== null && num !== undefined && (text.includes(num + ' -') || text.includes(num + '-') || text.startsWith(num + ' '))) {
+                targetRec = rec;
+                matchReason = 'leading_number';
+                break;
+            }
+            if (promptSnippet && promptSnippet.length > 15 && text.includes(promptSnippet)) {
+                targetRec = rec;
+                matchReason = 'prompt_snippet';
+                break;
+            }
+        }
+
+        if (!targetRec) {
+            return { found: false };
+        }
+
+        // Scroll into view
+        targetRec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Hydrate overlays
+        const cardTarget = targetRec.querySelector('[class*="slot-card"], [class*="video-card"], [class*="cover"]') || targetRec;
+        cardTarget.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+
+        // Locate download button
+        const dlBtn = targetRec.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
+        let clicked = false;
+        if (dlBtn) {
+            try {
+                dlBtn.click();
+                clicked = true;
+            } catch (e) {
+                clicked = false;
+            }
+        }
+
+        // Locate video element
+        const vid = targetRec.querySelector('video');
+        const videoSrc = vid ? (vid.src || vid.currentSrc) : null;
+
+        return {
+            found: true,
+            matchReason: matchReason,
+            btnClicked: clicked,
+            videoSrc: videoSrc
+        };
+        """
+
+        match_res = driver.execute_script(find_script, num, sub_name, prompt_snippet)
+        if not match_res or not match_res.get("found"):
+            err_msg = f"ไม่พบคลิปสำหรับ '{sub_name}' บนหน้า Dreamina ในขณะนี้"
+            log(f"[Seedance Download Warning] ⚠️ {err_msg}")
+            results.append({
+                "num": num,
+                "name": sub_name,
+                "ok": False,
+                "detail": err_msg
+            })
+            continue
+
+        video_src = match_res.get("videoSrc")
+        saved_file = None
+
+        if video_src and save_to_subfolder:
+            # Determine destination folder
+            dest_dir = sub_path if (sub_path and os.path.isdir(sub_path)) else os.path.expanduser("~/Downloads")
+            dest_filename = f"{sub_name}.mp4"
+            dest_path = os.path.join(dest_dir, dest_filename)
+
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    video_src,
+                    headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+                )
+                with urllib.request.urlopen(req, timeout=35) as resp, open(dest_path, "wb") as out_f:
+                    while chunk := resp.read(65536):
+                        out_f.write(chunk)
+                saved_file = dest_path
+                file_size_mb = round(os.path.getsize(dest_path) / (1024 * 1024), 1)
+                log(f"[Seedance Download] ✅ ดาวน์โหลดไฟล์ MP4 สำเร็จ: {dest_filename} ({file_size_mb} MB) -> {dest_path}")
+            except Exception as dl_err:
+                log(f"[Seedance Download Warning] ไม่สามารถบันทึกไฟล์ MP4 โดยตรงได้: {dl_err}")
+
+        success_count += 1
+        results.append({
+            "num": num,
+            "name": sub_name,
+            "ok": True,
+            "button_clicked": match_res.get("btnClicked", False),
+            "video_src": video_src,
+            "saved_file": saved_file
+        })
+
+        if idx < total - 1:
+            time.sleep(1.5)
+
+    if progress_callback:
+        progress_callback({
+            "current": total,
+            "total": total,
+            "percent": 100,
+            "message": f"✅ ดาวน์โหลดเสร็จสิ้น {success_count}/{total} รายการ"
+        })
+
+    return {
+        "ok": success_count > 0,
+        "total": total,
+        "success_count": success_count,
+        "results": results
+    }
 
 def apply_all_seedance_settings(
     driver,

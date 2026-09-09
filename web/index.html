@@ -1434,6 +1434,41 @@
                 </div>
               </div>
 
+              <!-- Numeric Prompt Selector & Direct Download Bar -->
+              <div style="background: rgba(127, 92, 255, 0.07); border: 1px solid rgba(127, 92, 255, 0.25); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 0.95rem; font-weight: bold; color: #ffb86c;">🎯 เลือกรายการตามเลข (Select & Download by Number)</span>
+                  </div>
+                  <div style="display: flex; gap: 6px; align-items: center;">
+                    <button id="btnSeedanceScanAllPrompts" type="button" class="secondary" style="padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; margin: 0; background: rgba(127, 92, 255, 0.15); border-color: rgba(127, 92, 255, 0.35); color: #c4b5fd;" title="สแกนรวบรวม Prompt ที่ใช้งานได้ทั้งหมดในโฟลเดอร์หลัก">
+                      📚 รวบรวม Prompt ทั้งหมด
+                    </button>
+                    <button id="btnSeedanceClearNumberSelection" type="button" class="secondary" style="padding: 6px 10px; font-size: 0.78rem; border-radius: 8px; margin: 0;" title="ล้างการค้นหาและเลือกทั้งหมด">
+                      🔄 แสดงทั้งหมด
+                    </button>
+                  </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <div style="position: relative; flex-grow: 1; min-width: 220px;">
+                    <input id="seedanceNumberSelectInput" type="text" placeholder="พิมพ์เลข เช่น 211 หรือ 211, 212, 215-220" style="width: 100%; margin-bottom: 0; padding: 10px 14px; font-size: 0.9rem; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(127, 92, 255, 0.35); color: #fff; outline: none;" />
+                  </div>
+                  <button id="btnSeedanceSelectByNumber" type="button" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; font-weight: bold; border-radius: 10px; margin: 0; white-space: nowrap; background: rgba(58, 160, 255, 0.2); border-color: rgba(58, 160, 255, 0.4); color: #8da6ff; cursor: pointer;">
+                    🎯 เลือกรายการ
+                  </button>
+                  <button id="btnSeedanceDownloadSelected" type="button" class="primary has-tooltip" style="padding: 10px 18px; font-size: 0.85rem; font-weight: bold; border-radius: 10px; margin: 0; white-space: nowrap; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; box-shadow: 0 3px 12px rgba(16, 185, 129, 0.3); cursor: pointer;">
+                    <span class="btn-text">📥 สั่งดาวน์โหลดบน Dreamina</span>
+                    <div class="custom-tooltip" id="tooltip_btnSeedanceDownloadSelected">สั่งดาวน์โหลดวิดีโอบนเว็บ Dreamina ตามรายการที่เลือกไว้ พร้อมบันทึกไฟล์ MP4 ลงในโฟลเดอร์ย่อยโดยตรง</div>
+                  </button>
+                </div>
+
+                <!-- Dynamic Live Feedback -->
+                <div id="seedanceNumberSelectFeedback" style="font-size: 0.82rem; color: rgba(255,255,255,0.6); min-height: 20px; display: flex; align-items: center;">
+                  💡 พิมพ์หมายเลขโฟลเดอร์ (เช่น 211) เพื่อเลือกรายการทันที
+                </div>
+              </div>
+
               <!-- Queue Container -->
               <div id="seedanceQueueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 650px; overflow-y: auto; padding-right: 4px;">
                 <div id="seedanceEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
@@ -2049,6 +2084,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=64"></script>
+  <script src="/web/app.js?v=65"></script>
 </body>
 </html>
