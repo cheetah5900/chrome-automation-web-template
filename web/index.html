@@ -1711,11 +1711,15 @@
                   <div class="form-group" style="margin-bottom: 0;">
                     <label style="font-weight: bold; color: #ff7e67;">สุ่มหน่วงเวลาระหว่างรอบ (วินาที)</label>
                     <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">Delay Min - Max ก่อนเริ่มรายการถัดไป</div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                       <input type="number" id="cfg_shopee_delay_min" min="0" max="3600" value="5" placeholder="Min" style="margin-bottom: 0; width: 75px; text-align: center; padding: 10px;" />
                       <span style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">-</span>
                       <input type="number" id="cfg_shopee_delay_max" min="0" max="3600" value="15" placeholder="Max" style="margin-bottom: 0; width: 75px; text-align: center; padding: 10px;" />
                       <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">วิ</span>
+                      <button id="setShopeeDelayDefaultBtn" class="secondary has-tooltip" style="padding: 10px 14px; font-size: 0.85rem; margin-bottom: 0; margin-left: 6px; white-space: nowrap; border-radius: 10px; color: #ffb86c; border-color: rgba(255,184,108,0.3);">
+                        <span class="btn-text">📌 Set Default</span>
+                        <div class="custom-tooltip" id="tooltip_setShopeeDelayDefaultBtn"></div>
+                      </button>
                     </div>
                   </div>
                 </div>

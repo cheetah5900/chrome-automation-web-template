@@ -1072,6 +1072,20 @@ async function loadConfig() {
         shopeeMainFolder.value = defShopeeFolder;
       }
     }
+    const shopeeDelayMin = document.getElementById('cfg_shopee_delay_min');
+    if (shopeeDelayMin) {
+      const defDelayMin = config.shopee_delay_min !== undefined ? config.shopee_delay_min : localStorage.getItem('shopee_default_delay_min');
+      if (defDelayMin !== null && defDelayMin !== undefined && defDelayMin !== '') {
+        shopeeDelayMin.value = defDelayMin;
+      }
+    }
+    const shopeeDelayMax = document.getElementById('cfg_shopee_delay_max');
+    if (shopeeDelayMax) {
+      const defDelayMax = config.shopee_delay_max !== undefined ? config.shopee_delay_max : localStorage.getItem('shopee_default_delay_max');
+      if (defDelayMax !== null && defDelayMax !== undefined && defDelayMax !== '') {
+        shopeeDelayMax.value = defDelayMax;
+      }
+    }
     if (typeof loadShopeePresets === 'function') loadShopeePresets(config.shopee_presets);
     loadSeedancePresets(config.seedance_presets);
     
@@ -7759,6 +7773,39 @@ function initShopeeAffiliateListeners() {
     });
   }
 
+  const setDelayDefaultBtn = document.getElementById('setShopeeDelayDefaultBtn');
+  if (setDelayDefaultBtn) {
+    setDelayDefaultBtn.addEventListener('click', async () => {
+      const minInput = document.getElementById('cfg_shopee_delay_min');
+      const maxInput = document.getElementById('cfg_shopee_delay_max');
+      const minVal = minInput ? parseFloat(minInput.value) || 0 : 5;
+      const maxVal = maxInput ? parseFloat(maxInput.value) || 0 : 15;
+      if (minVal > maxVal) {
+        showToast('ค่า Min ต้องไม่มากกว่า Max', 'warning');
+        return;
+      }
+      localStorage.setItem('shopee_default_delay_min', minVal);
+      localStorage.setItem('shopee_default_delay_max', maxVal);
+      try {
+        await jsonFetch('/api/config/set-defaults', {
+          method: 'POST',
+          body: JSON.stringify({
+            updates: {
+              shopee_delay_min: minVal,
+              shopee_delay_max: maxVal
+            }
+          })
+        });
+        showToast(`บันทึกค่าเริ่มต้นการหน่วงเวลา Shopee: ${minVal} - ${maxVal} วิ สำเร็จ`, 'success');
+        logShopeeConsole(`📌 บันทึกค่าเริ่มต้นการหน่วงเวลา: ${minVal} - ${maxVal} วิ`, 'success');
+      } catch (err) {
+        console.error('Failed to save default Shopee delay:', err);
+        showToast(`บันทึกในเครื่องแล้ว (${minVal} - ${maxVal} วิ)`, 'success');
+        logShopeeConsole(`📌 บันทึกค่าเริ่มต้นการหน่วงเวลา: ${minVal} - ${maxVal} วิ`, 'success');
+      }
+    });
+  }
+
   const scanBtn = document.getElementById('btnScanShopeeBatch');
   if (scanBtn) scanBtn.addEventListener('click', scanShopeeBatch);
 
@@ -7907,6 +7954,7 @@ const staticTooltips = {
   "setShopeePageUrlDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึก Shopee URL นี้เป็นค่าเริ่มต้นเมื่อเปิดโปรแกรม",
   "browseShopeeMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่บรรจุสื่อและข้อมูลสินค้า",
   "setShopeeMainFolderDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึกพาธโฟลเดอร์นี้เป็นค่าเริ่มต้นเมื่อเปิดโปรแกรม",
+  "setShopeeDelayDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึกช่วงหน่วงเวลาสุ่มนี้ (Min - Max) เป็นค่าเริ่มต้นเมื่อเปิดโปรแกรม",
   "btnScanShopeeBatch": "🔍 สแกนและเตรียมคิว (Scan Queue):<br>- สแกนหาไฟล์สื่อและข้อมูลเพื่อเตรียมรัน Shopee Affiliate",
   "btnClearShopeeBatch": "🗑️ ล้างรายการคิว Shopee ทั้งหมด",
   "runShopeeAffiliateBtn": "🚀 รัน Shopee Affiliate:<br>- เริ่มทำงานส่งข้อมูลตามคิวอัตโนมัติ",
