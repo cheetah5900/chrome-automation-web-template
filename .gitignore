@@ -34,6 +34,8 @@ web/schema.txt
 
 # Test and regression scripts
 test_*.py
+!tests/*.py
+!tests/**/*.py
 run_regression_test.py
 config_mac.json
 

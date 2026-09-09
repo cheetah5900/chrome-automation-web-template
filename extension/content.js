@@ -1,13 +1,7 @@
 /**
  * Content script — bridge between background.js and injected.js
- * Injects injected.js into MAIN world to access window.grecaptcha
+ * (injected.js is registered in manifest.json with world: MAIN)
  */
-(function () {
-  const s = document.createElement('script');
-  s.src = chrome.runtime.getURL('injected.js');
-  s.onload = () => s.remove();
-  (document.head || document.documentElement).appendChild(s);
-})();
 
 chrome.runtime.onMessage.addListener((msg, _, reply) => {
   if (msg.type === 'GET_CAPTCHA') {

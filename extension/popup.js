@@ -1,3 +1,9 @@
+if (new URLSearchParams(window.location.search).has('reload')) {
+  console.log('[FlowKit] Triggering extension reload...');
+  chrome.runtime.reload();
+  setTimeout(() => window.close(), 150);
+}
+
 const TYPE_LABELS = {
   GENERATE_IMAGE:           'GEN IMAGE',
   REGENERATE_IMAGE:         'REGEN IMAGE',

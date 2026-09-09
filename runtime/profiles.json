@@ -7,7 +7,7 @@
       "debug_port": 9222,
       "startup_urls": [
         "https://chatgpt.com/",
-        "https://labs.google/fx/tools/flow",
+        "https://flow.google.com/",
         "https://dreamina.capcut.com/ai-tool/generate?workspace=0&type=video"
       ],
       "browser_type": "chrome"
@@ -18,7 +18,7 @@
       "debug_port": 9222,
       "startup_urls": [
         "https://chatgpt.com/",
-        "https://labs.google/fx/tools/flow"
+        "https://flow.google.com/"
       ],
       "browser_type": "chrome"
     },
@@ -27,7 +27,7 @@
       "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Brave Flow",
       "debug_port": 9223,
       "startup_urls": [
-        "https://labs.google/fx/tools/flow"
+        "https://flow.google.com/"
       ],
       "browser_type": "brave"
     },
@@ -36,7 +36,7 @@
       "path": "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/runtime/chrome-profiles/Google Chrome Canary",
       "debug_port": 9224,
       "startup_urls": [
-        "https://labs.google/fx/tools/flow"
+        "https://flow.google.com/"
       ],
       "browser_type": "canary"
     }

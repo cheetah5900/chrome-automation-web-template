@@ -334,7 +334,7 @@ async def _process_one(req: dict, deferred: dict = None, retry_after: dict = Non
     try:
         result = await _dispatch(req, orientation)
         if _is_error(result):
-            await _handle_failure(rid, req, result, retry_after)
+            await _handle_failure(rid, req, result, retry_after, deferred)
         else:
             gen_result = parse_result(result, req_type)
             await crud.update_request(rid, status="COMPLETED", media_id=gen_result.media_id, output_url=gen_result.url)
@@ -349,7 +349,7 @@ async def _process_one(req: dict, deferred: dict = None, retry_after: dict = Non
     except Exception as e:
         logger.exception("Request %s exception: %s", rid[:8], e)
         await event_bus.emit("request_update", {"id": rid, "status": "FAILED", "error": str(e)})
-        await _handle_failure(rid, req, {"error": str(e)}, retry_after)
+        await _handle_failure(rid, req, {"error": str(e)}, retry_after, deferred)
 
 
 async def _dispatch(req: dict, orientation: str) -> dict:
@@ -474,7 +474,7 @@ async def _recover_entity_not_found(req: dict) -> bool:
     return False
 
 
-async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict = None):
+async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict = None, deferred: dict = None):
     error_msg = result.get("error")
     if not error_msg:
         data = result.get("data", {})
@@ -534,8 +534,10 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
     if "captcha" in error_lower or "recaptcha" in error_lower:
         retry = req.get("retry_count", 0) + 1
         if retry < 10:
+            if deferred is not None:
+                deferred[rid] = time.time() + 5.0
             await crud.update_request(rid, status="PENDING", retry_count=retry, error_message=str(error_msg))
-            logger.warning("Request %s reCAPTCHA failed (retry %d/10), will retry", rid[:8], retry)
+            logger.warning("Request %s reCAPTCHA failed (retry %d/10), will retry in 5s", rid[:8], retry)
             return
         else:
             await crud.update_request(rid, status="FAILED", error_message=str(error_msg))

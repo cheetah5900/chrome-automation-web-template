@@ -51,8 +51,31 @@ window.addEventListener('GET_CAPTCHA', async ({ detail }) => {
   }
 });
 
-function waitForGrecaptcha(timeout = 10000) {
+function waitForGrecaptcha(timeout = 12000) {
   return new Promise((resolve, reject) => {
+    if (window.grecaptcha?.enterprise?.execute) return resolve();
+    let s = document.getElementById('flowkit-recaptcha-script');
+    if (!s) {
+      s = document.createElement('script');
+      s.id = 'flowkit-recaptcha-script';
+      const rawUrl = `https://www.google.com/recaptcha/enterprise.js?render=${SITE_KEY}`;
+      if (window.trustedTypes?.createPolicy) {
+        try {
+          const p = window.trustedTypes.defaultPolicy || window.trustedTypes.createPolicy('recaptcha', { createScriptURL: u => u });
+          s.src = p.createScriptURL(rawUrl);
+        } catch {
+          try {
+            const p = window.trustedTypes.createPolicy('flowkit-' + Date.now(), { createScriptURL: u => u });
+            s.src = p.createScriptURL(rawUrl);
+          } catch {}
+        }
+      } else {
+        s.src = rawUrl;
+      }
+      if (s.src) {
+        (document.head || document.documentElement).appendChild(s);
+      }
+    }
     const start = Date.now();
     const check = () => {
       if (window.grecaptcha?.enterprise?.execute) return resolve();

@@ -84,6 +84,54 @@ async def extension_status():
     }
 
 
+@router.post("/test-captcha")
+async def test_captcha():
+    """Test solving reCAPTCHA via extension."""
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("solve_captcha", {"captchaAction": "VIDEO_GENERATION"}, timeout=60)
+
+
+@router.get("/ext-status")
+async def get_ext_status():
+    """Get status directly from extension."""
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("get_status", {}, timeout=10)
+
+
+@router.get("/tabs")
+async def list_tabs():
+    """List all open tabs from extension."""
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("query_tabs", {}, timeout=10)
+
+
+@router.get("/inspect-tab")
+async def inspect_tab(url: Optional[str] = None):
+    """Inspect Flow tab environment."""
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("inspect_tab", {"url": url}, timeout=25)
+
+
+@router.post("/reload-extension")
+async def reload_ext():
+    """Trigger extension reload via WS."""
+    import json
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    if client._extension_ws:
+        await client._extension_ws.send(json.dumps({"type": "reload_extension"}))
+    return {"ok": True}
+
+
 @router.get("/credits")
 async def get_credits():
     """Get user credits from Google Flow."""

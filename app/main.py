@@ -1703,7 +1703,7 @@ def handle_google_flow_login_if_needed(driver, target_email: str) -> None:
     is_google_accounts = "accounts.google.com" in current_url or "accounts.google" in current_url or "signin" in current_url
     
     if not is_google_accounts:
-        is_flow_page = any(x in current_url for x in ["labs.google", "vids.google.com", "vids.google", "tools/flow"])
+        is_flow_page = any(x in current_url for x in ["labs.google", "vids.google.com", "vids.google", "tools/flow", "flow.google.com"])
         if not is_flow_page:
             for check_url_attempt in range(10):
                 if not is_driver_alive(driver):
@@ -6172,7 +6172,7 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
 
     # 1. Switch to Google Flow tab if it exists (no redirect/get)
     switched = False
-    for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+    for url_part in ["tools/flow", "flow.google.com", "labs.google", "vids.google.com"]:
         if bot.switch_to_tab_containing(url_part):
             switched = True
             break
@@ -6706,7 +6706,7 @@ def step_video_retry(payload: VideoRetryPayload):
 
     # 1. Switch to Google Flow tab if it exists
     switched = False
-    for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+    for url_part in ["tools/flow", "flow.google.com", "labs.google", "vids.google.com"]:
         if bot.switch_to_tab_containing(url_part):
             switched = True
             break
@@ -6799,7 +6799,7 @@ def step_video_retry_scan(payload: VideoRetryScanPayload) -> dict[str, Any]:
 
     # 1. Switch to Google Flow tab if it exists
     switched = False
-    for url_part in ["tools/flow", "labs.google", "vids.google.com"]:
+    for url_part in ["tools/flow", "flow.google.com", "labs.google", "vids.google.com"]:
         if bot.switch_to_tab_containing(url_part):
             switched = True
             break

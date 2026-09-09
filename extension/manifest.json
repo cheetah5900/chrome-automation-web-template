@@ -6,6 +6,7 @@
   "permissions": ["storage", "alarms", "tabs", "webRequest", "scripting", "declarativeNetRequest", "sidePanel"],
   "host_permissions": [
     "https://labs.google/*",
+    "https://flow.google.com/*",
     "https://aisandbox-pa.googleapis.com/*",
     "https://storage.googleapis.com/*",
     "https://*.googleusercontent.com/*",
@@ -21,16 +22,27 @@
     {
       "matches": [
         "https://labs.google/fx/tools/flow*",
-        "https://labs.google/fx/*/tools/flow*"
+        "https://labs.google/fx/*/tools/flow*",
+        "https://flow.google.com/*"
       ],
       "js": ["content.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://labs.google/fx/tools/flow*",
+        "https://labs.google/fx/*/tools/flow*",
+        "https://flow.google.com/*"
+      ],
+      "js": ["injected.js"],
+      "world": "MAIN",
       "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": ["injected.js"],
-      "matches": ["https://labs.google/*"]
+      "matches": ["https://labs.google/*", "https://flow.google.com/*"]
     }
   ],
   "declarative_net_request": {
