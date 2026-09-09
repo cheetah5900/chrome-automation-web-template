@@ -8826,15 +8826,18 @@ function updateSeedanceRunButtonUI() {
     const countBadge = document.getElementById('seedanceSearchCountBadge');
     if (!container) return;
 
-    if (!items || items.length === 0) {
+    // Filter to only items that actually exist in local disk
+    const validItems = (items || []).filter(i => i && i.local_found !== false && (i.has_prompt || (i.subfolder_path && i.subfolder_path.length > 0)));
+
+    if (!validItems || validItems.length === 0) {
       container.innerHTML = '';
       container.style.display = 'none';
       if (countBadge) countBadge.style.display = 'none';
       return;
     }
 
-    const readyCount = items.filter(i => i.web_has_video || i.web_status === 'ready').length;
-    updateSeedanceSearchHeaderBadge(items.length, readyCount, mode === 'local_ready');
+    const readyCount = validItems.filter(i => i.web_has_video || i.web_status === 'ready').length;
+    updateSeedanceSearchHeaderBadge(validItems.length, readyCount, mode === 'local_ready');
 
     container.innerHTML = '';
     container.style.display = 'flex';
@@ -8846,7 +8849,7 @@ function updateSeedanceRunButtonUI() {
     summaryBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 2px 4px;';
     summaryBar.innerHTML = `
       <span style="font-size: 0.82rem; font-weight: 600; color: rgba(255, 255, 255, 0.75);">
-        📋 รายการที่ค้นพบ (${items.length} รายการ)
+        📋 รายการที่ค้นพบ (${validItems.length} รายการ)
       </span>
       <span id="seedanceWebReadyCountBadge" style="font-size: 0.76rem; padding: 2px 8px; border-radius: 12px; background: rgba(16, 185, 129, 0.2); color: #6ee7b7; font-weight: bold;">
         ${readyCount} พบคลิป
@@ -8873,7 +8876,7 @@ function updateSeedanceRunButtonUI() {
     table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
-    items.forEach((item, idx) => {
+    validItems.forEach((item, idx) => {
       const row = document.createElement('tr');
       row.id = `seedance-row-${idx}`;
       row.style.cssText = 'border-bottom: 1px solid rgba(255, 255, 255, 0.05); transition: background 0.2s ease;';
@@ -9031,7 +9034,10 @@ function updateSeedanceRunButtonUI() {
 
       if (!seedanceSearchActive) return;
 
-      if (!localRes.ok || !localRes.items || localRes.items.length === 0) {
+      const rawLocalItems = (localRes.ok && localRes.items) ? localRes.items : [];
+      seedanceSearchFoundItems = rawLocalItems.filter(i => i && i.local_found !== false && (i.has_prompt || (i.subfolder_path && i.subfolder_path.length > 0)));
+
+      if (seedanceSearchFoundItems.length === 0) {
         seedanceSearchFoundItems = [];
         renderSeedanceSearchResults([]);
         writeConsoleLine(`[Seedance Matcher] ⚠️ ไม่พบโฟลเดอร์หมายเลข "${query}" ในเครื่อง`, 'warning', 'seedanceConsole');
@@ -9041,7 +9047,6 @@ function updateSeedanceRunButtonUI() {
         return;
       }
 
-      seedanceSearchFoundItems = localRes.items;
       // Render immediately on the left side!
       renderSeedanceSearchResults(seedanceSearchFoundItems, 'local_ready');
 
@@ -9227,7 +9232,9 @@ function updateSeedanceRunButtonUI() {
         writeConsoleLine(`[Seedance Downloader] ✅ ดาวน์โหลดเสร็จสิ้น ${res.success_count}/${res.total} รายการ`, 'success', 'seedanceConsole');
         if (res.results) {
           res.results.forEach((r, idx) => {
-            const el = document.getElementById(`seedance-item-dl-status-${idx}`);
+            const itemIdx = seedanceSearchFoundItems.findIndex(x => (x.num !== undefined && x.num === r.num) || x.subfolder_name === r.name);
+            const targetIdx = itemIdx !== -1 ? itemIdx : idx;
+            const el = document.getElementById(`seedance-item-dl-status-${targetIdx}`);
             if (el) {
               if (r.ok) {
                 el.innerHTML = `<span style="color: #34d399; font-weight: bold;">✅ บันทึกไฟล์สำเร็จ: <code>${r.saved_file || 'mp4'}</code></span>`;
