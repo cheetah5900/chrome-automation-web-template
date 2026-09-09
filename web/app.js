@@ -7327,39 +7327,7 @@ function renderShopeeQueue() {
     left.appendChild(chk);
     left.appendChild(title);
 
-    const right = document.createElement('div');
-    right.style.cssText = 'display: flex; gap: 6px; align-items: center;';
-
-    const debugSelectBtn = document.createElement('button');
-    debugSelectBtn.className = 'secondary';
-    debugSelectBtn.style.cssText = 'padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; margin: 0; border-color: rgba(238, 77, 45, 0.3); color: #ff9a85; cursor: pointer;';
-    debugSelectBtn.textContent = '🎯 โหลดเข้า Debugger';
-    debugSelectBtn.title = 'โหลดคีย์เวิร์ดของรายการนี้เข้า Debugger แผงขวา';
-    debugSelectBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const kwInput = document.getElementById('shopeeDebugKeyword');
-      if (kwInput) {
-        kwInput.value = item.keyword || item.subfolder_name;
-        showToast(`โหลดคีย์เวิร์ด #${item.number || idx + 1} เรียบร้อย`, 'success');
-        logShopeeConsole(`📋 โหลด #${item.number || idx + 1} (${kwInput.value}) เข้า Step Debugger`, 'system');
-      }
-    });
-
-    const runSingleBtn = document.createElement('button');
-    runSingleBtn.className = 'secondary';
-    runSingleBtn.style.cssText = 'padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; margin: 0; background: rgba(238, 77, 45, 0.15); border-color: rgba(238, 77, 45, 0.4); color: #ff7e67; font-weight: bold; cursor: pointer;';
-    runSingleBtn.textContent = '▶ รันเฉพาะอันนี้';
-    runSingleBtn.title = 'รันโฟลเดอร์นี้เดี่ยวๆ แล้วหยุดค้างที่แท็บสินค้า';
-    runSingleBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      await runShopeeSingleItem(item, runSingleBtn);
-    });
-
-    right.appendChild(debugSelectBtn);
-    right.appendChild(runSingleBtn);
-
     topRow.appendChild(left);
-    topRow.appendChild(right);
 
     row.appendChild(topRow);
     list.appendChild(row);
