@@ -6967,6 +6967,11 @@ class SeedanceToggleDownloadEnhancerRequest(BaseModel):
 
 SeedanceToggleDownloadEnhancerRequest.model_rebuild()
 
+class SeedanceClearRequest(BaseModel):
+    mode: Optional[str] = "both"
+
+SeedanceClearRequest.model_rebuild()
+
 class SeedanceDownloadRequest(BaseModel):
     items: list[dict[str, Any]]
     save_to_subfolder: bool = True
@@ -7235,6 +7240,31 @@ def api_seedance_apply_settings(req: SeedanceApplySettingsRequest) -> dict[str, 
     except Exception as e:
         log(f"[Seedance Apply Error] {e}")
         return {"ok": False, "detail": str(e)}
+
+@app.post("/api/seedance/clear")
+def api_seedance_clear(req: SeedanceClearRequest) -> dict[str, Any]:
+    bot = browser_manager.get()
+    if not bot or not bot.driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ 9222 ยังไม่ได้เปิดใช้งาน"}
+    from app.seedance import ensure_seedance_tab, clear_seedance_image, clear_seedance_prompt
+    switched = ensure_seedance_tab(bot)
+    if not switched:
+        return {"ok": False, "detail": "ไม่พบแท็บ Dreamina บน Chrome 9222"}
+
+    results = {}
+    mode = req.mode or "both"
+    if mode in ("both", "image"):
+        results["image"] = clear_seedance_image(bot.driver)
+    if mode in ("both", "prompt"):
+        results["prompt"] = clear_seedance_prompt(bot.driver)
+
+    msg_parts = []
+    if results.get("image"):
+        msg_parts.append("ล้างรูปภาพอ้างอิง")
+    if results.get("prompt"):
+        msg_parts.append("ล้างข้อความ Prompt")
+    msg = f"✅ {', '.join(msg_parts)} บนเว็บ Dreamina สำเร็จ" if msg_parts else "ดำเนินการล้างเรียบร้อย"
+    return {"ok": True, "message": msg, "results": results}
 
 def _seedance_worker(req: SeedanceRunRequest):
     global global_seedance_progress

@@ -8084,6 +8084,23 @@ function setSeedanceClearMode(mode) {
 }
 window.setSeedanceClearMode = setSeedanceClearMode;
 
+async function triggerSeedanceImmediateClear(mode) {
+  try {
+    const res = await jsonFetch('/api/seedance/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: mode || 'both' })
+    });
+    if (res && res.ok) {
+      writeConsoleLine(`[Seedance] ${res.message || 'ล้างข้อมูลบนเว็บ Dreamina สำเร็จ'}`, 'success', 'seedanceConsole');
+      if (typeof showToast === 'function') showToast(res.message || 'ล้างข้อมูลสำเร็จ', 'success');
+    }
+  } catch (err) {
+    console.debug('Seedance immediate clear notice:', err.message);
+  }
+}
+window.triggerSeedanceImmediateClear = triggerSeedanceImmediateClear;
+
 // --- Seedance Preset Functions ---
 async function loadSeedancePresets(presets) {
   const select = document.getElementById('seedancePresetSelect');
@@ -9897,9 +9914,10 @@ function initSeedanceGenListeners() {
   // Clear Mode 3-Option Toggle Group
   const clearToggleButtons = document.querySelectorAll('.seedance-clear-toggle');
   clearToggleButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const mode = btn.getAttribute('data-clear');
       setSeedanceClearMode(mode);
+      await triggerSeedanceImmediateClear(mode);
     });
   });
   const savedClearMode = localStorage.getItem('seedance_clear_mode') || 'both';
