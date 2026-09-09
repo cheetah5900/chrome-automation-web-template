@@ -7085,32 +7085,10 @@ def api_seedance_search_local(req: SeedanceScanRequest) -> dict[str, Any]:
             item["web_has_video"] = False
             item["web_video_src"] = None
 
-        # Check for requested numbers that were not found in main_folder
-        target_numbers = parse_range_string(req.subfolders_str)
-        if target_numbers:
-            found_nums = {it.get("num") for it in items if it.get("num") is not None}
-            for t_num in sorted(target_numbers):
-                if t_num not in found_nums:
-                    items.append({
-                        "id": len(items) + 1,
-                        "num": t_num,
-                        "checked": False,
-                        "subfolder_name": f"#{t_num} (ไม่พบโฟลเดอร์ในเครื่อง)",
-                        "subfolder_path": "",
-                        "prompt_file": "",
-                        "prompt_path": "",
-                        "prompt_text": "",
-                        "has_prompt": False,
-                        "local_found": False,
-                        "local_video_exists": False,
-                        "local_video_path": None,
-                        "local_video_size_mb": 0,
-                        "web_status": "skipped",
-                        "web_has_video": False,
-                        "web_video_src": None,
-                        "status": "not_found"
-                    })
-            items.sort(key=lambda x: (x.get("num") is None, x.get("num") if x.get("num") is not None else 999999))
+        # Sort items numerically and assign sequential IDs (only items existing locally)
+        items.sort(key=lambda x: (x.get("num") is None, x.get("num") if x.get("num") is not None else 999999))
+        for idx, item in enumerate(items, 1):
+            item["id"] = idx
 
         return {
             "ok": True,
