@@ -839,6 +839,203 @@ def ensure_seedance_tab(bot) -> bool:
             return True
     return False
 
+def toggle_seedance_download_enhancer(driver, enabled: Optional[bool] = None) -> dict[str, Any]:
+    """
+    Injects or removes CSS & JS on Dreamina tab to keep Download buttons permanently visible
+    (without requiring mouse hover) and scales them 3x larger.
+    """
+    script = """
+    const requestedEnable = arguments[0];
+    const STYLE_ID = "seedance-always-download-style";
+    
+    // Determine target state (toggle if null/undefined)
+    let enable = requestedEnable;
+    if (enable === null || enable === undefined) {
+        enable = !window.__seedanceDownloadEnhancerActive;
+    }
+    window.__seedanceDownloadEnhancerActive = enable;
+
+    if (!enable) {
+        const existing = document.getElementById(STYLE_ID);
+        if (existing) existing.remove();
+        if (window.__seedanceObserver) {
+            window.__seedanceObserver.disconnect();
+            window.__seedanceObserver = null;
+        }
+        if (window.__seedanceInterval) {
+            clearInterval(window.__seedanceInterval);
+            window.__seedanceInterval = null;
+        }
+        document.querySelectorAll(".dreamina-download-enlarged").forEach(el => {
+            el.classList.remove("dreamina-download-enlarged");
+        });
+        return { ok: true, enabled: false, count: 0, message: "ปิดการขยายปุ่ม Download เรียบร้อยแล้ว" };
+    }
+
+    // 1. Intercept mouseleave/mouseout so hover states remain permanently active
+    if (!window.__seedanceMouseLeaveBlocked) {
+        window.__seedanceMouseLeaveBlocked = true;
+        const blockLeave = (e) => {
+            if (window.__seedanceDownloadEnhancerActive) {
+                e.stopImmediatePropagation();
+            }
+        };
+        window.addEventListener("mouseleave", blockLeave, true);
+        window.addEventListener("mouseout", blockLeave, true);
+    }
+
+    // 2. Inject or update CSS stylesheet
+    let style = document.getElementById(STYLE_ID);
+    if (!style) {
+        style = document.createElement("style");
+        style.id = STYLE_ID;
+        document.head.appendChild(style);
+    }
+    style.innerHTML = `
+        /* Force overlays, card actions and button groups visible without mouse hover */
+        [class*="slot-card"] [class*="button-group-top"],
+        [class*="slot-card"] [class*="button-group-bottom"],
+        [class*="overlay-"],
+        [class*="cover-container"] [class*="overlay"],
+        [class*="feed-item"] [class*="overlay"],
+        [class*="masonry-layout-item"] [class*="overlay"],
+        [class*="tail-"],
+        [class*="operation-wrapper"],
+        .audio-download-Kvjijk,
+        .audio-download-panel-gu8nB5,
+        [class*="xgplayer-download"] {
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: flex !important;
+            pointer-events: auto !important;
+        }
+
+        /* Ensure card overlays stay transparent so thumbnails remain fully visible */
+        [class*="overlay-"],
+        [class*="cover-container"] [class*="overlay"],
+        [class*="feed-item"] [class*="overlay"] {
+            background: transparent !important;
+        }
+
+        /* Prevent parent button containers from clipping enlarged buttons */
+        [class*="button-group-top"],
+        [class*="button-group-bottom"],
+        [class*="overlay-"],
+        [class*="tail-"],
+        [class*="operation-"],
+        .audio-download-Kvjijk,
+        .audio-download-panel-gu8nB5 {
+            overflow: visible !important;
+        }
+
+        /* 3X Enlarge Download Buttons */
+        .dreamina-download-enlarged,
+        [class*="xgplayer-download"],
+        .audio-download-button-aPZGNH {
+            transform: scale(3) !important;
+            transform-origin: center center !important;
+            z-index: 999999 !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            pointer-events: auto !important;
+            cursor: pointer !important;
+            filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.8)) !important;
+            transition: transform 0.15s ease !important;
+        }
+
+        .dreamina-download-enlarged:hover,
+        [class*="xgplayer-download"]:hover {
+            transform: scale(3.3) !important;
+        }
+    `;
+
+    // 3. Scanner function
+    function scanAndEnhance() {
+        if (!window.__seedanceDownloadEnhancerActive) return 0;
+        
+        // Trigger hover state on card containers so React mounts button groups & overlays
+        const cardTargets = document.querySelectorAll(
+            '[class*="slot-card"], [class*="feed-item"], [class*="masonry-layout-item"], [class*="info-card"]'
+        );
+        for (const c of cardTargets) {
+            if (!c.getAttribute("data-seedance-hovered")) {
+                c.setAttribute("data-seedance-hovered", "1");
+                c.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
+            }
+        }
+
+        let count = 0;
+        const allCandidates = document.querySelectorAll(
+            'button, [role="button"], div[class*="operation"], div[class*="action"], [class*="download"], a'
+        );
+        for (const el of allCandidates) {
+            if (el.classList.contains("dreamina-download-enlarged")) {
+                count++;
+                continue;
+            }
+            const cls = (typeof el.className === "string" ? el.className : "").toLowerCase();
+            const aria = (el.getAttribute("aria-label") || "").toLowerCase();
+            const title = (el.getAttribute("title") || "").toLowerCase();
+            const text = (el.innerText || "").trim().toLowerCase();
+            const testid = (el.getAttribute("data-testid") || "").toLowerCase();
+            const action = (el.getAttribute("data-action") || "").toLowerCase();
+
+            const isDownload = (
+                cls.includes("download") ||
+                aria.includes("download") || aria.includes("ดาวน์โหลด") ||
+                title.includes("download") || title.includes("ดาวน์โหลด") ||
+                testid.includes("download") || action.includes("download") ||
+                text === "download" || text === "ดาวน์โหลด" || text.includes("download") ||
+                cls.includes("xgplayer-download")
+            );
+
+            if (isDownload) {
+                el.classList.add("dreamina-download-enlarged");
+                count++;
+            }
+        }
+
+        const topGroups = document.querySelectorAll('[class*="button-group-top"]');
+        for (const group of topGroups) {
+            const firstBtn = group.querySelector('button, [role="button"], span');
+            if (firstBtn && !firstBtn.classList.contains("dreamina-download-enlarged")) {
+                firstBtn.classList.add("dreamina-download-enlarged");
+                count++;
+            }
+        }
+        return count;
+    }
+
+    const count = scanAndEnhance();
+
+    // 4. Setup MutationObserver
+    if (!window.__seedanceObserver) {
+        window.__seedanceObserver = new MutationObserver(() => {
+            scanAndEnhance();
+        });
+        window.__seedanceObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // 5. Periodic backup interval
+    if (!window.__seedanceInterval) {
+        window.__seedanceInterval = setInterval(scanAndEnhance, 1500);
+    }
+
+    return {
+        ok: true,
+        enabled: true,
+        count: count,
+        message: "เปิดใช้งานแสดงปุ่ม Download ตลอดเวลา และขยาย 3 เท่า สำเร็จ"
+    };
+    """
+    res = driver.execute_script(script, enabled)
+    if not isinstance(res, dict):
+        res = {"ok": True, "enabled": bool(enabled), "count": 0, "message": "Updated download enhancer state"}
+    
+    status_str = "เปิดใช้งาน (ON 3x)" if res.get("enabled") else "ปิดการใช้งาน (OFF)"
+    log(f"[Seedance] 📥 {status_str}: ปุ่ม Download บน Dreamina แสดงตลอดเวลา และขยาย 3 เท่า (พบ {res.get('count', 0)} จุด)")
+    return res
+
 def apply_all_seedance_settings(
     driver,
     model: Optional[str] = None,

@@ -1485,6 +1485,18 @@
                     <div class="custom-tooltip" id="tooltip_btnSeedanceForceStop"></div>
                   </button>
                 </div>
+
+                <!-- Download Buttons Enhancer (Always Visible & 3x Scale) -->
+                <div style="margin-top: 10px;">
+                  <button id="btnSeedanceToggleDownloadEnhancer" type="button" class="secondary has-tooltip" style="width: 100%; padding: 12px 16px; font-size: 0.9rem; font-weight: bold; border-radius: 12px; background: rgba(58, 160, 255, 0.12); border: 1px solid rgba(58, 160, 255, 0.35); color: #8da6ff; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span id="seedanceDownloadEnhancerIcon" style="font-size: 1.1rem;">📥</span>
+                      <span id="seedanceDownloadEnhancerText">แสดงปุ่ม Download ตลอดเวลา (ขยาย 3 เท่า)</span>
+                    </div>
+                    <span id="seedanceDownloadEnhancerBadge" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); font-weight: bold;">OFF</span>
+                    <div class="custom-tooltip" id="tooltip_btnSeedanceToggleDownloadEnhancer">เปิด/ปิด การแสดงผลปุ่ม Download บนหน้าเว็บ Dreamina ให้แสดงตลอดเวลาโดยไม่ต้องเอาเมาส์ Hover และขยายขนาดปุ่มใหญ่ขึ้น 3 เท่า</div>
+                  </button>
+                </div>
               </div>
 
               <!-- Seedance Step Debugger Panel -->
@@ -1551,13 +1563,16 @@
                   </button>
                 </div>
 
-                <!-- Action Controls: Direct Generate & Clear Both -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <!-- Action Controls: Direct Generate, Download 3x & Clear Both -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
                   <button id="btnSeedanceDebugDirectGen" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="กดปุ่ม Generate บนเว็บ Dreamina เพื่อสร้างวิดีโอทันที">
-                    <span>🚀 กด Generate ปกติ</span>
+                    <span>🚀 กด Generate</span>
+                  </button>
+                  <button id="btnSeedanceDebugDownloadEnhancer" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.35); color: #8da6ff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="เปิด/ปิด การแสดงปุ่ม Download บน Dreamina และขยายขนาด 3 เท่า">
+                    <span>📥 ปุ่ม Download 3x</span>
                   </button>
                   <button id="btnSeedanceDebugClearBoth" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="ลบรูปภาพอ้างอิงและเคลียร์ข้อความ Prompt ทั้งบน Dreamina และในช่อง Debug">
-                    <span>🧹 เคลียร์รูปภาพ + Prompt</span>
+                    <span>🧹 เคลียร์รูป+Prompt</span>
                   </button>
                 </div>
               </div>
@@ -2034,6 +2049,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=63"></script>
+  <script src="/web/app.js?v=64"></script>
 </body>
 </html>

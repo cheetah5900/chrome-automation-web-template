@@ -7190,6 +7190,11 @@ class SeedanceDebugStepRequest(BaseModel):
 
 SeedanceDebugStepRequest.model_rebuild()
 
+class SeedanceToggleDownloadEnhancerRequest(BaseModel):
+    enabled: Optional[bool] = None
+
+SeedanceToggleDownloadEnhancerRequest.model_rebuild()
+
 global_seedance_progress: dict[str, Any] = {
     "status": "idle",
     "total": 0,
@@ -7475,12 +7480,36 @@ def api_seedance_debug_step(req: SeedanceDebugStepRequest) -> dict[str, Any]:
                     log_steps.append("Cleared Image")
             return {"ok": True, "message": "ทดสอบทุกขั้นตอนสำเร็จ: " + ", ".join(log_steps)}
 
+        elif step in ("download_enhancer", "download_button", "download_3x", "toggle_download"):
+            from app.seedance import toggle_seedance_download_enhancer
+            res = toggle_seedance_download_enhancer(driver)
+            return res
+
         else:
             return {"ok": False, "detail": f"ไม่รู้จักขั้นตอน debug: '{step}'"}
 
     except Exception as e:
         log(f"[Seedance Debug Step Error] Step '{step}': {e}")
         return {"ok": False, "detail": str(e), "step": step}
+
+@app.post("/api/seedance/toggle-download-enhancer")
+def api_seedance_toggle_download_enhancer(req: Optional[SeedanceToggleDownloadEnhancerRequest] = None) -> dict[str, Any]:
+    bot = browser_manager.get()
+    if not bot or not bot.driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ยังไม่ได้เปิดใช้งาน"}
+    
+    from app.seedance import ensure_seedance_tab, toggle_seedance_download_enhancer
+    switched = ensure_seedance_tab(bot)
+    if not switched:
+        return {"ok": False, "detail": "ไม่พบแท็บ Dreamina (กรุณาเปิดแท็บ Dreamina บน Chrome 9222 ก่อน)"}
+    
+    try:
+        enabled_val = req.enabled if req else None
+        res = toggle_seedance_download_enhancer(bot.driver, enabled_val)
+        return res
+    except Exception as e:
+        log(f"[Seedance Download Enhancer Error]: {e}")
+        return {"ok": False, "detail": str(e)}
 
 @app.get("/")
 def index():

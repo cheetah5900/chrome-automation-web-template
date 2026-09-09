@@ -9014,6 +9014,111 @@ window.handlePasteSeedanceCharSheet = async function() {
   }
 };
 
+let seedanceDownloadEnhancerActive = false;
+
+function updateSeedanceDownloadEnhancerUI(active) {
+  seedanceDownloadEnhancerActive = !!active;
+  const toggleBtn = document.getElementById('btnSeedanceToggleDownloadEnhancer');
+  const badge = document.getElementById('seedanceDownloadEnhancerBadge');
+  const text = document.getElementById('seedanceDownloadEnhancerText');
+  const icon = document.getElementById('seedanceDownloadEnhancerIcon');
+  const debugBtn = document.getElementById('btnSeedanceDebugDownloadEnhancer');
+
+  if (toggleBtn) {
+    if (seedanceDownloadEnhancerActive) {
+      toggleBtn.style.background = 'rgba(16, 185, 129, 0.2)';
+      toggleBtn.style.borderColor = 'rgba(16, 185, 129, 0.6)';
+      toggleBtn.style.color = '#34d399';
+      toggleBtn.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.25)';
+    } else {
+      toggleBtn.style.background = 'rgba(58, 160, 255, 0.12)';
+      toggleBtn.style.borderColor = 'rgba(58, 160, 255, 0.35)';
+      toggleBtn.style.color = '#8da6ff';
+      toggleBtn.style.boxShadow = 'none';
+    }
+  }
+
+  if (badge) {
+    if (seedanceDownloadEnhancerActive) {
+      badge.textContent = 'ON (3x)';
+      badge.style.background = 'rgba(16, 185, 129, 0.3)';
+      badge.style.color = '#a7f3d0';
+    } else {
+      badge.textContent = 'OFF';
+      badge.style.background = 'rgba(255, 255, 255, 0.1)';
+      badge.style.color = 'rgba(255, 255, 255, 0.7)';
+    }
+  }
+
+  if (text) {
+    text.textContent = seedanceDownloadEnhancerActive
+      ? 'กำลังแสดงปุ่ม Download ตลอดเวลา (ขยาย 3 เท่า)'
+      : 'แสดงปุ่ม Download ตลอดเวลา (ขยาย 3 เท่า)';
+  }
+
+  if (icon) {
+    icon.textContent = seedanceDownloadEnhancerActive ? '🟢' : '📥';
+  }
+
+  if (debugBtn) {
+    if (seedanceDownloadEnhancerActive) {
+      debugBtn.style.background = 'rgba(16, 185, 129, 0.2)';
+      debugBtn.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+      debugBtn.style.color = '#34d399';
+      debugBtn.innerHTML = '<span>🟢 Download 3x (ON)</span>';
+    } else {
+      debugBtn.style.background = 'rgba(58, 160, 255, 0.15)';
+      debugBtn.style.borderColor = 'rgba(58, 160, 255, 0.35)';
+      debugBtn.style.color = '#8da6ff';
+      debugBtn.innerHTML = '<span>📥 ปุ่ม Download 3x</span>';
+    }
+  }
+}
+
+async function toggleSeedanceDownloadEnhancer(targetBtn = null) {
+  const nextState = !seedanceDownloadEnhancerActive;
+  const actionText = nextState ? 'เปิด' : 'ปิด';
+  writeConsoleLine(`[Seedance] ⏳ กำลังส่งคำสั่ง ${actionText} ขยายปุ่ม Download 3 เท่า บน Dreamina...`, 'system', 'seedanceConsole');
+  
+  if (targetBtn) {
+    targetBtn.disabled = true;
+  }
+
+  try {
+    const res = await jsonFetch('/api/seedance/toggle-download-enhancer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: nextState })
+    });
+
+    if (res && res.ok) {
+      updateSeedanceDownloadEnhancerUI(res.enabled);
+      const msg = res.enabled
+        ? `[Seedance] 📥 เปิดใช้งาน: ปุ่ม Download บน Dreamina แสดงตลอดเวลา และขยายใหญ่ 3 เท่า (พบ ${res.count || 0} จุด)`
+        : `[Seedance] ℹ️ ปิดการแสดงผลปุ่ม Download ขยาย 3 เท่า เรียบร้อยแล้ว`;
+      writeConsoleLine(msg, 'success', 'seedanceConsole');
+      if (typeof showToast === 'function') {
+        showToast(res.enabled ? 'เปิดแสดงปุ่ม Download ตลอดเวลา (ขยาย 3x) สำเร็จ' : 'ปิดแสดงปุ่ม Download สำเร็จ', 'success');
+      }
+    } else {
+      const err = res?.detail || res?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ Dreamina';
+      writeConsoleLine(`[Seedance Error] ❌ ${err}`, 'error', 'seedanceConsole');
+      if (typeof showToast === 'function') {
+        showToast(`เกิดข้อผิดพลาด: ${err}`, 'error');
+      }
+    }
+  } catch (ex) {
+    writeConsoleLine(`[Seedance Error] ❌ ${ex.message}`, 'error', 'seedanceConsole');
+    if (typeof showToast === 'function') {
+      showToast(`เกิดข้อผิดพลาด: ${ex.message}`, 'error');
+    }
+  } finally {
+    if (targetBtn) {
+      targetBtn.disabled = false;
+    }
+  }
+}
+
 async function executeSeedanceDebugStep(stepName, btnEl = null, customOptions = {}) {
   const originalHtml = btnEl ? btnEl.innerHTML : '';
   if (btnEl) {
@@ -9398,6 +9503,20 @@ function initSeedanceGenListeners() {
         const imgInp = document.getElementById('seedanceDebugImageInput');
         if (imgInp) imgInp.value = '';
       }
+    });
+  }
+
+  const toggleDownloadEnhancerBtn = document.getElementById('btnSeedanceToggleDownloadEnhancer');
+  if (toggleDownloadEnhancerBtn) {
+    toggleDownloadEnhancerBtn.addEventListener('click', (e) => {
+      toggleSeedanceDownloadEnhancer(e.currentTarget);
+    });
+  }
+
+  const debugDownloadEnhancerBtn = document.getElementById('btnSeedanceDebugDownloadEnhancer');
+  if (debugDownloadEnhancerBtn) {
+    debugDownloadEnhancerBtn.addEventListener('click', (e) => {
+      toggleSeedanceDownloadEnhancer(e.currentTarget);
     });
   }
 
