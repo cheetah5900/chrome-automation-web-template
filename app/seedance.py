@@ -842,200 +842,265 @@ def ensure_seedance_tab(bot) -> bool:
 
 def toggle_seedance_download_enhancer(driver, enabled: Optional[bool] = None) -> dict[str, Any]:
     """
-    Injects or removes CSS & JS on Dreamina tab to keep Download buttons permanently visible
-    (without requiring mouse hover) and scales them 3x larger.
+    Ensures download buttons remain at their normal size and removes any previously injected enlarged styles.
     """
     script = """
-    const requestedEnable = arguments[0];
     const STYLE_ID = "seedance-always-download-style";
-    
-    // Determine target state (toggle if null/undefined)
-    let enable = requestedEnable;
-    if (enable === null || enable === undefined) {
-        enable = !window.__seedanceDownloadEnhancerActive;
+    const existing = document.getElementById(STYLE_ID);
+    if (existing) existing.remove();
+    if (window.__seedanceObserver) {
+        window.__seedanceObserver.disconnect();
+        window.__seedanceObserver = null;
     }
-    window.__seedanceDownloadEnhancerActive = enable;
-
-    if (!enable) {
-        const existing = document.getElementById(STYLE_ID);
-        if (existing) existing.remove();
-        if (window.__seedanceObserver) {
-            window.__seedanceObserver.disconnect();
-            window.__seedanceObserver = null;
-        }
-        if (window.__seedanceInterval) {
-            clearInterval(window.__seedanceInterval);
-            window.__seedanceInterval = null;
-        }
-        document.querySelectorAll(".dreamina-download-enlarged").forEach(el => {
-            el.classList.remove("dreamina-download-enlarged");
-        });
-        return { ok: true, enabled: false, count: 0, message: "ปิดการขยายปุ่ม Download เรียบร้อยแล้ว" };
+    if (window.__seedanceInterval) {
+        clearInterval(window.__seedanceInterval);
+        window.__seedanceInterval = null;
     }
-
-    // 1. Intercept mouseleave/mouseout so hover states remain permanently active
-    if (!window.__seedanceMouseLeaveBlocked) {
-        window.__seedanceMouseLeaveBlocked = true;
-        const blockLeave = (e) => {
-            if (window.__seedanceDownloadEnhancerActive) {
-                e.stopImmediatePropagation();
-            }
-        };
-        window.addEventListener("mouseleave", blockLeave, true);
-        window.addEventListener("mouseout", blockLeave, true);
-    }
-
-    // 2. Inject or update CSS stylesheet
-    let style = document.getElementById(STYLE_ID);
-    if (!style) {
-        style = document.createElement("style");
-        style.id = STYLE_ID;
-        document.head.appendChild(style);
-    }
-    style.innerHTML = `
-        /* Force overlays, card actions and button groups visible without mouse hover */
-        [class*="slot-card"] [class*="button-group-top"],
-        [class*="slot-card"] [class*="button-group-bottom"],
-        [class*="overlay-"],
-        [class*="cover-container"] [class*="overlay"],
-        [class*="feed-item"] [class*="overlay"],
-        [class*="masonry-layout-item"] [class*="overlay"],
-        [class*="tail-"],
-        [class*="operation-wrapper"],
-        .audio-download-Kvjijk,
-        .audio-download-panel-gu8nB5,
-        [class*="xgplayer-download"] {
-            opacity: 1 !important;
-            visibility: visible !important;
-            display: flex !important;
-            pointer-events: auto !important;
-        }
-
-        /* Ensure card overlays stay transparent so thumbnails remain fully visible */
-        [class*="overlay-"],
-        [class*="cover-container"] [class*="overlay"],
-        [class*="feed-item"] [class*="overlay"] {
-            background: transparent !important;
-        }
-
-        /* Prevent parent button containers from clipping enlarged buttons */
-        [class*="button-group-top"],
-        [class*="button-group-bottom"],
-        [class*="overlay-"],
-        [class*="tail-"],
-        [class*="operation-"],
-        .audio-download-Kvjijk,
-        .audio-download-panel-gu8nB5 {
-            overflow: visible !important;
-        }
-
-        /* 3X Enlarge Download Buttons */
-        .dreamina-download-enlarged,
-        [class*="xgplayer-download"],
-        .audio-download-button-aPZGNH {
-            transform: scale(3) !important;
-            transform-origin: center center !important;
-            z-index: 999999 !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            pointer-events: auto !important;
-            cursor: pointer !important;
-            filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.8)) !important;
-            transition: transform 0.15s ease !important;
-        }
-
-        .dreamina-download-enlarged:hover,
-        [class*="xgplayer-download"]:hover {
-            transform: scale(3.3) !important;
-        }
-    `;
-
-    // 3. Scanner function
-    function scanAndEnhance() {
-        if (!window.__seedanceDownloadEnhancerActive) return 0;
-        
-        // Trigger hover state on card containers so React mounts button groups & overlays
-        const cardTargets = document.querySelectorAll(
-            '[class*="slot-card"], [class*="feed-item"], [class*="masonry-layout-item"], [class*="info-card"]'
-        );
-        for (const c of cardTargets) {
-            if (!c.getAttribute("data-seedance-hovered")) {
-                c.setAttribute("data-seedance-hovered", "1");
-                c.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
-            }
-        }
-
-        let count = 0;
-        const allCandidates = document.querySelectorAll(
-            'button, [role="button"], div[class*="operation"], div[class*="action"], [class*="download"], a'
-        );
-        for (const el of allCandidates) {
-            if (el.classList.contains("dreamina-download-enlarged")) {
-                count++;
-                continue;
-            }
-            const cls = (typeof el.className === "string" ? el.className : "").toLowerCase();
-            const aria = (el.getAttribute("aria-label") || "").toLowerCase();
-            const title = (el.getAttribute("title") || "").toLowerCase();
-            const text = (el.innerText || "").trim().toLowerCase();
-            const testid = (el.getAttribute("data-testid") || "").toLowerCase();
-            const action = (el.getAttribute("data-action") || "").toLowerCase();
-
-            const isDownload = (
-                cls.includes("download") ||
-                aria.includes("download") || aria.includes("ดาวน์โหลด") ||
-                title.includes("download") || title.includes("ดาวน์โหลด") ||
-                testid.includes("download") || action.includes("download") ||
-                text === "download" || text === "ดาวน์โหลด" || text.includes("download") ||
-                cls.includes("xgplayer-download")
-            );
-
-            if (isDownload) {
-                el.classList.add("dreamina-download-enlarged");
-                count++;
-            }
-        }
-
-        const topGroups = document.querySelectorAll('[class*="button-group-top"]');
-        for (const group of topGroups) {
-            const firstBtn = group.querySelector('button, [role="button"], span');
-            if (firstBtn && !firstBtn.classList.contains("dreamina-download-enlarged")) {
-                firstBtn.classList.add("dreamina-download-enlarged");
-                count++;
-            }
-        }
-        return count;
-    }
-
-    const count = scanAndEnhance();
-
-    // 4. Setup MutationObserver
-    if (!window.__seedanceObserver) {
-        window.__seedanceObserver = new MutationObserver(() => {
-            scanAndEnhance();
-        });
-        window.__seedanceObserver.observe(document.body, { childList: true, subtree: true });
-    }
-
-    // 5. Periodic backup interval
-    if (!window.__seedanceInterval) {
-        window.__seedanceInterval = setInterval(scanAndEnhance, 1500);
-    }
-
+    document.querySelectorAll(".dreamina-download-enlarged").forEach(el => {
+        el.classList.remove("dreamina-download-enlarged");
+        el.style.transform = "";
+        el.style.filter = "";
+        el.style.zIndex = "";
+    });
+    window.__seedanceDownloadEnhancerActive = false;
     return {
         ok: true,
-        enabled: true,
-        count: count,
-        message: "เปิดใช้งานแสดงปุ่ม Download ตลอดเวลา และขยาย 3 เท่า สำเร็จ"
+        enabled: false,
+        count: 0,
+        message: "ปุ่ม Download ขนาดปกติเรียบร้อยแล้ว (ไม่ขยายขนาด)"
     };
     """
-    res = driver.execute_script(script, enabled)
-    if not isinstance(res, dict):
-        res = {"ok": True, "enabled": bool(enabled), "count": 0, "message": "Updated download enhancer state"}
+    try:
+        res = driver.execute_script(script)
+        if not isinstance(res, dict):
+            res = {"ok": True, "enabled": False, "count": 0, "message": "ปุ่ม Download ขนาดปกติเรียบร้อยแล้ว"}
+        log("[Seedance] 📥 คืนค่าขนาดปุ่ม Download บน Dreamina ให้เป็นขนาดปกติเรียบร้อยแล้ว")
+        return res
+    except Exception as e:
+        log(f"[Seedance] ⚠️ ข้อผิดพลาดขณะคืนค่าขนาดปุ่ม Download: {e}")
+        return {"ok": False, "detail": str(e)}
+
+def find_record_on_dreamina(
+    driver,
+    num: Optional[Any] = None,
+    name: str = "",
+    prompt_snippet: str = "",
+    scroll_to_found: bool = True
+) -> dict[str, Any]:
+    """
+    Searches for a record card on Dreamina virtual list matching num, name, or prompt_snippet.
+    Checks current viewport first; if not found, scans through the viewport scroll positions.
+    Returns:
+      {
+        "found": bool,
+        "match_type": str,
+        "text": str,
+        "has_video": bool,
+        "video_src": str or None,
+        "is_generating": bool
+      }
+    """
+    if not driver:
+        return {"found": False, "reason": "no_driver"}
+
+    num_str = str(num) if num is not None else ""
+    name = (name or "").strip()
+    prompt_snippet = (prompt_snippet or "").strip().replace("\n", " ")[:50]
+
+    check_code = r"""
+    function checkTarget(num, name, snippet) {
+        const items = document.querySelectorAll('.content-_w2B98 > div > div, [class*="record-item"], [class*="slot-card"], [class*="record-card"]');
+        for (const el of items) {
+            if (el.classList.contains('record-list-container-GKMHFh') || el.classList.contains('record-virtual-list')) continue;
+            const text = (el.innerText || '').trim();
+            if (!text) continue;
+
+            let matched = false;
+            let matchType = '';
+            if (name && text.includes(name)) {
+                matched = true;
+                matchType = 'name';
+            } else if (num && (text.includes(num + ' -') || text.includes(num + '-') || text.startsWith(num + ' '))) {
+                matched = true;
+                matchType = 'num';
+            } else if (snippet && snippet.length > 15 && text.includes(snippet)) {
+                matched = true;
+                matchType = 'snippet';
+            }
+
+            if (matched) {
+                const vid = el.querySelector('video');
+                const isGen = !!el.querySelector('[class*="generating"], [class*="progress"], [class*="loading"]');
+                const dlBtn = el.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
+                return {
+                    found: true,
+                    matchType: matchType,
+                    text: text.slice(0, 120),
+                    hasVideo: !!vid,
+                    videoSrc: vid ? (vid.src || vid.currentSrc) : null,
+                    isGenerating: isGen,
+                    hasDlBtn: !!dlBtn,
+                    el: el
+                };
+            }
+        }
+        return null;
+    }
+    """
+
+    try:
+        res = driver.execute_script(check_code + r"""
+            const found = checkTarget(arguments[0], arguments[1], arguments[2]);
+            if (found) {
+                if (arguments[3] && found.el) {
+                    found.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                return {
+                    found: true,
+                    matchType: found.matchType,
+                    text: found.text,
+                    hasVideo: found.hasVideo,
+                    videoSrc: found.videoSrc,
+                    isGenerating: found.isGenerating,
+                    hasDlBtn: found.hasDlBtn
+                };
+            }
+            const vp = document.querySelector('.viewport-M4gznV') || document.querySelector('[class*="viewport"]');
+            return {
+                found: false,
+                maxScroll: vp ? vp.scrollHeight : 0,
+                clientHeight: vp ? vp.clientHeight : 800,
+                currScroll: vp ? vp.scrollTop : 0
+            };
+        """, num_str, name, prompt_snippet, scroll_to_found)
+
+        if isinstance(res, dict) and res.get("found"):
+            return res
+
+        if not isinstance(res, dict):
+            return {"found": False}
+
+        max_scroll = res.get("maxScroll", 0)
+        client_h = res.get("clientHeight", 800)
+        curr_scroll = res.get("currScroll", 0)
+
+        if max_scroll <= client_h:
+            return {"found": False}
+
+        # Step-scan through virtual list
+        positions = list(range(curr_scroll, max_scroll + client_h, client_h)) + list(range(0, curr_scroll, client_h))
+        
+        for pos in positions:
+            if is_seedance_stopped():
+                log("[Seedance Find Record] 🛑 ยกเลิกการค้นหาเนื่องจากคำสั่ง Force Stop")
+                return {"found": False, "stopped": True}
+            driver.execute_script(r"""
+                const vp = document.querySelector('.viewport-M4gznV') || document.querySelector('[class*="viewport"]');
+                if (vp) vp.scrollTop = arguments[0];
+            """, pos)
+            time.sleep(0.12)
+            match = driver.execute_script(check_code + r"""
+                const found = checkTarget(arguments[0], arguments[1], arguments[2]);
+                if (found) {
+                    if (arguments[3] && found.el) {
+                        found.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    return {
+                        found: true,
+                        matchType: found.matchType,
+                        text: found.text,
+                        hasVideo: found.hasVideo,
+                        videoSrc: found.videoSrc,
+                        isGenerating: found.isGenerating,
+                        hasDlBtn: found.hasDlBtn
+                    };
+                }
+                return null;
+            """, num_str, name, prompt_snippet, scroll_to_found)
+            if match and isinstance(match, dict) and match.get("found"):
+                return match
+
+    except Exception as ex:
+        log(f"[Seedance Find Record Warning] {ex}")
+
+    return {"found": False}
+
+
+def pair_seedance_items(driver, local_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Pairs scanned local items with corresponding generation records on Dreamina web tab.
+    Checks:
+      1. Local disk: does subfolder have prompt, image, and already existing .mp4?
+      2. Dreamina web: does record exist on page, is video ready to download, or still generating?
+    """
+    paired = []
     
-    status_str = "เปิดใช้งาน (ON 3x)" if res.get("enabled") else "ปิดการใช้งาน (OFF)"
-    log(f"[Seedance] 📥 {status_str}: ปุ่ม Download บน Dreamina แสดงตลอดเวลา และขยาย 3 เท่า (พบ {res.get('count', 0)} จุด)")
-    return res
+    # Revert download enhancer so buttons stay normal size
+    if driver:
+        try:
+            toggle_seedance_download_enhancer(driver, enabled=False)
+        except Exception:
+            pass
+
+    for item in local_items:
+        if is_seedance_stopped():
+            log("[Seedance Matcher] 🛑 ยกเลิกการจับคู่เนื่องจากคำสั่ง Force Stop")
+            break
+        sub_name = item.get("subfolder_name", "")
+        sub_path = item.get("subfolder_path", "")
+        num = item.get("num")
+        prompt_text = item.get("prompt_text", "")
+        prompt_snippet = prompt_text.strip().replace("\n", " ")[:50] if prompt_text else ""
+
+        # Check local mp4
+        local_mp4 = os.path.join(sub_path, f"{sub_name}.mp4") if (sub_path and os.path.isdir(sub_path)) else None
+        local_video_exists = bool(local_mp4 and os.path.isfile(local_mp4))
+        local_video_size_mb = round(os.path.getsize(local_mp4) / (1024 * 1024), 1) if local_video_exists else 0
+
+        # Check Dreamina web
+        web_matched = False
+        web_has_video = False
+        web_video_src = None
+        web_status = "offline"
+        web_snippet = ""
+
+        if driver:
+            try:
+                web_res = find_record_on_dreamina(driver, num=num, name=sub_name, prompt_snippet=prompt_snippet, scroll_to_found=False)
+                if web_res.get("found"):
+                    web_matched = True
+                    web_has_video = bool(web_res.get("hasVideo") and web_res.get("videoSrc"))
+                    web_video_src = web_res.get("videoSrc")
+                    web_snippet = web_res.get("text", "")
+                    if web_has_video:
+                        web_status = "ready"
+                    elif web_res.get("isGenerating"):
+                        web_status = "generating"
+                    else:
+                        web_status = "card_no_video"
+                else:
+                    web_status = "not_found"
+            except Exception as ex:
+                log(f"[Seedance Pair Warning] {ex}")
+                web_status = "error"
+        else:
+            web_status = "offline"
+
+        paired.append({
+            **item,
+            "local_video_exists": local_video_exists,
+            "local_video_path": local_mp4 if local_video_exists else None,
+            "local_video_size_mb": local_video_size_mb,
+            "web_matched": web_matched,
+            "web_has_video": web_has_video,
+            "web_video_src": web_video_src,
+            "web_status": web_status,
+            "web_snippet": web_snippet,
+            "can_download": web_has_video
+        })
+
+    return paired
+
 
 def download_seedance_videos(
     driver,
@@ -1046,17 +1111,16 @@ def download_seedance_videos(
     """
     Downloads generated videos from Dreamina for the specified items.
     For each item:
-      1. Finds matching record in Dreamina DOM (by subfolder name, number, or prompt snippet).
-      2. Clicks the download button on Dreamina.
-      3. If direct video src is found, streams and saves the MP4 directly into the item's subfolder
-         (or ~/Downloads as fallback).
+      1. Uses already paired videoSrc or locates record in Dreamina DOM via smart scroll search.
+      2. Clicks download button on Dreamina.
+      3. Streams and saves the MP4 directly into the item's subfolder (or ~/Downloads as fallback).
     """
     if not items:
         return {"ok": False, "detail": "ไม่มีรายการที่เลือกสำหรับดาวน์โหลด"}
 
-    # Ensure download enhancer is active so buttons & overlays are visible
+    # Ensure download buttons stay at normal size
     try:
-        toggle_seedance_download_enhancer(driver, enabled=True)
+        toggle_seedance_download_enhancer(driver, enabled=False)
     except Exception as enh_err:
         log(f"[Seedance Download Enhancer Warning]: {enh_err}")
 
@@ -1084,71 +1148,16 @@ def download_seedance_videos(
                 "message": f"กำลังดาวน์โหลด [{idx+1}/{total}] {sub_name}..."
             })
 
-        find_script = """
-        const num = arguments[0];
-        const subName = (arguments[1] || '').trim();
-        const promptSnippet = (arguments[2] || '').trim();
+        # 1. Check if video_src is already paired from search
+        video_src = item.get("web_video_src")
+        match_res = None
 
-        const records = document.querySelectorAll('[class*="record-"]');
-        let targetRec = null;
-        let matchReason = '';
+        if not video_src:
+            match_res = find_record_on_dreamina(driver, num=num, name=sub_name, prompt_snippet=prompt_snippet, scroll_to_found=True)
+            if match_res.get("found"):
+                video_src = match_res.get("videoSrc")
 
-        for (const rec of records) {
-            const text = (rec.innerText || '');
-            if (subName && text.includes(subName)) {
-                targetRec = rec;
-                matchReason = 'subfolder_name';
-                break;
-            }
-            if (num !== null && num !== undefined && (text.includes(num + ' -') || text.includes(num + '-') || text.startsWith(num + ' '))) {
-                targetRec = rec;
-                matchReason = 'leading_number';
-                break;
-            }
-            if (promptSnippet && promptSnippet.length > 15 && text.includes(promptSnippet)) {
-                targetRec = rec;
-                matchReason = 'prompt_snippet';
-                break;
-            }
-        }
-
-        if (!targetRec) {
-            return { found: false };
-        }
-
-        // Scroll into view
-        targetRec.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-        // Hydrate overlays
-        const cardTarget = targetRec.querySelector('[class*="slot-card"], [class*="video-card"], [class*="cover"]') || targetRec;
-        cardTarget.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-
-        // Locate download button
-        const dlBtn = targetRec.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
-        let clicked = false;
-        if (dlBtn) {
-            try {
-                dlBtn.click();
-                clicked = true;
-            } catch (e) {
-                clicked = false;
-            }
-        }
-
-        // Locate video element
-        const vid = targetRec.querySelector('video');
-        const videoSrc = vid ? (vid.src || vid.currentSrc) : null;
-
-        return {
-            found: true,
-            matchReason: matchReason,
-            btnClicked: clicked,
-            videoSrc: videoSrc
-        };
-        """
-
-        match_res = driver.execute_script(find_script, num, sub_name, prompt_snippet)
-        if not match_res or not match_res.get("found"):
+        if not video_src:
             err_msg = f"ไม่พบคลิปสำหรับ '{sub_name}' บนหน้า Dreamina ในขณะนี้"
             log(f"[Seedance Download Warning] ⚠️ {err_msg}")
             results.append({
@@ -1159,9 +1168,21 @@ def download_seedance_videos(
             })
             continue
 
-        video_src = match_res.get("videoSrc")
-        saved_file = None
+        # Click download button on Dreamina if possible
+        btn_clicked = False
+        try:
+            btn_clicked = bool(driver.execute_script(r"""
+                const dlBtn = document.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
+                if (dlBtn) {
+                    dlBtn.click();
+                    return true;
+                }
+                return false;
+            """))
+        except Exception:
+            pass
 
+        saved_file = None
         if video_src and save_to_subfolder:
             # Determine destination folder
             dest_dir = sub_path if (sub_path and os.path.isdir(sub_path)) else os.path.expanduser("~/Downloads")
@@ -1176,6 +1197,9 @@ def download_seedance_videos(
                 )
                 with urllib.request.urlopen(req, timeout=35) as resp, open(dest_path, "wb") as out_f:
                     while chunk := resp.read(65536):
+                        if is_seedance_stopped():
+                            log("[Seedance Download] 🛑 ยกเลิกการดาวน์โหลดไฟล์เนื่องจากคำสั่ง Force Stop")
+                            break
                         out_f.write(chunk)
                 saved_file = dest_path
                 file_size_mb = round(os.path.getsize(dest_path) / (1024 * 1024), 1)
@@ -1188,7 +1212,7 @@ def download_seedance_videos(
             "num": num,
             "name": sub_name,
             "ok": True,
-            "button_clicked": match_res.get("btnClicked", False),
+            "button_clicked": btn_clicked,
             "video_src": video_src,
             "saved_file": saved_file
         })

@@ -7201,6 +7201,16 @@ class SeedanceDownloadRequest(BaseModel):
 
 SeedanceDownloadRequest.model_rebuild()
 
+class SeedancePairSingleRequest(BaseModel):
+    item: dict[str, Any]
+
+SeedancePairSingleRequest.model_rebuild()
+
+class SeedancePairWebRequest(BaseModel):
+    items: list[dict[str, Any]]
+
+SeedancePairWebRequest.model_rebuild()
+
 global_seedance_progress: dict[str, Any] = {
     "status": "idle",
     "total": 0,
@@ -7269,6 +7279,165 @@ def api_seedance_scan(req: SeedanceScanRequest) -> dict[str, Any]:
     except Exception as e:
         log(f"[Seedance Scan Error] {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/seedance/search-local")
+def api_seedance_search_local(req: SeedanceScanRequest) -> dict[str, Any]:
+    from app.seedance import scan_seedance_folders, reset_seedance_stop, parse_range_string
+    import os
+    reset_seedance_stop()
+    try:
+        scan_res = scan_seedance_folders(
+            req.main_folder,
+            req.subfolders_str,
+            image_mode=req.image_mode,
+            character_sheet_path=req.character_sheet_path,
+            image_subfolder=req.image_subfolder or "images"
+        )
+        items = scan_res.get("items", [])
+        for item in items:
+            sub_path = item.get("subfolder_path", "")
+            sub_name = item.get("subfolder_name", "")
+            local_mp4 = os.path.join(sub_path, f"{sub_name}.mp4") if (sub_path and os.path.isdir(sub_path)) else None
+            local_video_exists = bool(local_mp4 and os.path.isfile(local_mp4))
+            local_video_size_mb = round(os.path.getsize(local_mp4) / (1024 * 1024), 1) if local_video_exists else 0
+            item["local_found"] = True
+            item["local_video_exists"] = local_video_exists
+            item["local_video_path"] = local_mp4 if local_video_exists else None
+            item["local_video_size_mb"] = local_video_size_mb
+            item["web_status"] = "pending"
+            item["web_has_video"] = False
+            item["web_video_src"] = None
+
+        # Check for requested numbers that were not found in main_folder
+        target_numbers = parse_range_string(req.subfolders_str)
+        if target_numbers:
+            found_nums = {it.get("num") for it in items if it.get("num") is not None}
+            for t_num in sorted(target_numbers):
+                if t_num not in found_nums:
+                    items.append({
+                        "id": len(items) + 1,
+                        "num": t_num,
+                        "checked": False,
+                        "subfolder_name": f"#{t_num} (ไม่พบโฟลเดอร์ในเครื่อง)",
+                        "subfolder_path": "",
+                        "prompt_file": "",
+                        "prompt_path": "",
+                        "prompt_text": "",
+                        "has_prompt": False,
+                        "local_found": False,
+                        "local_video_exists": False,
+                        "local_video_path": None,
+                        "local_video_size_mb": 0,
+                        "web_status": "skipped",
+                        "web_has_video": False,
+                        "web_video_src": None,
+                        "status": "not_found"
+                    })
+            items.sort(key=lambda x: (x.get("num") is None, x.get("num") if x.get("num") is not None else 999999))
+
+        return {
+            "ok": True,
+            "total": len(items),
+            "items": items
+        }
+    except Exception as e:
+        log(f"[Seedance Search Local Error] {e}")
+        return {"ok": False, "detail": str(e), "items": []}
+
+@app.post("/api/seedance/pair-single")
+def api_seedance_pair_single(req: SeedancePairSingleRequest) -> dict[str, Any]:
+    from app.seedance import pair_seedance_items, ensure_seedance_tab
+    if req.item.get("local_found") is False:
+        item = dict(req.item)
+        item["web_status"] = "skipped"
+        item["web_has_video"] = False
+        return {"ok": True, "item": item, "browser_connected": True}
+
+    bot = browser_manager.get()
+    driver = None
+    if bot and bot.driver:
+        try:
+            ensure_seedance_tab(bot)
+            driver = bot.driver
+        except Exception:
+            driver = None
+
+    paired = pair_seedance_items(driver, [req.item])
+    paired_item = paired[0] if paired else req.item
+    return {
+        "ok": True,
+        "item": paired_item,
+        "browser_connected": driver is not None
+    }
+
+@app.post("/api/seedance/pair-web")
+def api_seedance_pair_web(req: SeedancePairWebRequest) -> dict[str, Any]:
+    from app.seedance import pair_seedance_items, ensure_seedance_tab
+    bot = browser_manager.get()
+    driver = None
+    if bot and bot.driver:
+        try:
+            ensure_seedance_tab(bot)
+            driver = bot.driver
+        except Exception:
+            driver = None
+
+    paired_items = pair_seedance_items(driver, req.items)
+    paired_count = sum(1 for item in paired_items if item.get("web_has_video"))
+    return {
+        "ok": True,
+        "total": len(paired_items),
+        "paired_count": paired_count,
+        "items": paired_items,
+        "browser_connected": driver is not None
+    }
+
+@app.post("/api/seedance/search-paired")
+def api_seedance_search_paired(req: SeedanceScanRequest) -> dict[str, Any]:
+    from app.seedance import scan_seedance_folders, pair_seedance_items, ensure_seedance_tab, reset_seedance_stop
+    reset_seedance_stop()
+    try:
+        # 1. Scan local disk for folders and prompt files
+        scan_res = scan_seedance_folders(
+            req.main_folder,
+            req.subfolders_str,
+            image_mode=req.image_mode,
+            character_sheet_path=req.character_sheet_path,
+            image_subfolder=req.image_subfolder or "images"
+        )
+        local_items = scan_res.get("items", [])
+        if not local_items:
+            return {
+                "ok": True,
+                "total": 0,
+                "paired_count": 0,
+                "items": [],
+                "detail": f"ไม่พบโฟลเดอร์ในเครื่องที่ตรงกับ '{req.subfolders_str}'"
+            }
+
+        # 2. Connect to Dreamina on Chrome 9222 and pair with web records
+        bot = browser_manager.get()
+        driver = None
+        if bot and bot.driver:
+            try:
+                ensure_seedance_tab(bot)
+                driver = bot.driver
+            except Exception:
+                driver = None
+
+        paired_items = pair_seedance_items(driver, local_items)
+        paired_count = sum(1 for item in paired_items if item.get("web_has_video"))
+
+        return {
+            "ok": True,
+            "total": len(paired_items),
+            "paired_count": paired_count,
+            "items": paired_items,
+            "browser_connected": driver is not None
+        }
+    except Exception as e:
+        log(f"[Seedance Search Paired Error] {e}")
+        return {"ok": False, "detail": str(e), "items": []}
 
 @app.post("/api/seedance/apply-settings")
 def api_seedance_apply_settings(req: SeedanceApplySettingsRequest) -> dict[str, Any]:
@@ -7523,7 +7692,8 @@ def api_seedance_download(req: SeedanceDownloadRequest) -> dict[str, Any]:
     if not bot or not bot.driver:
         return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ยังไม่ได้เปิดใช้งาน"}
 
-    from app.seedance import ensure_seedance_tab, download_seedance_videos
+    from app.seedance import ensure_seedance_tab, download_seedance_videos, reset_seedance_stop
+    reset_seedance_stop()
     switched = ensure_seedance_tab(bot)
     if not switched:
         return {"ok": False, "detail": "ไม่พบแท็บ Dreamina (กรุณาเปิดแท็บ Dreamina บน Chrome 9222 ก่อน)"}

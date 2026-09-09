@@ -1429,50 +1429,45 @@
             <section class="card">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
                 <h3 style="margin: 0; font-size: 1.15rem; color: #8da6ff;">📝 รายการ Prompt ที่สแกนพบ (Scanned Items)</h3>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                  <button id="toggleAllSeedancePromptsBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 20px; margin: 0; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #fff;">Deselect All</button>
-                </div>
-              </div>
-
-              <!-- Numeric Prompt Selector & Direct Download Bar -->
-              <div style="background: rgba(127, 92, 255, 0.07); border: 1px solid rgba(127, 92, 255, 0.25); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 0.95rem; font-weight: bold; color: #ffb86c;">🎯 เลือกรายการตามเลข (Select & Download by Number)</span>
-                  </div>
-                  <div style="display: flex; gap: 6px; align-items: center;">
-                    <button id="btnSeedanceScanAllPrompts" type="button" class="secondary" style="padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; margin: 0; background: rgba(127, 92, 255, 0.15); border-color: rgba(127, 92, 255, 0.35); color: #c4b5fd;" title="สแกนรวบรวม Prompt ที่ใช้งานได้ทั้งหมดในโฟลเดอร์หลัก">
-                      📚 รวบรวม Prompt ทั้งหมด
-                    </button>
-                    <button id="btnSeedanceClearNumberSelection" type="button" class="secondary" style="padding: 6px 10px; font-size: 0.78rem; border-radius: 8px; margin: 0;" title="ล้างการค้นหาและเลือกทั้งหมด">
-                      🔄 แสดงทั้งหมด
-                    </button>
-                  </div>
-                </div>
-
-                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                  <div style="position: relative; flex-grow: 1; min-width: 220px;">
-                    <input id="seedanceNumberSelectInput" type="text" placeholder="พิมพ์เลข เช่น 211 หรือ 211, 212, 215-220" style="width: 100%; margin-bottom: 0; padding: 10px 14px; font-size: 0.9rem; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(127, 92, 255, 0.35); color: #fff; outline: none;" />
-                  </div>
-                  <button id="btnSeedanceSelectByNumber" type="button" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; font-weight: bold; border-radius: 10px; margin: 0; white-space: nowrap; background: rgba(58, 160, 255, 0.2); border-color: rgba(58, 160, 255, 0.4); color: #8da6ff; cursor: pointer;">
-                    🎯 เลือกรายการ
-                  </button>
-                  <button id="btnSeedanceDownloadSelected" type="button" class="primary has-tooltip" style="padding: 10px 18px; font-size: 0.85rem; font-weight: bold; border-radius: 10px; margin: 0; white-space: nowrap; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; box-shadow: 0 3px 12px rgba(16, 185, 129, 0.3); cursor: pointer;">
-                    <span class="btn-text">📥 สั่งดาวน์โหลดบน Dreamina</span>
-                    <div class="custom-tooltip" id="tooltip_btnSeedanceDownloadSelected">สั่งดาวน์โหลดวิดีโอบนเว็บ Dreamina ตามรายการที่เลือกไว้ พร้อมบันทึกไฟล์ MP4 ลงในโฟลเดอร์ย่อยโดยตรง</div>
-                  </button>
-                </div>
-
-                <!-- Dynamic Live Feedback -->
-                <div id="seedanceNumberSelectFeedback" style="font-size: 0.82rem; color: rgba(255,255,255,0.6); min-height: 20px; display: flex; align-items: center;">
-                  💡 พิมพ์หมายเลขโฟลเดอร์ (เช่น 211) เพื่อเลือกรายการทันที
-                </div>
               </div>
 
               <!-- Queue Container -->
               <div id="seedanceQueueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 650px; overflow-y: auto; padding-right: 4px;">
                 <div id="seedanceEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
                   ยังไม่มีข้อมูล Prompt — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนหาไฟล์ Prompt"</strong>
+                </div>
+              </div>
+            </section>
+
+            <!-- Standalone Search & Download Video Section -->
+            <section class="card" id="seedanceSearchDownloadSection">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
+                <h2 class="section-title" style="margin-bottom: 0;">🎯 ค้นหาและจับคู่วิดีโอ (Match & Download Video)</h2>
+                <span id="seedanceSearchCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; border-radius: 20px; font-weight: bold; display: none;">0 รายการ</span>
+              </div>
+              <p class="section-subtitle">ค้นหา 2 ฝั่ง: ฝั่งซ้ายรวบรวมโฟลเดอร์และ Prompt ภายในเครื่อง (Local) ให้ครบก่อน จากนั้นจึงเริ่มค้นหาและจับคู่วิดีโอบนเว็บ Dreamina (Web) ทางฝั่งขวา</p>
+
+              <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 12px;">
+                <!-- Input & Exactly 2 Action Buttons -->
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                  <div style="position: relative; flex-grow: 1; min-width: 220px;">
+                    <input id="seedanceSearchNumberInput" type="text" placeholder="พิมพ์เลข เช่น 211 หรือ 211, 212, 215-220" style="width: 100%; margin-bottom: 0; padding: 11px 14px; font-size: 0.92rem; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(127, 92, 255, 0.35); color: #fff; outline: none;" />
+                  </div>
+                  <button id="btnSeedanceSearchPrompts" type="button" class="secondary" style="padding: 11px 20px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; margin: 0; white-space: nowrap; background: rgba(58, 160, 255, 0.2); border-color: rgba(58, 160, 255, 0.4); color: #8da6ff; cursor: pointer; display: flex; align-items: center; gap: 6px;" title="ค้นหาและจับคู่ Prompt ในเครื่องกับ Dreamina (ขณะรันสามารถกดปุ่มนี้เพื่อ Force Stop ได้ทันที)">
+                    <span>🔍 ค้นหา</span>
+                  </button>
+                  <button id="btnSeedanceDownloadVideo" type="button" class="primary has-tooltip" style="padding: 11px 22px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; margin: 0; white-space: nowrap; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <span class="btn-text">📥 ดาวน์โหลด</span>
+                    <div class="custom-tooltip" id="tooltip_btnSeedanceDownloadVideo">ดาวน์โหลดวิดีโอบน Dreamina และบันทึกลงในโฟลเดอร์ของตัวมันเองโดยตรง</div>
+                  </button>
+                </div>
+
+                <!-- Result Container -->
+                <div id="seedanceSearchResultContainer" style="display: none; flex-direction: column; gap: 8px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 12px;"></div>
+
+                <!-- Status Feedback -->
+                <div id="seedanceSearchStatusText" style="font-size: 0.82rem; color: rgba(255,255,255,0.5);">
+                  💡 พิมพ์เลขโฟลเดอร์ เช่น <code>211</code> แล้วกดปุ่ม <strong>"🔍 ค้นหา"</strong> เพื่อรวบรวมข้อมูล และกด <strong>"📥 ดาวน์โหลด"</strong> เพื่อบันทึกไฟล์ MP4 ลงในโฟลเดอร์ของตัวมันเอง
                 </div>
               </div>
             </section>
@@ -1520,97 +1515,9 @@
                     <div class="custom-tooltip" id="tooltip_btnSeedanceForceStop"></div>
                   </button>
                 </div>
-
-                <!-- Download Buttons Enhancer (Always Visible & 3x Scale) -->
-                <div style="margin-top: 10px;">
-                  <button id="btnSeedanceToggleDownloadEnhancer" type="button" class="secondary has-tooltip" style="width: 100%; padding: 12px 16px; font-size: 0.9rem; font-weight: bold; border-radius: 12px; background: rgba(58, 160, 255, 0.12); border: 1px solid rgba(58, 160, 255, 0.35); color: #8da6ff; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                      <span id="seedanceDownloadEnhancerIcon" style="font-size: 1.1rem;">📥</span>
-                      <span id="seedanceDownloadEnhancerText">แสดงปุ่ม Download ตลอดเวลา (ขยาย 3 เท่า)</span>
-                    </div>
-                    <span id="seedanceDownloadEnhancerBadge" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); font-weight: bold;">OFF</span>
-                    <div class="custom-tooltip" id="tooltip_btnSeedanceToggleDownloadEnhancer">เปิด/ปิด การแสดงผลปุ่ม Download บนหน้าเว็บ Dreamina ให้แสดงตลอดเวลาโดยไม่ต้องเอาเมาส์ Hover และขยายขนาดปุ่มใหญ่ขึ้น 3 เท่า</div>
-                  </button>
-                </div>
               </div>
 
-              <!-- Seedance Step Debugger Panel -->
-              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(127, 92, 255, 0.25); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
-                  <span style="font-weight: bold; color: #c4b5fd; font-size: 0.92rem; display: flex; align-items: center; gap: 6px;">
-                    <span>🛠️ Seedance Step Debugger (ทดสอบทีละขั้นตอน)</span>
-                  </span>
-                  <span style="font-size: 0.75rem; color: rgba(255,255,255,0.45);">กดทดสอบเพื่อตรวจหาจุดผิดพลาด</span>
-                </div>
 
-                <!-- Debug Target: Prompt & Image Auto Fill or Custom -->
-                <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="font-size: 0.78rem; font-weight: bold; color: #8da6ff;">🎯 ข้อมูลทดสอบ (Debug Inputs)</span>
-                    <button id="btnSeedanceDebugAutoFill" type="button" class="secondary" style="padding: 3px 8px; font-size: 0.74rem; margin: 0; border-radius: 6px; background: rgba(127, 92, 255, 0.15); border-color: rgba(127, 92, 255, 0.35); color: #c4b5fd;" title="ดึง Prompt และรูปภาพจากคิวที่เลือกหรือรายการแรก">
-                      📋 ดึงจากคิว (Auto Fill)
-                    </button>
-                  </div>
-                  <div style="display: flex; flex-direction: column; gap: 6px;">
-                    <input id="seedanceDebugPromptInput" placeholder="ข้อความ Prompt สำหรับทดสอบ..." style="margin-bottom: 0; font-size: 0.8rem; padding: 6px 10px; border-radius: 6px;" />
-                    <div style="display: flex; gap: 6px;">
-                      <input id="seedanceDebugImageInput" placeholder="Path รูปภาพสำหรับทดสอบ..." style="margin-bottom: 0; font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; flex-grow: 1;" />
-                      <button id="btnSeedanceDebugBrowseImg" type="button" class="secondary" style="padding: 6px 10px; font-size: 0.75rem; margin: 0; border-radius: 6px; white-space: nowrap;">Browse...</button>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Step Buttons Grid (7 steps) -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-                  <button id="btnSeedanceDebugStep1" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                    <span>🌐 1. สลับแท็บ</span>
-                  </button>
-                  <button id="btnSeedanceDebugStep2" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                    <span>🤖 2. เลือกโมเดล</span>
-                  </button>
-                  <button id="btnSeedanceDebugStep3" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                    <span>📐 3. เลือกสัดส่วน</span>
-                  </button>
-                  <button id="btnSeedanceDebugStep4" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                    <span>⏱️ 4. เลือกระยะเวลา</span>
-                  </button>
-                  <button id="btnSeedanceDebugStep5" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(56, 189, 248, 0.3); color: #38bdf8; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                    <span>🖼️ 5. แนบรูปภาพ</span>
-                  </button>
-                  <button id="btnSeedanceDebugStep5Clear" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(239, 68, 68, 0.3); color: #f87171; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                    <span>🗑️ 5. ลบรูปภาพ</span>
-                  </button>
-                  <button id="btnSeedanceDebugStep6" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; margin: 0; border-radius: 8px; border-color: rgba(127, 92, 255, 0.3); color: #c4b5fd; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                    <span>✍️ 6. วาง Prompt</span>
-                  </button>
-                  <button id="btnSeedanceDebugStep7" type="button" class="secondary" style="padding: 8px 6px; font-size: 0.8rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #34d399; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;">
-                    <span>🚀 7. กด Generate</span>
-                  </button>
-                </div>
-
-                <!-- All Steps Runner Grid -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-                  <button id="btnSeedanceDebugStepAll" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; margin: 0; font-weight: bold; border-radius: 8px; background: linear-gradient(135deg, rgba(127, 92, 255, 0.2), rgba(58, 160, 255, 0.2)); border: 1px solid rgba(127, 92, 255, 0.4); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="รันสลับแท็บ, โมเดล, สัดส่วน, ระยะเวลา, แนบรูป และวาง Prompt โดยไม่กด Generate">
-                    <span>▶️ รัน 1 -> 6 (ไม่กด Generate)</span>
-                  </button>
-                  <button id="btnSeedanceDebugStepAllGen" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.25)); border: 1px solid rgba(16, 185, 129, 0.45); color: #34d399; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="รันครบทุกขั้นตอน 1 ถึง 7 พร้อมกดปุ่ม Generate บน Dreamina">
-                    <span>🚀 รัน 1 -> 7 (กด Generate ปกติ)</span>
-                  </button>
-                </div>
-
-                <!-- Action Controls: Direct Generate, Download 3x & Clear Both -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
-                  <button id="btnSeedanceDebugDirectGen" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="กดปุ่ม Generate บนเว็บ Dreamina เพื่อสร้างวิดีโอทันที">
-                    <span>🚀 กด Generate</span>
-                  </button>
-                  <button id="btnSeedanceDebugDownloadEnhancer" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.35); color: #8da6ff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="เปิด/ปิด การแสดงปุ่ม Download บน Dreamina และขยายขนาด 3 เท่า">
-                    <span>📥 ปุ่ม Download 3x</span>
-                  </button>
-                  <button id="btnSeedanceDebugClearBoth" type="button" class="secondary" style="padding: 9px 6px; font-size: 0.78rem; font-weight: bold; margin: 0; border-radius: 8px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;" title="ลบรูปภาพอ้างอิงและเคลียร์ข้อความ Prompt ทั้งบน Dreamina และในช่อง Debug">
-                    <span>🧹 เคลียร์รูป+Prompt</span>
-                  </button>
-                </div>
-              </div>
 
               <!-- Progress Bar -->
               <div id="seedanceProgressContainer" class="hidden" style="margin-bottom: 16px;">
@@ -2084,6 +1991,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=65"></script>
+  <script src="/web/app.js?v=78"></script>
 </body>
 </html>

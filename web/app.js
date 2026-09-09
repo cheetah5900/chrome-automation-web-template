@@ -8456,15 +8456,6 @@ function updateSeedanceRunButtonUI() {
       left.style.alignItems = 'center';
       left.style.gap = '10px';
 
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = item.checked !== false;
-      checkbox.style.cursor = 'pointer';
-      checkbox.addEventListener('change', () => {
-        item.checked = checkbox.checked;
-        renderSeedanceQueue();
-      });
-
       const folderTitle = document.createElement('span');
       folderTitle.style.fontWeight = 'bold';
       folderTitle.style.color = isCurrentStep ? '#f3e8ff' : '#c4b5fd';
@@ -8472,174 +8463,15 @@ function updateSeedanceRunButtonUI() {
       const numLabel = (item.num !== undefined && item.num !== null) ? `[#${item.num}] ` : `[#${index + 1}] `;
       folderTitle.textContent = `${numLabel}${item.subfolder_name}`;
 
-      left.appendChild(checkbox);
       left.appendChild(folderTitle);
 
       const right = document.createElement('div');
-      right.style.display = 'flex';
-      right.style.alignItems = 'center';
-      right.style.gap = '8px';
-
-      if (isCurrentStep) {
-        const activeBadge = document.createElement('span');
-        activeBadge.style.fontSize = '0.78rem';
-        activeBadge.style.padding = '2px 8px';
-        activeBadge.style.borderRadius = '6px';
-        activeBadge.style.background = 'linear-gradient(135deg, #8b5cf6, #ec4899)';
-        activeBadge.style.color = 'white';
-        activeBadge.style.fontWeight = 'bold';
-        activeBadge.textContent = '👉 วางอยู่บนเว็บ';
-        right.appendChild(activeBadge);
-      } else if (isCompletedStep) {
-        const doneBadge = document.createElement('span');
-        doneBadge.style.fontSize = '0.78rem';
-        doneBadge.style.padding = '2px 8px';
-        doneBadge.style.borderRadius = '6px';
-        doneBadge.style.background = 'rgba(16, 185, 129, 0.2)';
-        doneBadge.style.color = '#34d399';
-        doneBadge.textContent = '✅ วางแล้ว';
-        right.appendChild(doneBadge);
-      }
-
-      const fileBadge = document.createElement('span');
-      fileBadge.style.fontSize = '0.78rem';
-      fileBadge.style.padding = '2px 8px';
-      fileBadge.style.borderRadius = '6px';
-      fileBadge.style.background = item.has_prompt ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
-      fileBadge.style.color = item.has_prompt ? '#34d399' : '#f87171';
-      fileBadge.textContent = item.prompt_file;
-      right.appendChild(fileBadge);
-
-      const imgBadge = document.createElement('span');
-      imgBadge.style.fontSize = '0.78rem';
-      imgBadge.style.padding = '2px 8px';
-      imgBadge.style.borderRadius = '6px';
-      const curImageMode = getSeedanceImageMode();
-      if (curImageMode === 'subfolder') {
-        const itemImgPaths = (item.image_paths && item.image_paths.length > 0) ? item.image_paths : (item.subfolder_image_paths || []);
-        const itemImgFiles = (item.image_files && item.image_files.length > 0) ? item.image_files : (item.subfolder_image_files || []);
-        const hasImgs = item.has_image || (itemImgPaths.length > 0);
-
-        if (hasImgs && itemImgPaths.length > 0) {
-          imgBadge.style.background = 'rgba(56, 189, 248, 0.15)';
-          imgBadge.style.color = '#38bdf8';
-          const count = itemImgPaths.length;
-          const names = itemImgFiles.length > 0 ? itemImgFiles.join(', ') : (item.image_file || '');
-          imgBadge.textContent = count > 1 ? `🖼️ ${count} รูป: ${names}` : `🖼️ ${names || item.image_file || '1 รูป'}`;
-          imgBadge.title = itemImgPaths.join('\n');
-        } else {
-          imgBadge.style.background = 'rgba(239, 68, 68, 0.12)';
-          imgBadge.style.color = '#f87171';
-          imgBadge.textContent = '⚠️ ไม่พบรูปภาพ';
-          imgBadge.title = 'ไม่พบไฟล์รูปภาพในโฟลเดอร์ย่อยนี้';
-        }
-      } else if (curImageMode === 'character_sheet') {
-        const charSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
-        if (charSheetPath) {
-          const charName = charSheetPath.split('/').pop() || 'char_sheet';
-          imgBadge.style.background = 'rgba(168, 85, 247, 0.15)';
-          imgBadge.style.color = '#c084fc';
-          imgBadge.textContent = `👤 ${charName}`;
-          imgBadge.title = charSheetPath;
-        } else {
-          imgBadge.style.background = 'rgba(239, 68, 68, 0.12)';
-          imgBadge.style.color = '#f87171';
-          imgBadge.textContent = '⚠️ ยังไม่เลือกรูป Character Sheet';
-        }
-      } else {
-        imgBadge.style.background = 'rgba(255, 255, 255, 0.08)';
-        imgBadge.style.color = 'rgba(255, 255, 255, 0.5)';
-        imgBadge.textContent = '🚫 ไม่แนบรูป';
-      }
-      right.appendChild(imgBadge);
-
-      if (item.has_prompt && item.prompt_text) {
-        const applyBtn = document.createElement('button');
-        applyBtn.type = 'button';
-        applyBtn.className = 'secondary';
-        applyBtn.style.padding = '4px 10px';
-        applyBtn.style.fontSize = '0.78rem';
-        applyBtn.style.fontWeight = 'bold';
-        applyBtn.style.borderRadius = '6px';
-        applyBtn.style.background = 'rgba(58, 160, 255, 0.15)';
-        applyBtn.style.borderColor = 'rgba(58, 160, 255, 0.35)';
-        applyBtn.style.color = '#8da6ff';
-        applyBtn.style.cursor = 'pointer';
-        applyBtn.textContent = '⚡ นำไปวางบนเว็บ';
-        applyBtn.title = 'ลบข้อความเดิมในช่อง และวาง Prompt นี้ลงบน Dreamina ทันที';
-        applyBtn.addEventListener('click', () => {
-          seedanceStepIndex = index;
-          const curMode = getSeedanceImageMode();
-          let targetImgs = null;
-          let shouldClear = false;
-
-          if (curMode === 'subfolder') {
-            const rowImgPaths = (item.image_paths && item.image_paths.length > 0) ? item.image_paths : (item.subfolder_image_paths || []);
-            if (rowImgPaths.length > 0) {
-              targetImgs = rowImgPaths;
-            } else if (item.image_path) {
-              targetImgs = [item.image_path];
-            } else {
-              shouldClear = true;
-            }
-          } else if (curMode === 'character_sheet') {
-            const charSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
-            if (charSheetPath) {
-              targetImgs = [charSheetPath];
-            } else {
-              shouldClear = true;
-            }
-          } else {
-            shouldClear = true;
-          }
-
-          applySeedanceDirectSettings({
-            prompt_text: item.prompt_text,
-            image_paths: targetImgs,
-            clear_image: shouldClear
-          });
-          updateSeedanceRunButtonUI();
-          renderSeedanceQueue();
-        });
-        right.appendChild(applyBtn);
-      }
-
-      const downloadItemBtn = document.createElement('button');
-      downloadItemBtn.type = 'button';
-      downloadItemBtn.className = 'secondary';
-      downloadItemBtn.style.padding = '4px 10px';
-      downloadItemBtn.style.fontSize = '0.78rem';
-      downloadItemBtn.style.fontWeight = 'bold';
-      downloadItemBtn.style.borderRadius = '6px';
-      downloadItemBtn.style.background = 'rgba(16, 185, 129, 0.15)';
-      downloadItemBtn.style.borderColor = 'rgba(16, 185, 129, 0.35)';
-      downloadItemBtn.style.color = '#34d399';
-      downloadItemBtn.style.cursor = 'pointer';
-      downloadItemBtn.textContent = '📥 ดาวน์โหลด';
-      downloadItemBtn.title = `สั่งดาวน์โหลดวิดีโอสำหรับ ${item.subfolder_name} บน Dreamina`;
-      downloadItemBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        downloadSeedanceItems([item]);
-      });
-      right.appendChild(downloadItemBtn);
-
+      // ในกล่องนี้ไม่ต้องมีอะไรเลย ตามคำขอของผู้ใช้
       header.appendChild(left);
       header.appendChild(right);
       card.appendChild(header);
 
-      if (item.prompt_text) {
-        const preview = document.createElement('div');
-        preview.style.fontSize = '0.82rem';
-        preview.style.color = 'rgba(255, 255, 255, 0.7)';
-        preview.style.background = 'rgba(0, 0, 0, 0.25)';
-        preview.style.borderRadius = '6px';
-        preview.style.padding = '8px 10px';
-        preview.style.whiteSpace = 'pre-wrap';
-        preview.style.maxHeight = '80px';
-        preview.style.overflowY = 'auto';
-        preview.textContent = item.prompt_text.slice(0, 250) + (item.prompt_text.length > 250 ? '...' : '');
-        card.appendChild(preview);
-      }
+      // (กล่องข้อความพรีวิว Prompt นำออกตามคำขอ: ไม่ต้องมีกล่องนี้)
 
       container.appendChild(card);
     });
@@ -8691,12 +8523,10 @@ function updateSeedanceRunButtonUI() {
   window.scanSeedanceBatch = scanSeedanceBatch;
 
   function clearSeedanceBatch() {
-    if (seedanceBatchQueue.length > 0) {
-      if (!confirm('ต้องการล้างรายการที่สแกนพบทั้งหมดหรือไม่?')) return;
-    }
     seedanceBatchQueue = [];
     seedanceStepIndex = -1;
     renderSeedanceQueue();
+    updateSeedanceRunButtonUI();
     const progressContainer = document.getElementById('seedanceProgressContainer');
     if (progressContainer) progressContainer.classList.add('hidden');
     writeConsoleLine('ล้างรายการคิวทั้งหมดเรียบร้อยแล้ว', 'info', 'seedanceConsole');
@@ -8893,6 +8723,547 @@ function updateSeedanceRunButtonUI() {
   }
   window.downloadSeedanceItems = downloadSeedanceItems;
 
+  // --- Standalone Search & Download by Number (2-Column: Local vs Web) ---
+  let seedanceSearchFoundItems = [];
+
+  function updateSeedanceSearchHeaderBadge(localCount, webCount, isSearchingWeb = false) {
+    const countBadge = document.getElementById('seedanceSearchCountBadge');
+    if (!countBadge) return;
+    countBadge.style.display = 'inline-flex';
+    countBadge.style.alignItems = 'center';
+    countBadge.style.gap = '8px';
+    if (isSearchingWeb) {
+      countBadge.innerHTML = `<span style="color: #c4b5fd;">💻 ในเครื่อง: ${localCount} รายการ</span> <span style="color: rgba(255,255,255,0.3);">|</span> <span style="color: #93c5fd;">🌐 กำลังหาบนเว็บ... (พบ ${webCount})</span>`;
+      countBadge.style.background = 'rgba(59, 130, 246, 0.15)';
+      countBadge.style.borderColor = 'rgba(59, 130, 246, 0.35)';
+      countBadge.style.color = '#93c5fd';
+    } else {
+      countBadge.innerHTML = `<span style="color: #c4b5fd;">💻 ในเครื่อง: ${localCount} รายการ</span> <span style="color: rgba(255,255,255,0.3);">|</span> <span style="color: #34d399;">🌐 บนเว็บ: ${webCount} คลิป</span>`;
+      countBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+      countBadge.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+      countBadge.style.color = '#34d399';
+    }
+  }
+
+  function updateSeedanceWebItemStatus(idx, state, item = null) {
+    const row = document.getElementById(`seedance-row-${idx}`);
+    const badge = document.getElementById(`seedance-web-badge-${idx}`);
+    if (!badge) return;
+
+    if (state === 'waiting') {
+      badge.textContent = '⏳ รอค้นหา';
+      badge.style.background = 'rgba(255, 255, 255, 0.08)';
+      badge.style.color = 'rgba(255, 255, 255, 0.6)';
+      badge.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+      if (row) row.style.background = 'transparent';
+    } else if (state === 'searching') {
+      badge.textContent = '🔍 กำลังค้นหา...';
+      badge.style.background = 'rgba(59, 130, 246, 0.2)';
+      badge.style.color = '#93c5fd';
+      badge.style.border = '1px solid rgba(59, 130, 246, 0.4)';
+      if (row) row.style.background = 'rgba(59, 130, 246, 0.08)';
+    } else if (state === 'done' && item) {
+      if (item.web_status === 'skipped') {
+        badge.textContent = '⚪ ข้าม (ไม่พบในเครื่อง)';
+        badge.style.background = 'rgba(255, 255, 255, 0.08)';
+        badge.style.color = 'rgba(255, 255, 255, 0.5)';
+        badge.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+        if (row) row.style.background = 'transparent';
+      } else if (item.web_status === 'ready' || item.web_has_video) {
+        badge.textContent = '🟢 พบคลิป (พร้อมโหลด)';
+        badge.style.background = 'rgba(16, 185, 129, 0.2)';
+        badge.style.color = '#34d399';
+        badge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+        if (row) row.style.background = 'rgba(16, 185, 129, 0.06)';
+      } else if (item.web_status === 'generating') {
+        badge.textContent = '🟡 กำลังสร้างคลิป';
+        badge.style.background = 'rgba(251, 191, 36, 0.2)';
+        badge.style.color = '#fbbf24';
+        badge.style.border = '1px solid rgba(251, 191, 36, 0.4)';
+        if (row) row.style.background = 'rgba(251, 191, 36, 0.06)';
+      } else if (item.web_status === 'offline') {
+        badge.textContent = '⚪ Chrome Offline';
+        badge.style.background = 'rgba(255, 255, 255, 0.08)';
+        badge.style.color = 'rgba(255, 255, 255, 0.6)';
+        badge.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+        if (row) row.style.background = 'transparent';
+      } else {
+        badge.textContent = '🔴 ยังไม่พบคลิป';
+        badge.style.background = 'rgba(239, 68, 68, 0.15)';
+        badge.style.color = '#f87171';
+        badge.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        if (row) row.style.background = 'transparent';
+      }
+    } else if (state === 'error') {
+      badge.textContent = '⚠️ เกิดข้อผิดพลาด';
+      badge.style.background = 'rgba(239, 68, 68, 0.15)';
+      badge.style.color = '#f87171';
+      badge.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      if (row) row.style.background = 'transparent';
+    }
+  }
+
+  function renderSeedanceSearchResults(items, mode = 'full') {
+    const container = document.getElementById('seedanceSearchResultContainer');
+    const countBadge = document.getElementById('seedanceSearchCountBadge');
+    if (!container) return;
+
+    if (!items || items.length === 0) {
+      container.innerHTML = '';
+      container.style.display = 'none';
+      if (countBadge) countBadge.style.display = 'none';
+      return;
+    }
+
+    const readyCount = items.filter(i => i.web_has_video || i.web_status === 'ready').length;
+    updateSeedanceSearchHeaderBadge(items.length, readyCount, mode === 'local_ready');
+
+    container.innerHTML = '';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '8px';
+
+    // Summary header bar
+    const summaryBar = document.createElement('div');
+    summaryBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 2px 4px;';
+    summaryBar.innerHTML = `
+      <span style="font-size: 0.82rem; font-weight: 600; color: rgba(255, 255, 255, 0.75);">
+        📋 รายการที่ค้นพบ (${items.length} รายการ)
+      </span>
+      <span id="seedanceWebReadyCountBadge" style="font-size: 0.76rem; padding: 2px 8px; border-radius: 12px; background: rgba(16, 185, 129, 0.2); color: #6ee7b7; font-weight: bold;">
+        ${readyCount} พบคลิป
+      </span>
+    `;
+    container.appendChild(summaryBar);
+
+    // Responsive Table Wrapper
+    const tableWrapper = document.createElement('div');
+    tableWrapper.style.cssText = 'width: 100%; max-height: 480px; overflow-y: auto; overflow-x: auto; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(0, 0, 0, 0.2);';
+
+    const table = document.createElement('table');
+    table.style.cssText = 'width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem;';
+
+    // Table Header with exactly: เลข | สถานะบน local | สถานะบน seedance
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+      <tr style="position: sticky; top: 0; z-index: 2; background: #141721; border-bottom: 1px solid rgba(255, 255, 255, 0.12);">
+        <th style="padding: 10px 12px; color: #8da6ff; font-weight: 600; width: 32%;">เลข</th>
+        <th style="padding: 10px 12px; color: #c4b5fd; font-weight: 600; width: 34%;">สถานะบน local</th>
+        <th style="padding: 10px 12px; color: #6ee7b7; font-weight: 600; width: 34%;">สถานะบน seedance</th>
+      </tr>
+    `;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    items.forEach((item, idx) => {
+      const row = document.createElement('tr');
+      row.id = `seedance-row-${idx}`;
+      row.style.cssText = 'border-bottom: 1px solid rgba(255, 255, 255, 0.05); transition: background 0.2s ease;';
+
+      const numText = item.num !== null && item.num !== undefined ? `#${item.num}` : '#';
+      const nameText = item.subfolder_name || item.name || '-';
+      const shortName = nameText.length > 28 ? nameText.slice(0, 26) + '...' : nameText;
+
+      // Col 1: เลข
+      const tdNum = document.createElement('td');
+      tdNum.style.cssText = 'padding: 8px 12px; vertical-align: middle;';
+      tdNum.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span style="background: rgba(127, 92, 255, 0.25); border: 1px solid rgba(127, 92, 255, 0.4); color: #c4b5fd; font-weight: bold; font-size: 0.8rem; padding: 2px 7px; border-radius: 6px;">${numText}</span>
+          <span style="color: #fff; font-size: 0.82rem; font-weight: 500;" title="${nameText}">${shortName}</span>
+        </div>
+      `;
+      row.appendChild(tdNum);
+
+      // Col 2: สถานะบน local (บอกแค่ว่า เจอ หรือ ไม่เจอ)
+      const tdLocal = document.createElement('td');
+      tdLocal.style.cssText = 'padding: 8px 12px; vertical-align: middle;';
+      const isFound = item.local_found !== false && (item.has_prompt || (item.subfolder_path && item.subfolder_path.length > 0));
+      if (isFound) {
+        tdLocal.innerHTML = `<span style="font-size: 0.78rem; color: #34d399; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 2px 9px; border-radius: 6px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;">🟢 เจอ</span>`;
+      } else {
+        tdLocal.innerHTML = `<span style="font-size: 0.78rem; color: #f87171; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 2px 9px; border-radius: 6px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;">🔴 ไม่เจอ</span>`;
+      }
+      row.appendChild(tdLocal);
+
+      // Col 3: สถานะบน seedance
+      const tdWeb = document.createElement('td');
+      tdWeb.style.cssText = 'padding: 8px 12px; vertical-align: middle;';
+      tdWeb.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 3px;">
+          <span id="seedance-web-badge-${idx}" style="font-size: 0.74rem; padding: 2px 8px; border-radius: 6px; font-weight: bold; width: fit-content; display: inline-block;">...</span>
+          <div id="seedance-item-dl-status-${idx}" style="font-size: 0.74rem; color: rgba(255, 255, 255, 0.5);"></div>
+        </div>
+      `;
+      row.appendChild(tdWeb);
+
+      tbody.appendChild(row);
+
+      // Populate initial web state
+      if (item.local_found === false) {
+        updateSeedanceWebItemStatus(idx, 'done', { ...item, web_status: 'skipped' });
+      } else if (mode === 'local_ready') {
+        updateSeedanceWebItemStatus(idx, 'waiting');
+      } else {
+        updateSeedanceWebItemStatus(idx, 'done', item);
+      }
+    });
+
+    table.appendChild(tbody);
+    tableWrapper.appendChild(table);
+    container.appendChild(tableWrapper);
+  }
+  window.renderSeedanceSearchResults = renderSeedanceSearchResults;
+
+  let seedanceSearchActive = false;
+  let seedanceSearchAbortController = null;
+  let seedanceDownloadActive = false;
+
+  async function stopSeedanceSearch() {
+    writeConsoleLine('[Seedance Matcher] 🛑 ส่งคำสั่ง Force Stop การค้นหา...', 'warning', 'seedanceConsole');
+    try {
+      if (seedanceSearchAbortController) {
+        seedanceSearchAbortController.abort();
+      }
+      await jsonFetch('/api/seedance/stop', { method: 'POST' });
+      writeConsoleLine('[Seedance Matcher] 🛑 ส่งคำสั่ง Force Stop สำเร็จ', 'success', 'seedanceConsole');
+    } catch (e) {
+      console.warn('Force stop error:', e);
+    } finally {
+      seedanceSearchActive = false;
+      const searchBtn = document.getElementById('btnSeedanceSearchPrompts');
+      if (searchBtn) {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = '<span>🔍 ค้นหา</span>';
+        searchBtn.style.background = 'rgba(58, 160, 255, 0.2)';
+        searchBtn.style.borderColor = 'rgba(58, 160, 255, 0.4)';
+        searchBtn.style.color = '#8da6ff';
+        searchBtn.style.boxShadow = 'none';
+        searchBtn.title = 'ค้นหา 2 ฝั่ง: ในเครื่องและบนเว็บ Dreamina';
+      }
+      const statusText = document.getElementById('seedanceSearchStatusText');
+      if (statusText) {
+        statusText.innerHTML = '<span style="color: #f87171; font-weight: bold;">🛑 ยกเลิกการค้นหาเรียบร้อยแล้ว (Force Stop)</span>';
+      }
+      if (typeof showToast === 'function') {
+        showToast('ยกเลิกการค้นหาแล้ว (Force Stop)', 'warning');
+      }
+    }
+  }
+  window.stopSeedanceSearch = stopSeedanceSearch;
+
+  async function searchSeedancePromptsByNumber() {
+    const searchBtn = document.getElementById('btnSeedanceSearchPrompts');
+
+    // If currently running, clicking it triggers Force Stop!
+    if (seedanceSearchActive) {
+      await stopSeedanceSearch();
+      return;
+    }
+
+    const input = document.getElementById('seedanceSearchNumberInput');
+    const query = (input?.value || '').trim();
+    const statusText = document.getElementById('seedanceSearchStatusText');
+    const mainFolder = document.getElementById('cfg_seedance_main_folder')?.value.trim() || localStorage.getItem('seedance_main_folder') || '';
+
+    if (!query) {
+      if (statusText) statusText.innerHTML = '<span style="color: #fbbf24;">⚠️ กรุณาพิมพ์หมายเลขโฟลเดอร์ เช่น <code>211</code> หรือ <code>211, 212</code></span>';
+      return;
+    }
+
+    if (!mainFolder) {
+      alert('กรุณาระบุหรือเลือกโฟลเดอร์หลักของ Seedance ก่อน');
+      return;
+    }
+
+    seedanceSearchActive = true;
+    seedanceSearchAbortController = new AbortController();
+
+    if (searchBtn) {
+      searchBtn.disabled = false;
+      searchBtn.innerHTML = '<span>🛑 Force Stop</span>';
+      searchBtn.style.background = 'rgba(239, 68, 68, 0.25)';
+      searchBtn.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+      searchBtn.style.color = '#f87171';
+      searchBtn.style.boxShadow = '0 0 12px rgba(239, 68, 68, 0.35)';
+      searchBtn.title = 'คลิกเพื่อหยุดการค้นหาทันที (Force Stop)';
+    }
+
+    // ==========================================
+    // Phase 1: รวบรวมฝั่งซ้าย (ภายในเครื่อง Local Disk)
+    // ==========================================
+    if (statusText) {
+      statusText.innerHTML = `<span style="color: #c4b5fd;">📂 [ขั้นตอน 1/2] กำลังรวบรวมข้อมูลโฟลเดอร์และ Prompt ภายในเครื่อง (ฝั่งซ้าย)...</span>`;
+    }
+    writeConsoleLine(`[Seedance Matcher] 📂 [1/2] กำลังรวบรวมข้อมูลโฟลเดอร์ "${query}" ภายในเครื่อง...`, 'system', 'seedanceConsole');
+
+    try {
+      const localRes = await jsonFetch('/api/seedance/search-local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          main_folder: mainFolder,
+          subfolders_str: query,
+          image_mode: getSeedanceImageMode(),
+          character_sheet_path: document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '',
+          image_subfolder: document.getElementById('cfg_seedance_image_subfolder')?.value.trim() || 'images'
+        }),
+        signal: seedanceSearchAbortController.signal
+      });
+
+      if (!seedanceSearchActive) return;
+
+      if (!localRes.ok || !localRes.items || localRes.items.length === 0) {
+        seedanceSearchFoundItems = [];
+        renderSeedanceSearchResults([]);
+        writeConsoleLine(`[Seedance Matcher] ⚠️ ไม่พบโฟลเดอร์หมายเลข "${query}" ในเครื่อง`, 'warning', 'seedanceConsole');
+        if (statusText) {
+          statusText.innerHTML = `<span style="color: #f87171;">⚠️ ${localRes.detail || `ไม่พบโฟลเดอร์หมายเลข "${query}" ในโฟลเดอร์หลัก`}</span>`;
+        }
+        return;
+      }
+
+      seedanceSearchFoundItems = localRes.items;
+      // Render immediately on the left side!
+      renderSeedanceSearchResults(seedanceSearchFoundItems, 'local_ready');
+
+      writeConsoleLine(`[Seedance Matcher] ✅ [1/2] รวบรวมฝั่งซ้าย (ในเครื่อง) ครบแล้ว ${seedanceSearchFoundItems.length} รายการ`, 'success', 'seedanceConsole');
+
+      // ==========================================
+      // Phase 2: ค้นหาฝั่งขวา (บนเว็บ Dreamina Web)
+      // ==========================================
+      if (statusText) {
+        statusText.innerHTML = `<span style="color: #6ee7b7;">🌐 [ขั้นตอน 2/2] รวบรวมในเครื่องครบ ${seedanceSearchFoundItems.length} รายการแล้ว! กำลังค้นหาและจับคู่คลิปบนเว็บ Dreamina...</span>`;
+      }
+      writeConsoleLine(`[Seedance Matcher] 🌐 [2/2] เริ่มค้นหาและจับคู่คลิปวิดีโอบนเว็บ Dreamina (Chrome 9222)...`, 'system', 'seedanceConsole');
+
+      let browserConnected = true;
+      let readyCount = 0;
+
+      for (let i = 0; i < seedanceSearchFoundItems.length; i++) {
+        if (!seedanceSearchActive) break;
+
+        const currentItem = seedanceSearchFoundItems[i];
+        if (currentItem.local_found === false) {
+          updateSeedanceWebItemStatus(i, 'done', { ...currentItem, web_status: 'skipped' });
+          continue;
+        }
+
+        updateSeedanceWebItemStatus(i, 'searching');
+
+        try {
+          const pairRes = await jsonFetch('/api/seedance/pair-single', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item: currentItem }),
+            signal: seedanceSearchAbortController.signal
+          });
+
+          if (!seedanceSearchActive) break;
+
+          if (pairRes.ok && pairRes.item) {
+            seedanceSearchFoundItems[i] = pairRes.item;
+            browserConnected = pairRes.browser_connected;
+            updateSeedanceWebItemStatus(i, 'done', pairRes.item);
+            if (pairRes.item.web_has_video || pairRes.item.web_status === 'ready') {
+              readyCount++;
+            }
+          }
+        } catch (itemErr) {
+          if (itemErr.name === 'AbortError' || !seedanceSearchActive) break;
+          console.warn('Pair item error:', itemErr);
+          updateSeedanceWebItemStatus(i, 'error');
+        }
+
+        const webReadyBadge = document.getElementById('seedanceWebReadyCountBadge');
+        if (webReadyBadge) webReadyBadge.textContent = `${readyCount} พบคลิป`;
+        updateSeedanceSearchHeaderBadge(seedanceSearchFoundItems.length, readyCount, i < seedanceSearchFoundItems.length - 1);
+      }
+
+      if (!seedanceSearchActive) return;
+
+      const finalReadyCount = seedanceSearchFoundItems.filter(i => i.web_has_video || i.web_status === 'ready').length;
+      const webReadyBadge = document.getElementById('seedanceWebReadyCountBadge');
+      if (webReadyBadge) webReadyBadge.textContent = `${finalReadyCount} พบคลิป`;
+      updateSeedanceSearchHeaderBadge(seedanceSearchFoundItems.length, finalReadyCount, false);
+
+      writeConsoleLine(`[Seedance Matcher] 🎉 ค้นหาครบทั้ง 2 ฝั่งแล้ว: ในเครื่อง ${seedanceSearchFoundItems.length} รายการ, พบคลิปบน Dreamina ${finalReadyCount} รายการ`, 'success', 'seedanceConsole');
+
+      if (statusText) {
+        if (!browserConnected) {
+          statusText.innerHTML = `<span style="color: #fbbf24; font-weight: bold;">⚠️ รวบรวมในเครื่องพบ ${seedanceSearchFoundItems.length} รายการ แต่ไม่ได้เปิดแท็บ Dreamina บน Chrome 9222</span> (กรุณาเปิดแท็บ Dreamina แล้วกดค้นหาใหม่)`;
+        } else if (finalReadyCount > 0) {
+          statusText.innerHTML = `<span style="color: #34d399; font-weight: bold;">✅ ค้นหาครบ 2 ฝั่งสำเร็จ! พบในเครื่อง ${seedanceSearchFoundItems.length} รายการ (พบคลิปบนเว็บแล้ว ${finalReadyCount} รายการ)</span> — กดปุ่ม <strong>"📥 ดาวน์โหลด"</strong> เพื่อบันทึกไฟล์ MP4`;
+        } else {
+          statusText.innerHTML = `<span style="color: #fbbf24; font-weight: bold;">⚠️ พบในเครื่อง ${seedanceSearchFoundItems.length} รายการ แต่ยังไม่พบคลิปวิดีโอสร้างเสร็จบน Dreamina</span> (กรุณาส่ง Prompt ไปสร้างก่อน หรือรอให้ประมวลผลเสร็จ)`;
+        }
+      }
+    } catch (err) {
+      if (err.name === 'AbortError' || !seedanceSearchActive) {
+        writeConsoleLine('[Seedance Matcher] 🛑 ยกเลิกการค้นหาเรียบร้อยแล้ว', 'warning', 'seedanceConsole');
+        if (statusText) {
+          statusText.innerHTML = '<span style="color: #f87171; font-weight: bold;">🛑 ยกเลิกการค้นหาเรียบร้อยแล้ว (Force Stop)</span>';
+        }
+      } else {
+        writeConsoleLine(`[Seedance Matcher Error] ${err.message}`, 'error', 'seedanceConsole');
+        if (statusText) {
+          statusText.innerHTML = `<span style="color: #f87171;">❌ เกิดข้อผิดพลาด: ${err.message}</span>`;
+        }
+      }
+    } finally {
+      seedanceSearchActive = false;
+      seedanceSearchAbortController = null;
+      if (searchBtn) {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = '<span>🔍 ค้นหา</span>';
+        searchBtn.style.background = 'rgba(58, 160, 255, 0.2)';
+        searchBtn.style.borderColor = 'rgba(58, 160, 255, 0.4)';
+        searchBtn.style.color = '#8da6ff';
+        searchBtn.style.boxShadow = 'none';
+        searchBtn.title = 'ค้นหา 2 ฝั่ง: ในเครื่องและบนเว็บ Dreamina';
+      }
+    }
+  }
+  window.searchSeedancePromptsByNumber = searchSeedancePromptsByNumber;
+
+  async function downloadSeedanceVideoFromSearch() {
+    const dlBtn = document.getElementById('btnSeedanceDownloadVideo');
+    const searchBtn = document.getElementById('btnSeedanceSearchPrompts');
+
+    if (seedanceDownloadActive) {
+      writeConsoleLine('[Seedance Downloader] 🛑 กำลังส่งคำสั่ง Force Stop การดาวน์โหลด...', 'warning', 'seedanceConsole');
+      try {
+        await jsonFetch('/api/seedance/stop', { method: 'POST' });
+        writeConsoleLine('[Seedance Downloader] 🛑 ส่งคำสั่ง Force Stop สำเร็จ', 'success', 'seedanceConsole');
+      } catch (e) {}
+      seedanceDownloadActive = false;
+      return;
+    }
+
+    const input = document.getElementById('seedanceSearchNumberInput');
+    const query = (input?.value || '').trim();
+    const statusText = document.getElementById('seedanceSearchStatusText');
+
+    if (!seedanceSearchFoundItems || seedanceSearchFoundItems.length === 0) {
+      if (query) {
+        await searchSeedancePromptsByNumber();
+        if (!seedanceSearchFoundItems || seedanceSearchFoundItems.length === 0) {
+          return;
+        }
+      } else {
+        alert('กรุณาพิมพ์หมายเลขโฟลเดอร์แล้วกด "🔍 ค้นหา" เพื่อตรวจจับคู่ก่อนดาวน์โหลด');
+        return;
+      }
+    }
+
+    const itemsToDownload = seedanceSearchFoundItems;
+    const downloadableItems = itemsToDownload.filter(i => (i.web_has_video || i.web_status === 'ready' || i.web_video_src) && i.local_found !== false);
+
+    if (downloadableItems.length === 0) {
+      alert('ยังไม่พบคลิปวิดีโอบนเว็บ Dreamina สำหรับรายการที่เลือก กรุณารอสร้างเสร็จ หรือส่ง Prompt ไปสร้างก่อน');
+      return;
+    }
+
+    const count = downloadableItems.length;
+    const names = downloadableItems.map(i => i.subfolder_name).slice(0, 3).join(', ');
+    const displayLabel = count === 1 ? downloadableItems[0].subfolder_name : `${count} รายการ (${names}${count > 3 ? '...' : ''})`;
+
+    seedanceDownloadActive = true;
+
+    if (dlBtn) {
+      dlBtn.disabled = false;
+      dlBtn.innerHTML = '<span class="btn-text">🛑 Force Stop</span>';
+      dlBtn.style.background = 'rgba(239, 68, 68, 0.25)';
+      dlBtn.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+      dlBtn.style.color = '#f87171';
+      dlBtn.style.boxShadow = '0 0 12px rgba(239, 68, 68, 0.35)';
+      dlBtn.title = 'คลิกเพื่อหยุดการดาวน์โหลดทันที (Force Stop)';
+    }
+    if (searchBtn) {
+      searchBtn.disabled = false;
+      searchBtn.innerHTML = '<span>🛑 Force Stop</span>';
+      searchBtn.style.background = 'rgba(239, 68, 68, 0.25)';
+      searchBtn.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+      searchBtn.style.color = '#f87171';
+      searchBtn.title = 'คลิกเพื่อหยุดการทำงานทันที (Force Stop)';
+    }
+
+    if (statusText) {
+      statusText.innerHTML = `<span style="color: #60a5fa;">🚀 กำลังบันทึกวิดีโอของ ${displayLabel} ลงในโฟลเดอร์ย่อยโดยตรง...</span>`;
+    }
+    writeConsoleLine(`[Seedance Downloader] 🚀 สั่งดาวน์โหลด ${displayLabel} จาก Dreamina และบันทึกไฟล์ MP4 ลงโฟลเดอร์...`, 'system', 'seedanceConsole');
+
+    try {
+      const res = await jsonFetch('/api/seedance/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: downloadableItems,
+          save_to_subfolder: true
+        })
+      });
+
+      if (!seedanceDownloadActive) return;
+
+      if (res.ok) {
+        writeConsoleLine(`[Seedance Downloader] ✅ ดาวน์โหลดเสร็จสิ้น ${res.success_count}/${res.total} รายการ`, 'success', 'seedanceConsole');
+        if (res.results) {
+          res.results.forEach((r, idx) => {
+            const el = document.getElementById(`seedance-item-dl-status-${idx}`);
+            if (el) {
+              if (r.ok) {
+                el.innerHTML = `<span style="color: #34d399; font-weight: bold;">✅ บันทึกไฟล์สำเร็จ: <code>${r.saved_file || 'mp4'}</code></span>`;
+              } else {
+                el.innerHTML = `<span style="color: #f87171; font-weight: bold;">⚠️ ${r.detail || 'ไม่สำเร็จ'}</span>`;
+              }
+            }
+            if (r.ok) {
+              const savedStr = r.saved_file ? ` (ไฟล์: ${r.saved_file})` : '';
+              writeConsoleLine(`  - ✅ [${r.num || '-'}] ${r.name}: ดาวน์โหลดสำเร็จ${savedStr}`, 'success', 'seedanceConsole');
+            } else {
+              writeConsoleLine(`  - ⚠️ [${r.num || '-'}] ${r.name}: ${r.detail || 'เกิดข้อผิดพลาด'}`, 'warning', 'seedanceConsole');
+            }
+          });
+        }
+        if (statusText) {
+          statusText.innerHTML = `<span style="color: #34d399; font-weight: bold;">🎉 ดาวน์โหลดสำเร็จ ${res.success_count}/${res.total} รายการ!</span> บันทึกไฟล์ MP4 ลงในโฟลเดอร์ย่อยเรียบร้อยแล้ว`;
+        }
+      } else {
+        writeConsoleLine(`[Seedance Downloader Error] ${res.detail || 'ไม่สามารถดาวน์โหลดได้'}`, 'error', 'seedanceConsole');
+        if (statusText) {
+          statusText.innerHTML = `<span style="color: #f87171;">❌ ดาวน์โหลดไม่สำเร็จ: ${res.detail || 'ไม่พบวิดีโอบน Dreamina'}</span>`;
+        }
+        alert(`ดาวน์โหลดไม่สำเร็จ: ${res.detail || 'ไม่พบวิดีโอบน Dreamina'}`);
+      }
+    } catch (err) {
+      writeConsoleLine(`[Seedance Downloader Error] ${err.message}`, 'error', 'seedanceConsole');
+      if (statusText) {
+        statusText.innerHTML = `<span style="color: #f87171;">❌ เกิดข้อผิดพลาด: ${err.message}</span>`;
+      }
+      alert(`ดาวน์โหลดผิดพลาด: ${err.message}`);
+    } finally {
+      seedanceDownloadActive = false;
+      if (dlBtn) {
+        dlBtn.disabled = false;
+        dlBtn.innerHTML = '<span class="btn-text">📥 ดาวน์โหลด</span><div class="custom-tooltip" id="tooltip_btnSeedanceDownloadVideo">ดาวน์โหลดวิดีโอบน Dreamina และบันทึกลงในโฟลเดอร์ของตัวมันเองโดยตรง</div>';
+        dlBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        dlBtn.style.borderColor = 'transparent';
+        dlBtn.style.color = 'white';
+        dlBtn.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.3)';
+        dlBtn.title = '';
+      }
+      if (searchBtn && !seedanceSearchActive) {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = '<span>🔍 ค้นหา</span>';
+        searchBtn.style.background = 'rgba(58, 160, 255, 0.2)';
+        searchBtn.style.borderColor = 'rgba(58, 160, 255, 0.4)';
+        searchBtn.style.color = '#8da6ff';
+        searchBtn.style.boxShadow = 'none';
+        searchBtn.title = 'ค้นหาและจับคู่ Prompt ในเครื่องกับ Dreamina';
+      }
+    }
+  }
+  window.downloadSeedanceVideoFromSearch = downloadSeedanceVideoFromSearch;
 
   async function runSeedanceBatch(btnElement) {
     const selectedItems = seedanceBatchQueue.filter(p => p.checked !== false && p.has_prompt);
@@ -9629,57 +10000,25 @@ function initSeedanceGenListeners() {
   const clearBtn = document.getElementById('btnClearSeedanceBatch');
   if (clearBtn) clearBtn.addEventListener('click', clearSeedanceBatch);
 
-  const toggleAllBtn = document.getElementById('toggleAllSeedancePromptsBtn');
-  if (toggleAllBtn) {
-    toggleAllBtn.addEventListener('click', () => {
-      const allChecked = seedanceBatchQueue.length > 0 && seedanceBatchQueue.every(p => p.checked !== false);
-      seedanceBatchQueue.forEach(p => p.checked = !allChecked);
-      renderSeedanceQueue();
-    });
-  }
-
-  // Quick Select & Download by Number Listeners
-  const numSelectInput = document.getElementById('seedanceNumberSelectInput');
-  if (numSelectInput) {
-    numSelectInput.addEventListener('input', (e) => {
-      selectSeedanceByNumber(e.target.value, false);
-    });
-    numSelectInput.addEventListener('keydown', (e) => {
+  // Standalone Search & Download by Number (2 Buttons: Search & Download)
+  const searchInput = document.getElementById('seedanceSearchNumberInput');
+  if (searchInput) {
+    searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        selectSeedanceByNumber(e.target.value, true);
+        searchSeedancePromptsByNumber();
       }
     });
   }
 
-  const selectByNumBtn = document.getElementById('btnSeedanceSelectByNumber');
-  if (selectByNumBtn) {
-    selectByNumBtn.addEventListener('click', () => {
-      const val = document.getElementById('seedanceNumberSelectInput')?.value || '';
-      selectSeedanceByNumber(val, true);
-    });
+  const searchBtn = document.getElementById('btnSeedanceSearchPrompts');
+  if (searchBtn) {
+    searchBtn.addEventListener('click', searchSeedancePromptsByNumber);
   }
 
-  const dlSelectedBtn = document.getElementById('btnSeedanceDownloadSelected');
-  if (dlSelectedBtn) {
-    dlSelectedBtn.addEventListener('click', () => {
-      const checkedItems = seedanceBatchQueue.filter(p => p.checked !== false);
-      if (checkedItems.length === 0) {
-        alert('กรุณาพิมพ์เลือกหมายเลข หรือติ๊กเลือกรายการที่ต้องการดาวน์โหลดก่อน');
-        return;
-      }
-      downloadSeedanceItems(checkedItems);
-    });
-  }
-
-  const scanAllBtn = document.getElementById('btnSeedanceScanAllPrompts');
-  if (scanAllBtn) {
-    scanAllBtn.addEventListener('click', scanAllSeedancePrompts);
-  }
-
-  const clearNumBtn = document.getElementById('btnSeedanceClearNumberSelection');
-  if (clearNumBtn) {
-    clearNumBtn.addEventListener('click', clearSeedanceNumberSelection);
+  const dlBtn = document.getElementById('btnSeedanceDownloadVideo');
+  if (dlBtn) {
+    dlBtn.addEventListener('click', downloadSeedanceVideoFromSearch);
   }
 
   const runBtn = document.getElementById('runSeedanceBatchBtn');
@@ -9704,80 +10043,6 @@ function initSeedanceGenListeners() {
     });
   }
 
-  // Seedance Step Debugger Listeners
-  const debugAutoFillBtn = document.getElementById('btnSeedanceDebugAutoFill');
-  if (debugAutoFillBtn) debugAutoFillBtn.addEventListener('click', autoFillSeedanceDebugInputs);
-
-  const debugBrowseImgBtn = document.getElementById('btnSeedanceDebugBrowseImg');
-  if (debugBrowseImgBtn) debugBrowseImgBtn.addEventListener('click', browseSeedanceDebugImage);
-
-  const debugStep1Btn = document.getElementById('btnSeedanceDebugStep1');
-  if (debugStep1Btn) debugStep1Btn.addEventListener('click', (e) => executeSeedanceDebugStep('tab', e.currentTarget));
-
-  const debugStep2Btn = document.getElementById('btnSeedanceDebugStep2');
-  if (debugStep2Btn) debugStep2Btn.addEventListener('click', (e) => executeSeedanceDebugStep('model', e.currentTarget));
-
-  const debugStep3Btn = document.getElementById('btnSeedanceDebugStep3');
-  if (debugStep3Btn) debugStep3Btn.addEventListener('click', (e) => executeSeedanceDebugStep('aspect_ratio', e.currentTarget));
-
-  const debugStep4Btn = document.getElementById('btnSeedanceDebugStep4');
-  if (debugStep4Btn) debugStep4Btn.addEventListener('click', (e) => executeSeedanceDebugStep('duration', e.currentTarget));
-
-  const debugStep5Btn = document.getElementById('btnSeedanceDebugStep5');
-  if (debugStep5Btn) debugStep5Btn.addEventListener('click', (e) => executeSeedanceDebugStep('image', e.currentTarget));
-
-  const debugStep5ClearBtn = document.getElementById('btnSeedanceDebugStep5Clear');
-  if (debugStep5ClearBtn) {
-    debugStep5ClearBtn.addEventListener('click', async (e) => {
-      const ok = await executeSeedanceDebugStep('clear_image', e.currentTarget);
-      if (ok) {
-        const imgInp = document.getElementById('seedanceDebugImageInput');
-        if (imgInp) imgInp.value = '';
-      }
-    });
-  }
-
-  const debugStep6Btn = document.getElementById('btnSeedanceDebugStep6');
-  if (debugStep6Btn) debugStep6Btn.addEventListener('click', (e) => executeSeedanceDebugStep('prompt', e.currentTarget));
-
-  const debugStep7Btn = document.getElementById('btnSeedanceDebugStep7');
-  if (debugStep7Btn) debugStep7Btn.addEventListener('click', (e) => executeSeedanceDebugStep('generate', e.currentTarget));
-
-  const debugStepAllBtn = document.getElementById('btnSeedanceDebugStepAll');
-  if (debugStepAllBtn) debugStepAllBtn.addEventListener('click', (e) => executeSeedanceDebugStep('all', e.currentTarget));
-
-  const debugStepAllGenBtn = document.getElementById('btnSeedanceDebugStepAllGen');
-  if (debugStepAllGenBtn) debugStepAllGenBtn.addEventListener('click', (e) => executeSeedanceDebugStep('all', e.currentTarget, { click_generate: true }));
-
-  const debugDirectGenBtn = document.getElementById('btnSeedanceDebugDirectGen');
-  if (debugDirectGenBtn) debugDirectGenBtn.addEventListener('click', (e) => executeSeedanceDebugStep('generate', e.currentTarget));
-
-  const debugClearBothBtn = document.getElementById('btnSeedanceDebugClearBoth');
-  if (debugClearBothBtn) {
-    debugClearBothBtn.addEventListener('click', async (e) => {
-      const ok = await executeSeedanceDebugStep('clear_both', e.currentTarget);
-      if (ok) {
-        const pInp = document.getElementById('seedanceDebugPromptInput');
-        if (pInp) pInp.value = '';
-        const imgInp = document.getElementById('seedanceDebugImageInput');
-        if (imgInp) imgInp.value = '';
-      }
-    });
-  }
-
-  const toggleDownloadEnhancerBtn = document.getElementById('btnSeedanceToggleDownloadEnhancer');
-  if (toggleDownloadEnhancerBtn) {
-    toggleDownloadEnhancerBtn.addEventListener('click', (e) => {
-      toggleSeedanceDownloadEnhancer(e.currentTarget);
-    });
-  }
-
-  const debugDownloadEnhancerBtn = document.getElementById('btnSeedanceDebugDownloadEnhancer');
-  if (debugDownloadEnhancerBtn) {
-    debugDownloadEnhancerBtn.addEventListener('click', (e) => {
-      toggleSeedanceDownloadEnhancer(e.currentTarget);
-    });
-  }
 
   // Load Seedance presets and initialize button UI immediately
   loadSeedancePresets();
