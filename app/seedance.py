@@ -144,102 +144,79 @@ def find_image_in_folder(
     return all_imgs[0][0], all_imgs[0][1]
 
 def clear_seedance_image(driver) -> bool:
-    """Removes all currently attached reference images from Dreamina."""
+    """Removes all currently attached reference images from Dreamina composer."""
     try:
-        from selenium.webdriver.common.action_chains import ActionChains
-
-        # Loop up to 15 attempts to ensure ALL images are deleted if multiple exist
         total_removed = 0
-        for iteration in range(15):
-            # Check how many images are currently attached in composer
-            img_count = driver.execute_script("""
-                const refs = document.querySelector('[data-content-generator-references="true"]');
-                if (!refs) return 0;
-                return refs.querySelectorAll('img').length;
+        for iteration in range(12):
+            res = driver.execute_script("""
+                // 1. Find all reference images currently attached in composer area
+                const imgs = Array.from(document.querySelectorAll('img.image-DAOzUW, [class*="reference"] img')).filter(img => {
+                    const r = img.getBoundingClientRect();
+                    return r.top > 500 && r.height > 5;
+                });
+                if (imgs.length === 0) return { done: true, count: 0 };
+
+                // 2. Hover over the first image and its container to trigger remove button render
+                const targetImg = imgs[0];
+                let p = targetImg;
+                while (p && !p.classList.contains('reference-item-ZGVyJs') && p !== document.body) {
+                    p.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                    p.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                    p = p.parentElement;
+                }
+                if (p) {
+                    p.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                    p.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                }
+
+                // 3. Find and click the remove button container
+                const removeBtn = document.querySelector('.remove-button-container-B8A1_x, div[class*="remove-button-container"], [data-reference-remove-button="true"], .remove-button-f7uCBH, div[class*="remove-button"]');
+                if (removeBtn) {
+                    const pKey = Object.keys(removeBtn).find(k => k.startsWith('__reactProps'));
+                    if (pKey && removeBtn[pKey] && typeof removeBtn[pKey].onClick === 'function') {
+                        removeBtn[pKey].onClick({ stopPropagation: () => {}, preventDefault: () => {} });
+                        return { done: false, method: 'reactProps', count: imgs.length };
+                    }
+                    removeBtn.click();
+                    return { done: false, method: 'domClick', count: imgs.length };
+                }
+
+                // 4. Fallback search across any reference container
+                const anyRemoveBtn = Array.from(document.querySelectorAll('.remove-button-container-B8A1_x, div[class*="remove-button-container"], [data-reference-remove-button="true"]'))
+                                          .find(b => b.getBoundingClientRect().top > 500);
+                if (anyRemoveBtn) {
+                    const pKey = Object.keys(anyRemoveBtn).find(k => k.startsWith('__reactProps'));
+                    if (pKey && anyRemoveBtn[pKey] && typeof anyRemoveBtn[pKey].onClick === 'function') {
+                        anyRemoveBtn[pKey].onClick({ stopPropagation: () => {}, preventDefault: () => {} });
+                        return { done: false, method: 'reactPropsFallback', count: imgs.length };
+                    }
+                    anyRemoveBtn.click();
+                    return { done: false, method: 'domClickFallback', count: imgs.length };
+                }
+
+                return { done: false, method: 'noButtonFound', count: imgs.length };
             """)
-            if img_count == 0:
+
+            if not res or res.get("done"):
                 break
 
-            # 1. Click any remove buttons that are already rendered in the DOM
-            clicked_any = driver.execute_script("""
-                const refs = document.querySelector('[data-content-generator-references="true"]');
-                if (!refs) return 0;
-                const btns = Array.from(refs.querySelectorAll('[data-reference-remove-button="true"], .remove-button-f7uCBH, div[class*="remove-button"], button[class*="remove"], [class*="delete"]'));
-                let clicked = 0;
-                for (const btn of btns) {
-                    btn.click();
-                    clicked++;
-                }
-                return clicked;
-            """)
+            total_removed += 1
+            time.sleep(0.35)
 
-            if clicked_any > 0:
-                total_removed += clicked_any
-                time.sleep(0.4)
-                continue
-
-            # 2. If buttons are only visible on hover, hover over each reference item containing an img
-            try:
-                target_elems = driver.execute_script("""
-                    const refs = document.querySelector('[data-content-generator-references="true"]');
-                    if (!refs) return [];
-                    const imgs = refs.querySelectorAll('img');
-                    const targets = [];
-                    for (const img of imgs) {
-                        const container = img.closest('div[data-index]') ||
-                                          img.closest('.reference-item-ZGVyJs') ||
-                                          img.closest('.reference-a5qJDc') ||
-                                          img.parentElement ||
-                                          img;
-                        if (container && !targets.includes(container)) {
-                            targets.push(container);
-                        }
-                    }
-                    return targets;
-                """)
-
-                for target in target_elems:
-                    try:
-                        ActionChains(driver).move_to_element(target).perform()
-                        time.sleep(0.2)
-                        driver.execute_script("""
-                            const target = arguments[0];
-                            let clicked = false;
-                            if (target) {
-                                const btn = target.querySelector('[data-reference-remove-button="true"], .remove-button-f7uCBH, div[class*="remove-button"], button[class*="remove"], [class*="delete"]');
-                                if (btn) {
-                                    btn.click();
-                                    clicked = true;
-                                }
-                            }
-                            if (!clicked) {
-                                const refs = document.querySelector('[data-content-generator-references="true"]');
-                                if (refs) {
-                                    const btn = refs.querySelector('[data-reference-remove-button="true"], .remove-button-f7uCBH, div[class*="remove-button"], button[class*="remove"], [class*="delete"]');
-                                    if (btn) btn.click();
-                                }
-                            }
-                        """, target)
-                        time.sleep(0.3)
-                    except Exception:
-                        pass
-            except Exception as hover_err:
-                log(f"[Seedance] Warning on hover remove button: {hover_err}")
-
-            time.sleep(0.4)
-
-        # Final verification
+        # Final verification: check if any composer reference images remain
         remaining_count = driver.execute_script("""
-            const refs = document.querySelector('[data-content-generator-references="true"]');
-            if (!refs) return 0;
-            return refs.querySelectorAll('img').length;
+            const imgs = Array.from(document.querySelectorAll('img.image-DAOzUW, [class*="reference"] img')).filter(img => {
+                const r = img.getBoundingClientRect();
+                return r.top > 500 && r.height > 5;
+            });
+            return imgs.length;
         """)
 
         if remaining_count == 0:
             if total_removed > 0:
                 log(f"[Seedance] 🗑️ นำรูปภาพอ้างอิงทั้งหมด ({total_removed} รูป) ออกเรียบร้อยแล้ว")
             else:
-                log("[Seedance] 🗑️ นำรูปภาพอ้างอิงเดิมออกเรียบร้อยแล้ว")
+                log("[Seedance] 🗑️ ไม่มีรูปภาพอ้างอิงค้างอยู่บน Dreamina")
             return True
         else:
             log(f"[Seedance] ⚠️ ยังมีรูปภาพอ้างอิงเหลืออยู่ {remaining_count} รูปบน Dreamina")
@@ -438,10 +415,12 @@ def set_seedance_images(driver, image_paths: list[str]) -> bool:
     log(f"[Seedance] 📤 แนบไฟล์ผ่าน {res.get('method')} สำเร็จ {res.get('count')} รูป")
     time.sleep(0.8)
 
-    # Verify upload thumbnail count
+    # Verify upload thumbnail count in composer
     img_count = driver.execute_script("""
-        const refs = document.querySelectorAll("[data-content-generator-references=true] img, .reference-item-ZGVyJs img, img[class*=reference], img[class*=image-]");
-        return Array.from(refs).filter(img => img.src && (img.src.startsWith("blob:") || img.src.includes("byteimg") || img.src.includes("dreamina"))).length;
+        return Array.from(document.querySelectorAll('img.image-DAOzUW, [class*="reference"] img')).filter(img => {
+            const r = img.getBoundingClientRect();
+            return r.top > 500 && r.height > 5;
+        }).length;
     """)
 
     log(f"[Seedance] ✅ แนบรูปภาพสำเร็จ {len(valid_paths)} รูป (แสดงบนเว็บ {img_count} รูป)")
@@ -1271,12 +1250,14 @@ def apply_all_seedance_settings(
     if clear_mode in ("both", "image"):
         if target_imgs:
             results["image"] = set_seedance_images(driver, target_imgs)
-        elif clear_image or clear_mode == "image":
+        else:
             results["image"] = clear_seedance_image(driver)
     else:
-        # clear_mode == "prompt" -> Do NOT clear image on Dreamina unless target_imgs provided
+        # clear_mode == "prompt" -> Do NOT clear image on Dreamina unless target_imgs provided or clear_image explicitly set
         if target_imgs:
             results["image"] = set_seedance_images(driver, target_imgs)
+        elif clear_image:
+            results["image"] = clear_seedance_image(driver)
 
     # 2. Handle Prompt based on clear_mode
     if prompt_text and prompt_text.strip():
@@ -1419,8 +1400,10 @@ def run_seedance_batch(
                     target_char_img = character_sheet_path or (item_img_paths[0] if item_img_paths else None)
                     if target_char_img and os.path.isfile(target_char_img):
                         has_img = driver.execute_script("""
-                            const refs = document.querySelector('[data-content-generator-references="true"]');
-                            return !!(refs && refs.querySelector('img'));
+                            return Array.from(document.querySelectorAll('img.image-DAOzUW, [class*="reference"] img')).some(img => {
+                                const r = img.getBoundingClientRect();
+                                return r.top > 500 && r.height > 5;
+                            });
                         """)
                         if not has_img:
                             log(f"[Seedance] 👤 แนบรูป Character Sheet: {os.path.basename(target_char_img)}")
@@ -1437,8 +1420,10 @@ def run_seedance_batch(
                     target_char_img = character_sheet_path or (item_img_paths[0] if item_img_paths else None)
                     if target_char_img and os.path.isfile(target_char_img):
                         has_img = driver.execute_script("""
-                            const refs = document.querySelector('[data-content-generator-references="true"]');
-                            return !!(refs && refs.querySelector('img'));
+                            return Array.from(document.querySelectorAll('img.image-DAOzUW, [class*="reference"] img')).some(img => {
+                                const r = img.getBoundingClientRect();
+                                return r.top > 500 && r.height > 5;
+                            });
                         """)
                         if not has_img:
                             set_seedance_images(driver, [target_char_img])
