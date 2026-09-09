@@ -278,13 +278,6 @@ ${step5}
 - Set 2: 7-9 (เอาคลิป 7,8,9 มารวมกัน)</em>`;
   }
 
-  const tooltipRunStoryboard = document.getElementById('tooltip_btnRunStoryboardAutofill');
-  if (tooltipRunStoryboard) {
-    tooltipRunStoryboard.textContent = `📋 รันการเติมข้อมูล (Autofill):
-1. ระบบจะหาปุ่มทั้งหมดที่ตรงกับตัวเลือก
-2. สั่ง Chrome ให้คลิกเพื่อป้อนข้อมูลตัวละคร/สถานที่/อุปกรณ์ ในหน้าเว็บ Google Flow โดยอัตโนมัติ`;
-  }
-
   const tooltipScanMeta = document.getElementById('tooltip_btnScanMetaBatch');
   if (tooltipScanMeta) {
     const metaFolder = document.getElementById('cfg_meta_main_folder')?.value.trim() || '[ยังไม่ระบุโฟลเดอร์]';
@@ -485,7 +478,6 @@ async function updatePortStatus() {
   // Sidebar navigation elements
   const tabBrowserSetup = document.getElementById('tabBrowserSetupBtn');
   const tabImageGen = document.getElementById('tabImageGenBtn');
-  const tabStoryboardGen = document.getElementById('tabStoryboardGenBtn');
   const tabVideoGen = document.getElementById('tabVideoGenBtn');
   const tabVideoHelper = document.getElementById('tabVideoHelperBtn');
   const tabSeedanceGen = document.getElementById('tabSeedanceGenBtn');
@@ -497,7 +489,7 @@ async function updatePortStatus() {
   const sidebarProfilePort = document.getElementById('sidebar_active_profile_port');
   const browserStatusDot = document.getElementById('sidebar_browser_status_dot');
 
-  const otherTabs = [tabImageGen, tabStoryboardGen, tabVideoGen, tabVideoHelper, tabSeedanceGen, tabMetaAutoPost];
+  const otherTabs = [tabImageGen, tabVideoGen, tabVideoHelper, tabSeedanceGen, tabMetaAutoPost];
 
   if (!select || !select.value) {
     if (badge) {
@@ -807,7 +799,6 @@ inputsToListen.forEach(id => {
 function initTabNavigation() {
   const btnBrowserSetup = document.getElementById('tabBrowserSetupBtn');
   const btnImageGen = document.getElementById('tabImageGenBtn');
-  const btnStoryboardGen = document.getElementById('tabStoryboardGenBtn');
   const btnVideoGen = document.getElementById('tabVideoGenBtn');
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
@@ -817,7 +808,6 @@ function initTabNavigation() {
   
   const viewBrowserSetup = document.getElementById('browserSetupView');
   const viewImageGen = document.getElementById('imageGenView');
-  const viewStoryboardGen = document.getElementById('storyboardGenView');
   const viewVideoGen = document.getElementById('videoGenView');
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
@@ -828,7 +818,6 @@ function initTabNavigation() {
   const tabs = [
     { btn: btnBrowserSetup, view: viewBrowserSetup, onLoad: null },
     { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
-    { btn: btnStoryboardGen, view: viewStoryboardGen, onLoad: () => { console.log('Storyboard loaded'); } },
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
@@ -878,7 +867,6 @@ function initTabNavigation() {
 function restoreSavedTab() {
   const btnBrowserSetup = document.getElementById('tabBrowserSetupBtn');
   const btnImageGen = document.getElementById('tabImageGenBtn');
-  const btnStoryboardGen = document.getElementById('tabStoryboardGenBtn');
   const btnVideoGen = document.getElementById('tabVideoGenBtn');
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
@@ -888,7 +876,6 @@ function restoreSavedTab() {
 
   const viewBrowserSetup = document.getElementById('browserSetupView');
   const viewImageGen = document.getElementById('imageGenView');
-  const viewStoryboardGen = document.getElementById('storyboardGenView');
   const viewVideoGen = document.getElementById('videoGenView');
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
@@ -899,7 +886,6 @@ function restoreSavedTab() {
   const tabs = [
     { btn: btnBrowserSetup, view: viewBrowserSetup, onLoad: null },
     { btn: btnImageGen, view: viewImageGen, onLoad: loadImagePrompts },
-    { btn: btnStoryboardGen, view: viewStoryboardGen, onLoad: () => { console.log('Storyboard loaded'); } },
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
@@ -11532,173 +11518,7 @@ document.getElementById('btnGeneratePendingScenes')?.addEventListener('click', a
 });
 
 
-// Storyboard Autofill Event Listeners & Configs
 document.addEventListener('DOMContentLoaded', () => {
-  // Load persisted default delay from localStorage on startup (fallback to 1.5)
-  const savedDelayDefault = localStorage.getItem('flowkit_autofill_delay_default');
-  const delayInput = document.getElementById('numAutofillDelay');
-  if (delayInput) {
-    delayInput.value = savedDelayDefault || '1.5';
-  }
-
-  // Set Default Delay button (saves current input value as the new default)
-  document.getElementById('btnSetAutofillDelayDefault')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    const delayInput = document.getElementById('numAutofillDelay');
-    if (delayInput) {
-      const currentVal = delayInput.value;
-      localStorage.setItem('flowkit_autofill_delay_default', currentVal);
-      showToast(`บันทึกดีเลย์ ${currentVal} วินาที เป็นค่าเริ่มต้นใหม่เรียบร้อยแล้ว`, 'success');
-    }
-  });
-
-  // Load and bind checkbox states with local storage
-  const chkChars = document.getElementById('chkAutofillChars');
-  if (chkChars) {
-    const saved = localStorage.getItem('flowkit_autofill_chars');
-    if (saved !== null) chkChars.checked = (saved === 'true');
-    chkChars.addEventListener('change', () => {
-      localStorage.setItem('flowkit_autofill_chars', chkChars.checked);
-    });
-  }
-
-  const chkLocs = document.getElementById('chkAutofillLocs');
-  if (chkLocs) {
-    const saved = localStorage.getItem('flowkit_autofill_locs');
-    if (saved !== null) chkLocs.checked = (saved === 'true');
-    chkLocs.addEventListener('change', () => {
-      localStorage.setItem('flowkit_autofill_locs', chkLocs.checked);
-    });
-  }
-
-  const chkProps = document.getElementById('chkAutofillProps');
-  if (chkProps) {
-    const saved = localStorage.getItem('flowkit_autofill_props');
-    if (saved !== null) chkProps.checked = (saved === 'true');
-    chkProps.addEventListener('change', () => {
-      localStorage.setItem('flowkit_autofill_props', chkProps.checked);
-    });
-  }
-
-  const chkScenes = document.getElementById('chkAutofillScenes');
-  const configDiv = document.getElementById('autofillScenesConfig');
-  if (chkScenes) {
-    const saved = localStorage.getItem('flowkit_autofill_scenes');
-    if (saved !== null) chkScenes.checked = (saved === 'true');
-    
-    // Set initial visibility
-    if (configDiv) {
-      configDiv.style.display = chkScenes.checked ? 'flex' : 'none';
-    }
-
-    chkScenes.addEventListener('change', () => {
-      localStorage.setItem('flowkit_autofill_scenes', chkScenes.checked);
-      if (configDiv) {
-        configDiv.style.display = chkScenes.checked ? 'flex' : 'none';
-      }
-    });
-  }
-
-  // Storyboard Autofill Event Listener
-  document.getElementById('btnRunStoryboardAutofill')?.addEventListener('click', async () => {
-    const btn = document.getElementById('btnRunStoryboardAutofill');
-    const chkChars = document.getElementById('chkAutofillChars')?.checked;
-    const chkLocs = document.getElementById('chkAutofillLocs')?.checked;
-    const chkProps = document.getElementById('chkAutofillProps')?.checked;
-    const chkScenes = document.getElementById('chkAutofillScenes')?.checked;
-    
-    const delaySecVal = parseFloat(document.getElementById('numAutofillDelay')?.value || '1.5');
-    const rangeVal = document.getElementById('txtAutofillRange')?.value || '';
-    
-    const storyboardConsole = document.getElementById('storyboardConsole');
-    if (storyboardConsole) {
-      storyboardConsole.innerHTML = '<div class="console-line system">Starting Storyboard Autofill automation...</div>';
-    }
-    
-    const logToStoryboardConsole = (text, type = 'info') => {
-      if (!storyboardConsole) return;
-      const div = document.createElement('div');
-      div.className = `console-line ${type}`;
-      div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
-      storyboardConsole.appendChild(div);
-      storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
-    };
-
-    if (btn) {
-      btn.disabled = true;
-      const btnText = btn.querySelector('.btn-text');
-      if (btnText) btnText.textContent = 'กำลังทำงาน...';
-    }
-    
-    try {
-      logToStoryboardConsole('Sending request to backend...', 'info');
-      const res = await jsonFetch('/api/step/storyboard-autofill', {
-        method: 'POST',
-        body: JSON.stringify({
-          autofill_characters: chkChars,
-          autofill_locations: chkLocs,
-          autofill_props: chkProps,
-          autofill_scenes: chkScenes,
-          delay_seconds: delaySecVal,
-          scene_range: rangeVal
-        })
-      });
-      
-      if (res && res.ok) {
-        logToStoryboardConsole(`SUCCESS: Clicked ${res.clicked_count} autofill button(s).`, 'success');
-        if (res.clicked_buttons && res.clicked_buttons.length > 0) {
-          res.clicked_buttons.forEach(btnName => {
-            logToStoryboardConsole(`- Clicked button: "${btnName}"`, 'success');
-          });
-        } else {
-          logToStoryboardConsole('No matching autofill buttons were found on the active page.', 'warning');
-        }
-        showToast('Storyboard Autofill completed successfully!', 'success');
-      } else {
-        const errMsg = res ? res.detail || JSON.stringify(res) : 'Unknown error';
-        logToStoryboardConsole(`FAILED: ${errMsg}`, 'error');
-        showToast('Autofill failed: ' + errMsg, 'error');
-      }
-    } catch (err) {
-      logToStoryboardConsole(`ERROR: ${err.message || err}`, 'error');
-      showToast('Autofill error: ' + (err.message || err), 'error');
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        const btnText = btn.querySelector('.btn-text');
-        if (btnText) btnText.textContent = '⚡ RUN AUTOFILL BUTTONS';
-      }
-    }
-  });
-
-  // Force Stop Autofill Event Listener
-  document.getElementById('btnStopStoryboardAutofill')?.addEventListener('click', async () => {
-    const storyboardConsole = document.getElementById('storyboardConsole');
-    const logToStoryboardConsole = (text, type = 'info') => {
-      if (!storyboardConsole) return;
-      const div = document.createElement('div');
-      div.className = `console-line ${type}`;
-      div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
-      storyboardConsole.appendChild(div);
-      storyboardConsole.scrollTop = storyboardConsole.scrollHeight;
-    };
-
-    try {
-      logToStoryboardConsole('Sending Force Stop request to browser...', 'warning');
-      const res = await jsonFetch('/api/step/storyboard-autofill/stop', {
-        method: 'POST'
-      });
-      if (res && res.ok) {
-        logToStoryboardConsole('Force Stop request sent successfully! Checking if active script terminated...', 'success');
-        showToast('Autofill Force Stop request sent!', 'info');
-      } else {
-        logToStoryboardConsole('Failed to send stop request: ' + (res.message || 'Unknown'), 'error');
-      }
-    } catch (err) {
-      logToStoryboardConsole('Error sending stop request: ' + (err.message || err), 'error');
-    }
-  });
-
   // --- Dynamic Color Preset & Light/Dark Theme Switching System ---
   const htmlRoot = document.documentElement;
   const themeModeToggle = document.getElementById('themeModeToggle');
