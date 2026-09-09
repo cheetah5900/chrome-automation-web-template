@@ -1086,6 +1086,13 @@ async function loadConfig() {
         shopeeDelayMax.value = defDelayMax;
       }
     }
+    const shopeeSubfolders = document.getElementById('cfg_shopee_subfolders');
+    if (shopeeSubfolders) {
+      const savedSub = localStorage.getItem('shopee_subfolders');
+      if (savedSub !== null && savedSub !== undefined && !shopeeSubfolders.value) {
+        shopeeSubfolders.value = savedSub;
+      }
+    }
     if (typeof loadShopeePresets === 'function') loadShopeePresets(config.shopee_presets);
     loadSeedancePresets(config.seedance_presets);
     
@@ -7245,6 +7252,9 @@ async function browseShopeeMainFolder() {
 async function scanShopeeBatch() {
   const mainFolder = document.getElementById('cfg_shopee_main_folder')?.value || '';
   const subfolders = document.getElementById('cfg_shopee_subfolders')?.value || '';
+  if (subfolders !== undefined) {
+    localStorage.setItem('shopee_subfolders', subfolders);
+  }
   const videoPrefix = document.getElementById('cfg_shopee_video_prefix')?.value || 'combined';
   const startDate = document.getElementById('cfg_shopee_start_date')?.value || '';
   const startHour = parseInt(document.getElementById('cfg_shopee_start_hour')?.value, 10) || 18;
@@ -7803,6 +7813,20 @@ function initShopeeAffiliateListeners() {
         showToast(`บันทึกในเครื่องแล้ว (${minVal} - ${maxVal} วิ)`, 'success');
         logShopeeConsole(`📌 บันทึกค่าเริ่มต้นการหน่วงเวลา: ${minVal} - ${maxVal} วิ`, 'success');
       }
+    });
+  }
+
+  const subfoldersInput = document.getElementById('cfg_shopee_subfolders');
+  if (subfoldersInput) {
+    const savedSub = localStorage.getItem('shopee_subfolders');
+    if (savedSub !== null && savedSub !== undefined && !subfoldersInput.value) {
+      subfoldersInput.value = savedSub;
+    }
+    subfoldersInput.addEventListener('input', () => {
+      localStorage.setItem('shopee_subfolders', subfoldersInput.value);
+    });
+    subfoldersInput.addEventListener('change', () => {
+      localStorage.setItem('shopee_subfolders', subfoldersInput.value);
     });
   }
 
