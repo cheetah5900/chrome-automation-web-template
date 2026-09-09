@@ -6699,6 +6699,11 @@ async function runMetaAutoPost(btnElement) {
     alert('กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน');
     return;
   }
+  if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+    writeConsoleLine(`[Meta Auto Post Error] ❌ URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย http:// หรือ https:// (ค่าปัจจุบัน: ${targetUrl})`, 'error', 'metaConsole');
+    alert('URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย http:// หรือ https://');
+    return;
+  }
 
   if (btnElement) {
     btnElement.disabled = true;
@@ -6749,10 +6754,15 @@ async function runMetaAutoPost(btnElement) {
               writeConsoleLine(`[Meta Auto Post] ${prog.message}`, prog.status === 'error' ? 'error' : 'info', 'metaConsole');
               lastMsg = prog.message;
             }
-            if (prog.status === 'completed' || prog.status === 'error') {
+            if (prog.status === 'completed' || prog.status === 'error' || prog.status === 'completed_with_errors') {
               isDone = true;
               if (prog.status === 'completed') {
                 writeConsoleLine(`🎉 Auto Post ดำเนินการเสร็จสมบูรณ์ทุกรายการ!`, 'success', 'metaConsole');
+              } else if (prog.status === 'completed_with_errors') {
+                writeConsoleLine(`⚠️ Auto Post สิ้นสุด: ${prog.message}`, 'warning', 'metaConsole');
+                if (prog.errors && prog.errors.length > 0) {
+                  prog.errors.forEach(err => writeConsoleLine(`- ${err}`, 'error', 'metaConsole'));
+                }
               } else if (prog.status === 'error') {
                 writeConsoleLine(`❌ Auto Post เกิดข้อผิดพลาด: ${prog.message}`, 'error', 'metaConsole');
               }
@@ -6830,6 +6840,11 @@ async function runMetaStep1(btn) {
   if (!targetUrl) {
     writeConsoleLine(`[Step 1 Error] ❌ กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน`, 'error', 'metaConsole');
     alert('กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน');
+    return;
+  }
+  if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+    writeConsoleLine(`[Step 1 Error] ❌ URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย http:// หรือ https:// (ค่าปัจจุบัน: ${targetUrl})`, 'error', 'metaConsole');
+    alert('URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย http:// หรือ https://');
     return;
   }
   writeConsoleLine(`[Step 1] 🌐 กำลังเปิด Composer URL: ${targetUrl}...`, 'system', 'metaConsole');

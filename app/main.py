@@ -4353,7 +4353,12 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", del
         global_meta_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
         global_meta_progress["percent"] = 100
         global_meta_progress["current"] = len(posts)
-        global_meta_progress["message"] = f"✅ โพสต์ตามคิวสำเร็จครบทั้งหมด {res['success_count']} รายการ" if res["ok"] else f"เสร็จสิ้น {res['success_count']}/{len(posts)} รายการ"
+        global_meta_progress["errors"] = res.get("errors", [])
+        if res["ok"]:
+            global_meta_progress["message"] = f"✅ โพสต์ตามคิวสำเร็จครบทั้งหมด {res['success_count']} รายการ"
+        else:
+            first_err = res["errors"][0] if res.get("errors") else "พบข้อผิดพลาด"
+            global_meta_progress["message"] = f"เสร็จสิ้น {res['success_count']}/{len(posts)} รายการ: {first_err}"
 
     except Exception as e:
         log(f"[Meta Auto Post Error] {e}")

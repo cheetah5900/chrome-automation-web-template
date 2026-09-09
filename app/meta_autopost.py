@@ -4,6 +4,7 @@ import time
 import random
 import subprocess
 import argparse
+import urllib.parse
 from datetime import datetime
 from typing import Any, Callable, Optional
 from selenium.webdriver.common.by import By
@@ -20,30 +21,89 @@ def log(msg: str) -> None:
     except Exception:
         pass
 
-def cleanup_browser_tabs(driver) -> None:
-    """Closes all extraneous tabs/windows, keeping only the active single working tab."""
+def ensure_active_window(driver, target_url: str = "") -> str:
+    """
+    Ensures driver is switched to a valid, responsive window handle.
+    If current window is dead or closed, safely switches to an active tab or creates one via CDP.
+    Never raises 'no such window: target window already closed'.
+    """
+    if not driver:
+        raise RuntimeError("WebDriver instance is None")
+
+    # 1. Quick test if current handle is responsive
+    current_ok = False
+    try:
+        _ = driver.current_window_handle
+        _ = driver.title
+        current_ok = True
+    except Exception:
+        current_ok = False
+
+    # 2. Extract target domain to prioritize tabs matching target domain
+    target_host = ""
+    if target_url:
+        try:
+            target_host = urllib.parse.urlparse(target_url).netloc.lower()
+        except Exception:
+            target_host = ""
+
+    # 3. Retrieve all window handles
+    handles = []
     try:
         handles = driver.window_handles
-        if len(handles) > 1:
-            main_handle = None
-            for h in handles:
-                try:
-                    driver.switch_to.window(h)
-                    if "business.facebook.com" in driver.current_url:
-                        main_handle = h
-                        break
-                except Exception:
-                    pass
-            if not main_handle:
-                main_handle = handles[0]
-            for h in handles:
-                if h != main_handle:
-                    try:
-                        driver.switch_to.window(h)
-                        driver.close()
-                    except Exception:
-                        pass
-            driver.switch_to.window(main_handle)
+    except Exception as e:
+        log(f"[ensure_active_window] Error querying window_handles: {e}")
+
+    live_handles = []
+    matched_handle = None
+
+    for h in handles:
+        try:
+            driver.switch_to.window(h)
+            curr = driver.current_url.lower()
+            live_handles.append(h)
+            if target_host and target_host in curr:
+                matched_handle = h
+                break
+            elif "business.facebook.com" in curr or "facebook.com" in curr:
+                matched_handle = h
+                break
+        except Exception:
+            continue
+
+    if matched_handle:
+        driver.switch_to.window(matched_handle)
+        return matched_handle
+
+    if live_handles:
+        driver.switch_to.window(live_handles[0])
+        return live_handles[0]
+
+    # If currently responsive, keep current
+    if current_ok:
+        try:
+            return driver.current_window_handle
+        except Exception:
+            pass
+
+    # 4. If no live handle exists at all (e.g. user closed all tabs), create a new tab via CDP
+    try:
+        log("[ensure_active_window] ไม่พบแท็บที่เปิดอยู่ กำลังสร้างแท็บใหม่ผ่าน CDP...")
+        driver.execute_cdp_cmd("Target.createTarget", {"url": target_url or "about:blank"})
+        time.sleep(0.5)
+        new_handles = driver.window_handles
+        if new_handles:
+            driver.switch_to.window(new_handles[-1])
+            return new_handles[-1]
+    except Exception as cdp_err:
+        log(f"[ensure_active_window] CDP createTarget error: {cdp_err}")
+
+    raise RuntimeError("ไม่สามารถเชื่อมต่อหน้าต่าง Chrome ได้ (กรุณาตรวจสอบว่าได้กด Launch Browser แล้ว)")
+
+def cleanup_browser_tabs(driver, target_url: str = "") -> None:
+    """Safely ensures active working window without aggressively closing user tabs."""
+    try:
+        ensure_active_window(driver, target_url=target_url)
     except Exception:
         pass
 
@@ -70,11 +130,12 @@ def get_browser_window_pid(port: int = 9222) -> Optional[int]:
     except Exception:
         return None
 
-def focus_9222_browser_tab(driver, port: int = 9222) -> None:
-    """Focuses the port 9222 tab directly through CDP and native macOS NSRunningApplication by PID."""
+def focus_9222_browser_tab(driver, port: int | None = None) -> None:
+    """Focuses the Chrome window directly through CDP and native macOS NSRunningApplication by PID."""
+    target_port = port or getattr(browser_manager, '_current_port', None) or 9222
     if driver:
         try:
-            driver.switch_to.window(driver.current_window_handle)
+            ensure_active_window(driver)
             driver.execute_script("window.focus();")
             driver.execute_cdp_cmd('Page.bringToFront', {})
         except Exception:
@@ -83,7 +144,7 @@ def focus_9222_browser_tab(driver, port: int = 9222) -> None:
     if sys.platform != "darwin":
         return
 
-    pid = get_browser_window_pid(port)
+    pid = get_browser_window_pid(target_port)
     if pid:
         jxa_script = f'''
         ObjC.import('AppKit');
@@ -187,29 +248,104 @@ def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float 
 # ==============================================================================
 
 def step_1_open_composer(driver, composer_url: str) -> bool:
-    """Step 1: Focus 9222, close extra tabs, navigate to fresh composer URL and wait until ready."""
-    cleanup_browser_tabs(driver)
-    focus_9222_browser_tab(driver, port=9222)
+    """Step 1: Safely focus/recover browser tab, navigate to composer URL, and verify URL & composer readiness."""
+    composer_url = (composer_url or "").strip()
+    if not composer_url or not (composer_url.startswith("http://") or composer_url.startswith("https://")):
+        raise ValueError(f"URL ไม่ถูกต้อง: '{composer_url}' (ต้องขึ้นต้นด้วย http:// หรือ https://)")
+
+    # 1. Ensure driver has a live window handle and focus it
+    ensure_active_window(driver, target_url=composer_url)
+    focus_9222_browser_tab(driver)
     time.sleep(0.2)
 
-    log(f"[Meta Step 1] กำลังโหลดหน้าต่าง Composer: {composer_url}")
-    driver.get(composer_url)
-    
-    # Loop check: document ready + verify Add video button or Composer frame is loaded
+    log(f"[Meta Step 1] กำลังเปิดหน้าต่าง Composer: {composer_url}")
+
+    # Check if already on this exact composer URL or need to navigate
+    needs_navigate = True
+    try:
+        curr_url = driver.current_url
+        if curr_url.split("?")[0] == composer_url.split("?")[0] and "reels_composer" in curr_url:
+            log("[Meta Step 1] กำลังอยู่ในหน้า Composer เดิม ทำการรีเฟรชเพื่อให้ได้ฟอร์มใหม่...")
+            driver.get(composer_url)
+            needs_navigate = False
+    except Exception:
+        needs_navigate = True
+
+    if needs_navigate:
+        try:
+            driver.get(composer_url)
+        except Exception as get_err:
+            log(f"[Meta Step 1 Warning] driver.get failed ({get_err}), attempting recovery...")
+            ensure_active_window(driver, target_url=composer_url)
+            driver.get(composer_url)
+
+    # 2. VERIFY URL NAVIGATION: Check whether browser has actually reached the target link
+    log("[Meta Step 1] 🔍 กำลังตรวจสอบการเปิดลิงก์บนเบราว์เซอร์...")
+    parsed_target = urllib.parse.urlparse(composer_url)
+    target_host = parsed_target.netloc.lower()
+
+    nav_start = time.time()
+    navigated = False
+    last_detected_url = ""
+
+    while time.time() - nav_start < 20.0:
+        if is_meta_stopped():
+            raise RuntimeError("🛑 Force Stop: ผู้ใช้สั่งหยุดการทำงาน")
+        try:
+            curr = driver.current_url.lower()
+            last_detected_url = curr
+            if target_host in curr or "facebook.com" in curr:
+                # Check for login redirect
+                if "login" in curr or "checkpoint" in curr:
+                    raise RuntimeError(f"⚠️ เบราว์เซอร์ถูกเปลี่ยนเส้นทางไปหน้า Login ({curr}) กรุณาเข้าสู่ระบบ Facebook บนเบราว์เซอร์นี้ก่อนรัน Auto Post")
+                navigated = True
+                break
+        except Exception as e:
+            if "login" in str(e).lower():
+                raise
+        time.sleep(0.5)
+
+    if not navigated:
+        raise RuntimeError(
+            f"❌ ไม่สามารถเปิดลิงก์ Meta ได้: เบราว์เซอร์ยังคงอยู่ที่ '{last_detected_url or 'ไม่ทราบ URL'}' "
+            f"(ไม่ตรงกับปลายทาง {target_host}) กรุณาตรวจสอบว่าเปิด Chrome ถูกต้องและไม่ได้ติดบล็อก"
+        )
+
+    log(f"[Meta Step 1] 🌐 ยืนยันการเปิดลิงก์สำเร็จ: {driver.current_url[:80]}...")
+
+    # 3. VERIFY COMPOSER DOM READINESS
+    log("[Meta Step 1] ⏳ รอหน้าต่าง Composer โหลดองค์ประกอบ (Add video / Upload input)...")
     ready = fast_poll(driver, '''
         if (document.readyState !== 'complete') return false;
-        const allEls = Array.from(document.querySelectorAll('div[role="button"], button, span, div'));
-        const addBtn = allEls.find(el => {
+
+        // 1. Check for Add video button (English / Thai)
+        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button, span, div'));
+        const addBtn = allBtns.find(el => {
             const txt = (el.innerText || '').trim();
             const rect = el.getBoundingClientRect();
-            return rect.width > 10 && rect.height > 10 && (txt.includes('Add video') || txt.includes('Add Video'));
+            const isVis = rect.width > 10 && rect.height > 10;
+            return isVis && (
+                txt.includes('Add video') || 
+                txt.includes('Add Video') || 
+                txt.includes('Upload video') || 
+                txt.includes('เพิ่มวิดีโอ')
+            );
         });
-        const hasComposer = !!document.querySelector('div[role="dialog"], [role="main"], div[class*="composer" i]');
-        return !!addBtn || hasComposer;
-    ''', timeout=35.0, poll_interval=0.25)
-    
+        if (addBtn) return true;
+
+        // 2. Check for file input accepting video
+        const fileInput = document.querySelector('input[type="file"][accept*="video"], input[type="file"]');
+        if (fileInput) return true;
+
+        // 3. Check for specific Reels composer dialog
+        const composerDialog = document.querySelector('div[aria-label*="Reel" i], div[aria-label*="Composer" i], div[data-pagelet*="Composer" i]');
+        if (composerDialog) return true;
+
+        return false;
+    ''', timeout=40.0, poll_interval=0.3)
+
     if not ready:
-        raise RuntimeError("หน้าต่าง Composer ไม่พร้อมทำงานภายในเวลา 35 วินาที")
+        raise RuntimeError("หน้าต่าง Composer ไม่พร้อมทำงานภายในเวลา 40 วินาที (ไม่พบปุ่ม Add video หรือช่องอัปโหลดวิดีโอ)")
 
     log("[Meta Step 1] ✅ หน้าต่าง Composer พร้อมใช้งานเรียบร้อยแล้ว")
     return True
@@ -1099,10 +1235,14 @@ def post_single_reel(
             )
         except Exception as ex:
             log(f"[Meta Auto Post Script] ⚠️ Error on attempt {attempt}/{max_retries}: {ex}")
+            ex_str = str(ex)
+            # If the error is an unrecoverable navigation/login/URL error, don't blindly retry
+            if any(k in ex_str for k in ["Login", "login", "URL ไม่ถูกต้อง", "ไม่สามารถเปิดลิงก์", "Force Stop"]):
+                raise ex
             if attempt < max_retries:
                 log(f"[Meta Auto Post Script] 🔄 Refreshing composer page and restarting flow in 2s...")
                 try:
-                    cleanup_browser_tabs(driver)
+                    ensure_active_window(driver, target_url=composer_url)
                     driver.get(composer_url)
                     time.sleep(2.0)
                 except Exception:
@@ -1176,13 +1316,29 @@ def run_meta_autopost_batch(
             if ok:
                 success_count += 1
         except Exception as e:
-            if is_meta_stopped() or "Force Stop" in str(e):
+            err_str = str(e)
+            if is_meta_stopped() or "Force Stop" in err_str:
                 log("[Meta Auto Post] 🛑 หยุดทำงานทันทีตามคำสั่ง Force Stop")
                 errors.append("🛑 บังคับหยุดทำงาน (Force Stop)")
                 break
-            err_msg = f"[{idx+1}/{total}] {post.get('subfolder_name', 'Item')}: {str(e)}"
+
+            err_msg = f"[{idx+1}/{total}] {post.get('subfolder_name', 'Item')}: {err_str}"
             log(f"[Meta Auto Post Script Item Error] {err_msg}")
             errors.append(err_msg)
+
+            # CRITICAL CHECK: If fatal error (cannot open link, not logged in, window/driver dead, composer failed to load),
+            # ABORT ENTIRE BATCH IMMEDIATELY to avoid futile loop of failing all remaining queue items.
+            is_fatal = any(k in err_str for k in [
+                "ไม่สามารถเปิดลิงก์", "Login", "login", "URL ไม่ถูกต้อง",
+                "no such window", "web view not found", "connection refused",
+                "Session info", "target window already closed", "not reachable",
+                "ไม่พร้อมทำงานภายในเวลา"
+            ])
+            if is_fatal:
+                fatal_msg = f"🛑 หยุดกระบวนการทั้งหมดทันทีเนื่องจาก: {err_str}"
+                log(f"[Meta Auto Post Fatal] {fatal_msg}")
+                errors.append(fatal_msg)
+                break
 
     if progress_callback:
         progress_callback({
