@@ -762,6 +762,61 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
 # Facebook Reels Step Debugger Helpers (Page & Modal Controls)
 # ==============================================================================
 
+JS_REEL_HELPERS = """
+function dismissFacebookAlerts() {
+    try {
+        const dialogs = Array.from(document.querySelectorAll('[role="dialog"], div[aria-modal="true"]'));
+        for (const d of dialogs) {
+            const aria = (d.getAttribute('aria-label') || '').toLowerCase();
+            const text = (d.innerText || '').toLowerCase();
+            if (aria.includes("can't read") || aria.includes("couldn't be uploaded") ||
+                text.includes("can't read files") || text.includes("couldn't be uploaded") ||
+                text.includes("photos couldn't be uploaded") || text.includes("ไม่สามารถอ่านไฟล์") ||
+                text.includes("รูปภาพของคุณไม่สามารถอัปโหลดได้")) {
+                const btn = d.querySelector('[role="button"], button');
+                if (btn) btn.click();
+            }
+        }
+    } catch(e) {}
+}
+
+function findReelModal() {
+    dismissFacebookAlerts();
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"], div[aria-modal="true"]'));
+    const reelDialogs = dialogs.filter(d => {
+        const aria = (d.getAttribute('aria-label') || '').toLowerCase();
+        if (aria.includes('notification') || aria.includes('การแจ้งเตือน')) return false;
+        if (aria.includes("can't read") || aria.includes("couldn't be uploaded")) return false;
+        
+        const text = (d.innerText || '').toLowerCase();
+        if (text.includes("can't read files") || text.includes("photos couldn't be uploaded")) return false;
+        
+        const hasVideoInput = !!d.querySelector('input[type="file"][accept*="video"]');
+        const isReelText = text.includes('create reel') || text.includes('สร้างคลิป reels') || 
+                           text.includes('สร้าง reel') || text.includes('reel settings') || 
+                           text.includes('ตั้งค่า reel') || text.includes('add video') || 
+                           text.includes('replace video') || text.includes('describe your reel') ||
+                           text.includes('edit reel') || text.includes('scheduling options') ||
+                           text.includes('uploading video');
+        return hasVideoInput || isReelText;
+    });
+    return reelDialogs.length > 0 ? reelDialogs[reelDialogs.length - 1] : null;
+}
+
+function findReelVideoInput() {
+    const modal = findReelModal();
+    if (modal) {
+        const inp = modal.querySelector('input[type="file"][accept*="video"]') || modal.querySelector('input[type="file"]');
+        if (inp) return inp;
+    }
+    const allVideoInputs = Array.from(document.querySelectorAll('input[type="file"]')).filter(i => {
+        const acc = (i.getAttribute('accept') || '').toLowerCase();
+        return acc.includes('video') && !acc.startsWith('image/*');
+    });
+    return allVideoInputs.length > 0 ? allVideoInputs[allVideoInputs.length - 1] : null;
+}
+"""
+
 def debug_click_reels_button(driver) -> dict[str, Any]:
     """
     Step 1: Finds and clicks the 'Reels' button located next to 'Photo/video' in the Facebook feed / page.
@@ -772,15 +827,22 @@ def debug_click_reels_button(driver) -> dict[str, Any]:
     
     ensure_active_window(driver)
 
-    js_find_and_click = """
+    # Check if Reel modal is ALREADY open
+    already_open = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
+    if already_open:
+        log("[Facebook Debug] ℹ️ หน้าต่างสร้าง Reels เปิดอยู่แล้ว")
+        return {"success": True, "message": "หน้าต่างสร้าง Reels เปิดอยู่แล้ว", "already_open": True}
+
+    js_find_and_click = JS_REEL_HELPERS + """
+    window.scrollTo({ top: 0, behavior: 'instant' });
     const candidates = [];
-    const dialog = document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    const dialog = findReelModal();
     const allButtons = Array.from(document.querySelectorAll('[role="button"], button, div[tabindex="0"]'));
 
     for (const b of allButtons) {
         if (dialog && dialog.contains(b)) continue;
         const rect = b.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0 || rect.y < 0) continue;
+        if (rect.width === 0 || rect.height === 0) continue;
         const aria = (b.getAttribute('aria-label') || '').trim().toLowerCase();
         const text = (b.innerText || '').trim().toLowerCase();
         
@@ -939,9 +1001,7 @@ def debug_click_upload_video_button(driver, video_path: str = "", main_folder: s
     ensure_active_window(driver)
 
     # 1. Check if modal is open; if not, click Reels button
-    modal_check = driver.execute_script("""
-        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
-    """)
+    modal_check = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
     if not modal_check:
         r_open = debug_click_reels_button(driver)
         if not r_open.get("success"):
@@ -956,44 +1016,37 @@ def debug_click_upload_video_button(driver, video_path: str = "", main_folder: s
             "error": "ไม่พบไฟล์วิดีโอ (.mp4) สำหรับแนบ กรุณาสแกนคิว หรือระบุโฟลเดอร์หลักในช่องตั้งค่า"
         }
 
-    # 3. Locate file input in modal (prioritize file input inside the open dialog)
-    modals = driver.find_elements(By.CSS_SELECTOR, '[role="dialog"], div[aria-modal="true"]')
-    dialog = modals[0] if modals else driver
+    # 3. Locate file input in modal (prioritize video file input inside the Reel modal, never photo input)
+    input_el = driver.execute_script(JS_REEL_HELPERS + """
+        const inp = findReelVideoInput();
+        if (inp) {
+            inp.style.display = 'block';
+            inp.style.opacity = '1';
+            inp.style.visibility = 'visible';
+            inp.style.width = '50px';
+            inp.style.height = '50px';
+            inp.style.position = 'fixed';
+            inp.style.top = '50px';
+            inp.style.left = '50px';
+            inp.style.zIndex = '999999';
+            return inp;
+        }
+        return null;
+    """)
 
-    file_inputs = dialog.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
-    if not file_inputs:
-        file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
-
-    if not file_inputs:
+    if not input_el:
         return {"success": False, "error": "ไม่พบช่อง input[type='file'] สำหรับอัปโหลดวิดีโอในหน้าต่าง Reels"}
 
-    attached = False
-    for inp in file_inputs:
-        try:
-            driver.execute_script("""
-                arguments[0].style.display = 'block';
-                arguments[0].style.opacity = '1';
-                arguments[0].style.visibility = 'visible';
-                arguments[0].style.width = '50px';
-                arguments[0].style.height = '50px';
-                arguments[0].style.position = 'fixed';
-                arguments[0].style.top = '50px';
-                arguments[0].style.left = '50px';
-                arguments[0].style.zIndex = '999999';
-            """, inp)
-            inp.send_keys(target_video)
-            attached = True
-            break
-        except Exception as e:
-            log(f"[Facebook Debug] send_keys error on input: {e}")
-
-    if not attached:
-        return {"success": False, "error": "ไม่สามารถส่งไฟล์วิดีโอเข้า input[type='file'] ได้"}
+    try:
+        input_el.send_keys(target_video)
+    except Exception as e:
+        log(f"[Facebook Debug] send_keys error on input: {e}")
+        return {"success": False, "error": f"ไม่สามารถส่งไฟล์วิดีโอเข้า input: {e}"}
 
     # 4. Wait for Facebook to recognize video upload
     time.sleep(2.5)
-    status = driver.execute_script("""
-        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    status = driver.execute_script(JS_REEL_HELPERS + """
+        const modal = findReelModal();
         if (!modal) return { open: false };
         const buttons = Array.from(modal.querySelectorAll('[role="button"], button')).map(b => (b.getAttribute('aria-label') || b.innerText || '').trim()).filter(Boolean);
         const text = (modal.innerText || '').slice(0, 300);
@@ -1026,8 +1079,8 @@ def debug_close_reels_modal(driver) -> dict[str, Any]:
 
     ensure_active_window(driver)
 
-    js_close = """
-    const dialog = document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    js_close = JS_REEL_HELPERS + """
+    const dialog = findReelModal();
     if (!dialog) return { success: false, error: "ไม่พบหน้าต่าง Modal ที่เปิดอยู่" };
     const closeBtn = dialog.querySelector('[aria-label="Close"], [aria-label="ปิด"], [aria-label*="Close"], [aria-label*="ปิด"]');
     if (closeBtn) {
@@ -1062,9 +1115,7 @@ def debug_reels_full_flow(driver, video_path: str = "", main_folder: str = "") -
     start = time.time()
     modal_opened = False
     while time.time() - start < 5.0:
-        opened = driver.execute_script("""
-            return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
-        """)
+        opened = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
         if opened:
             modal_opened = True
             break
@@ -1091,15 +1142,13 @@ def debug_click_next_twice(driver) -> dict[str, Any]:
 
     ensure_active_window(driver)
 
-    modal_check = driver.execute_script("""
-        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
-    """)
+    modal_check = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
     if not modal_check:
         return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
 
     # Check if already at Reel settings screen
-    already_at_settings = driver.execute_script("""
-        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    already_at_settings = driver.execute_script(JS_REEL_HELPERS + """
+        const modal = findReelModal() || document;
         const text = (modal.innerText || '').toLowerCase();
         const hasDescBox = !!modal.querySelector('[role="textbox"][contenteditable="true"]');
         const isSettings = text.includes('reel settings') || text.includes('ตั้งค่า reel') || hasDescBox;
@@ -1120,8 +1169,8 @@ def debug_click_next_twice(driver) -> dict[str, Any]:
         clicked = False
         click_info = None
         while time.time() - start_t < 6.0:
-            js_next = """
-            const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+            js_next = JS_REEL_HELPERS + """
+            const modal = findReelModal() || document;
             const buttons = Array.from(modal.querySelectorAll('[role="button"], button')).filter(b => {
                 const t = (b.innerText || '').trim().toLowerCase();
                 const a = (b.getAttribute('aria-label') || '').trim().toLowerCase();
@@ -1146,8 +1195,8 @@ def debug_click_next_twice(driver) -> dict[str, Any]:
 
         if not clicked:
             # Check if settings screen was already reached
-            at_settings_now = driver.execute_script("""
-                const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+            at_settings_now = driver.execute_script(JS_REEL_HELPERS + """
+                const modal = findReelModal() || document;
                 const text = (modal.innerText || '').toLowerCase();
                 return text.includes('reel settings') || text.includes('ตั้งค่า reel') || !!modal.querySelector('[role="textbox"][contenteditable="true"]');
             """)
@@ -1167,8 +1216,8 @@ def debug_click_next_twice(driver) -> dict[str, Any]:
         log(f"[Facebook Debug] ➡️ กดปุ่ม Next ครั้งที่ {step_idx}/2 สำเร็จ")
         time.sleep(2.0)
 
-    settings_reached = driver.execute_script("""
-        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    settings_reached = driver.execute_script(JS_REEL_HELPERS + """
+        const modal = findReelModal() || document;
         const text = (modal.innerText || '').toLowerCase();
         return text.includes('reel settings') || text.includes('ตั้งค่า reel') || !!modal.querySelector('[role="textbox"][contenteditable="true"]');
     """)
@@ -1191,8 +1240,9 @@ def debug_insert_caption(driver, caption: str = "", folder_path: str = "", main_
 
     ensure_active_window(driver)
 
-    modal_check = driver.execute_script("""
-        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    modal_check = driver.execute_script(f"""
+        {JS_REEL_HELPERS}
+        return !!findReelModal();
     """)
     if not modal_check:
         return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
@@ -1201,15 +1251,14 @@ def debug_insert_caption(driver, caption: str = "", folder_path: str = "", main_
     if not target_caption:
         return {"success": False, "error": "ไม่พบข้อความแคปชั่นสำหรับระบุ"}
 
-    # Locate description input
-    desc_inputs = driver.find_elements(By.CSS_SELECTOR, '[role="dialog"] [role="textbox"][contenteditable="true"], div[aria-modal="true"] [role="textbox"][contenteditable="true"]')
-    if not desc_inputs:
-        desc_inputs = driver.find_elements(By.CSS_SELECTOR, '[role="textbox"][contenteditable="true"]')
+    # Locate description input inside Reel modal
+    desc_el = driver.execute_script(JS_REEL_HELPERS + """
+        const modal = findReelModal() || document;
+        return modal.querySelector('[role="textbox"][contenteditable="true"]') || document.querySelector('[role="textbox"][contenteditable="true"]');
+    """)
 
-    if not desc_inputs:
+    if not desc_el:
         return {"success": False, "error": "ไม่พบช่องกรอก Description ('Describe your reel...') ในหน้าต่าง Reels (กรุณากด Step 3 เพื่อเข้าหน้าตั้งค่าก่อน)"}
-
-    desc_el = desc_inputs[0]
 
     # Fast paste on macOS
     pasted = False
@@ -1256,9 +1305,7 @@ def debug_add_affiliate_product(driver, affiliate_url: str = "", folder_path: st
 
     ensure_active_window(driver)
 
-    modal_check = driver.execute_script("""
-        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
-    """)
+    modal_check = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
     if not modal_check:
         return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
 
@@ -1267,8 +1314,8 @@ def debug_add_affiliate_product(driver, affiliate_url: str = "", folder_path: st
         return {"success": False, "error": "ไม่พบลิงก์ Affiliate (URL) สำหรับเพิ่มสินค้า"}
 
     # 1. Click 'Add product' button inside modal
-    js_click_add = """
-    const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    js_click_add = JS_REEL_HELPERS + """
+    const modal = findReelModal() || document;
     const btn = Array.from(modal.querySelectorAll('*')).find(el => {
         const t = (el.innerText || '').toLowerCase();
         const a = (el.getAttribute('aria-label') || '').toLowerCase();
@@ -1355,8 +1402,8 @@ def debug_add_affiliate_product(driver, affiliate_url: str = "", folder_path: st
     time.sleep(1.5)
 
     # 5. Verify product link added
-    check_added = driver.execute_script("""
-        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    check_added = driver.execute_script(JS_REEL_HELPERS + """
+        const modal = findReelModal() || document;
         const text = modal.innerText || '';
         return text.includes('Product link added') || text.includes('เพิ่มลิงก์สินค้าแล้ว');
     """)
@@ -1378,9 +1425,7 @@ def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = 
 
     ensure_active_window(driver)
 
-    modal_check = driver.execute_script("""
-        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
-    """)
+    modal_check = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
     if not modal_check:
         return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
 
@@ -1404,14 +1449,14 @@ def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = 
     day_str = str(target_dt.day)
 
     # 2. Check if currently inside Scheduling options sub-view
-    in_sched = driver.execute_script("""
-        const m = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    in_sched = driver.execute_script(JS_REEL_HELPERS + """
+        const m = findReelModal() || document;
         return (m.innerText || '').includes('Choose a date and time in the future');
     """)
 
     if not in_sched:
-        js_open_sched = """
-        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+        js_open_sched = JS_REEL_HELPERS + """
+        const modal = findReelModal() || document;
         const btn = Array.from(modal.querySelectorAll('*')).find(el => {
             const t = (el.innerText || '').toLowerCase();
             const a = (el.getAttribute('aria-label') || '').toLowerCase();
@@ -1519,8 +1564,8 @@ def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = 
     time.sleep(1.5)
 
     # 7. Check updated status on Reel settings
-    sched_summary = driver.execute_script("""
-        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    sched_summary = driver.execute_script(JS_REEL_HELPERS + """
+        const modal = findReelModal() || document;
         const btn = Array.from(modal.querySelectorAll('*')).find(el => {
             const t = (el.innerText || '');
             return t.includes('Scheduling options') && el.getAttribute('role') === 'button';
@@ -1546,15 +1591,13 @@ def debug_click_post_button(driver) -> dict[str, Any]:
 
     ensure_active_window(driver)
 
-    modal_check = driver.execute_script("""
-        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
-    """)
+    modal_check = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
     if not modal_check:
         return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
 
     # If currently inside a sub-view, click Back first
-    in_subview = driver.execute_script("""
-        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    in_subview = driver.execute_script(JS_REEL_HELPERS + """
+        const modal = findReelModal() || document;
         const text = modal.innerText || '';
         return text.includes('Choose a date and time in the future') || text.includes('Add affiliate product');
     """)
@@ -1569,8 +1612,8 @@ def debug_click_post_button(driver) -> dict[str, Any]:
         time.sleep(1.2)
 
     # Find the enabled submit action button (Schedule or Post)
-    js_click_action = """
-    const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    js_click_action = JS_REEL_HELPERS + """
+    const modal = findReelModal() || document;
     const candidates = Array.from(modal.querySelectorAll('[role="button"], button')).filter(b => {
         const t = (b.innerText || '').trim().toLowerCase();
         const a = (b.getAttribute('aria-label') || '').trim().toLowerCase();
@@ -1597,8 +1640,8 @@ def debug_click_post_button(driver) -> dict[str, Any]:
     time.sleep(2.0)
 
     # Check modal state after clicking
-    after_check = driver.execute_script("""
-        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    after_check = driver.execute_script(JS_REEL_HELPERS + """
+        const modal = findReelModal();
         if (!modal) return { modal_closed: true };
         return {
             modal_closed: false,
@@ -1724,7 +1767,7 @@ def run_facebook_autopost_batch(
         try:
             # Step 0: Ensure any lingering dialog from previous run is closed
             try:
-                has_lingering = driver.execute_script('return !!document.querySelector(\'[role="dialog"], div[aria-modal="true"]\');')
+                has_lingering = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
                 if has_lingering:
                     log("[Facebook Auto Post] พบหน้าต่าง Modal ค้างอยู่ ทำการปิดก่อนเริ่มรายการใหม่...")
                     debug_close_reels_modal(driver)
@@ -1790,7 +1833,7 @@ def run_facebook_autopost_batch(
                     break
                 is_open = False
                 try:
-                    is_open = driver.execute_script('return !!document.querySelector(\'[role="dialog"], div[aria-modal="true"]\');')
+                    is_open = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
                 except Exception:
                     pass
                 if not is_open:
