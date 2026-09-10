@@ -224,9 +224,6 @@ request_facebook_stop = request_meta_stop
 reset_facebook_stop = reset_meta_stop
 is_facebook_stopped = is_meta_stopped
 
-def run_facebook_autopost_batch(*args, **kwargs):
-    return run_meta_autopost_batch(*args, **kwargs)
-
 def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float = 0.2, *args, **kwargs) -> Any:
     """Polls JavaScript expression until truthy or timeout."""
     start_t = time.time()
@@ -1618,6 +1615,197 @@ def debug_click_post_button(driver) -> dict[str, Any]:
         "message": f"กดปุ่ม '{btn_label}' เรียบร้อยแล้ว (ระบบกำลังเริ่มกระบวนการโพสต์/กำหนดเวลาคลิป Reels)",
         "button": btn_label,
         "after_state": after_check
+    }
+
+def run_facebook_autopost_batch(
+    driver=None,
+    posts: list[dict[str, Any]] = None,
+    target_url: str = "",
+    delay_min: float = 5.0,
+    delay_max: float = 15.0,
+    progress_callback: Optional[Callable[[dict[str, Any]], None]] = None,
+    *args, **kwargs
+) -> dict[str, Any]:
+    """
+    Runs the full 7-step Facebook Reels Auto Post sequence for all queue items.
+    """
+    if not driver:
+        bot = browser_manager.get(target_port=9222) or browser_manager.get()
+        if bot and bot.driver:
+            driver = bot.driver
+
+    if not driver:
+        raise RuntimeError("เบราว์เซอร์ Chrome 9222 ยังไม่ได้เชื่อมต่อ (กรุณากด Launch Profile ก่อน)")
+
+    if not posts:
+        return {"ok": False, "error": "ไม่มีรายการโพสต์ให้ดำเนินการ", "success_count": 0, "errors": ["ไม่มีรายการโพสต์"]}
+
+    total = len(posts)
+    success_count = 0
+    errors = []
+    reset_facebook_stop()
+
+    ensure_active_window(driver, target_url=target_url)
+
+    # If target_url is specified and current URL doesn't match, navigate to it
+    if target_url and ("facebook.com" in target_url):
+        try:
+            curr = driver.current_url.lower()
+            target_clean = target_url.strip().lower()
+            if not curr.startswith(target_clean) and not target_clean.startswith(curr):
+                log(f"[Facebook Auto Post] กำลังเปิดหน้าเพจ Facebook: {target_url}")
+                driver.get(target_url)
+                time.sleep(3.0)
+        except Exception as e:
+            log(f"[Facebook Auto Post] Navigate error: {e}")
+
+    for idx, post in enumerate(posts):
+        if is_facebook_stopped():
+            log("[Facebook Auto Post] 🛑 ยกเลิกรายการที่เหลือเนื่องจากคำสั่ง Force Stop")
+            errors.append("🛑 การทำงานถูกยกเลิกด้วย Force Stop")
+            break
+
+        item_num = idx + 1
+        item_title = post.get("subfolder_name") or post.get("video_name") or f"Item #{item_num}"
+        video_path = post.get("video_path", "")
+        caption = post.get("caption", "")
+        affiliate_url = post.get("affiliate_url", "")
+        subfolder_path = post.get("subfolder_path", "")
+        scheduled_dt = post.get("scheduled_datetime", "")
+
+        # Anti-bot random delay before starting 2nd post onwards
+        if idx > 0 and (delay_max > 0 or delay_min > 0):
+            act_min = min(float(delay_min), float(delay_max))
+            act_max = max(float(delay_min), float(delay_max))
+            rand_delay = round(random.uniform(act_min, act_max), 1)
+            log(f"[Facebook Auto Post] ⏳ สุ่มหน่วงเวลา {rand_delay}s ก่อนเริ่มรายการที่ {item_num}/{total} เพื่อความปลอดภัย...")
+            if progress_callback:
+                progress_callback({
+                    "current": idx,
+                    "total": total,
+                    "percent": int((idx / total) * 100),
+                    "message": f"⏳ สุ่มหน่วงเวลา {rand_delay}s ก่อนเริ่มรายการที่ {item_num}/{total}..."
+                })
+            w_start = time.time()
+            while time.time() - w_start < rand_delay:
+                if is_facebook_stopped():
+                    break
+                time.sleep(0.3)
+            if is_facebook_stopped():
+                errors.append("🛑 บังคับหยุดทำงาน (Force Stop)")
+                break
+
+        base_pct = int((idx / total) * 100)
+        item_weight = 100.0 / total
+
+        def _report(step_num: int, step_desc: str):
+            pct = int(base_pct + (step_num / 7.0) * item_weight)
+            msg = f"[{item_num}/{total}] {step_desc} ({item_title})"
+            log(f"[Facebook Auto Post] {msg}")
+            if progress_callback:
+                progress_callback({
+                    "current": idx,
+                    "total": total,
+                    "percent": min(pct, 99),
+                    "message": msg
+                })
+
+        try:
+            # Step 0: Ensure any lingering dialog from previous run is closed
+            try:
+                has_lingering = driver.execute_script('return !!document.querySelector(\'[role="dialog"], div[aria-modal="true"]\');')
+                if has_lingering:
+                    log("[Facebook Auto Post] พบหน้าต่าง Modal ค้างอยู่ ทำการปิดก่อนเริ่มรายการใหม่...")
+                    debug_close_reels_modal(driver)
+                    time.sleep(1.0)
+            except Exception:
+                pass
+
+            # Step 1: Click Reels
+            _report(1, "🎬 1. กดปุ่ม Reels")
+            r1 = debug_click_reels_button(driver)
+            if not r1.get("success"):
+                raise RuntimeError(r1.get("error", "กดปุ่ม Reels ไม่สำเร็จ"))
+            time.sleep(1.5)
+
+            # Step 2: Upload Video
+            _report(2, "📤 2. แนบไฟล์วิดีโอเข้า Reels")
+            r2 = debug_click_upload_video_button(driver, video_path=video_path, main_folder=subfolder_path)
+            if not r2.get("success"):
+                raise RuntimeError(r2.get("error", "แนบไฟล์วิดีโอไม่สำเร็จ"))
+            time.sleep(2.0)
+
+            # Step 3: Next twice
+            _report(3, "➡️ 3. กด Next 2 ครั้ง (เข้าหน้าตั้งค่า)")
+            r3 = debug_click_next_twice(driver)
+            if not r3.get("success"):
+                raise RuntimeError(r3.get("error", "กดปุ่ม Next ไม่สำเร็จ"))
+            time.sleep(1.5)
+
+            # Step 4: Insert Caption
+            _report(4, "📝 4. ใส่ Description (Caption)")
+            r4 = debug_insert_caption(driver, caption=caption, folder_path=subfolder_path, main_folder=subfolder_path)
+            if not r4.get("success"):
+                log(f"[Facebook Auto Post Warning] Description: {r4.get('error')}")
+            time.sleep(1.0)
+
+            # Step 5: Add Affiliate Product
+            if affiliate_url or subfolder_path:
+                _report(5, "🛍️ 5. เพิ่มสินค้า Affiliate & ลิงก์")
+                r5 = debug_add_affiliate_product(driver, affiliate_url=affiliate_url, folder_path=subfolder_path, main_folder=subfolder_path)
+                if not r5.get("success"):
+                    log(f"[Facebook Auto Post Warning] Add affiliate product: {r5.get('error')}")
+                time.sleep(1.0)
+
+            # Step 6: Set Schedule Time
+            _report(6, "⏰ 6. ตั้งเวลาโพสต์")
+            r6 = debug_set_schedule(driver, scheduled_datetime=scheduled_dt, main_folder=subfolder_path)
+            if not r6.get("success"):
+                log(f"[Facebook Auto Post Warning] Set schedule: {r6.get('error')}")
+            time.sleep(1.0)
+
+            # Step 7: Click Submit / Post
+            _report(7, "🚀 7. กดปุ่มโพสต์/กำหนดเวลา")
+            r7 = debug_click_post_button(driver)
+            if not r7.get("success"):
+                raise RuntimeError(r7.get("error", "กดปุ่มโพสต์ไม่สำเร็จ"))
+
+            success_count += 1
+            log(f"[Facebook Auto Post] ✅ สำเร็จรายการที่ {item_num}/{total}: {item_title}")
+
+            # Wait for modal to disappear
+            modal_wait_start = time.time()
+            while time.time() - modal_wait_start < 15.0:
+                if is_facebook_stopped():
+                    break
+                is_open = False
+                try:
+                    is_open = driver.execute_script('return !!document.querySelector(\'[role="dialog"], div[aria-modal="true"]\');')
+                except Exception:
+                    pass
+                if not is_open:
+                    break
+                time.sleep(0.5)
+
+            time.sleep(2.0)
+
+        except Exception as item_err:
+            err_msg = f"[{item_num}/{total}] {item_title}: {item_err}"
+            log(f"[Facebook Auto Post Item Error] ❌ {err_msg}")
+            errors.append(err_msg)
+            if is_facebook_stopped():
+                break
+            try:
+                debug_close_reels_modal(driver)
+            except Exception:
+                pass
+
+    ok = len(errors) == 0 and success_count > 0
+    return {
+        "ok": ok,
+        "total": total,
+        "success_count": success_count,
+        "errors": errors
     }
 
 # --- Granular Date Debug Helpers for Step-by-Step UI Control ---

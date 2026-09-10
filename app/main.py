@@ -4842,19 +4842,22 @@ FacebookOpenUrlRequest.model_rebuild()
 def _facebook_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0):
     global global_facebook_progress
     try:
-        bot = browser_manager.get()
-        if not bot or not bot.driver:
+        driver = _get_facebook_driver()
+        if not driver:
             global_facebook_progress["status"] = "error"
-            global_facebook_progress["message"] = "เบราว์เซอร์ Chrome ไม่ได้เชื่อมต่อ (กรุณากด Launch Browser ก่อน)"
-            log("[Facebook Auto Post] Error: Chrome driver is not attached")
+            global_facebook_progress["message"] = "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ (กรุณากด 'Launch Profile' ด้านบนก่อน)"
+            log("[Facebook Auto Post] Error: Chrome 9222 driver is not attached")
             return
 
-        composer_url = target_url.strip() if target_url else ""
-        if not composer_url:
-            global_facebook_progress["status"] = "error"
-            global_facebook_progress["message"] = "กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน"
-            log("[Facebook Auto Post Error] กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน")
-            return
+        clean_url = target_url.strip() if target_url else ""
+        if not clean_url:
+            try:
+                curr = driver.current_url.lower()
+                if "facebook.com" in curr:
+                    clean_url = driver.current_url
+                    log(f"[Facebook Auto Post] ใช้แท็บ Facebook ปัจจุบันบนเบราว์เซอร์: {clean_url}")
+            except Exception:
+                pass
 
         from app.facebook_autopost import run_facebook_autopost_batch, reset_facebook_stop
 
@@ -4866,22 +4869,23 @@ def _facebook_autopost_worker(posts: list[dict[str, Any]], target_url: str = "",
                 global_facebook_progress[k] = v
 
         res = run_facebook_autopost_batch(
+            driver=driver,
             posts=posts,
-            target_url=target_url,
+            target_url=clean_url,
             delay_min=delay_min,
             delay_max=delay_max,
             progress_callback=_on_progress
         )
 
-        global_facebook_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
+        global_facebook_progress["status"] = "completed" if res.get("ok") else "completed_with_errors"
         global_facebook_progress["percent"] = 100
         global_facebook_progress["current"] = len(posts)
         global_facebook_progress["errors"] = res.get("errors", [])
-        if res["ok"]:
-            global_facebook_progress["message"] = f"✅ โพสต์ Facebook ตามคิวสำเร็จครบทั้งหมด {res['success_count']} รายการ"
+        if res.get("ok"):
+            global_facebook_progress["message"] = f"✅ โพสต์ Facebook ตามคิวสำเร็จครบทั้งหมด {res.get('success_count', 0)} รายการ"
         else:
             first_err = res["errors"][0] if res.get("errors") else "พบข้อผิดพลาด"
-            global_facebook_progress["message"] = f"เสร็จสิ้น {res['success_count']}/{len(posts)} รายการ: {first_err}"
+            global_facebook_progress["message"] = f"เสร็จสิ้น {res.get('success_count', 0)}/{len(posts)} รายการ: {first_err}"
 
     except Exception as e:
         log(f"[Facebook Auto Post Error] {e}")

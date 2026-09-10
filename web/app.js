@@ -7698,20 +7698,46 @@ function clearFacebookBatch() {
 async function runFacebookAutoPost(btnElement) {
   const presetSelect = document.getElementById('facebookPresetSelect');
   const presetVal = presetSelect ? presetSelect.value.trim() : '';
-  if (!presetVal) {
-    writeConsoleLine(`[Facebook Auto Post Error] ❌ กรุณาเลือก Preset ก่อนเริ่มรัน Auto Post`, 'error', 'facebookConsole');
-    alert('กรุณาเลือก Preset ก่อนเริ่มรัน Auto Post');
+  const mainFolder = document.getElementById('cfg_facebook_main_folder')?.value.trim() || '';
+
+  if (!presetVal && !mainFolder) {
+    writeConsoleLine(`[Facebook Auto Post Error] ❌ กรุณาเลือก Preset หรือระบุโฟลเดอร์หลักก่อนเริ่มรัน Auto Post`, 'error', 'facebookConsole');
+    alert('กรุณาเลือก Preset หรือระบุโฟลเดอร์หลักก่อนเริ่มรัน Auto Post');
     if (presetSelect) presetSelect.focus();
     return;
   }
 
-  const selectedPosts = facebookPostQueue.filter(p => p.checked !== false);
+  // 1. Check if queue has selected posts. If empty, auto-scan main folder first!
+  let selectedPosts = facebookPostQueue.filter(p => p.checked !== false);
+  if (selectedPosts.length === 0 && mainFolder) {
+    writeConsoleLine(`[Facebook Auto Post] 🔍 ไม่พบรายการในคิว กำลังสแกนโฟลเดอร์ "${mainFolder}" อัตโนมัติ...`, 'info', 'facebookConsole');
+    await scanFacebookBatch();
+    selectedPosts = facebookPostQueue.filter(p => p.checked !== false);
+  }
+
+  // 2. If still empty, build direct post from main folder (like debug mode)
+  if (selectedPosts.length === 0 && mainFolder) {
+    const startDate = document.getElementById('cfg_facebook_start_date')?.value || '';
+    const startHour = String(document.getElementById('cfg_facebook_start_hour')?.value || '18').padStart(2, '0');
+    let schedDt = startDate ? `${startDate}T${startHour}:00:00` : '';
+    selectedPosts = [{
+      subfolder_name: 'Main Folder Post',
+      subfolder_path: mainFolder,
+      video_path: '',
+      caption: '',
+      affiliate_url: '',
+      scheduled_datetime: schedDt,
+      checked: true
+    }];
+  }
+
   if (selectedPosts.length === 0) {
-    alert('ไม่มีรายการโพสต์ที่ถูกเลือก กรุณาติ๊กเลือกอย่างน้อย 1 รายการ');
+    writeConsoleLine(`[Facebook Auto Post Error] ❌ ไม่มีรายการโพสต์ให้ดำเนินการ กรุณาระบุโฟลเดอร์หลักหรือกดสแกนคิวก่อน`, 'error', 'facebookConsole');
+    alert('ไม่มีรายการโพสต์ให้ดำเนินการ กรุณาระบุโฟลเดอร์หลักหรือกดสแกนคิวก่อน');
     return;
   }
 
-  const missingVideos = selectedPosts.filter(x => !x.video_path);
+  const missingVideos = selectedPosts.filter(x => !x.video_path && !x.subfolder_path);
   if (missingVideos.length > 0) {
     if (!confirm(`มี ${missingVideos.length} รายการที่ยังไม่มีไฟล์วิดีโอ ต้องการดำเนินการต่อหรือไม่?`)) {
       return;
@@ -7719,15 +7745,13 @@ async function runFacebookAutoPost(btnElement) {
   }
 
   const targetUrl = document.getElementById('cfg_facebook_page_url')?.value.trim() || '';
-  if (!targetUrl) {
-    writeConsoleLine(`[Facebook Auto Post Error] ❌ กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน`, 'error', 'facebookConsole');
-    alert('กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน');
-    return;
-  }
-  if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+  if (targetUrl && !targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
     writeConsoleLine(`[Facebook Auto Post Error] ❌ URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย http:// หรือ https:// (ค่าปัจจุบัน: ${targetUrl})`, 'error', 'facebookConsole');
     alert('URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย http:// หรือ https://');
     return;
+  }
+  if (!targetUrl) {
+    writeConsoleLine(`[Facebook Auto Post] ℹ️ ไม่ได้ระบุ URL ของเพจ ระบบจะใช้หน้า Facebook ปัจจุบันที่เปิดอยู่บน Chrome 9222 อัตโนมัติ`, 'info', 'facebookConsole');
   }
 
   if (btnElement) {
