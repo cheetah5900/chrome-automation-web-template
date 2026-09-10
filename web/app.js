@@ -6366,10 +6366,18 @@ function loadMetaPresets(presets) {
     });
   }
   const savedLast = localStorage.getItem('meta_last_preset');
+  let chosenPresetName = '';
   if (savedLast && presets && presets[savedLast]) {
-    select.value = savedLast;
+    chosenPresetName = savedLast;
   } else if (currentVal && presets && presets[currentVal]) {
-    select.value = currentVal;
+    chosenPresetName = currentVal;
+  }
+
+  if (chosenPresetName) {
+    select.value = chosenPresetName;
+    if (typeof applyMetaPreset === 'function') {
+      applyMetaPreset(chosenPresetName, presets[chosenPresetName]);
+    }
   }
 }
 window.loadMetaPresets = loadMetaPresets;
@@ -6453,19 +6461,31 @@ async function deleteMetaPreset() {
 }
 window.deleteMetaPreset = deleteMetaPreset;
 
-async function applyMetaPreset() {
+async function applyMetaPreset(presetNameOrEvent, presetObj) {
   const select = document.getElementById('metaPresetSelect');
-  const currentName = select ? select.value : '';
-  if (!currentName) return;
+  let currentName = (typeof presetNameOrEvent === 'string' && presetNameOrEvent)
+    ? presetNameOrEvent
+    : (select ? select.value : '');
+  if (!currentName) {
+    localStorage.removeItem('meta_last_preset');
+    return;
+  }
+
+  if (select && select.value !== currentName) {
+    select.value = currentName;
+  }
 
   localStorage.setItem('meta_last_preset', currentName);
-  let currentConfig = {};
-  try {
-    currentConfig = await jsonFetch('/api/config');
-  } catch (e) {
-    console.error('Failed to fetch config:', e);
+  let preset = presetObj;
+  if (!preset) {
+    let currentConfig = {};
+    try {
+      currentConfig = await jsonFetch('/api/config');
+    } catch (e) {
+      console.error('Failed to fetch config:', e);
+    }
+    preset = (currentConfig.meta_presets || {})[currentName];
   }
-  const preset = (currentConfig.meta_presets || {})[currentName];
   if (!preset) return;
 
   if (document.getElementById('cfg_meta_page_url')) document.getElementById('cfg_meta_page_url').value = preset.page_url || preset.channel_url || '';
@@ -7277,10 +7297,18 @@ function loadFacebookPresets(presets) {
     });
   }
   const savedLast = localStorage.getItem('facebook_last_preset');
+  let chosenPresetName = '';
   if (savedLast && presets && presets[savedLast]) {
-    select.value = savedLast;
+    chosenPresetName = savedLast;
   } else if (currentVal && presets && presets[currentVal]) {
-    select.value = currentVal;
+    chosenPresetName = currentVal;
+  }
+
+  if (chosenPresetName) {
+    select.value = chosenPresetName;
+    if (typeof applyFacebookPreset === 'function') {
+      applyFacebookPreset(chosenPresetName, presets[chosenPresetName]);
+    }
   }
 }
 window.loadFacebookPresets = loadFacebookPresets;
@@ -7364,19 +7392,33 @@ async function deleteFacebookPreset() {
 }
 window.deleteFacebookPreset = deleteFacebookPreset;
 
-async function applyFacebookPreset() {
+async function applyFacebookPreset(presetNameOrEvent, presetObj) {
   const select = document.getElementById('facebookPresetSelect');
-  const currentName = select ? select.value : '';
-  if (!currentName) return;
+  let currentName = (typeof presetNameOrEvent === 'string' && presetNameOrEvent)
+    ? presetNameOrEvent
+    : (select ? select.value : '');
+  
+  if (!currentName) {
+    localStorage.removeItem('facebook_last_preset');
+    return;
+  }
+
+  if (select && select.value !== currentName) {
+    select.value = currentName;
+  }
 
   localStorage.setItem('facebook_last_preset', currentName);
-  let currentConfig = {};
-  try {
-    currentConfig = await jsonFetch('/api/config');
-  } catch (e) {
-    console.error('Failed to fetch config:', e);
+
+  let preset = presetObj;
+  if (!preset) {
+    let currentConfig = {};
+    try {
+      currentConfig = await jsonFetch('/api/config');
+    } catch (e) {
+      console.error('Failed to fetch config:', e);
+    }
+    preset = (currentConfig.facebook_presets || currentConfig.meta_presets || {})[currentName];
   }
-  const preset = (currentConfig.facebook_presets || currentConfig.meta_presets || {})[currentName];
   if (!preset) return;
 
   if (document.getElementById('cfg_facebook_page_url')) document.getElementById('cfg_facebook_page_url').value = preset.page_url || preset.channel_url || '';
