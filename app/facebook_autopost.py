@@ -30,14 +30,15 @@ def ensure_active_window(driver, target_url: str = "") -> str:
     if not driver:
         raise RuntimeError("WebDriver instance is None")
 
-    # 1. Quick test if current handle is responsive
-    current_ok = False
+    # 1. Quick test if current handle is responsive and already on facebook
     try:
-        _ = driver.current_window_handle
-        _ = driver.title
-        current_ok = True
+        curr_h = driver.current_window_handle
+        curr_u = driver.current_url.lower()
+        if "facebook.com" in curr_u or "business.facebook.com" in curr_u:
+            if not target_url or (urllib.parse.urlparse(target_url).netloc.lower() in curr_u):
+                return curr_h
     except Exception:
-        current_ok = False
+        pass
 
     # 2. Extract target domain to prioritize tabs matching target domain
     target_host = ""
@@ -796,11 +797,14 @@ function findReelModal() {
                            text.includes('สร้าง reel') || text.includes('reel settings') || 
                            text.includes('ตั้งค่า reel') || text.includes('add video') || 
                            text.includes('replace video') || text.includes('describe your reel') ||
-                           text.includes('edit reel') || text.includes('scheduling options') ||
-                           text.includes('uploading video');
+                           text.includes('edit reel') || text.includes('uploading video');
         return hasVideoInput || isReelText;
     });
-    return reelDialogs.length > 0 ? reelDialogs[reelDialogs.length - 1] : null;
+    // Prefer dialog with more content/elements (the main Reel settings dialog)
+    if (reelDialogs.length > 1) {
+        reelDialogs.sort((a, b) => b.querySelectorAll('*').length - a.querySelectorAll('*').length);
+    }
+    return reelDialogs.length > 0 ? reelDialogs[0] : null;
 }
 
 function findReelVideoInput() {
@@ -817,21 +821,16 @@ function findReelVideoInput() {
 }
 """
 
-def debug_click_reels_button(driver) -> dict[str, Any]:
+def debug_click_reels_button(driver, timeout: float = 45.0) -> dict[str, Any]:
     """
     Step 1: Finds and clicks the 'Reels' button located next to 'Photo/video' in the Facebook feed / page.
     Supports English ('Reel', 'Reels') and Thai ('คลิป Reels', 'รีลส์', 'สร้างคลิป Reels').
+    Polls up to timeout seconds for the button to appear.
     """
     if not driver:
         return {"success": False, "error": "WebDriver is None"}
     
     ensure_active_window(driver)
-
-    # Check if Reel modal is ALREADY open
-    already_open = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
-    if already_open:
-        log("[Facebook Debug] ℹ️ หน้าต่างสร้าง Reels เปิดอยู่แล้ว")
-        return {"success": True, "message": "หน้าต่างสร้าง Reels เปิดอยู่แล้ว", "already_open": True}
 
     js_find_and_click = JS_REEL_HELPERS + """
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -882,22 +881,32 @@ def debug_click_reels_button(driver) -> dict[str, Any]:
     return { success: false, error: "ไม่พบปุ่ม 'Reels' ข้าง Photo/video บนหน้า Facebook" };
     """
 
-    res = driver.execute_script(js_find_and_click)
-    if res.get("success"):
-        label = res.get("aria") or res.get("text") or "Reels"
-        log(f"[Facebook Debug] ✅ Step 1: กดปุ่ม '{label}' (ตำแหน่ง x={res.get('rect', {}).get('x')}, y={res.get('rect', {}).get('y')}) สำเร็จ")
-        return {"success": True, "message": f"กดปุ่ม '{label}' สำเร็จ หน้าต่างสร้างคลิป Reels กำลังเปิด", "data": res}
-    else:
-        err = res.get("error", "ไม่พบปุ่ม Reels ข้าง Photo/video")
-        log(f"[Facebook Debug Error] {err}")
-        return {"success": False, "error": err}
+    start_time = time.time()
+    last_res = None
 
-def find_sample_video(preferred_path: str = "", main_folder: str = "") -> str:
-    """Finds a valid video file path for testing Reel upload."""
-    if preferred_path and os.path.isfile(preferred_path):
-        return preferred_path
+    while time.time() - start_time < timeout:
+        if is_facebook_stopped():
+            return {"success": False, "error": "บังคับหยุดทำงาน (Force Stop)"}
 
-    folders_to_check = []
+        # Check if Reel modal is ALREADY open
+        already_open = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
+        if already_open:
+            log("[Facebook Debug] ℹ️ หน้าต่างสร้าง Reels เปิดอยู่แล้ว")
+            return {"success": True, "message": "หน้าต่างสร้าง Reels เปิดอยู่แล้ว", "already_open": True}
+
+        res = driver.execute_script(js_find_and_click)
+        if res.get("success"):
+            label = res.get("aria") or res.get("text") or "Reels"
+            log(f"[Facebook Debug] ✅ Step 1: กดปุ่ม '{label}' (ตำแหน่ง x={res.get('rect', {}).get('x')}, y={res.get('rect', {}).get('y')}) สำเร็จ")
+            return {"success": True, "message": f"กดปุ่ม '{label}' สำเร็จ หน้าต่างสร้างคลิป Reels กำลังเปิด", "data": res}
+        
+        last_res = res
+        time.sleep(1.0)
+
+    err = last_res.get("error", "ไม่พบปุ่ม Reels ข้าง Photo/video บนหน้า Facebook") if last_res else "ไม่พบปุ่ม Reels (หมดเวลาค้นหา)"
+    log(f"[Facebook Debug Error] {err}")
+    return {"success": False, "error": err}
+
 def find_sample_video(preferred_path: str = "", folder_path: str = "", main_folder: str = "") -> str:
     """Locates a video file strictly in the specified target path/folder."""
     if preferred_path and os.path.isfile(preferred_path):
@@ -1043,22 +1052,24 @@ def debug_click_upload_video_button(driver, video_path: str = "", main_folder: s
         log(f"[Facebook Debug] send_keys error on input: {e}")
         return {"success": False, "error": f"ไม่สามารถส่งไฟล์วิดีโอเข้า input: {e}"}
 
-    # 4. Wait for Facebook to recognize video upload
-    time.sleep(2.5)
-    status = driver.execute_script(JS_REEL_HELPERS + """
-        const modal = findReelModal();
-        if (!modal) return { open: false };
-        const buttons = Array.from(modal.querySelectorAll('[role="button"], button')).map(b => (b.getAttribute('aria-label') || b.innerText || '').trim()).filter(Boolean);
-        const text = (modal.innerText || '').slice(0, 300);
-        const hasNext = buttons.some(b => b.toLowerCase().includes('next') || b.includes('ถัดไป'));
-        const isUploading = text.toLowerCase().includes('uploading') || text.includes('กำลังอัปโหลด') || buttons.some(b => b.toLowerCase().includes('replace'));
-        return {
-            open: true,
-            hasNext: hasNext,
-            isUploading: isUploading,
-            buttons: buttons
-        };
-    """)
+    # 4. Wait for Facebook to recognize video upload (responsive polling)
+    start_rec = time.time()
+    status = {"open": True, "hasNext": False}
+    while time.time() - start_rec < 3.0:
+        status = driver.execute_script(JS_REEL_HELPERS + """
+            const modal = findReelModal();
+            if (!modal) return { open: false, hasNext: false };
+            const buttons = Array.from(modal.querySelectorAll('[role="button"], button')).map(b => (b.getAttribute('aria-label') || b.innerText || '').trim()).filter(Boolean);
+            const hasNext = buttons.some(b => b.toLowerCase().includes('next') || b.includes('ถัดไป'));
+            return {
+                open: true,
+                hasNext: hasNext,
+                buttons: buttons
+            };
+        """)
+        if status.get("hasNext"):
+            break
+        time.sleep(0.2)
 
     vid_name = os.path.basename(target_video)
     log(f"[Facebook Debug] ✅ Step 2: แนบไฟล์วิดีโอ '{vid_name}' เข้าสู่ Reels เรียบร้อยแล้ว (ไม่ต้องคลิกเลือกไฟล์เอง)")
@@ -1214,7 +1225,7 @@ def debug_click_next_twice(driver) -> dict[str, Any]:
 
         click_results.append(click_info)
         log(f"[Facebook Debug] ➡️ กดปุ่ม Next ครั้งที่ {step_idx}/2 สำเร็จ")
-        time.sleep(2.0)
+        time.sleep(0.6)
 
     settings_reached = driver.execute_script(JS_REEL_HELPERS + """
         const modal = findReelModal() || document;
@@ -1251,11 +1262,17 @@ def debug_insert_caption(driver, caption: str = "", folder_path: str = "", main_
     if not target_caption:
         return {"success": False, "error": "ไม่พบข้อความแคปชั่นสำหรับระบุ"}
 
-    # Locate description input inside Reel modal
-    desc_el = driver.execute_script(JS_REEL_HELPERS + """
-        const modal = findReelModal() || document;
-        return modal.querySelector('[role="textbox"][contenteditable="true"]') || document.querySelector('[role="textbox"][contenteditable="true"]');
-    """)
+    # Locate description input inside Reel modal (responsive polling up to 4s)
+    desc_el = None
+    desc_start = time.time()
+    while time.time() - desc_start < 4.0:
+        desc_el = driver.execute_script(JS_REEL_HELPERS + """
+            const modal = findReelModal() || document;
+            return modal.querySelector('[role="textbox"][contenteditable="true"]') || document.querySelector('[role="textbox"][contenteditable="true"]');
+        """)
+        if desc_el:
+            break
+        time.sleep(0.15)
 
     if not desc_el:
         return {"success": False, "error": "ไม่พบช่องกรอก Description ('Describe your reel...') ในหน้าต่าง Reels (กรุณากด Step 3 เพื่อเข้าหน้าตั้งค่าก่อน)"}
@@ -1266,11 +1283,11 @@ def debug_insert_caption(driver, caption: str = "", folder_path: str = "", main_
         try:
             p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
             p.communicate(input=target_caption.encode("utf-8"))
-            time.sleep(0.1)
+            time.sleep(0.05)
             ActionChains(driver).click(desc_el).key_down(Keys.COMMAND).send_keys("a").key_up(Keys.COMMAND).send_keys(Keys.BACKSPACE).perform()
-            time.sleep(0.2)
+            time.sleep(0.1)
             ActionChains(driver).key_down(Keys.COMMAND).send_keys("v").key_up(Keys.COMMAND).perform()
-            time.sleep(0.5)
+            time.sleep(0.2)
             pasted = True
         except Exception as e:
             log(f"[Facebook Debug] pbcopy error: {e}")
@@ -1450,8 +1467,11 @@ def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = 
 
     # 2. Check if currently inside Scheduling options sub-view
     in_sched = driver.execute_script(JS_REEL_HELPERS + """
-        const m = findReelModal() || document;
-        return (m.innerText || '').includes('Choose a date and time in the future');
+        const bodyText = (document.body ? document.body.innerText : '') + (findReelModal() ? findReelModal().innerText : '');
+        return bodyText.includes('Choose a date and time in the future') ||
+               bodyText.includes('เลือกวันที่และเวลา') ||
+               bodyText.includes('Schedule for later') ||
+               bodyText.includes('กำหนดเวลา');
     """)
 
     if not in_sched:
@@ -1477,7 +1497,7 @@ def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = 
         time.sleep(1.2)
 
     # 3. Locate inputs in Scheduling options
-    inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="text"]')
+    inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="text"], input[role="combobox"]')
     date_input = None
     time_input = None
     for inp in inputs:
@@ -1498,7 +1518,8 @@ def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = 
     # 4. Set Time
     if time_input:
         try:
-            time_input.click()
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].focus(); arguments[0].click();", time_input)
+            time.sleep(0.2)
             ActionChains(driver).key_down(Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL).send_keys("a").key_up(Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL).send_keys(Keys.BACKSPACE).perform()
             time.sleep(0.2)
             time_input.send_keys(fb_time)
@@ -1518,7 +1539,7 @@ def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = 
     # 5. Set Date if calendar day is reachable
     if date_input:
         try:
-            date_input.click()
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].focus(); arguments[0].click();", date_input)
             time.sleep(0.4)
             driver.execute_script("""
                 const targetDay = arguments[0];
@@ -1534,33 +1555,55 @@ def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = 
         except Exception as e:
             log(f"[Facebook Debug] Date set error: {e}")
 
-    # 6. Click 'Schedule for later' confirmation button
+    # 6. Click 'Schedule for later' confirmation button inside the modal
     js_confirm = """
-    const btn = Array.from(document.querySelectorAll('[role="button"], button')).find(b => {
-        const t = (b.innerText || '').trim().toLowerCase();
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+    const schedDialog = dialogs.find(d => {
+        const t = (d.innerText || '').toLowerCase();
+        return t.includes('choose a date and time') || t.includes('schedule for later') || t.includes('กำหนดเวลา');
+    }) || document;
+
+    const allButtons = Array.from(schedDialog.querySelectorAll('[role="button"], button'));
+    const candidates = allButtons.filter(b => {
         const a = (b.getAttribute('aria-label') || '').trim().toLowerCase();
-        const rect = b.getBoundingClientRect();
-        const isSched = (t === 'schedule for later' || t === 'กำหนดเวลาในภายหลัง' ||
-                         a === 'schedule for later' || a === 'กำหนดเวลาในภายหลัง');
+        const t = (b.innerText || b.textContent || '').trim().toLowerCase();
+        const isBack = a.includes('back') || a.includes('ย้อนกลับ') || a.includes('close') || a.includes('date picker');
+        if (isBack) return false;
+
+        const isSched = a.includes('schedule for later') || t.includes('schedule for later') ||
+                        a.includes('กำหนดเวลาในภายหลัง') || t.includes('กำหนดเวลาในภายหลัง') ||
+                        a.includes('กำหนดเวลาสำหรับภายหลัง') || t.includes('กำหนดเวลาสำหรับภายหลัง') ||
+                        a === 'schedule' || t === 'schedule' ||
+                        a === 'กำหนดเวลา' || t === 'กำหนดเวลา';
+        const isNotHidden = b.getAttribute('aria-hidden') !== 'true';
         const isEnabled = b.getAttribute('aria-disabled') !== 'true' && !b.disabled;
-        return isSched && isEnabled && rect.width > 80 && rect.x > 500;
+        const rect = b.getBoundingClientRect();
+        return isSched && isNotHidden && isEnabled && rect.width > 50 && rect.height > 20 && rect.x >= 0 && rect.y >= 0;
     });
-    if (btn) {
+
+    if (candidates.length > 0) {
+        const btn = candidates[candidates.length - 1];
+        btn.scrollIntoView({ behavior: 'instant', block: 'center' });
         btn.click();
-        return { success: true, method: 'confirm_button' };
+        return { success: true, method: 'schedule_for_later_button', text: (btn.textContent || btn.getAttribute('aria-label') || '').trim() };
     }
-    // Fallback: click back button in header
-    const backBtn = Array.from(document.querySelectorAll('[aria-label="Back"], [aria-label="ย้อนกลับ"]')).find(b => {
-        const r = b.getBoundingClientRect();
-        return r.width > 0 && r.x > 0;
-    });
-    if (backBtn) {
-        backBtn.click();
-        return { success: true, method: 'back_button' };
-    }
-    return { success: true, method: 'already_saved' };
+    return { success: false, error: "ไม่พบปุ่ม 'Schedule for later' ในหน้าต่างตั้งค่าเวลา" };
     """
-    driver.execute_script(js_confirm)
+
+    confirm_start = time.time()
+    r_confirm = {"success": False, "error": "ไม่พบปุ่ม 'Schedule for later' ในหน้าต่างตั้งค่าเวลา"}
+    while time.time() - confirm_start < 5.0:
+        r_confirm = driver.execute_script(js_confirm)
+        if r_confirm.get("success"):
+            break
+        time.sleep(0.5)
+
+    if r_confirm.get("success"):
+        log(f"[Facebook Debug] ✅ กดปุ่ม Schedule for later ใน modal เรียบร้อยแล้ว (Button: '{r_confirm.get('text')}')")
+    else:
+        log(f"[Facebook Debug Warning] ⚠️ {r_confirm.get('error')}")
+        return r_confirm
+
     time.sleep(1.5)
 
     # 7. Check updated status on Reel settings
@@ -1570,7 +1613,7 @@ def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = 
             const t = (el.innerText || '');
             return t.includes('Scheduling options') && el.getAttribute('role') === 'button';
         });
-        return btn ? btn.innerText.replace(/\\n/g, ' - ') : '';
+        return btn ? btn.innerText.split('\\n').join(' - ') : '';
     """)
 
     log(f"[Facebook Debug] ✅ Step 6: ตั้งเวลาโพสต์สำเร็จ ({fb_date} เวลา {fb_time}) -> {sched_summary}")
@@ -1615,23 +1658,33 @@ def debug_click_post_button(driver) -> dict[str, Any]:
     js_click_action = JS_REEL_HELPERS + """
     const modal = findReelModal() || document;
     const candidates = Array.from(modal.querySelectorAll('[role="button"], button')).filter(b => {
-        const t = (b.innerText || '').trim().toLowerCase();
+        const t = (b.innerText || b.textContent || '').trim().toLowerCase();
         const a = (b.getAttribute('aria-label') || '').trim().toLowerCase();
         const rect = b.getBoundingClientRect();
         const isAction = (t === 'schedule' || t === 'post' || a === 'schedule' || a === 'post' ||
-                          t === 'กำหนดเวลา' || t === 'โพสต์');
+                          t === 'กำหนดเวลา' || t === 'โพสต์' || a === 'กำหนดเวลา' || a === 'โพสต์');
+        const isNotHidden = b.getAttribute('aria-hidden') !== 'true';
         const isEnabled = b.getAttribute('aria-disabled') !== 'true' && !b.disabled;
-        return isAction && isEnabled && rect.width > 80 && rect.x > 0 && rect.y > 400;
+        return isAction && isNotHidden && isEnabled && rect.width > 50 && rect.height > 20 && rect.x >= 0 && rect.y >= 0;
     });
     if (candidates.length > 0) {
         const btn = candidates[candidates.length - 1];
-        const label = btn.innerText.trim() || btn.getAttribute('aria-label') || 'Submit';
+        const label = (btn.innerText || btn.textContent || btn.getAttribute('aria-label') || 'Submit').trim();
+        btn.scrollIntoView({ behavior: 'instant', block: 'center' });
         btn.click();
         return { success: true, label: label };
     }
     return { success: false, error: "ไม่พบปุ่ม Schedule หรือ Post ที่พร้อมใช้งาน (ปุ่มอาจยัง disabled หรือกำลังประมวลผลอยู่)" };
     """
-    res = driver.execute_script(js_click_action)
+
+    start_click = time.time()
+    res = {"success": False, "error": "ไม่พบปุ่ม Schedule หรือ Post ที่พร้อมใช้งาน"}
+    while time.time() - start_click < 8.0:
+        res = driver.execute_script(js_click_action)
+        if res.get("success"):
+            break
+        time.sleep(0.5)
+
     if not res.get("success"):
         return res
 
@@ -1765,19 +1818,31 @@ def run_facebook_autopost_batch(
             continue
 
         try:
-            # Step 0: Ensure any lingering dialog from previous run is closed
-            try:
-                has_lingering = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
-                if has_lingering:
-                    log("[Facebook Auto Post] พบหน้าต่าง Modal ค้างอยู่ ทำการปิดก่อนเริ่มรายการใหม่...")
-                    debug_close_reels_modal(driver)
+            # Step 0: Ensure any lingering dialog from previous run is closed (wait up to 45s for round 2+)
+            if idx > 0:
+                log(f"[Facebook Auto Post] ⏳ [รอบที่ {item_num}/{total}] กำลังตรวจสอบว่าหน้าต่างกรอกข้อมูลก่อนหน้าปิดสมบูรณ์และรอปุ่ม Reel ปรากฏ...")
+                m_start = time.time()
+                while time.time() - m_start < 45.0:
+                    if is_facebook_stopped():
+                        break
+                    has_m = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
+                    if not has_m:
+                        break
                     time.sleep(1.0)
-            except Exception:
-                pass
+                time.sleep(1.5)
+            else:
+                try:
+                    has_lingering = driver.execute_script(JS_REEL_HELPERS + "\nreturn !!findReelModal();")
+                    if has_lingering:
+                        log("[Facebook Auto Post] พบหน้าต่าง Modal ค้างอยู่ ทำการปิดก่อนเริ่มรายการใหม่...")
+                        debug_close_reels_modal(driver)
+                        time.sleep(1.0)
+                except Exception:
+                    pass
 
-            # Step 1: Click Reels
+            # Step 1: Click Reels (polls up to 45s for Reel button to appear)
             _report(1, "🎬 1. กดปุ่ม Reels")
-            r1 = debug_click_reels_button(driver)
+            r1 = debug_click_reels_button(driver, timeout=45.0)
             if not r1.get("success"):
                 raise RuntimeError(r1.get("error", "กดปุ่ม Reels ไม่สำเร็จ"))
             time.sleep(1.5)
@@ -1787,21 +1852,21 @@ def run_facebook_autopost_batch(
             r2 = debug_click_upload_video_button(driver, video_path=video_path, main_folder=subfolder_path)
             if not r2.get("success"):
                 raise RuntimeError(r2.get("error", "แนบไฟล์วิดีโอไม่สำเร็จ"))
-            time.sleep(2.0)
+            time.sleep(0.6)
 
             # Step 3: Next twice
             _report(3, "➡️ 3. กด Next 2 ครั้ง (เข้าหน้าตั้งค่า)")
             r3 = debug_click_next_twice(driver)
             if not r3.get("success"):
                 raise RuntimeError(r3.get("error", "กดปุ่ม Next ไม่สำเร็จ"))
-            time.sleep(1.5)
+            time.sleep(0.5)
 
             # Step 4: Insert Caption
             _report(4, "📝 4. ใส่ Description (Caption)")
             r4 = debug_insert_caption(driver, caption=caption, folder_path=subfolder_path, main_folder=subfolder_path)
             if not r4.get("success"):
                 log(f"[Facebook Auto Post Warning] Description: {r4.get('error')}")
-            time.sleep(1.0)
+            time.sleep(0.5)
 
             # Step 5: Add Affiliate Product
             _report(5, "🛍️ 5. เพิ่มสินค้า Affiliate & ลิงก์")
@@ -1810,25 +1875,25 @@ def run_facebook_autopost_batch(
                 log(f"[Facebook Auto Post Warning] Add affiliate product: {r5.get('error')}")
             time.sleep(1.0)
 
-            # Step 6: Set Schedule Time
-            _report(6, "⏰ 6. ตั้งเวลาโพสต์")
+            # Step 6: Set Schedule Time (Clicks Schedule for later in modal)
+            _report(6, "⏰ 6. ตั้งเวลาโพสต์ (กด Schedule for later)")
             r6 = debug_set_schedule(driver, scheduled_datetime=scheduled_dt, main_folder=subfolder_path)
             if not r6.get("success"):
-                log(f"[Facebook Auto Post Warning] Set schedule: {r6.get('error')}")
-            time.sleep(1.0)
+                raise RuntimeError(r6.get("error", "ตั้งเวลาโพสต์ไม่สำเร็จ"))
+            time.sleep(1.5)
 
-            # Step 7: Click Submit / Post
-            _report(7, "🚀 7. กดปุ่มโพสต์/กำหนดเวลา")
+            # Step 7: Click Submit / Schedule to publish
+            _report(7, "🚀 7. กดปุ่มกำหนดเวลา/โพสต์ (Schedule/Post)")
             r7 = debug_click_post_button(driver)
             if not r7.get("success"):
-                raise RuntimeError(r7.get("error", "กดปุ่มโพสต์ไม่สำเร็จ"))
+                raise RuntimeError(r7.get("error", "กดปุ่มกำหนดเวลา/โพสต์ไม่สำเร็จ"))
 
             success_count += 1
             log(f"[Facebook Auto Post] ✅ สำเร็จรายการที่ {item_num}/{total}: {item_title}")
 
-            # Wait for modal to disappear
+            # Wait for modal to disappear after submission
             modal_wait_start = time.time()
-            while time.time() - modal_wait_start < 15.0:
+            while time.time() - modal_wait_start < 45.0:
                 if is_facebook_stopped():
                     break
                 is_open = False
@@ -1838,7 +1903,7 @@ def run_facebook_autopost_batch(
                     pass
                 if not is_open:
                     break
-                time.sleep(0.5)
+                time.sleep(1.0)
 
             time.sleep(2.0)
 

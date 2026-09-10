@@ -7469,7 +7469,7 @@ async function scanFacebookBatch() {
     return;
   }
   const subfoldersStr = document.getElementById('cfg_facebook_subfolders')?.value.trim() || '';
-  const videoPrefix = document.getElementById('cfg_facebook_video_prefix')?.value.trim() || 'combined';
+  const videoPrefix = (document.getElementById('cfg_facebook_video_prefix')?.value ?? 'combined').trim();
   const startDate = document.getElementById('cfg_facebook_start_date')?.value.trim() || '';
   const startHour = parseInt(document.getElementById('cfg_facebook_start_hour')?.value, 10) || 18;
 
@@ -7584,22 +7584,17 @@ function renderFacebookPostQueue() {
     card.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <input type="checkbox" class="facebook-item-checkbox" data-index="${index}" ${isChecked ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer; accent-color: #1877f2; margin: 0;" />
           <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">#${index + 1} โฟลเดอร์: ${item.subfolder_name || 'Manual Post'}</span>
           ${hasVideoBadge}
           ${hasCaptionBadge}
           ${hasAffiliateBadge}
         </div>
-        <button class="delete-post-btn secondary" data-index="${index}" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; color: #ff6b6b; border-color: rgba(255,107,107,0.3); margin: 0;">🗑️ ลบ</button>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div>
           <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">ตำแหน่งไฟล์วิดีโอ (Video Path)</label>
-          <div style="display: flex; gap: 6px;">
-            <input type="text" class="facebook-video-input" data-index="${index}" value="${item.video_path || ''}" placeholder="เลือกหรือวางที่อยู่ไฟล์วิดีโอ..." style="font-size: 0.82rem; padding: 8px 10px; margin-bottom: 0; flex-grow: 1;" />
-            <button class="browse-facebook-video-btn secondary" data-index="${index}" style="padding: 6px 10px; font-size: 0.78rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Browse</button>
-          </div>
+          <input type="text" class="facebook-video-input" data-index="${index}" value="${item.video_path || ''}" placeholder="เลือกหรือวางที่อยู่ไฟล์วิดีโอ..." style="font-size: 0.82rem; padding: 8px 10px; margin-bottom: 0; width: 100%;" />
         </div>
 
         <div>
@@ -7628,24 +7623,6 @@ function renderFacebookPostQueue() {
   });
 
   // Attach interactive listeners
-  container.querySelectorAll('.facebook-item-checkbox').forEach(cb => {
-    cb.addEventListener('change', (e) => {
-      const idx = parseInt(e.target.dataset.index, 10);
-      if (facebookPostQueue[idx]) {
-        facebookPostQueue[idx].checked = e.target.checked;
-        const card = e.target.closest('.facebook-post-card');
-        if (card) {
-          card.style.opacity = e.target.checked ? '1' : '0.45';
-          card.style.background = e.target.checked ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.01)';
-          card.style.borderColor = e.target.checked ? 'rgba(24, 119, 242, 0.3)' : 'rgba(255, 255, 255, 0.06)';
-        }
-        const selectedCount = facebookPostQueue.filter(p => p.checked !== false).length;
-        if (badge) badge.textContent = `${selectedCount} / ${facebookPostQueue.length} Posts Selected`;
-        updateFacebookSelectAllButtonText();
-      }
-    });
-  });
-
   container.querySelectorAll('.facebook-video-input').forEach(input => {
     input.addEventListener('input', (e) => {
       const idx = parseInt(e.target.dataset.index, 10);
@@ -7691,42 +7668,6 @@ function renderFacebookPostQueue() {
       renderFacebookPostQueue();
     });
   });
-
-  container.querySelectorAll('.browse-facebook-video-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const idx = parseInt(e.currentTarget.dataset.index, 10);
-      try {
-        const res = await jsonFetch('/api/utils/browse-file?filter_type=video');
-        if (res.ok && res.path) {
-          if (facebookPostQueue[idx]) {
-            facebookPostQueue[idx].video_path = res.path;
-            facebookPostQueue[idx].video_name = res.path.split('/').pop().split('\\\\').pop();
-            facebookPostQueue[idx].has_video = true;
-            renderFacebookPostQueue();
-          }
-        }
-      } catch (err) {
-        console.error('Browse video error:', err);
-      }
-    });
-  });
-
-  container.querySelectorAll('.delete-post-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const idx = parseInt(e.currentTarget.dataset.index, 10);
-      facebookPostQueue.splice(idx, 1);
-      renderFacebookPostQueue();
-    });
-  });
-}
-
-function clearFacebookBatch() {
-  if (facebookPostQueue.length > 0) {
-    if (!confirm('ต้องการล้างรายการโพสต์ทั้งหมดหรือไม่?')) return;
-  }
-  facebookPostQueue = [];
-  renderFacebookPostQueue();
-  writeConsoleLine('ล้างรายการคิวโพสต์ทั้งหมดแล้ว', 'info', 'facebookConsole');
 }
 
 async function runFacebookAutoPost(btnElement) {
@@ -7946,9 +7887,6 @@ function initFacebookAutoPostListeners() {
   const scanBtn = document.getElementById('btnScanFacebookBatch');
   if (scanBtn) scanBtn.addEventListener('click', scanFacebookBatch);
 
-  const clearBtn = document.getElementById('btnClearFacebookBatch');
-  if (clearBtn) clearBtn.addEventListener('click', clearFacebookBatch);
-
   const toggleAllBtn = document.getElementById('toggleAllFacebookPostsBtn');
   if (toggleAllBtn) {
     toggleAllBtn.addEventListener('click', () => {
@@ -7970,101 +7908,6 @@ function initFacebookAutoPostListeners() {
       const consoleBox = document.getElementById('facebookConsole');
       if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
     });
-  }
-
-  // Facebook Reels Step Debugger Listeners
-  const debugReelsBtn = document.getElementById('btnFacebookDebugStepReels');
-  if (debugReelsBtn) debugReelsBtn.addEventListener('click', (e) => executeFacebookDebugStep('click_reels', e.currentTarget));
-
-  const debugUploadBtn = document.getElementById('btnFacebookDebugStepUpload');
-  if (debugUploadBtn) debugUploadBtn.addEventListener('click', (e) => executeFacebookDebugStep('click_upload', e.currentTarget));
-
-  const debugNextBtn = document.getElementById('btnFacebookDebugStepNext');
-  if (debugNextBtn) debugNextBtn.addEventListener('click', (e) => executeFacebookDebugStep('click_next_twice', e.currentTarget));
-
-  const debugCaptionBtn = document.getElementById('btnFacebookDebugStepCaption');
-  if (debugCaptionBtn) debugCaptionBtn.addEventListener('click', (e) => executeFacebookDebugStep('insert_caption', e.currentTarget));
-
-  const debugAddProductBtn = document.getElementById('btnFacebookDebugStepAddProduct');
-  if (debugAddProductBtn) debugAddProductBtn.addEventListener('click', (e) => executeFacebookDebugStep('add_affiliate_product', e.currentTarget));
-
-  const debugScheduleBtn = document.getElementById('btnFacebookDebugStepSchedule');
-  if (debugScheduleBtn) debugScheduleBtn.addEventListener('click', (e) => executeFacebookDebugStep('set_schedule', e.currentTarget));
-
-  const debugPostBtn = document.getElementById('btnFacebookDebugStepPost');
-  if (debugPostBtn) debugPostBtn.addEventListener('click', (e) => executeFacebookDebugStep('click_post', e.currentTarget));
-}
-
-async function executeFacebookDebugStep(stepName, btn) {
-  const stepLabels = {
-    'click_reels': '🎬 Step 1: กดปุ่ม Reels (ข้าง Photo/video)',
-    'click_upload': '📤 Step 2: แนบไฟล์วิดีโอเข้า Reels (Direct Attach)',
-    'click_next_twice': '➡️ Step 3: กด Next 2 ครั้ง (เข้าหน้าตั้งค่า)',
-    'insert_caption': '📝 Step 4: ใส่ Description (Caption)',
-    'add_affiliate_product': '🛍️ Step 5: กด Add Product & วาง Affiliate Link',
-    'set_schedule': '⏰ Step 6: ตั้งเวลาโพสต์ (Schedule Time)',
-    'click_post': '🚀 Step 7: กดปุ่มโพสต์ (Post / Schedule)'
-  };
-  const label = stepLabels[stepName] || stepName;
-
-  let targetVideoPath = '';
-  let targetCaption = '';
-  let targetAffiliateUrl = '';
-  let targetSubfolder = '';
-  let targetScheduledDatetime = '';
-  if (typeof facebookPostQueue !== 'undefined' && facebookPostQueue && facebookPostQueue.length > 0) {
-    const item = facebookPostQueue.find(p => p.checked !== false && (p.video_path || p.caption)) || facebookPostQueue[0];
-    if (item) {
-      targetVideoPath = item.video_path || '';
-      targetCaption = item.caption || '';
-      targetAffiliateUrl = item.affiliate_url || '';
-      targetSubfolder = item.subfolder_path || '';
-      targetScheduledDatetime = item.scheduled_datetime || '';
-    }
-  }
-  if (!targetScheduledDatetime) {
-    const startDate = document.getElementById('cfg_facebook_start_date')?.value || '';
-    const startHour = String(document.getElementById('cfg_facebook_start_hour')?.value || '18').padStart(2, '0');
-    if (startDate) {
-      targetScheduledDatetime = `${startDate}T${startHour}:00:00`;
-    }
-  }
-  const mainFolder = document.getElementById('cfg_facebook_main_folder')?.value || '';
-
-  writeConsoleLine(`[Reels Debug] ⏳ กำลังรัน: ${label}...`, 'system', 'facebookConsole');
-  if (btn) btn.disabled = true;
-
-  try {
-    const res = await jsonFetch('/api/facebook-autopost/debug/step', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        step: stepName,
-        video_path: targetVideoPath,
-        main_folder: mainFolder,
-        caption: targetCaption,
-        affiliate_url: targetAffiliateUrl,
-        subfolder_path: targetSubfolder,
-        scheduled_datetime: targetScheduledDatetime
-      })
-    });
-
-    if (res.ok) {
-      writeConsoleLine(`[Reels Debug] ✅ ${res.message || 'สำเร็จ'}`, 'success', 'facebookConsole');
-      showToast(`Facebook Debug: ${res.message || 'สำเร็จ'}`, 'success');
-      if (res.data) {
-        writeConsoleLine(`  -> Result: ${JSON.stringify(res.data)}`, 'info', 'facebookConsole');
-      }
-    } else {
-      const errMsg = res.detail || res.message || 'เกิดข้อผิดพลาด';
-      writeConsoleLine(`[Reels Debug Error] ❌ ${errMsg}`, 'error', 'facebookConsole');
-      showToast(errMsg, 'error');
-    }
-  } catch (err) {
-    writeConsoleLine(`[Reels Debug Exception] ❌ ${err.message}`, 'error', 'facebookConsole');
-    showToast(err.message, 'error');
-  } finally {
-    if (btn) btn.disabled = false;
   }
 }
 
@@ -8859,7 +8702,6 @@ const staticTooltips = {
   "saveFacebookPresetBtn": "💾 บันทึก Preset Facebook Auto Post:<br>- บันทึกค่าการตั้งค่า, ลิงก์เพจ และชั่วโมงที่เริ่มโพสต์เก็บไว้",
   "deleteFacebookPresetBtn": "🗑️ ลบ Preset ที่เลือก",
   "btnScanFacebookBatch": "🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair):<br>- สแกนไฟล์วิดีโอ (combined*), แคปชั่น (caption.md), และจัดคิวโพสต์วันละ 1 โพสต์ตามชั่วโมงที่ระบุ (สุ่มนาที 00-59)",
-  "btnClearFacebookBatch": "🗑️ ล้างรายการโพสต์ที่จับคู่ไว้ทั้งหมดในตาราง",
   "runFacebookAutoPostBtn": "🚀 รัน Auto Post ตามคิว:<br>- เริ่มส่งโพสต์ตามรายการที่เตรียมไว้ทั้งหมดไปยัง Facebook",
   "btnFacebookForceStop": "🛑 บังคับหยุดทำงาน (Force Stop):<br>- หยุดกระบวนการโพสต์ที่กำลังทำงานอยู่ทันทีโดยไม่ปิดหน้าเบราว์เซอร์",
   "clearFacebookConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)",

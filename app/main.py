@@ -4478,14 +4478,8 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     video_exts = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"]
 
-    for idx, folder_path in enumerate(target_subfolders):
+    for folder_path in target_subfolders:
         folder_name = os.path.basename(folder_path)
-        
-        # Post once per day at target hour with a randomized minute (0-59)
-        post_day = base_day + timedelta(days=idx)
-        random_minute = random.randint(0, 59)
-        item_dt = datetime(post_day.year, post_day.month, post_day.day, target_hour, random_minute)
-        scheduled_iso = item_dt.strftime("%Y-%m-%dT%H:%M")
 
         # Find video file
         sub_files = []
@@ -4497,20 +4491,24 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
         video_files = [f for f in sub_files if any(f.lower().endswith(ext) for ext in video_exts) and os.path.isfile(os.path.join(folder_path, f))]
         video_files.sort(key=natural_sort_key)
         
-        # Prioritize files starting with / containing the configured prefix
-        starts_prefix = [v for v in video_files if v.lower().startswith(prefix_clean)]
-        contains_prefix = [v for v in video_files if prefix_clean in v.lower()]
-        
-        if starts_prefix:
+        # Only select video starting with the configured prefix; skip folder if not found
+        if prefix_clean:
+            starts_prefix = [v for v in video_files if v.lower().startswith(prefix_clean)]
+            if not starts_prefix:
+                continue
             selected_video = starts_prefix[0]
-        elif contains_prefix:
-            selected_video = contains_prefix[0]
-        elif video_files:
-            selected_video = video_files[0]
         else:
-            selected_video = None
+            if not video_files:
+                continue
+            selected_video = video_files[0]
 
-        video_path = os.path.join(folder_path, selected_video) if selected_video else ""
+        video_path = os.path.join(folder_path, selected_video)
+
+        # Post once per day at target hour with a randomized minute (0-59)
+        post_day = base_day + timedelta(days=len(items))
+        random_minute = random.randint(0, 59)
+        item_dt = datetime(post_day.year, post_day.month, post_day.day, target_hour, random_minute)
+        scheduled_iso = item_dt.strftime("%Y-%m-%dT%H:%M")
 
         # Find caption file (prioritizing caption.md / Caption.md)
         caption_text = ""
@@ -4571,7 +4569,7 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
         has_aff = bool(affiliate_url)
 
         items.append({
-            "id": idx + 1,
+            "id": len(items) + 1,
             "checked": has_aff,  # uncheck by default if missing affiliate link
             "subfolder_name": folder_name,
             "subfolder_path": folder_path,
