@@ -299,6 +299,32 @@ ${step5}
 2. ควบคุมเบราว์เซอร์ส่งโพสต์ไปยัง Facebook / Meta ตามลำดับและเวลาที่กำหนด<br>
 3. แสดงความคืบหน้าแบบ Real-time บน Console`;
   }
+
+  const tooltipScanFacebook = document.getElementById('tooltip_btnScanFacebookBatch');
+  if (tooltipScanFacebook) {
+    const fbFolder = document.getElementById('cfg_facebook_main_folder')?.value.trim() || '[ยังไม่ระบุโฟลเดอร์]';
+    const subRange = document.getElementById('cfg_facebook_subfolders')?.value.trim() || 'ทั้งหมด';
+    const startDate = document.getElementById('cfg_facebook_start_date')?.value.trim() || 'วันนี้';
+    tooltipScanFacebook.innerHTML = `🔍 <strong>ขั้นตอนการสแกนและจับคู่ข้อมูล:</strong><br>
+1. สแกนโฟลเดอร์หลัก: <code>${fbFolder}</code><br>
+2. เลือกโฟลเดอร์ย่อย: <code>${subRange}</code><br>
+3. ตรวจจับไฟล์วิดีโอ (.mp4) และไฟล์ Caption (.txt) ในแต่ละโฟลเดอร์<br>
+4. คำนวณวัน-เวลาโพสต์เริ่มต้น: <code>${startDate}</code><br>
+5. แสดงผลในตารางคิวให้ตรวจสอบและแก้ไขก่อนเริ่มรัน`;
+  }
+
+  const tooltipRunFacebook = document.getElementById('tooltip_runFacebookAutoPostBtn');
+  if (tooltipRunFacebook) {
+    tooltipRunFacebook.innerHTML = `🚀 <strong>รัน Auto Post ตามคิว:</strong><br>
+1. ตรวจสอบคิวโพสต์ที่เตรียมไว้ (${facebookPostQueue.length} รายการ)<br>
+2. ควบคุมเบราว์เซอร์ส่งโพสต์ไปยัง Facebook ตามลำดับและเวลาที่กำหนด<br>
+3. แสดงความคืบหน้าแบบ Real-time บน Console`;
+  }
+
+  const tooltipForceStopFacebook = document.getElementById('tooltip_btnFacebookForceStop');
+  if (tooltipForceStopFacebook) {
+    tooltipForceStopFacebook.innerHTML = `🛑 <strong>Force Stop:</strong><br>หยุดกระบวนการรัน Facebook Auto Post ทันที`;
+  }
 }
 
 async function loadSettings() {
@@ -803,6 +829,7 @@ function initTabNavigation() {
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
+  const btnFacebookAutoPost = document.getElementById('tabFacebookAutoPostBtn');
   const btnMetaAutoPost = document.getElementById('tabMetaAutoPostBtn');
   const btnShopeeAffiliate = document.getElementById('tabShopeeAffiliateBtn');
   
@@ -812,6 +839,7 @@ function initTabNavigation() {
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
   const viewSeedanceGen = document.getElementById('seedanceGenView');
+  const viewFacebookAutoPost = document.getElementById('facebookAutoPostView');
   const viewMetaAutoPost = document.getElementById('metaAutoPostView');
   const viewShopeeAffiliate = document.getElementById('shopeeAffiliateView');
 
@@ -822,6 +850,7 @@ function initTabNavigation() {
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
     { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: null },
+    { btn: btnFacebookAutoPost, view: viewFacebookAutoPost, onLoad: loadConfig },
     { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig },
     { btn: btnShopeeAffiliate, view: viewShopeeAffiliate, onLoad: loadConfig }
   ];
@@ -871,6 +900,7 @@ function restoreSavedTab() {
   const btnWorkflow = document.getElementById('tabWorkflowBtn');
   const btnVideoHelper = document.getElementById('tabVideoHelperBtn');
   const btnSeedanceGen = document.getElementById('tabSeedanceGenBtn');
+  const btnFacebookAutoPost = document.getElementById('tabFacebookAutoPostBtn');
   const btnMetaAutoPost = document.getElementById('tabMetaAutoPostBtn');
   const btnShopeeAffiliate = document.getElementById('tabShopeeAffiliateBtn');
 
@@ -880,6 +910,7 @@ function restoreSavedTab() {
   const viewWorkflow = document.getElementById('workflowBotView');
   const viewVideoHelper = document.getElementById('videoHelperView');
   const viewSeedanceGen = document.getElementById('seedanceGenView');
+  const viewFacebookAutoPost = document.getElementById('facebookAutoPostView');
   const viewMetaAutoPost = document.getElementById('metaAutoPostView');
   const viewShopeeAffiliate = document.getElementById('shopeeAffiliateView');
 
@@ -890,6 +921,7 @@ function restoreSavedTab() {
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
     { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: loadConfig },
+    { btn: btnFacebookAutoPost, view: viewFacebookAutoPost, onLoad: loadConfig },
     { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig },
     { btn: btnShopeeAffiliate, view: viewShopeeAffiliate, onLoad: loadConfig }
   ];
@@ -916,6 +948,7 @@ async function loadConfig() {
     loadFlowVideoPresets(config.flow_video_presets);
     loadFlowPoPresets(config.flow_po_presets);
     loadSeedancePresets(config.seedance_presets);
+    if (typeof loadFacebookPresets === 'function') loadFacebookPresets(config.facebook_presets || config.meta_presets);
     loadMetaPresets(config.meta_presets);
     if (typeof loadShopeePresets === 'function') loadShopeePresets(config.shopee_presets);
     const folderInput = document.getElementById('cfg_folder_name');
@@ -1056,6 +1089,7 @@ async function loadConfig() {
     }
 
     loadMetaPresets(config.meta_presets);
+    if (typeof loadFacebookPresets === 'function') loadFacebookPresets(config.facebook_presets || config.meta_presets);
     
     // Shopee Affiliate Defaults
     const shopeePageUrl = document.getElementById('cfg_shopee_page_url');
@@ -7188,6 +7222,603 @@ async function executeMetaDateDebugStep(stepName, btn) {
 }
 window.executeMetaDateDebugStep = executeMetaDateDebugStep;
 
+// --- Facebook Auto Post Logic ---
+let facebookPostQueue = [];
+
+function loadFacebookPresets(presets) {
+  const select = document.getElementById('facebookPresetSelect');
+  if (!select) return;
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>';
+  if (presets && typeof presets === 'object') {
+    Object.keys(presets).forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    });
+  }
+  const savedLast = localStorage.getItem('facebook_last_preset');
+  if (savedLast && presets && presets[savedLast]) {
+    select.value = savedLast;
+  } else if (currentVal && presets && presets[currentVal]) {
+    select.value = currentVal;
+  }
+}
+window.loadFacebookPresets = loadFacebookPresets;
+
+async function saveFacebookPreset() {
+  const currentKey = document.getElementById('facebookPresetSelect')?.value || '';
+  const name = prompt('ระบุชื่อ Preset สำหรับ Facebook Auto Post (หรือระบุชื่อเดิมเพื่อบันทึกทับ):', currentKey);
+  if (!name || !name.trim()) return;
+  const trimmedName = name.trim();
+
+  let currentConfig = {};
+  try {
+    currentConfig = await jsonFetch('/api/config');
+  } catch (e) {
+    console.error('Failed to fetch config:', e);
+  }
+  const presets = currentConfig.facebook_presets || {};
+
+  presets[trimmedName] = {
+    page_url: document.getElementById('cfg_facebook_page_url')?.value || '',
+    main_folder: document.getElementById('cfg_facebook_main_folder')?.value || '',
+    subfolders: document.getElementById('cfg_facebook_subfolders')?.value || '',
+    video_prefix: document.getElementById('cfg_facebook_video_prefix')?.value || 'combined',
+    start_date: document.getElementById('cfg_facebook_start_date')?.value || '',
+    start_hour: parseInt(document.getElementById('cfg_facebook_start_hour')?.value, 10) || 18,
+    delay_min: parseFloat(document.getElementById('cfg_facebook_delay_min')?.value) || 5,
+    delay_max: parseFloat(document.getElementById('cfg_facebook_delay_max')?.value) || 15
+  };
+
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'facebook_presets', value: presets })
+    });
+    loadFacebookPresets(presets);
+    const select = document.getElementById('facebookPresetSelect');
+    if (select) select.value = trimmedName;
+    localStorage.setItem('facebook_last_preset', trimmedName);
+    writeConsoleLine(`💾 บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว`, 'success', 'facebookConsole');
+    if (typeof showToast === 'function') showToast(`บันทึก Preset "${trimmedName}" เรียบร้อยแล้ว!`, 'success');
+  } catch (e) {
+    writeConsoleLine(`เกิดข้อผิดพลาดในการบันทึก Preset: ${e.message}`, 'error', 'facebookConsole');
+    if (typeof showToast === 'function') showToast(`เกิดข้อผิดพลาด: ${e.message}`, 'error');
+  }
+}
+window.saveFacebookPreset = saveFacebookPreset;
+
+async function deleteFacebookPreset() {
+  const select = document.getElementById('facebookPresetSelect');
+  const currentName = select ? select.value : '';
+  if (!currentName) {
+    alert('กรุณาเลือก Preset ที่ต้องการลบ');
+    return;
+  }
+  if (!confirm(`ยืนยันการลบ Preset "${currentName}" หรือไม่?`)) return;
+
+  let currentConfig = {};
+  try {
+    currentConfig = await jsonFetch('/api/config');
+  } catch (e) {
+    console.error('Failed to fetch config:', e);
+  }
+  const presets = currentConfig.facebook_presets || {};
+  delete presets[currentName];
+
+  try {
+    await jsonFetch('/api/config/set-default', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'facebook_presets', value: presets })
+    });
+    loadFacebookPresets(presets);
+    localStorage.removeItem('facebook_last_preset');
+    writeConsoleLine(`🗑️ ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'facebookConsole');
+    if (typeof showToast === 'function') showToast(`ลบ Preset "${currentName}" เรียบร้อยแล้ว`, 'info');
+  } catch (e) {
+    writeConsoleLine(`เกิดข้อผิดพลาดในการลบ Preset: ${e.message}`, 'error', 'facebookConsole');
+    if (typeof showToast === 'function') showToast(`เกิดข้อผิดพลาด: ${e.message}`, 'error');
+  }
+}
+window.deleteFacebookPreset = deleteFacebookPreset;
+
+async function applyFacebookPreset() {
+  const select = document.getElementById('facebookPresetSelect');
+  const currentName = select ? select.value : '';
+  if (!currentName) return;
+
+  localStorage.setItem('facebook_last_preset', currentName);
+  let currentConfig = {};
+  try {
+    currentConfig = await jsonFetch('/api/config');
+  } catch (e) {
+    console.error('Failed to fetch config:', e);
+  }
+  const preset = (currentConfig.facebook_presets || currentConfig.meta_presets || {})[currentName];
+  if (!preset) return;
+
+  if (document.getElementById('cfg_facebook_page_url')) document.getElementById('cfg_facebook_page_url').value = preset.page_url || preset.channel_url || '';
+  if (document.getElementById('cfg_facebook_main_folder')) document.getElementById('cfg_facebook_main_folder').value = preset.main_folder || '';
+  if (document.getElementById('cfg_facebook_subfolders')) document.getElementById('cfg_facebook_subfolders').value = preset.subfolders || '';
+  if (document.getElementById('cfg_facebook_video_prefix')) document.getElementById('cfg_facebook_video_prefix').value = preset.video_prefix || 'combined';
+  if (document.getElementById('cfg_facebook_start_date')) document.getElementById('cfg_facebook_start_date').value = preset.start_date || '';
+  if (document.getElementById('cfg_facebook_start_hour')) {
+    const h = preset.start_hour !== undefined ? preset.start_hour : (preset.start_time ? parseInt(preset.start_time.split(':')[0], 10) : 18);
+    document.getElementById('cfg_facebook_start_hour').value = isNaN(h) ? 18 : h;
+  }
+  if (document.getElementById('cfg_facebook_delay_min')) document.getElementById('cfg_facebook_delay_min').value = preset.delay_min !== undefined ? preset.delay_min : 5;
+  if (document.getElementById('cfg_facebook_delay_max')) document.getElementById('cfg_facebook_delay_max').value = preset.delay_max !== undefined ? preset.delay_max : 15;
+
+  const urlDisplay = preset.page_url || preset.channel_url || 'ไม่ได้ระบุ';
+  writeConsoleLine(`โหลด Preset "${currentName}" สำเร็จ (URL: ${urlDisplay})`, 'info', 'facebookConsole');
+  updateTooltips();
+}
+window.applyFacebookPreset = applyFacebookPreset;
+
+async function openFacebookPageUrl() {
+  const url = document.getElementById('cfg_facebook_page_url')?.value.trim() || '';
+  if (!url) {
+    alert('กรุณาระบุลิงก์หน้าเพจ Facebook ก่อน');
+    return;
+  }
+  writeConsoleLine(`Facebook Auto Post: กำลังเปิดหน้าเว็บ "${url}"...`, 'system', 'facebookConsole');
+  try {
+    const res = await jsonFetch('/api/facebook-autopost/open-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    if (res.ok) {
+      writeConsoleLine(`[Facebook Auto Post] ${res.message || 'เปิดหน้าเว็บสำเร็จ'}`, 'success', 'facebookConsole');
+    } else {
+      writeConsoleLine(`[Facebook Auto Post Error] ${res.detail || res.message}`, 'error', 'facebookConsole');
+    }
+  } catch (err) {
+    writeConsoleLine(`[Facebook Auto Post Error] ${err.message}`, 'error', 'facebookConsole');
+  }
+}
+
+async function scanFacebookBatch() {
+  const mainFolder = document.getElementById('cfg_facebook_main_folder')?.value.trim() || '';
+  if (!mainFolder) {
+    alert('กรุณาระบุโฟลเดอร์หลัก (Main Target Folder)');
+    return;
+  }
+  const subfoldersStr = document.getElementById('cfg_facebook_subfolders')?.value.trim() || '';
+  const videoPrefix = document.getElementById('cfg_facebook_video_prefix')?.value.trim() || 'combined';
+  const startDate = document.getElementById('cfg_facebook_start_date')?.value.trim() || '';
+  const startHour = parseInt(document.getElementById('cfg_facebook_start_hour')?.value, 10) || 18;
+
+  const btn = document.getElementById('btnScanFacebookBatch');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    const textSpan = btn.querySelector('.btn-text');
+    if (textSpan) textSpan.textContent = 'กำลังสแกน...';
+  }
+
+  writeConsoleLine(`Facebook Auto Post: เริ่มสแกนโฟลเดอร์ "${mainFolder}" (Prefix: "${videoPrefix}", เวลา: ${startHour}:xx สุ่มนาที, วันละ 1 โพสต์)...`, 'system', 'facebookConsole');
+
+  try {
+    const res = await jsonFetch('/api/facebook-autopost/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_folder: mainFolder,
+        subfolders_str: subfoldersStr,
+        video_prefix: videoPrefix,
+        start_date: startDate,
+        start_hour: startHour
+      })
+    });
+
+    if (res.ok && Array.isArray(res.items)) {
+      facebookPostQueue = res.items;
+      renderFacebookPostQueue();
+      writeConsoleLine(`Facebook Auto Post: สแกนพบ ${res.items.length} รายการโพสต์ พร้อมจับคู่วิดีโอและ Caption อัตโนมัติ`, 'success', 'facebookConsole');
+    } else {
+      writeConsoleLine(`Facebook Auto Post Scan Error: ${res.detail || res.message || 'ไม่สามารถสแกนได้'}`, 'error', 'facebookConsole');
+      alert(`ไม่สามารถสแกนได้: ${res.detail || res.message || 'Unknown error'}`);
+    }
+  } catch (e) {
+    writeConsoleLine(`เกิดข้อผิดพลาดในการสแกน: ${e.message}`, 'error', 'facebookConsole');
+    alert(`เกิดข้อผิดพลาด: ${e.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      const textSpan = btn.querySelector('.btn-text');
+      if (textSpan) textSpan.textContent = '🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair)';
+    }
+  }
+}
+
+function updateFacebookSelectAllButtonText() {
+  const toggleBtn = document.getElementById('toggleAllFacebookPostsBtn');
+  if (!toggleBtn) return;
+  const allChecked = facebookPostQueue.length > 0 && facebookPostQueue.every(p => p.checked !== false);
+  toggleBtn.textContent = allChecked ? 'Deselect All' : 'Select All';
+}
+
+function renderFacebookPostQueue() {
+  const container = document.getElementById('facebookPostQueueList');
+  const badge = document.getElementById('facebookBatchCountBadge');
+  if (!container) return;
+
+  const selectedCount = facebookPostQueue.filter(p => p.checked !== false).length;
+  if (badge) {
+    badge.textContent = `${selectedCount} / ${facebookPostQueue.length} Posts Selected`;
+  }
+  updateFacebookSelectAllButtonText();
+
+  if (facebookPostQueue.length === 0) {
+    container.innerHTML = `
+      <div id="facebookEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
+        ยังไม่มีข้อมูลโพสต์ — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนและจับคู่ข้อมูล"</strong>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = '';
+  facebookPostQueue.forEach((item, index) => {
+    const isChecked = item.checked !== false;
+    const card = document.createElement('div');
+    card.className = 'facebook-post-card';
+    card.style.cssText = `
+      background: ${isChecked ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.01)'};
+      border: 1px solid ${isChecked ? 'rgba(24, 119, 242, 0.3)' : 'rgba(255, 255, 255, 0.06)'};
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: all 0.2s ease;
+      opacity: ${isChecked ? '1' : '0.45'};
+    `;
+
+    const hasVideoBadge = item.has_video
+      ? `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">🎬 ${item.video_name || 'พบ video'}</span>`
+      : `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">❌ ไม่พบวิดีโอ</span>`;
+
+    const hasCaptionBadge = item.has_caption
+      ? `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">📝 ${item.caption_file || 'มี Caption'}</span>`
+      : `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">⚠️ ไม่มี Caption</span>`;
+
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <input type="checkbox" class="facebook-item-checkbox" data-index="${index}" ${isChecked ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer; accent-color: #1877f2; margin: 0;" />
+          <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">#${index + 1} โฟลเดอร์: ${item.subfolder_name || 'Manual Post'}</span>
+          ${hasVideoBadge}
+          ${hasCaptionBadge}
+        </div>
+        <button class="delete-post-btn secondary" data-index="${index}" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; color: #ff6b6b; border-color: rgba(255,107,107,0.3); margin: 0;">🗑️ ลบ</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">ตำแหน่งไฟล์วิดีโอ (Video Path)</label>
+          <div style="display: flex; gap: 6px;">
+            <input type="text" class="facebook-video-input" data-index="${index}" value="${item.video_path || ''}" placeholder="เลือกหรือวางที่อยู่ไฟล์วิดีโอ..." style="font-size: 0.82rem; padding: 8px 10px; margin-bottom: 0; flex-grow: 1;" />
+            <button class="browse-facebook-video-btn secondary" data-index="${index}" style="padding: 6px 10px; font-size: 0.78rem; margin-bottom: 0; white-space: nowrap; border-radius: 8px;">Browse</button>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">📅 กำหนดวัน-เวลาที่โพสต์ (Scheduled Time)</label>
+          <input type="datetime-local" class="facebook-datetime-input" data-index="${index}" value="${item.scheduled_datetime || ''}" style="font-size: 0.82rem; padding: 8px 10px; margin-bottom: 0; width: 100%;" />
+        </div>
+      </div>
+
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7);">เนื้อหาโพสต์ / Caption</label>
+          <span class="char-counter" style="font-size: 0.72rem; color: rgba(255,255,255,0.4);">${(item.caption || '').length} ตัวอักษร</span>
+        </div>
+        <textarea class="facebook-caption-input" data-index="${index}" rows="3" placeholder="ระบุข้อความ Caption สำหรับโพสต์นี้..." style="font-size: 0.85rem; padding: 8px 10px; margin-bottom: 0; width: 100%; border-radius: 8px; line-height: 1.4;">${item.caption || ''}</textarea>
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+
+  // Attach interactive listeners
+  container.querySelectorAll('.facebook-item-checkbox').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (facebookPostQueue[idx]) {
+        facebookPostQueue[idx].checked = e.target.checked;
+        const card = e.target.closest('.facebook-post-card');
+        if (card) {
+          card.style.opacity = e.target.checked ? '1' : '0.45';
+          card.style.background = e.target.checked ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.01)';
+          card.style.borderColor = e.target.checked ? 'rgba(24, 119, 242, 0.3)' : 'rgba(255, 255, 255, 0.06)';
+        }
+        const selectedCount = facebookPostQueue.filter(p => p.checked !== false).length;
+        if (badge) badge.textContent = `${selectedCount} / ${facebookPostQueue.length} Posts Selected`;
+        updateFacebookSelectAllButtonText();
+      }
+    });
+  });
+
+  container.querySelectorAll('.facebook-video-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (facebookPostQueue[idx]) {
+        facebookPostQueue[idx].video_path = e.target.value;
+        facebookPostQueue[idx].has_video = !!e.target.value.trim();
+      }
+    });
+  });
+
+  container.querySelectorAll('.facebook-datetime-input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (facebookPostQueue[idx]) {
+        facebookPostQueue[idx].scheduled_datetime = e.target.value;
+      }
+    });
+  });
+
+  container.querySelectorAll('.facebook-caption-input').forEach(textarea => {
+    textarea.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (facebookPostQueue[idx]) {
+        facebookPostQueue[idx].caption = e.target.value;
+        facebookPostQueue[idx].has_caption = !!e.target.value.trim();
+        const card = e.target.closest('.facebook-post-card');
+        const counter = card ? card.querySelector('.char-counter') : null;
+        if (counter) counter.textContent = `${e.target.value.length} ตัวอักษร`;
+      }
+    });
+  });
+
+  container.querySelectorAll('.browse-facebook-video-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const idx = parseInt(e.currentTarget.dataset.index, 10);
+      try {
+        const res = await jsonFetch('/api/utils/browse-file?filter_type=video');
+        if (res.ok && res.path) {
+          if (facebookPostQueue[idx]) {
+            facebookPostQueue[idx].video_path = res.path;
+            facebookPostQueue[idx].video_name = res.path.split('/').pop().split('\\\\').pop();
+            facebookPostQueue[idx].has_video = true;
+            renderFacebookPostQueue();
+          }
+        }
+      } catch (err) {
+        console.error('Browse video error:', err);
+      }
+    });
+  });
+
+  container.querySelectorAll('.delete-post-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.index, 10);
+      facebookPostQueue.splice(idx, 1);
+      renderFacebookPostQueue();
+    });
+  });
+}
+
+function clearFacebookBatch() {
+  if (facebookPostQueue.length > 0) {
+    if (!confirm('ต้องการล้างรายการโพสต์ทั้งหมดหรือไม่?')) return;
+  }
+  facebookPostQueue = [];
+  renderFacebookPostQueue();
+  writeConsoleLine('ล้างรายการคิวโพสต์ทั้งหมดแล้ว', 'info', 'facebookConsole');
+}
+
+async function runFacebookAutoPost(btnElement) {
+  const presetSelect = document.getElementById('facebookPresetSelect');
+  const presetVal = presetSelect ? presetSelect.value.trim() : '';
+  if (!presetVal) {
+    writeConsoleLine(`[Facebook Auto Post Error] ❌ กรุณาเลือก Preset ก่อนเริ่มรัน Auto Post`, 'error', 'facebookConsole');
+    alert('กรุณาเลือก Preset ก่อนเริ่มรัน Auto Post');
+    if (presetSelect) presetSelect.focus();
+    return;
+  }
+
+  const selectedPosts = facebookPostQueue.filter(p => p.checked !== false);
+  if (selectedPosts.length === 0) {
+    alert('ไม่มีรายการโพสต์ที่ถูกเลือก กรุณาติ๊กเลือกอย่างน้อย 1 รายการ');
+    return;
+  }
+
+  const missingVideos = selectedPosts.filter(x => !x.video_path);
+  if (missingVideos.length > 0) {
+    if (!confirm(`มี ${missingVideos.length} รายการที่ยังไม่มีไฟล์วิดีโอ ต้องการดำเนินการต่อหรือไม่?`)) {
+      return;
+    }
+  }
+
+  const targetUrl = document.getElementById('cfg_facebook_page_url')?.value.trim() || '';
+  if (!targetUrl) {
+    writeConsoleLine(`[Facebook Auto Post Error] ❌ กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน`, 'error', 'facebookConsole');
+    alert('กรุณาระบุ URL ของเพจในช่องหรือเลือก Preset ที่บันทึกไว้ก่อน');
+    return;
+  }
+  if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+    writeConsoleLine(`[Facebook Auto Post Error] ❌ URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย http:// หรือ https:// (ค่าปัจจุบัน: ${targetUrl})`, 'error', 'facebookConsole');
+    alert('URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย http:// หรือ https://');
+    return;
+  }
+
+  if (btnElement) {
+    btnElement.disabled = true;
+    btnElement.classList.add('loading');
+    const textSpan = btnElement.querySelector('.btn-text');
+    if (textSpan) textSpan.textContent = 'กำลังดำเนินการ Auto Post...';
+  }
+
+  const progressContainer = document.getElementById('facebookProgressContainer');
+  const progressBar = document.getElementById('facebookProgressBar');
+  const progressText = document.getElementById('facebookProgressText');
+
+  if (progressContainer) progressContainer.classList.remove('hidden');
+  if (progressBar) progressBar.style.width = '0%';
+  if (progressText) progressText.textContent = `0% (0/${selectedPosts.length})`;
+
+  const delayMin = parseFloat(document.getElementById('cfg_facebook_delay_min')?.value) || 5;
+  const delayMax = parseFloat(document.getElementById('cfg_facebook_delay_max')?.value) || 15;
+
+  writeConsoleLine(`🚀 เริ่มส่งคำสั่งรัน Facebook Auto Post สำหรับ ${selectedPosts.length} รายการที่เลือก (URL: ${targetUrl}, Delay: ${delayMin}s-${delayMax}s)...`, 'system', 'facebookConsole');
+
+  try {
+    const res = await jsonFetch('/api/facebook-autopost/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        posts: selectedPosts,
+        target_url: targetUrl,
+        delay_min: delayMin,
+        delay_max: delayMax
+      })
+    });
+
+    if (res.ok) {
+      writeConsoleLine(`[Facebook Auto Post] ${res.message || 'เริ่มการทำงาน Auto Post เรียบร้อยแล้ว'}`, 'success', 'facebookConsole');
+      
+      let isDone = false;
+      let lastMsg = '';
+      while (!isDone) {
+        await new Promise(r => setTimeout(r, 1200));
+        try {
+          const prog = await jsonFetch('/api/facebook-autopost/progress');
+          if (prog) {
+            if (progressBar) progressBar.style.width = `${prog.percent || 0}%`;
+            if (progressText) progressText.textContent = `${prog.percent || 0}% (${prog.current || 0}/${prog.total || selectedPosts.length})`;
+            if (prog.message && prog.message !== lastMsg) {
+              writeConsoleLine(`[Facebook Auto Post] ${prog.message}`, prog.status === 'error' ? 'error' : 'info', 'facebookConsole');
+              lastMsg = prog.message;
+            }
+            if (prog.status === 'completed' || prog.status === 'error' || prog.status === 'completed_with_errors') {
+              isDone = true;
+              if (prog.status === 'completed') {
+                writeConsoleLine(`🎉 Auto Post ดำเนินการเสร็จสมบูรณ์ทุกรายการ!`, 'success', 'facebookConsole');
+              } else if (prog.status === 'completed_with_errors') {
+                writeConsoleLine(`⚠️ Auto Post สิ้นสุด: ${prog.message}`, 'warning', 'facebookConsole');
+                if (prog.errors && prog.errors.length > 0) {
+                  prog.errors.forEach(err => writeConsoleLine(`- ${err}`, 'error', 'facebookConsole'));
+                }
+              } else if (prog.status === 'error') {
+                writeConsoleLine(`❌ Auto Post เกิดข้อผิดพลาด: ${prog.message}`, 'error', 'facebookConsole');
+              }
+            }
+          }
+        } catch (pollErr) {
+          console.warn('Poll progress error:', pollErr);
+        }
+      }
+    } else {
+      writeConsoleLine(`[Facebook Auto Post Error] ${res.detail || res.message}`, 'error', 'facebookConsole');
+    }
+  } catch (e) {
+    writeConsoleLine(`[Facebook Auto Post Error] ${e.message}`, 'error', 'facebookConsole');
+  } finally {
+    if (btnElement) {
+      btnElement.disabled = false;
+      btnElement.classList.remove('loading');
+      const textSpan = btnElement.querySelector('.btn-text');
+      if (textSpan) textSpan.textContent = '🚀 เริ่มรัน Auto Post ตามคิว';
+    }
+  }
+}
+
+let isFacebookAutoPostStopping = false;
+
+async function stopFacebookAutoPost(btnElement) {
+  if (isFacebookAutoPostStopping) return;
+  isFacebookAutoPostStopping = true;
+  writeConsoleLine(`[Facebook Auto Post] 🛑 กำลังส่งคำสั่ง Force Stop เพื่อหยุดทุกกระบวนการ...`, 'warning', 'facebookConsole');
+  if (btnElement) btnElement.disabled = true;
+
+  try {
+    const res = await jsonFetch('/api/facebook-autopost/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    writeConsoleLine(`[Facebook Auto Post] 🛑 ${res.message || 'สั่ง Force Stop สำเร็จ'}`, 'error', 'facebookConsole');
+  } catch (err) {
+    writeConsoleLine(`[Facebook Auto Post] 🛑 Force Stop Call: ${err.message}`, 'error', 'facebookConsole');
+  } finally {
+    const runBtn = document.getElementById('runFacebookAutoPostBtn');
+    if (runBtn) {
+      runBtn.disabled = false;
+      runBtn.classList.remove('loading');
+      const textSpan = runBtn.querySelector('.btn-text');
+      if (textSpan) textSpan.textContent = '🚀 เริ่มรัน Auto Post ตามคิว';
+    }
+    if (btnElement) btnElement.disabled = false;
+    isFacebookAutoPostStopping = false;
+  }
+}
+
+function initFacebookAutoPostListeners() {
+  const openUrlBtn = document.getElementById('btnOpenFacebookPageUrl');
+  if (openUrlBtn) openUrlBtn.addEventListener('click', openFacebookPageUrl);
+
+  const browseMainBtn = document.getElementById('browseFacebookMainFolderBtn');
+  if (browseMainBtn) {
+    browseMainBtn.addEventListener('click', async () => {
+      try {
+        const res = await jsonFetch('/api/utils/browse-directory');
+        if (res.ok && res.path) {
+          const input = document.getElementById('cfg_facebook_main_folder');
+          if (input) input.value = res.path;
+          updateTooltips();
+        }
+      } catch (err) {
+        console.error('Browse facebook main folder error:', err);
+      }
+    });
+  }
+
+  const savePresetBtn = document.getElementById('saveFacebookPresetBtn');
+  if (savePresetBtn) savePresetBtn.addEventListener('click', saveFacebookPreset);
+
+  const deletePresetBtn = document.getElementById('deleteFacebookPresetBtn');
+  if (deletePresetBtn) deletePresetBtn.addEventListener('click', deleteFacebookPreset);
+
+  const presetSelect = document.getElementById('facebookPresetSelect');
+  if (presetSelect) presetSelect.addEventListener('change', applyFacebookPreset);
+
+  const scanBtn = document.getElementById('btnScanFacebookBatch');
+  if (scanBtn) scanBtn.addEventListener('click', scanFacebookBatch);
+
+  const clearBtn = document.getElementById('btnClearFacebookBatch');
+  if (clearBtn) clearBtn.addEventListener('click', clearFacebookBatch);
+
+  const toggleAllBtn = document.getElementById('toggleAllFacebookPostsBtn');
+  if (toggleAllBtn) {
+    toggleAllBtn.addEventListener('click', () => {
+      const allChecked = facebookPostQueue.length > 0 && facebookPostQueue.every(p => p.checked !== false);
+      facebookPostQueue.forEach(p => p.checked = !allChecked);
+      renderFacebookPostQueue();
+    });
+  }
+
+  const runBtn = document.getElementById('runFacebookAutoPostBtn');
+  if (runBtn) runBtn.addEventListener('click', (e) => runFacebookAutoPost(e.currentTarget));
+
+  const forceStopBtn = document.getElementById('btnFacebookForceStop');
+  if (forceStopBtn) forceStopBtn.addEventListener('click', (e) => stopFacebookAutoPost(e.currentTarget));
+
+  const clearConsoleBtn = document.getElementById('clearFacebookConsoleBtn');
+  if (clearConsoleBtn) {
+    clearConsoleBtn.addEventListener('click', () => {
+      const consoleBox = document.getElementById('facebookConsole');
+      if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
+    });
+  }
+}
+
 // --- Shopee Affiliate Logic ---
 let shopeeQueue = [];
 
@@ -7909,6 +8540,7 @@ const staticTooltips = {
   "tabVideoGenBtn": "🎬 แถบสร้างวิดีโอ (Video Generation):<br>- รันเจเนอเรตวิดีโอบน Google Flow",
   "tabVideoHelperBtn": "🎥 แถบช่วยเหลือวิดีโอ (Video Helper):<br>- รวมคลิปวิดีโอเข้าด้วยกัน (Combine Mode)",
   "tabSeedanceGenBtn": "💃 แถบ Seedance Gen:<br>- สร้างคลิปเต้น (สำหรับอนาคต)",
+  "tabFacebookAutoPostBtn": "📘 แถบ Facebook Auto Post:<br>- ดึงข้อมูลแบบ Batch และตั้งเวลาโพสต์คลิปลง Facebook",
   "tabMetaAutoPostBtn": "📢 แถบ Meta Auto Post (Facebook Automation):<br>- ดึงข้อมูลแบบ Batch และตั้งเวลาโพสต์คลิปลง Facebook/Meta",
 
   // Image Gen
@@ -7971,6 +8603,17 @@ const staticTooltips = {
   "runMetaAutoPostBtn": "🚀 รัน Auto Post ตามคิว:<br>- เริ่มส่งโพสต์ตามรายการที่เตรียมไว้ทั้งหมดไปยัง Facebook/Meta",
   "btnMetaForceStop": "🛑 บังคับหยุดทำงาน (Force Stop):<br>- หยุดกระบวนการโพสต์ที่กำลังทำงานอยู่ทันทีโดยไม่ปิดหน้าเบราว์เซอร์",
   "clearMetaConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)",
+
+  // Facebook Auto Post
+  "btnOpenFacebookPageUrl": "🌐 ไปที่หน้าเพจนี้ (Open / Redirect):<br>- เปิด Chrome ไปยัง URL ของช่อง/เพจนี้ทันที",
+  "browseFacebookMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่มีโฟลเดอร์ย่อยบรรจุวิดีโอและ Caption",
+  "saveFacebookPresetBtn": "💾 บันทึก Preset Facebook Auto Post:<br>- บันทึกค่าการตั้งค่า, ลิงก์เพจ และชั่วโมงที่เริ่มโพสต์เก็บไว้",
+  "deleteFacebookPresetBtn": "🗑️ ลบ Preset ที่เลือก",
+  "btnScanFacebookBatch": "🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair):<br>- สแกนไฟล์วิดีโอ (combined*), แคปชั่น (caption.md), และจัดคิวโพสต์วันละ 1 โพสต์ตามชั่วโมงที่ระบุ (สุ่มนาที 00-59)",
+  "btnClearFacebookBatch": "🗑️ ล้างรายการโพสต์ที่จับคู่ไว้ทั้งหมดในตาราง",
+  "runFacebookAutoPostBtn": "🚀 รัน Auto Post ตามคิว:<br>- เริ่มส่งโพสต์ตามรายการที่เตรียมไว้ทั้งหมดไปยัง Facebook",
+  "btnFacebookForceStop": "🛑 บังคับหยุดทำงาน (Force Stop):<br>- หยุดกระบวนการโพสต์ที่กำลังทำงานอยู่ทันทีโดยไม่ปิดหน้าเบราว์เซอร์",
+  "clearFacebookConsoleBtn": "🧹 ล้างหน้าต่าง Log (Clear)",
 
   // Shopee Affiliate
   "tabShopeeAffiliateBtn": "🛍️ แถบ Shopee Affiliate:<br>- จัดการและอัปโหลดเนื้อหา/โพสต์ Shopee Affiliate อัตโนมัติ",
@@ -10138,6 +10781,7 @@ async function initApp() {
   try { initFileImports(); } catch (e) { console.error('initFileImports error:', e); }
   try { initVideoGenListeners(); } catch (e) { console.error('initVideoGenListeners error:', e); }
   try { initSeedanceGenListeners(); } catch (e) { console.error('initSeedanceGenListeners error:', e); }
+  try { initFacebookAutoPostListeners(); } catch (e) { console.error('initFacebookAutoPostListeners error:', e); }
   try { initMetaAutoPostListeners(); } catch (e) { console.error('initMetaAutoPostListeners error:', e); }
   try { initShopeeAffiliateListeners(); } catch (e) { console.error('initShopeeAffiliateListeners error:', e); }
   try { initVisualElementPicker(); } catch (e) { console.error('initVisualElementPicker error:', e); }

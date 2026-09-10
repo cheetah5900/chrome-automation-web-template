@@ -158,13 +158,15 @@ async def reset_force_stop_middleware(request, call_next):
         path.startswith("/api/video/") or 
         path.startswith("/api/utils/") or
         path.startswith("/api/shopee-affiliate/") or
-        path.startswith("/api/meta-autopost/")
+        path.startswith("/api/meta-autopost/") or
+        path.startswith("/api/facebook-autopost/")
     ):
         if path not in [
             "/api/profiles/force-kill", 
             "/api/step/stop-upload-google-flow",
             "/api/shopee-affiliate/stop",
-            "/api/meta-autopost/stop"
+            "/api/meta-autopost/stop",
+            "/api/facebook-autopost/stop"
         ]:
             _force_stop_requested = False
     
@@ -4784,6 +4786,150 @@ def api_meta_autopost_stop() -> dict[str, Any]:
     global _force_stop_requested
     _force_stop_requested = True
     log("[Meta Auto Post] 🛑 ได้รับคำสั่ง Force Stop - กำลังหยุดการทำงานทุกกระบวนการ")
+    return {"ok": True, "message": "🛑 สั่ง Force Stop เรียบร้อยแล้ว"}
+
+# ==============================================================================
+# FACEBOOK AUTO POST (NEW)
+# ==============================================================================
+
+global_facebook_progress: dict[str, Any] = {
+    "status": "idle",
+    "total": 0,
+    "current": 0,
+    "percent": 0,
+    "message": "",
+    "errors": []
+}
+
+class FacebookRunRequest(BaseModel):
+    posts: list[dict[str, Any]]
+    target_url: str = ""
+    delay_min: float = 5.0
+    delay_max: float = 15.0
+
+class FacebookScanRequest(BaseModel):
+    main_folder: str
+    subfolders_str: str = ""
+    video_prefix: str = "combined"
+    start_date: str = ""
+    start_hour: int | str = 18
+
+class FacebookOpenUrlRequest(BaseModel):
+    url: str
+
+FacebookRunRequest.model_rebuild()
+FacebookScanRequest.model_rebuild()
+FacebookOpenUrlRequest.model_rebuild()
+
+def _facebook_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0):
+    global global_facebook_progress
+    try:
+        bot = browser_manager.get()
+        if not bot or not bot.driver:
+            global_facebook_progress["status"] = "error"
+            global_facebook_progress["message"] = "เบราว์เซอร์ Chrome ไม่ได้เชื่อมต่อ (กรุณากด Launch Browser ก่อน)"
+            log("[Facebook Auto Post] Error: Chrome driver is not attached")
+            return
+
+        composer_url = target_url.strip() if target_url else ""
+        if not composer_url:
+            global_facebook_progress["status"] = "error"
+            global_facebook_progress["message"] = "กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน"
+            log("[Facebook Auto Post Error] กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน")
+            return
+
+        from app.facebook_autopost import run_facebook_autopost_batch, reset_facebook_stop
+
+        reset_facebook_stop()
+
+        def _on_progress(prog_data: dict[str, Any]):
+            global global_facebook_progress
+            for k, v in prog_data.items():
+                global_facebook_progress[k] = v
+
+        res = run_facebook_autopost_batch(
+            posts=posts,
+            target_url=target_url,
+            delay_min=delay_min,
+            delay_max=delay_max,
+            progress_callback=_on_progress
+        )
+
+        global_facebook_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
+        global_facebook_progress["percent"] = 100
+        global_facebook_progress["current"] = len(posts)
+        global_facebook_progress["errors"] = res.get("errors", [])
+        if res["ok"]:
+            global_facebook_progress["message"] = f"✅ โพสต์ Facebook ตามคิวสำเร็จครบทั้งหมด {res['success_count']} รายการ"
+        else:
+            first_err = res["errors"][0] if res.get("errors") else "พบข้อผิดพลาด"
+            global_facebook_progress["message"] = f"เสร็จสิ้น {res['success_count']}/{len(posts)} รายการ: {first_err}"
+
+    except Exception as e:
+        log(f"[Facebook Auto Post Error] {e}")
+        global_facebook_progress["status"] = "error"
+        global_facebook_progress["message"] = f"เกิดข้อผิดพลาด: {str(e)}"
+
+@app.post("/api/facebook-autopost/run")
+def run_facebook_autopost(req: FacebookRunRequest) -> dict[str, Any]:
+    global global_facebook_progress
+    posts = req.posts
+    if not posts:
+        raise HTTPException(status_code=400, detail="ไม่มีรายการโพสต์ให้ดำเนินการ")
+
+    global_facebook_progress = {
+        "status": "running",
+        "total": len(posts),
+        "current": 0,
+        "percent": 0,
+        "message": f"เตรียมรันโพสต์ {len(posts)} รายการ...",
+        "errors": []
+    }
+    
+    log(f"[Facebook Auto Post] Received batch run request for {len(posts)} items (Delay: {req.delay_min}s - {req.delay_max}s)")
+    
+    import threading
+    t = threading.Thread(
+        target=_facebook_autopost_worker,
+        args=(posts, req.target_url, req.delay_min, req.delay_max),
+        daemon=True
+    )
+    t.start()
+
+    return {
+        "ok": True,
+        "message": f"เริ่มกระบวนการ Facebook Auto Post {len(posts)} รายการ",
+        "total": len(posts)
+    }
+
+@app.post("/api/facebook-autopost/scan")
+def scan_facebook_autopost_endpoint(req: FacebookScanRequest) -> dict[str, Any]:
+    meta_req = MetaScanRequest(
+        main_folder=req.main_folder,
+        subfolders_str=req.subfolders_str,
+        video_prefix=req.video_prefix,
+        start_date=req.start_date,
+        start_hour=req.start_hour
+    )
+    return scan_meta_autopost(meta_req)
+
+@app.get("/api/facebook-autopost/progress")
+def get_facebook_autopost_progress() -> dict[str, Any]:
+    global global_facebook_progress
+    return global_facebook_progress
+
+@app.post("/api/facebook-autopost/open-url")
+def open_facebook_channel_url(req: FacebookOpenUrlRequest) -> dict[str, Any]:
+    meta_req = MetaOpenUrlRequest(url=req.url)
+    return open_meta_channel_url(meta_req)
+
+@app.post("/api/facebook-autopost/stop")
+def api_facebook_autopost_stop() -> dict[str, Any]:
+    from app.facebook_autopost import request_facebook_stop
+    request_facebook_stop()
+    global _force_stop_requested
+    _force_stop_requested = True
+    log("[Facebook Auto Post] 🛑 ได้รับคำสั่ง Force Stop - กำลังหยุดการทำงานทุกกระบวนการ")
     return {"ok": True, "message": "🛑 สั่ง Force Stop เรียบร้อยแล้ว"}
 
 # ==============================================================================

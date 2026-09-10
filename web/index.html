@@ -61,6 +61,10 @@
           <span class="nav-icon">💃</span>
           <span class="nav-text">Seedance Gen</span>
         </button>
+        <button id="tabFacebookAutoPostBtn" class="sidebar-nav-btn">
+          <span class="nav-icon">📘</span>
+          <span class="nav-text">Facebook Auto Post</span>
+        </button>
         <button id="tabMetaAutoPostBtn" class="sidebar-nav-btn locked" disabled>
           <span class="nav-icon">📢</span>
           <span class="nav-text">Meta Auto Post</span>
@@ -1446,6 +1450,168 @@
               </div>
               <div id="seedanceConsole" class="console-box" style="flex-grow: 1; min-height: 280px; max-height: 500px; overflow-y: auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; font-family: monospace; font-size: 0.82rem;">
                 <div class="console-line system">พร้อมสำหรับการใช้งาน Seedance Video Gen (CapCut Dreamina)</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 6.5: FACEBOOK AUTO POST -->
+      <div id="facebookAutoPostView" class="tab-view hidden">
+        <div class="layout-grid workflow-grid" style="grid-template-columns: 7fr 3fr;">
+          <!-- Left Column: Settings, Batch Scanner & Paired Items Preview -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Configuration & Batch Scanner Card -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
+                <h2 class="section-title" style="margin-bottom: 0;">📘 Facebook Auto Post (Page & Reels Automation)</h2>
+                <span id="facebookBatchCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(24, 119, 242, 0.15); border: 1px solid rgba(24, 119, 242, 0.3); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Posts Ready</span>
+              </div>
+              <p class="section-subtitle">สแกนดึงข้อมูลโฟลเดอร์ จับคู่วิดีโอ + Caption และกำหนดวัน-เวลาโพสต์ลง Facebook อัตโนมัติ</p>
+
+              <div class="settings-form" style="margin-top: 15px;">
+                <!-- Preset Manager -->
+                <div id="facebookPresetsGroup" class="form-group" style="margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px;">
+                  <label style="font-weight: bold; color: #ffb86c; margin-bottom: 8px; display: block;">Preset การตั้งค่า</label>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <select id="facebookPresetSelect" style="flex-grow: 1; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); outline: none;">
+                      <option value="">-- เลือกหรือสร้าง Preset ใหม่ --</option>
+                    </select>
+                    <button id="saveFacebookPresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap;">💾 บันทึก Preset</button>
+                    <button id="deleteFacebookPresetBtn" class="secondary" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 8px; white-space: nowrap; color: #ff6b6b; border-color: rgba(255,107,107,0.3);">🗑️ ลบ</button>
+                  </div>
+                </div>
+
+                <!-- Facebook Channel / Page URL -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_facebook_page_url" style="font-weight: bold; color: #8da6ff;">ลิงก์หน้าเพจ Facebook / Composer (Channel URL / Composer URL)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">ระบุ URL หน้าเพจ Facebook หรือ Composer สำหรับโพสต์ของ Preset นี้</div>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <input id="cfg_facebook_page_url" placeholder="เช่น https://www.facebook.com/... หรือ https://business.facebook.com/latest/composer?asset_id=..." style="margin-bottom: 0; flex-grow: 1;" />
+                    <button id="btnOpenFacebookPageUrl" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: rgba(24, 119, 242, 0.15); border-color: rgba(24, 119, 242, 0.3); color: #8da6ff;">🌐 ไปที่หน้านี้ (Redirect)</button>
+                  </div>
+                </div>
+
+                <!-- Main Folder -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_facebook_main_folder" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์หลักสำหรับดึงข้อมูล (Main Target Folder)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์หลักที่มีโฟลเดอร์ย่อยบรรจุคลิปวิดีโอและไฟล์ข้อความ Caption</div>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <input id="cfg_facebook_main_folder" placeholder="เช่น /Users/litar/Downloads/facebook_videos_batch" style="margin-bottom: 0; flex-grow: 1;" />
+                    <button id="browseFacebookMainFolderBtn" class="secondary" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                  </div>
+                </div>
+
+                <!-- Sub folders & Video Prefix Grid -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
+                  <!-- Sub folders input -->
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_facebook_subfolders" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)</div>
+                    <input id="cfg_facebook_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+
+                  <!-- Video Prefix input -->
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_facebook_video_prefix" style="font-weight: bold; color: #8da6ff;">คำนำหน้าชื่อวิดีโอ (Video Prefix)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ขึ้นต้นด้วยคำนี้เพื่อจับคู่วิดีโอ (ค่าเริ่มต้น: combined)</div>
+                    <input id="cfg_facebook_video_prefix" value="combined" placeholder="เช่น combined หรือ final" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+                </div>
+
+                <!-- Date, Time and Delay Scheduling Row -->
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 16px; margin-bottom: 20px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_facebook_start_date" style="font-weight: bold; color: #8da6ff;">วันที่เริ่มต้นโพสต์ (Start Date)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ระบบจะโพสต์วันละ 1 คลิปตามลำดับวันที่</div>
+                    <input type="date" id="cfg_facebook_start_date" style="margin-bottom: 0; width: 100%; padding: 10px;" />
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_facebook_start_hour" style="font-weight: bold; color: #8da6ff;">ชั่วโมงที่เริ่มโพสต์ (0-23)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">สุ่มนาที 00-59 ในแต่ละวัน</div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <input type="number" id="cfg_facebook_start_hour" min="0" max="23" value="18" placeholder="18" style="margin-bottom: 0; width: 80px; text-align: center; padding: 10px;" />
+                      <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">: (สุ่มนาที)</span>
+                    </div>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-weight: bold; color: #8da6ff;">สุ่มหน่วงเวลาระหว่างโพสต์ (วินาที)</label>
+                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">Delay Min - Max ก่อนเริ่มรอบถัดไป</div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <input type="number" id="cfg_facebook_delay_min" min="0" max="3600" value="5" placeholder="Min" style="margin-bottom: 0; width: 75px; text-align: center; padding: 10px;" />
+                      <span style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">-</span>
+                      <input type="number" id="cfg_facebook_delay_max" min="0" max="3600" value="15" placeholder="Max" style="margin-bottom: 0; width: 75px; text-align: center; padding: 10px;" />
+                      <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">วิ</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Scan Button -->
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <button id="btnScanFacebookBatch" class="primary has-tooltip" style="padding: 12px 24px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #1877f2, #0052cc); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(24, 119, 242, 0.3);">
+                    <span class="btn-text">🔍 สแกนและจับคู่ข้อมูล (Scan & Auto-Pair)</span>
+                    <div class="custom-tooltip" id="tooltip_btnScanFacebookBatch"></div>
+                  </button>
+                  <button id="btnClearFacebookBatch" class="secondary" style="padding: 12px 18px; font-size: 0.85rem; border-radius: 12px; margin-bottom: 0;">🗑️ ล้างรายการ</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Scanned & Paired Posts Preview List -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #8da6ff;">📸 รายการโพสต์ที่สแกนพบ (Scanned Posts)</h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button id="toggleAllFacebookPostsBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 20px; margin: 0; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #fff;">Deselect All</button>
+                </div>
+              </div>
+
+              <!-- Queue Container -->
+              <div id="facebookPostQueueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 650px; overflow-y: auto; padding-right: 4px;">
+                <div id="facebookEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
+                  ยังไม่มีข้อมูลโพสต์ — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนและจับคู่ข้อมูล"</strong>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Right Column: Status, Run Controls & Console -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <section class="card" style="height: 100%; display: flex; flex-direction: column;">
+              <h2 class="section-title">🚀 Facebook Auto Post Execution</h2>
+              <p class="section-subtitle">สถานะและบันทึกการส่งโพสต์ไปยัง Facebook</p>
+
+              <div style="margin: 15px 0 16px 0; display: flex; gap: 10px;">
+                <button id="runFacebookAutoPostBtn" class="primary has-tooltip" style="flex: 1; padding: 14px; font-size: 1rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">
+                  <span class="btn-text">🚀 เริ่มรัน Auto Post ตามคิว</span>
+                  <div class="custom-tooltip" id="tooltip_runFacebookAutoPostBtn"></div>
+                </button>
+                <button id="btnFacebookForceStop" class="danger has-tooltip" style="padding: 14px 20px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                  <span>🛑 Force Stop</span>
+                  <div class="custom-tooltip" id="tooltip_btnFacebookForceStop"></div>
+                </button>
+              </div>
+
+              <!-- Progress Bar -->
+              <div id="facebookProgressContainer" class="hidden" style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; color: #8da6ff;">
+                  <span>ความคืบหน้า</span>
+                  <span id="facebookProgressText">0% (0/0)</span>
+                </div>
+                <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.08); border-radius: 5px; overflow: hidden;">
+                  <div id="facebookProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #1877f2, #10b981); transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+
+              <!-- Console Header -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label style="font-weight: bold; color: rgba(255,255,255,0.7); font-size: 0.85rem;">Live Console Output</label>
+                <button id="clearFacebookConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; margin: 0;">Clear</button>
+              </div>
+
+              <!-- Console Box -->
+              <div id="facebookConsole" class="console-box" style="flex-grow: 1; min-height: 400px;">
+                <div class="console-line system">Ready for Facebook Auto Post operations...</div>
               </div>
             </section>
           </div>
