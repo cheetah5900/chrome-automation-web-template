@@ -5203,6 +5203,15 @@ def scan_shopee_affiliate(req: ShopeeScanRequest) -> dict[str, Any]:
     if not main_folder or not os.path.exists(main_folder) or not os.path.isdir(main_folder):
         raise HTTPException(status_code=400, detail="โฟลเดอร์หลักไม่ถูกต้องหรือไม่พบในระบบ")
 
+    # Ensure ShopeeSave Watcher is running in background with this main folder
+    try:
+        from app.shopeesave_watcher import is_watcher_running, start_watcher
+        is_run, _ = is_watcher_running()
+        if not is_run:
+            start_watcher(project_dir=main_folder)
+    except Exception:
+        pass
+
     target_subfolders: list[str] = []
     subfolders_input = req.subfolders_str.strip()
 

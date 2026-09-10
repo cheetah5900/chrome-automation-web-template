@@ -7963,6 +7963,27 @@ async function scanShopeeBatch() {
     return;
   }
 
+  // 0. Auto-start ShopeeSave Watcher if not running
+  try {
+    const watcherStatus = await jsonFetch('/api/shopeesave-watcher/status');
+    if (watcherStatus && !watcherStatus.running) {
+      logShopeeConsole('📦 ตรวจพบ Watcher ยังไม่ทำงาน -> กำลังเปิด ShopeeSave Watcher อัตโนมัติ...', 'system');
+      const startRes = await jsonFetch('/api/shopeesave-watcher/start', {
+        method: 'POST',
+        body: JSON.stringify({ project_dir: mainFolder.trim() })
+      });
+      if (startRes && startRes.ok) {
+        logShopeeConsole(`🚀 [Auto-Start] ${startRes.message}`, 'success');
+        showToast('เปิด ShopeeSave Watcher อัตโนมัติเรียบร้อย', 'success');
+      }
+      if (typeof fetchShopeeWatcherStatus === 'function') {
+        fetchShopeeWatcherStatus();
+      }
+    }
+  } catch (err) {
+    console.warn('Auto-start watcher check failed:', err);
+  }
+
   logShopeeConsole(`🔍 กำลังสแกนโฟลเดอร์: ${mainFolder}...`, 'system');
 
   try {
