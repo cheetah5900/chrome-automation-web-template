@@ -836,100 +836,96 @@ def find_sample_video(preferred_path: str = "", main_folder: str = "") -> str:
         return preferred_path
 
     folders_to_check = []
-    if main_folder and os.path.isdir(main_folder):
-        folders_to_check.append(main_folder)
+def find_sample_video(preferred_path: str = "", folder_path: str = "", main_folder: str = "") -> str:
+    """Locates a video file strictly in the specified target path/folder."""
+    if preferred_path and os.path.isfile(preferred_path):
+        return preferred_path
 
-    try:
-        from app.main import get_config_data
-        cfg = get_config_data()
-        if cfg.get("facebook_main_folder") and os.path.isdir(cfg.get("facebook_main_folder")):
-            folders_to_check.append(cfg.get("facebook_main_folder"))
-        if cfg.get("shopee_main_folder") and os.path.isdir(cfg.get("shopee_main_folder")):
-            folders_to_check.append(cfg.get("shopee_main_folder"))
-        for p in (cfg.get("facebook_presets") or {}).values():
-            if p.get("main_folder") and os.path.isdir(p.get("main_folder")):
-                folders_to_check.append(p.get("main_folder"))
-    except Exception:
-        pass
+    search_dirs = []
+    if folder_path:
+        search_dirs.append(folder_path if os.path.isdir(folder_path) else os.path.dirname(folder_path))
+    if main_folder and os.path.isdir(main_folder) and main_folder not in search_dirs:
+        search_dirs.append(main_folder)
 
-    for folder in folders_to_check:
-        for root, _, files in os.walk(folder):
+    for s_dir in search_dirs:
+        try:
+            files = sorted(os.listdir(s_dir), key=natural_sort_key)
             for f in files:
                 if f.lower().endswith(('.mp4', '.mov', '.mkv', '.webm')) and not f.startswith('.'):
-                    candidate = os.path.join(root, f)
-                    if os.path.getsize(candidate) > 1000:
-                        return candidate
+                    p = os.path.join(s_dir, f)
+                    if os.path.isfile(p) and os.path.getsize(p) > 1000:
+                        return p
+        except Exception:
+            pass
 
-    fallback_channel = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/9 - ป้ายยาที่ตาซ้าย"
-    if os.path.isdir(fallback_channel):
-        for root, _, files in os.walk(fallback_channel):
-            for f in files:
-                if f.lower().endswith(('.mp4', '.mov', '.mkv', '.webm')) and not f.startswith('.'):
-                    candidate = os.path.join(root, f)
-                    if os.path.getsize(candidate) > 1000:
-                        return candidate
     return ""
 
 def find_sample_caption(preferred_caption: str = "", folder_path: str = "") -> str:
-    """Finds caption text from preference, subfolder files, or channel folders."""
+    """Finds caption text strictly from preference or the specific folder's caption file."""
     if preferred_caption and preferred_caption.strip():
         return preferred_caption.strip()
 
-    folders_to_check = []
-    if folder_path:
-        if os.path.isfile(folder_path):
-            folders_to_check.append(os.path.dirname(folder_path))
-        elif os.path.isdir(folder_path):
-            folders_to_check.append(folder_path)
+    if not folder_path:
+        return ""
 
-    fallback_channel = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/9 - ป้ายยาที่ตาซ้าย"
-    if os.path.isdir(fallback_channel):
-        folders_to_check.append(fallback_channel)
+    target_dir = folder_path if os.path.isdir(folder_path) else os.path.dirname(folder_path)
+    if not os.path.isdir(target_dir):
+        return ""
 
-    for folder in folders_to_check:
-        for root, _, files in os.walk(folder):
-            for f in files:
-                if f.lower() in ("caption.md", "caption.txt"):
-                    p = os.path.join(root, f)
-                    try:
-                        with open(p, "r", encoding="utf-8") as cf:
-                            txt = cf.read().strip()
-                            if txt:
-                                return txt
-                    except Exception:
-                        pass
-    return "วิดีโอใหม่วันนี้ กดติดตามรับชมคลิปน่ารักๆ ทุกวัน ✨ #Shorts #Reels"
+    try:
+        files = os.listdir(target_dir)
+        for f in files:
+            if f.lower() in ("caption.md", "caption.txt"):
+                p = os.path.join(target_dir, f)
+                if os.path.isfile(p):
+                    for enc in ("utf-8", "utf-8-sig", "latin-1"):
+                        try:
+                            with open(p, "r", encoding=enc) as cf:
+                                txt = cf.read().strip()
+                                if txt:
+                                    return txt
+                            break
+                        except Exception:
+                            continue
+    except Exception:
+        pass
+
+    return ""
 
 def find_sample_affiliate_url(preferred_url: str = "", folder_path: str = "") -> str:
-    """Finds affiliate short URL from preference, subfolder files, or channel folders."""
+    """Finds affiliate short URL strictly from preference or from the target folder's affiliate md file."""
     if preferred_url and (preferred_url.startswith("http://") or preferred_url.startswith("https://")):
         return preferred_url.strip()
 
-    folders_to_check = []
-    if folder_path:
-        if os.path.isfile(folder_path):
-            folders_to_check.append(os.path.dirname(folder_path))
-        elif os.path.isdir(folder_path):
-            folders_to_check.append(folder_path)
+    if not folder_path:
+        return ""
 
-    fallback_channel = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/9 - ป้ายยาที่ตาซ้าย"
-    if os.path.isdir(fallback_channel):
-        folders_to_check.append(fallback_channel)
+    target_dir = folder_path if os.path.isdir(folder_path) else os.path.dirname(folder_path)
+    if not os.path.isdir(target_dir):
+        return ""
 
-    for folder in folders_to_check:
-        for root, _, files in os.walk(folder):
-            for f in files:
-                if f.lower() in ("affiliate link.md", "affiliate_link.md", "affiliatelink.md", "affiliate.md", "affiliate link.txt"):
-                    p = os.path.join(root, f)
-                    try:
-                        with open(p, "r", encoding="utf-8") as af:
-                            for line in af:
-                                l_str = line.strip()
-                                if l_str.startswith("http://") or l_str.startswith("https://"):
-                                    return l_str
-                    except Exception:
-                        pass
-    return "https://s.shopee.co.th/20vHCuY8sU"
+    # Strictly check ONLY inside this specific target folder (no cross-folder traversal)
+    valid_names = ("affiliate link.md", "affiliate_link.md", "affiliatelink.md", "affiliate.md", "affiliate link.txt")
+    try:
+        files = os.listdir(target_dir)
+        for f in files:
+            if f.lower() in valid_names:
+                p = os.path.join(target_dir, f)
+                if os.path.isfile(p):
+                    for enc in ("utf-8", "utf-8-sig", "latin-1"):
+                        try:
+                            with open(p, "r", encoding=enc) as af:
+                                for line in af:
+                                    l_str = line.strip()
+                                    if l_str.startswith("http://") or l_str.startswith("https://"):
+                                        return l_str
+                            break
+                        except Exception:
+                            continue
+    except Exception:
+        pass
+
+    return ""
 
 
 def debug_click_upload_video_button(driver, video_path: str = "", main_folder: str = "") -> dict[str, Any]:
@@ -1749,13 +1745,16 @@ def run_facebook_autopost_batch(
                 log(f"[Facebook Auto Post Warning] Description: {r4.get('error')}")
             time.sleep(1.0)
 
-            # Step 5: Add Affiliate Product
-            if affiliate_url or subfolder_path:
+            # Step 5: Add Affiliate Product (Strictly only if Affiliate Link.md exists in this subfolder)
+            target_aff_url = find_sample_affiliate_url(affiliate_url, folder_path=subfolder_path)
+            if target_aff_url:
                 _report(5, "🛍️ 5. เพิ่มสินค้า Affiliate & ลิงก์")
-                r5 = debug_add_affiliate_product(driver, affiliate_url=affiliate_url, folder_path=subfolder_path, main_folder=subfolder_path)
+                r5 = debug_add_affiliate_product(driver, affiliate_url=target_aff_url, folder_path=subfolder_path, main_folder=subfolder_path)
                 if not r5.get("success"):
                     log(f"[Facebook Auto Post Warning] Add affiliate product: {r5.get('error')}")
                 time.sleep(1.0)
+            else:
+                log(f"[Facebook Auto Post] ℹ️ โฟลเดอร์ '{item_title}' ไม่มีไฟล์ Affiliate Link.md -> ข้ามขั้นตอนเพิ่มสินค้า Affiliate อย่างปลอดภัย")
 
             # Step 6: Set Schedule Time
             _report(6, "⏰ 6. ตั้งเวลาโพสต์")
