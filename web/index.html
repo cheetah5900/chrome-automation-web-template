@@ -1945,6 +1945,48 @@
               </div>
             </section>
 
+            <!-- ShopeeSave Auto-Watcher Card -->
+            <section class="card" style="border: 1px solid rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.03);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 8px;">
+                <h3 style="margin: 0; font-size: 1.05rem; color: #34d399; display: flex; align-items: center; gap: 8px;">
+                  👁️ ShopeeSave Auto-Watcher & Move
+                </h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <span id="shopeeWatcherStatusBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 12px; border-radius: 20px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); font-weight: bold;">⚪ Stopped</span>
+                </div>
+              </div>
+              <p style="font-size: 0.82rem; color: rgba(255,255,255,0.6); margin: 0 0 14px 0; line-height: 1.4;">
+                เฝ้าตรวจจับโฟลเดอร์ <code>~/Downloads/ShopeeSave_*</code> แบบ Real-time ทันทีที่ดาวน์โหลดเสร็จ: ป้องกันชื่อไฟล์ชนกัน (แก้ชื่อ <code>_</code> ตาม Product ID), จับคู่กับโฟลเดอร์ตอนในโปรเจกต์ และย้ายไฟล์ (main_images, product.jpg, info) เข้าโฟลเดอร์ตอนให้อัตโนมัติ
+              </p>
+
+              <!-- Watcher Controls Row -->
+              <div style="display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;">
+                <button id="btnStartShopeeWatcher" class="primary has-tooltip" style="padding: 10px 20px; font-size: 0.88rem; font-weight: bold; border-radius: 10px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
+                  <span class="btn-text">▶️ Start Watcher</span>
+                  <div class="custom-tooltip" id="tooltip_btnStartShopeeWatcher"></div>
+                </button>
+                <button id="btnStopShopeeWatcher" class="danger has-tooltip" disabled style="padding: 10px 18px; font-size: 0.88rem; font-weight: bold; border-radius: 10px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                  <span class="btn-text">⏹️ Stop Watcher</span>
+                  <div class="custom-tooltip" id="tooltip_btnStopShopeeWatcher"></div>
+                </button>
+                <button id="btnRefreshShopeeWatcherLogs" class="secondary" style="padding: 10px 14px; font-size: 0.82rem; border-radius: 10px; margin: 0;">
+                  🔄 Refresh Logs
+                </button>
+                <button id="btnClearShopeeWatcherLogs" class="secondary" style="padding: 10px 12px; font-size: 0.82rem; border-radius: 10px; margin: 0; color: rgba(255,255,255,0.5);">
+                  🗑️ Clear
+                </button>
+              </div>
+
+              <!-- Watcher Live Log Box -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 0.78rem; color: #34d399; font-weight: 600;">Watcher Live Logs (~/.shopeesave_watcher.log)</label>
+                <span id="shopeeWatcherLogCount" style="font-size: 0.72rem; color: rgba(255,255,255,0.4);">Auto-refreshing</span>
+              </div>
+              <div id="shopeeWatcherConsole" class="console-box" style="height: 140px; min-height: 140px; font-size: 0.78rem; overflow-y: auto; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 10px; font-family: monospace;">
+                <div class="console-line system">Ready. Press Start Watcher to monitor ShopeeSave downloads...</div>
+              </div>
+            </section>
+
             <!-- Scanned Items Preview List -->
             <section class="card">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">

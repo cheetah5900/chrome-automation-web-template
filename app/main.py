@@ -5671,6 +5671,43 @@ def api_shopee_debug_step_6(req: dict[str, Any] = None) -> dict[str, Any]:
     except Exception as e:
         return {"ok": False, "detail": f"Step 6 ผิดพลาด: {str(e)}"}
 
+# ==============================================================================
+# ShopeeSave Auto-Watcher Endpoints
+# ==============================================================================
+
+@app.get("/api/shopeesave-watcher/status")
+def api_shopeesave_watcher_status() -> dict[str, Any]:
+    """Get status of the ShopeeSave background watcher daemon."""
+    from app.shopeesave_watcher import get_watcher_status
+    return get_watcher_status()
+
+@app.post("/api/shopeesave-watcher/start")
+def api_shopeesave_watcher_start(req: dict[str, Any] = None) -> dict[str, Any]:
+    """Start the ShopeeSave background watcher daemon."""
+    from app.shopeesave_watcher import start_watcher
+    req = req or {}
+    project_dir = req.get("project_dir")
+    downloads_dir = req.get("downloads_dir")
+    return start_watcher(project_dir=project_dir, downloads_dir=downloads_dir)
+
+@app.post("/api/shopeesave-watcher/stop")
+def api_shopeesave_watcher_stop() -> dict[str, Any]:
+    """Stop the ShopeeSave background watcher daemon."""
+    from app.shopeesave_watcher import stop_watcher
+    return stop_watcher()
+
+@app.get("/api/shopeesave-watcher/logs")
+def api_shopeesave_watcher_logs(lines: int = 50) -> dict[str, Any]:
+    """Get recent logs from the ShopeeSave watcher."""
+    from app.shopeesave_watcher import get_watcher_logs
+    return get_watcher_logs(max_lines=lines)
+
+@app.post("/api/shopeesave-watcher/clear-logs")
+def api_shopeesave_watcher_clear_logs() -> dict[str, Any]:
+    """Clear the ShopeeSave watcher log file."""
+    from app.shopeesave_watcher import clear_watcher_logs
+    return clear_watcher_logs()
+
 @app.get("/api/utils/view-image")
 def view_image(path: str) -> FileResponse:
     import os

@@ -8463,6 +8463,134 @@ async function runShopeeSingleItem(item, btn) {
   }
 }
 
+// ==============================================================================
+// ShopeeSave Auto-Watcher Logic
+// ==============================================================================
+let shopeeWatcherPollingInterval = null;
+
+async function fetchShopeeWatcherStatus() {
+  try {
+    const res = await jsonFetch('/api/shopeesave-watcher/status');
+    if (!res || !res.ok) return;
+
+    const badge = document.getElementById('shopeeWatcherStatusBadge');
+    const startBtn = document.getElementById('btnStartShopeeWatcher');
+    const stopBtn = document.getElementById('btnStopShopeeWatcher');
+
+    if (badge) {
+      if (res.running) {
+        badge.textContent = `🟢 Running (PID: ${res.pid || 'Active'})`;
+        badge.style.background = 'rgba(16, 185, 129, 0.2)';
+        badge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+        badge.style.color = '#34d399';
+      } else {
+        badge.textContent = '⚪ Stopped';
+        badge.style.background = 'rgba(255, 255, 255, 0.08)';
+        badge.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+        badge.style.color = 'rgba(255, 255, 255, 0.6)';
+      }
+    }
+
+    if (startBtn) startBtn.disabled = !!res.running;
+    if (stopBtn) stopBtn.disabled = !res.running;
+
+    if (res.last_logs && Array.isArray(res.last_logs)) {
+      renderShopeeWatcherLogs(res.last_logs);
+    }
+  } catch (e) {
+    // Ignore transient polling errors
+  }
+}
+
+function renderShopeeWatcherLogs(logs) {
+  const consoleBox = document.getElementById('shopeeWatcherConsole');
+  if (!consoleBox || !logs || logs.length === 0) return;
+
+  consoleBox.innerHTML = '';
+  logs.forEach(msg => {
+    const line = document.createElement('div');
+    let cls = 'system';
+    if (msg.includes('SUCCESS') || msg.includes('✅') || msg.includes('Started')) cls = 'success';
+    else if (msg.includes('Error') || msg.includes('❌') || msg.includes('Failed')) cls = 'error';
+    else if (msg.includes('WAIT') || msg.includes('⏳') || msg.includes('Renamed') || msg.includes('🛡️')) cls = 'warning';
+    line.className = `console-line ${cls}`;
+    line.textContent = msg;
+    consoleBox.appendChild(line);
+  });
+  consoleBox.scrollTop = consoleBox.scrollHeight;
+}
+
+async function startShopeeWatcher(btn) {
+  if (btn) btn.disabled = true;
+  const mainFolderInput = document.getElementById('cfg_shopee_main_folder');
+  const projectDir = mainFolderInput ? mainFolderInput.value.trim() : '';
+
+  try {
+    const res = await jsonFetch('/api/shopeesave-watcher/start', {
+      method: 'POST',
+      body: JSON.stringify({ project_dir: projectDir })
+    });
+    if (res.ok) {
+      showToast(res.message || 'ShopeeSave Watcher เริ่มทำงานแล้ว', 'success');
+      logShopeeConsole(`🚀 [ShopeeSave Watcher] ${res.message}`, 'success');
+    } else {
+      showToast(res.detail || 'ไม่สามารถเปิด Watcher ได้', 'error');
+      logShopeeConsole(`❌ [ShopeeSave Watcher] ${res.detail}`, 'error');
+    }
+    await fetchShopeeWatcherStatus();
+  } catch (e) {
+    showToast(`Error: ${e.message}`, 'error');
+    logShopeeConsole(`❌ [ShopeeSave Watcher] Error: ${e.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function stopShopeeWatcher(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await jsonFetch('/api/shopeesave-watcher/stop', {
+      method: 'POST'
+    });
+    if (res.ok) {
+      showToast(res.message || 'ShopeeSave Watcher หยุดทำงานแล้ว', 'info');
+      logShopeeConsole(`🛑 [ShopeeSave Watcher] ${res.message}`, 'info');
+    } else {
+      showToast(res.detail || 'ไม่สามารถหยุด Watcher ได้', 'error');
+    }
+    await fetchShopeeWatcherStatus();
+  } catch (e) {
+    showToast(`Error: ${e.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function refreshShopeeWatcherLogs() {
+  try {
+    const res = await jsonFetch('/api/shopeesave-watcher/logs?lines=60');
+    if (res.ok && res.logs) {
+      renderShopeeWatcherLogs(res.logs);
+      showToast('อัปเดต Log สำเร็จ', 'success');
+    }
+  } catch (e) {
+    showToast(`Error: ${e.message}`, 'error');
+  }
+}
+
+async function clearShopeeWatcherLogs() {
+  try {
+    const res = await jsonFetch('/api/shopeesave-watcher/clear-logs', { method: 'POST' });
+    if (res.ok) {
+      const consoleBox = document.getElementById('shopeeWatcherConsole');
+      if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Logs cleared.</div>';
+      showToast('ล้าง Log เรียบร้อย', 'success');
+    }
+  } catch (e) {
+    showToast(`Error: ${e.message}`, 'error');
+  }
+}
+
 function initShopeeAffiliateListeners() {
   const browseBtn = document.getElementById('browseShopeeMainFolderBtn');
   if (browseBtn) browseBtn.addEventListener('click', browseShopeeMainFolder);
@@ -8607,9 +8735,36 @@ function initShopeeAffiliateListeners() {
       if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
     });
   }
+
+  // ShopeeSave Watcher listeners
+  const startWatcherBtn = document.getElementById('btnStartShopeeWatcher');
+  if (startWatcherBtn) startWatcherBtn.addEventListener('click', (e) => startShopeeWatcher(e.currentTarget));
+
+  const stopWatcherBtn = document.getElementById('btnStopShopeeWatcher');
+  if (stopWatcherBtn) stopWatcherBtn.addEventListener('click', (e) => stopShopeeWatcher(e.currentTarget));
+
+  const refreshWatcherLogsBtn = document.getElementById('btnRefreshShopeeWatcherLogs');
+  if (refreshWatcherLogsBtn) refreshWatcherLogsBtn.addEventListener('click', refreshShopeeWatcherLogs);
+
+  const clearWatcherLogsBtn = document.getElementById('btnClearShopeeWatcherLogs');
+  if (clearWatcherLogsBtn) clearWatcherLogsBtn.addEventListener('click', clearShopeeWatcherLogs);
+
+  // Initial fetch status & start periodic polling
+  fetchShopeeWatcherStatus();
+  if (!shopeeWatcherPollingInterval) {
+    shopeeWatcherPollingInterval = setInterval(() => {
+      const view = document.getElementById('shopeeAffiliateView');
+      if (view && !view.classList.contains('hidden')) {
+        fetchShopeeWatcherStatus();
+      }
+    }, 3000);
+  }
 }
 
 const staticTooltips = {
+  // ShopeeSave Watcher
+  "btnStartShopeeWatcher": "▶️ เปิดการทำงาน ShopeeSave Watcher:<br>- เฝ้าตรวจจับโฟลเดอร์ใน ~/Downloads/ShopeeSave_* อัตโนมัติ<br>- แก้ปัญหาชื่อไฟล์ชนกัน และย้ายเข้าโฟลเดอร์ตอน",
+  "btnStopShopeeWatcher": "⏹️ ปิดการทำงาน ShopeeSave Watcher:<br>- สั่งหยุด Background Daemon ทันที",
   // Settings / Profile
   "openSettings": "⚙️ ตั้งค่าระบบ (Settings):<br>- แก้ไขพอร์ต, หน่วงเวลา, หรือ URL เริ่มต้น",
   "launchProfile": "🚀 เปิดเบราว์เซอร์ Chrome แบบโหมด Remote Debugging บนพอร์ตที่เลือก เพื่อให้บอทสามารถควบคุมได้",
