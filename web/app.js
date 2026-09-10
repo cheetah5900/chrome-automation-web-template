@@ -807,6 +807,12 @@ const inputsToListen = [
   'cfg_meta_video_prefix',
   'cfg_meta_start_date',
   'cfg_meta_start_hour',
+  'cfg_facebook_page_url',
+  'cfg_facebook_main_folder',
+  'cfg_facebook_subfolders',
+  'cfg_facebook_video_prefix',
+  'cfg_facebook_start_date',
+  'cfg_facebook_start_hour',
   'startupUrl1',
   'startupUrl2',
   'startupUrl3'
@@ -1085,6 +1091,38 @@ async function loadConfig() {
         metaStartHour.value = isNaN(h) ? 18 : h;
       } else {
         metaStartHour.value = 18;
+      }
+    }
+
+    // Facebook Auto Post Defaults
+    const fbPageUrl = document.getElementById('cfg_facebook_page_url');
+    if (fbPageUrl) fbPageUrl.value = config.facebook_page_url || config.meta_page_url || '';
+
+    const fbMainFolder = document.getElementById('cfg_facebook_main_folder');
+    if (fbMainFolder) fbMainFolder.value = config.facebook_main_folder || config.meta_main_folder || '';
+
+    const fbSubfolders = document.getElementById('cfg_facebook_subfolders');
+    if (fbSubfolders) fbSubfolders.value = config.facebook_subfolders || config.meta_subfolders || '';
+
+    const fbVideoPrefix = document.getElementById('cfg_facebook_video_prefix');
+    if (fbVideoPrefix) fbVideoPrefix.value = config.facebook_video_prefix || config.meta_video_prefix || 'combined';
+
+    const fbStartDate = document.getElementById('cfg_facebook_start_date');
+    if (fbStartDate) {
+      if (config.facebook_start_date) {
+        fbStartDate.value = config.facebook_start_date;
+      } else if (!fbStartDate.value) {
+        const today = new Date().toISOString().split('T')[0];
+        fbStartDate.value = today;
+      }
+    }
+
+    const fbStartHour = document.getElementById('cfg_facebook_start_hour');
+    if (fbStartHour) {
+      if (config.facebook_start_hour !== undefined) {
+        fbStartHour.value = config.facebook_start_hour;
+      } else {
+        fbStartHour.value = 18;
       }
     }
 
