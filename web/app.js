@@ -7855,6 +7855,57 @@ function initFacebookAutoPostListeners() {
       if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared.</div>';
     });
   }
+
+  // Facebook Reels Step Debugger Listeners
+  const debugReelsBtn = document.getElementById('btnFacebookDebugStepReels');
+  if (debugReelsBtn) debugReelsBtn.addEventListener('click', (e) => executeFacebookDebugStep('click_reels', e.currentTarget));
+
+  const debugUploadBtn = document.getElementById('btnFacebookDebugStepUpload');
+  if (debugUploadBtn) debugUploadBtn.addEventListener('click', (e) => executeFacebookDebugStep('click_upload', e.currentTarget));
+
+  const debugFlowBtn = document.getElementById('btnFacebookDebugStepFlow');
+  if (debugFlowBtn) debugFlowBtn.addEventListener('click', (e) => executeFacebookDebugStep('reels_flow', e.currentTarget));
+
+  const debugCloseBtn = document.getElementById('btnFacebookDebugCloseModal');
+  if (debugCloseBtn) debugCloseBtn.addEventListener('click', (e) => executeFacebookDebugStep('close_modal', e.currentTarget));
+}
+
+async function executeFacebookDebugStep(stepName, btn) {
+  const stepLabels = {
+    'click_reels': '🎬 Step 1: กดปุ่ม Reels (ข้าง Photo/video)',
+    'click_upload': '📤 Step 2: กดปุ่มเพิ่มวิดีโอ (Add Video)',
+    'reels_flow': '⚡ รันต่อเนื่อง (กด Reels ➔ กด Add Video)',
+    'close_modal': '✖️ ปิดหน้าต่างสร้าง Reels'
+  };
+  const label = stepLabels[stepName] || stepName;
+
+  writeConsoleLine(`[Reels Debug] ⏳ กำลังรัน: ${label}...`, 'system', 'facebookConsole');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await jsonFetch('/api/facebook-autopost/debug/step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: stepName })
+    });
+
+    if (res.ok) {
+      writeConsoleLine(`[Reels Debug] ✅ ${res.message || 'สำเร็จ'}`, 'success', 'facebookConsole');
+      showToast(`Facebook Debug: ${res.message || 'สำเร็จ'}`, 'success');
+      if (res.data) {
+        writeConsoleLine(`  -> Result: ${JSON.stringify(res.data)}`, 'info', 'facebookConsole');
+      }
+    } else {
+      const errMsg = res.detail || res.message || 'เกิดข้อผิดพลาด';
+      writeConsoleLine(`[Reels Debug Error] ❌ ${errMsg}`, 'error', 'facebookConsole');
+      showToast(errMsg, 'error');
+    }
+  } catch (err) {
+    writeConsoleLine(`[Reels Debug Exception] ❌ ${err.message}`, 'error', 'facebookConsole');
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // --- Shopee Affiliate Logic ---

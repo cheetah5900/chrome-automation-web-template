@@ -223,7 +223,9 @@ def is_meta_stopped() -> bool:
 request_facebook_stop = request_meta_stop
 reset_facebook_stop = reset_meta_stop
 is_facebook_stopped = is_meta_stopped
-run_facebook_autopost_batch = run_meta_autopost_batch
+
+def run_facebook_autopost_batch(*args, **kwargs):
+    return run_meta_autopost_batch(*args, **kwargs)
 
 def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float = 0.2, *args, **kwargs) -> Any:
     """Polls JavaScript expression until truthy or timeout."""
@@ -758,6 +760,226 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
             log(f"[Meta Step 5 Error] แปลงหรือใส่วัน-เวลา '{scheduled_dt_str}' ไม่ถูกต้อง: {ex_dt}")
             raise ex_dt
     return True
+
+# ==============================================================================
+# Facebook Reels Step Debugger Helpers (Page & Modal Controls)
+# ==============================================================================
+
+def debug_click_reels_button(driver) -> dict[str, Any]:
+    """
+    Step 1: Finds and clicks the 'Reels' button located next to 'Photo/video' in the Facebook feed / page.
+    Supports English ('Reel', 'Reels') and Thai ('คลิป Reels', 'รีลส์', 'สร้างคลิป Reels').
+    """
+    if not driver:
+        return {"success": False, "error": "WebDriver is None"}
+    
+    ensure_active_window(driver)
+
+    js_find_and_click = """
+    const candidates = [];
+    const dialog = document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    const allButtons = Array.from(document.querySelectorAll('[role="button"], button, div[tabindex="0"]'));
+
+    for (const b of allButtons) {
+        if (dialog && dialog.contains(b)) continue;
+        const rect = b.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0 || rect.y < 0) continue;
+        const aria = (b.getAttribute('aria-label') || '').trim().toLowerCase();
+        const text = (b.innerText || '').trim().toLowerCase();
+        
+        const isReel = (aria === 'reel' || aria === 'reels' || aria === 'คลิป reels' || aria === 'รีลส์' || 
+                        aria.includes('สร้างคลิป reels') || text === 'reel' || text === 'reels' || 
+                        text === 'คลิป reels' || text === 'รีลส์');
+        if (isReel) {
+            const parent = b.parentElement;
+            const parentText = parent ? (parent.innerText || '').toLowerCase() : '';
+            const hasPhotoSibling = parentText.includes('photo') || parentText.includes('รูปภาพ') || parentText.includes('live') || parentText.includes('วิดีโอ');
+            candidates.push({
+                el: b,
+                score: hasPhotoSibling ? 20 : 10,
+                tag: b.tagName,
+                aria: b.getAttribute('aria-label'),
+                text: b.innerText.trim(),
+                rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }
+            });
+        }
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+
+    if (candidates.length > 0) {
+        const best = candidates[0];
+        best.el.scrollIntoView({ behavior: 'instant', block: 'center' });
+        best.el.click();
+        return {
+            success: true,
+            tag: best.tag,
+            aria: best.aria,
+            text: best.text,
+            rect: best.rect,
+            total_candidates: candidates.length
+        };
+    }
+    return { success: false, error: "ไม่พบปุ่ม 'Reels' ข้าง Photo/video บนหน้า Facebook" };
+    """
+
+    res = driver.execute_script(js_find_and_click)
+    if res.get("success"):
+        label = res.get("aria") or res.get("text") or "Reels"
+        log(f"[Facebook Debug] ✅ Step 1: กดปุ่ม '{label}' (ตำแหน่ง x={res.get('rect', {}).get('x')}, y={res.get('rect', {}).get('y')}) สำเร็จ")
+        return {"success": True, "message": f"กดปุ่ม '{label}' สำเร็จ หน้าต่างสร้างคลิป Reels กำลังเปิด", "data": res}
+    else:
+        err = res.get("error", "ไม่พบปุ่ม Reels ข้าง Photo/video")
+        log(f"[Facebook Debug Error] {err}")
+        return {"success": False, "error": err}
+
+def debug_click_upload_video_button(driver) -> dict[str, Any]:
+    """
+    Step 2: Finds and clicks the 'Add Video' / 'Upload' button inside the Create Reel modal dialog.
+    Supports English ('Add Video', 'Upload video for reel', 'Upload') and Thai ('เพิ่มวิดีโอ', 'อัปโหลดวิดีโอ', 'อัดวิดีโอ', 'อัปโหลด').
+    """
+    if not driver:
+        return {"success": False, "error": "WebDriver is None"}
+
+    ensure_active_window(driver)
+
+    js_find_upload = """
+    const dialog = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    const candidates = [];
+    const buttons = Array.from(dialog.querySelectorAll('[role="button"], button, div[tabindex="0"]'));
+
+    for (const b of buttons) {
+        const rect = b.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        const aria = (b.getAttribute('aria-label') || '').trim().toLowerCase();
+        const text = (b.innerText || '').trim().toLowerCase();
+        
+        let score = 0;
+        if (aria.includes('upload video') || aria.includes('อัปโหลดวิดีโอ') || aria.includes('อัดวิดีโอ')) {
+            score = 30;
+        } else if (text.includes('add video') || text.includes('เพิ่มวิดีโอ') || text.includes('อัดวิดีโอ')) {
+            score = 25;
+        } else if (aria === 'upload' || text === 'upload' || aria === 'อัปโหลด' || text === 'อัปโหลด') {
+            score = 20;
+        } else if (b.tagName === 'INPUT' && b.type === 'file') {
+            score = 15;
+        }
+
+        if (score > 0) {
+            candidates.push({
+                el: b,
+                score: score,
+                tag: b.tagName,
+                aria: b.getAttribute('aria-label'),
+                text: b.innerText.trim().slice(0, 50),
+                rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }
+            });
+        }
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+
+    if (candidates.length > 0) {
+        const best = candidates[0];
+        setTimeout(() => {
+            try {
+                best.el.click();
+            } catch (e) {}
+        }, 50);
+
+        return {
+            success: true,
+            tag: best.tag,
+            aria: best.aria,
+            text: best.text,
+            rect: best.rect,
+            total_candidates: candidates.length
+        };
+    }
+
+    const fileInput = dialog.querySelector('input[type="file"][accept*="video"]');
+    if (fileInput) {
+        setTimeout(() => {
+            try {
+                fileInput.click();
+            } catch (e) {}
+        }, 50);
+        return {
+            success: true,
+            tag: 'INPUT',
+            text: 'input[type=file]',
+            message: 'คลิกที่ input[type=file] เพื่อเปิดหน้าต่างเลือกไฟล์'
+        };
+    }
+
+    return { success: false, error: "ไม่พบปุ่ม 'Add Video' หรือ 'Upload' ในหน้าต่างสร้างคลิป Reels" };
+    """
+
+    res = driver.execute_script(js_find_upload)
+    if res.get("success"):
+        label = res.get("aria") or res.get("text") or "Add Video"
+        log(f"[Facebook Debug] ✅ Step 2: กดปุ่ม '{label}' (สำหรับอัปโหลดวิดีโอ) สำเร็จ")
+        return {"success": True, "message": f"กดปุ่ม '{label}' สำเร็จ (เปิดหน้าต่างเลือกไฟล์วิดีโอ)", "data": res}
+    else:
+        err = res.get("error", "ไม่พบปุ่ม Add Video / Upload")
+        log(f"[Facebook Debug Error] {err}")
+        return {"success": False, "error": err}
+
+def debug_close_reels_modal(driver) -> dict[str, Any]:
+    """
+    Closes the Create Reel modal dialog if currently open.
+    """
+    if not driver:
+        return {"success": False, "error": "WebDriver is None"}
+
+    ensure_active_window(driver)
+
+    js_close = """
+    const dialog = document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    if (!dialog) return { success: false, error: "ไม่พบหน้าต่าง Modal ที่เปิดอยู่" };
+    const closeBtn = dialog.querySelector('[aria-label="Close"], [aria-label="ปิด"], [aria-label*="Close"], [aria-label*="ปิด"]');
+    if (closeBtn) {
+        closeBtn.click();
+        return { success: true, message: "ปิดหน้าต่างสร้าง Reels เรียบร้อยแล้ว" };
+    }
+    return { success: false, error: "ไม่พบปุ่มปิด (Close) ในหน้าต่าง Modal" };
+    """
+    res = driver.execute_script(js_close)
+    if res.get("success"):
+        log("[Facebook Debug] ✖️ ปิดหน้าต่างสร้าง Reels เรียบร้อย")
+        return {"success": True, "message": "ปิดหน้าต่างสร้าง Reels สำเร็จ"}
+    return {"success": False, "error": res.get("error", "ไม่พบปุ่มปิด")}
+
+def debug_reels_full_flow(driver) -> dict[str, Any]:
+    """
+    Runs full sequence: Click Reels button -> Wait for modal -> Click Add Video button.
+    """
+    r1 = debug_click_reels_button(driver)
+    if not r1.get("success"):
+        return r1
+    
+    start = time.time()
+    modal_opened = False
+    while time.time() - start < 5.0:
+        opened = driver.execute_script("""
+            return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
+        """)
+        if opened:
+            modal_opened = True
+            break
+        time.sleep(0.3)
+    
+    if not modal_opened:
+        return {"success": False, "error": "กดปุ่ม Reels แล้ว แต่หน้าต่างสร้างคลิป Reels ไม่เปิดขึ้นมาใน 5 วินาที"}
+
+    time.sleep(0.5)
+    r2 = debug_click_upload_video_button(driver)
+    return {
+        "success": r2.get("success", False),
+        "message": f"รันต่อเนื่องสำเร็จ: {r1.get('message')} ➔ {r2.get('message')}",
+        "step1": r1,
+        "step2": r2
+    }
 
 # --- Granular Date Debug Helpers for Step-by-Step UI Control ---
 def debug_date_open_calendar(driver, platform_idx: str = "all") -> dict[str, Any]:

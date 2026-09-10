@@ -1660,6 +1660,33 @@
                 </div>
               </div>
 
+              <!-- Facebook Reels Step Debugger Section -->
+              <div style="margin-bottom: 16px; padding: 14px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(24, 119, 242, 0.25); border-radius: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                  <span style="font-size: 0.9rem; font-weight: bold; color: #8da6ff;">🛠️ Facebook Reels Debugger (โหมดทดสอบแยกขั้นตอน)</span>
+                  <span style="font-size: 0.75rem; color: #60a5fa; background: rgba(24, 119, 242, 0.15); padding: 2px 8px; border-radius: 10px; border: 1px solid rgba(24, 119, 242, 0.3);">Step Debugger</span>
+                </div>
+                
+                <!-- Step buttons grid -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                  <button id="btnFacebookDebugStepReels" class="secondary" style="padding: 10px 12px; font-size: 0.85rem; margin: 0; border-radius: 8px; text-align: center; border-color: rgba(24, 119, 242, 0.4); color: #8da6ff; background: rgba(24, 119, 242, 0.08); font-weight: bold; cursor: pointer;">
+                    🎬 1. กดปุ่ม Reels (ข้าง Photo/video)
+                  </button>
+                  <button id="btnFacebookDebugStepUpload" class="secondary" style="padding: 10px 12px; font-size: 0.85rem; margin: 0; border-radius: 8px; text-align: center; border-color: rgba(16, 185, 129, 0.4); color: #34d399; background: rgba(16, 185, 129, 0.08); font-weight: bold; cursor: pointer;">
+                    📤 2. กดปุ่มเพิ่มวิดีโอ (Add Video)
+                  </button>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
+                  <button id="btnFacebookDebugStepFlow" class="secondary" style="padding: 9px; font-size: 0.85rem; margin: 0; font-weight: bold; border-radius: 8px; background: rgba(24, 119, 242, 0.15); border: 1px solid rgba(24, 119, 242, 0.4); color: #8da6ff; cursor: pointer;">
+                    ⚡ รันต่อเนื่อง (กด Reels ➔ กด Add Video)
+                  </button>
+                  <button id="btnFacebookDebugCloseModal" class="secondary" style="padding: 9px; font-size: 0.85rem; margin: 0; border-radius: 8px; border-color: rgba(255, 107, 107, 0.3); color: #ff6b6b; background: rgba(255, 107, 107, 0.08); cursor: pointer;">
+                    ✖️ ปิดหน้าต่าง
+                  </button>
+                </div>
+              </div>
+
               <!-- Console Header -->
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <label style="font-weight: bold; color: rgba(255,255,255,0.7); font-size: 0.85rem;">Live Console Output</label>
@@ -2087,6 +2114,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=79"></script>
+  <script src="/web/app.js?v=80"></script>
 </body>
 </html>

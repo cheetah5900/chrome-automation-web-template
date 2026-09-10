@@ -4932,6 +4932,60 @@ def api_facebook_autopost_stop() -> dict[str, Any]:
     log("[Facebook Auto Post] 🛑 ได้รับคำสั่ง Force Stop - กำลังหยุดการทำงานทุกกระบวนการ")
     return {"ok": True, "message": "🛑 สั่ง Force Stop เรียบร้อยแล้ว"}
 
+class FacebookDebugStepRequest(BaseModel):
+    step: str
+
+FacebookDebugStepRequest.model_rebuild()
+
+def _get_facebook_driver():
+    try:
+        ready = sync_ensure_chrome_debug_ready(port=9222)
+        if ready:
+            bot = browser_manager.get(target_port=9222)
+            if bot and bot.driver:
+                return bot.driver
+        bot = browser_manager.get()
+        if bot and bot.driver:
+            return bot.driver
+    except Exception as e:
+        log(f"[Facebook Driver Error] {e}")
+    return None
+
+@app.post("/api/facebook-autopost/debug/step")
+def api_facebook_debug_step(req: FacebookDebugStepRequest) -> dict[str, Any]:
+    driver = _get_facebook_driver()
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ยังไม่ได้เปิดใช้งาน (กรุณากด 'Launch Profile' ด้านบนก่อน)"}
+    from app.facebook_autopost import (
+        debug_click_reels_button,
+        debug_click_upload_video_button,
+        debug_close_reels_modal,
+        debug_reels_full_flow,
+    )
+    step = req.step.strip().lower()
+    try:
+        if step in ("click_reels", "reels", "step1"):
+            res = debug_click_reels_button(driver)
+        elif step in ("click_upload", "upload", "step2"):
+            res = debug_click_upload_video_button(driver)
+        elif step in ("close_modal", "close"):
+            res = debug_close_reels_modal(driver)
+        elif step in ("reels_flow", "flow", "all"):
+            res = debug_reels_full_flow(driver)
+        else:
+            return {"ok": False, "detail": f"Unknown debug step: {step}"}
+        
+        return {
+            "ok": res.get("success", False),
+            "data": res,
+            "message": res.get("message", res.get("error", ""))
+        }
+    except Exception as e:
+        log(f"[Facebook Debug Error] {e}")
+        return {"ok": False, "detail": str(e)}
+
+
+
 # ==============================================================================
 # SHOPEE AFFILIATE AUTOMATION
 # ==============================================================================
