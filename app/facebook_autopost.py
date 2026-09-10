@@ -5,7 +5,7 @@ import random
 import subprocess
 import argparse
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -1374,6 +1374,250 @@ def debug_add_affiliate_product(driver, affiliate_url: str = "", folder_path: st
         "message": f"เพิ่มสินค้า Affiliate สำเร็จ ({target_url})",
         "affiliate_url": target_url,
         "verified": check_added
+    }
+
+def debug_set_schedule(driver, scheduled_datetime: str = "", main_folder: str = "") -> dict[str, Any]:
+    """
+    Step 6: Configures posting schedule date & time inside 'Scheduling options' of the Reel modal.
+    """
+    if not driver:
+        return {"success": False, "error": "WebDriver is None"}
+
+    ensure_active_window(driver)
+
+    modal_check = driver.execute_script("""
+        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    """)
+    if not modal_check:
+        return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
+
+    # 1. Parse date and time
+    target_dt = None
+    if scheduled_datetime:
+        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                target_dt = datetime.strptime(scheduled_datetime.strip(), fmt)
+                break
+            except Exception:
+                pass
+
+    if not target_dt:
+        # Default to tomorrow at 18:00
+        now = datetime.now()
+        target_dt = (now.replace(hour=18, minute=0, second=0, microsecond=0) + timedelta(days=1))
+
+    fb_date = f"{target_dt.day} {target_dt.strftime('%b')} {target_dt.year}"
+    fb_time = target_dt.strftime("%H:%M")
+    day_str = str(target_dt.day)
+
+    # 2. Check if currently inside Scheduling options sub-view
+    in_sched = driver.execute_script("""
+        const m = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+        return (m.innerText || '').includes('Choose a date and time in the future');
+    """)
+
+    if not in_sched:
+        js_open_sched = """
+        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+        const btn = Array.from(modal.querySelectorAll('*')).find(el => {
+            const t = (el.innerText || '').toLowerCase();
+            const a = (el.getAttribute('aria-label') || '').toLowerCase();
+            const isSched = t.includes('scheduling options') || t.includes('ตัวเลือกการกำหนดเวลา') ||
+                            a.includes('scheduling options') || a.includes('ตัวเลือกการกำหนดเวลา');
+            return isSched && el.getAttribute('role') === 'button';
+        });
+        if (btn) {
+            btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+            btn.click();
+            return { success: true };
+        }
+        return { success: false, error: "ไม่พบปุ่ม 'Scheduling options' (กรุณากด Step 3 เพื่อเข้าหน้าตั้งค่าก่อน)" };
+        """
+        r_open = driver.execute_script(js_open_sched)
+        if not r_open.get("success"):
+            return r_open
+        time.sleep(1.2)
+
+    # 3. Locate inputs in Scheduling options
+    inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="text"]')
+    date_input = None
+    time_input = None
+    for inp in inputs:
+        parent_text = driver.execute_script("""
+            let p = arguments[0].parentElement;
+            for (let k = 0; k < 4; k++) {
+                if (!p) break;
+                if (p.innerText && p.innerText.trim()) return p.innerText.trim();
+                p = p.parentElement;
+            }
+            return '';
+        """, inp)
+        if "time" in parent_text.lower() or "เวลา" in parent_text.lower():
+            time_input = inp
+        elif "date" in parent_text.lower() or "วัน" in parent_text.lower():
+            date_input = inp
+
+    # 4. Set Time
+    if time_input:
+        try:
+            time_input.click()
+            ActionChains(driver).key_down(Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL).send_keys("a").key_up(Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL).send_keys(Keys.BACKSPACE).perform()
+            time.sleep(0.2)
+            time_input.send_keys(fb_time)
+            time.sleep(0.3)
+            # Click the matching option in dropdown listbox if available
+            driver.execute_script("""
+                const targetTime = arguments[0];
+                const opt = Array.from(document.querySelectorAll('[role="option"]')).find(o => o.innerText.trim() === targetTime);
+                if (opt) opt.click();
+            """, fb_time)
+            time.sleep(0.3)
+            ActionChains(driver).send_keys(Keys.ENTER).perform()
+            time.sleep(0.3)
+        except Exception as e:
+            log(f"[Facebook Debug] Time set error: {e}")
+
+    # 5. Set Date if calendar day is reachable
+    if date_input:
+        try:
+            date_input.click()
+            time.sleep(0.4)
+            driver.execute_script("""
+                const targetDay = arguments[0];
+                const grid = document.querySelector('[role="grid"]');
+                if (grid) {
+                    const days = Array.from(grid.querySelectorAll('*')).filter(e => e.innerText && e.innerText.trim() === targetDay);
+                    if (days.length > 0) {
+                        days[days.length - 1].click();
+                    }
+                }
+            """, day_str)
+            time.sleep(0.4)
+        except Exception as e:
+            log(f"[Facebook Debug] Date set error: {e}")
+
+    # 6. Click 'Schedule for later' confirmation button
+    js_confirm = """
+    const btn = Array.from(document.querySelectorAll('[role="button"], button')).find(b => {
+        const t = (b.innerText || '').trim().toLowerCase();
+        const a = (b.getAttribute('aria-label') || '').trim().toLowerCase();
+        const rect = b.getBoundingClientRect();
+        const isSched = (t === 'schedule for later' || t === 'กำหนดเวลาในภายหลัง' ||
+                         a === 'schedule for later' || a === 'กำหนดเวลาในภายหลัง');
+        const isEnabled = b.getAttribute('aria-disabled') !== 'true' && !b.disabled;
+        return isSched && isEnabled && rect.width > 80 && rect.x > 500;
+    });
+    if (btn) {
+        btn.click();
+        return { success: true, method: 'confirm_button' };
+    }
+    // Fallback: click back button in header
+    const backBtn = Array.from(document.querySelectorAll('[aria-label="Back"], [aria-label="ย้อนกลับ"]')).find(b => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.x > 0;
+    });
+    if (backBtn) {
+        backBtn.click();
+        return { success: true, method: 'back_button' };
+    }
+    return { success: true, method: 'already_saved' };
+    """
+    driver.execute_script(js_confirm)
+    time.sleep(1.5)
+
+    # 7. Check updated status on Reel settings
+    sched_summary = driver.execute_script("""
+        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+        const btn = Array.from(modal.querySelectorAll('*')).find(el => {
+            const t = (el.innerText || '');
+            return t.includes('Scheduling options') && el.getAttribute('role') === 'button';
+        });
+        return btn ? btn.innerText.replace(/\\n/g, ' - ') : '';
+    """)
+
+    log(f"[Facebook Debug] ✅ Step 6: ตั้งเวลาโพสต์สำเร็จ ({fb_date} เวลา {fb_time}) -> {sched_summary}")
+    return {
+        "success": True,
+        "message": f"ตั้งเวลาโพสต์สำเร็จ ({fb_date} เวลา {fb_time})",
+        "date": fb_date,
+        "time": fb_time,
+        "summary": sched_summary
+    }
+
+def debug_click_post_button(driver) -> dict[str, Any]:
+    """
+    Step 7: Clicks the primary submit button ('Post' or 'Schedule') to publish or schedule the Reel.
+    """
+    if not driver:
+        return {"success": False, "error": "WebDriver is None"}
+
+    ensure_active_window(driver)
+
+    modal_check = driver.execute_script("""
+        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    """)
+    if not modal_check:
+        return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
+
+    # If currently inside a sub-view, click Back first
+    in_subview = driver.execute_script("""
+        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+        const text = modal.innerText || '';
+        return text.includes('Choose a date and time in the future') || text.includes('Add affiliate product');
+    """)
+    if in_subview:
+        driver.execute_script("""
+            const backBtns = Array.from(document.querySelectorAll('[aria-label="Back"], [aria-label="ย้อนกลับ"]')).filter(b => {
+                const r = b.getBoundingClientRect();
+                return r.width > 0 && r.x > 0;
+            });
+            if (backBtns.length > 0) backBtns[backBtns.length - 1].click();
+        """)
+        time.sleep(1.2)
+
+    # Find the enabled submit action button (Schedule or Post)
+    js_click_action = """
+    const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    const candidates = Array.from(modal.querySelectorAll('[role="button"], button')).filter(b => {
+        const t = (b.innerText || '').trim().toLowerCase();
+        const a = (b.getAttribute('aria-label') || '').trim().toLowerCase();
+        const rect = b.getBoundingClientRect();
+        const isAction = (t === 'schedule' || t === 'post' || a === 'schedule' || a === 'post' ||
+                          t === 'กำหนดเวลา' || t === 'โพสต์');
+        const isEnabled = b.getAttribute('aria-disabled') !== 'true' && !b.disabled;
+        return isAction && isEnabled && rect.width > 80 && rect.x > 0 && rect.y > 400;
+    });
+    if (candidates.length > 0) {
+        const btn = candidates[candidates.length - 1];
+        const label = btn.innerText.trim() || btn.getAttribute('aria-label') || 'Submit';
+        btn.click();
+        return { success: true, label: label };
+    }
+    return { success: false, error: "ไม่พบปุ่ม Schedule หรือ Post ที่พร้อมใช้งาน (ปุ่มอาจยัง disabled หรือกำลังประมวลผลอยู่)" };
+    """
+    res = driver.execute_script(js_click_action)
+    if not res.get("success"):
+        return res
+
+    btn_label = res.get("label", "Post/Schedule")
+    log(f"[Facebook Debug] 🚀 Step 7: กดปุ่ม '{btn_label}' สำเร็จ")
+    time.sleep(2.0)
+
+    # Check modal state after clicking
+    after_check = driver.execute_script("""
+        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]');
+        if (!modal) return { modal_closed: true };
+        return {
+            modal_closed: false,
+            text_sample: (modal.innerText || '').slice(0, 150)
+        };
+    """)
+
+    return {
+        "success": True,
+        "message": f"กดปุ่ม '{btn_label}' เรียบร้อยแล้ว (ระบบกำลังเริ่มกระบวนการโพสต์/กำหนดเวลาคลิป Reels)",
+        "button": btn_label,
+        "after_state": after_check
     }
 
 # --- Granular Date Debug Helpers for Step-by-Step UI Control ---

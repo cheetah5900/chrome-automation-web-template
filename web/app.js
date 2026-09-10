@@ -7913,6 +7913,12 @@ function initFacebookAutoPostListeners() {
 
   const debugAddProductBtn = document.getElementById('btnFacebookDebugStepAddProduct');
   if (debugAddProductBtn) debugAddProductBtn.addEventListener('click', (e) => executeFacebookDebugStep('add_affiliate_product', e.currentTarget));
+
+  const debugScheduleBtn = document.getElementById('btnFacebookDebugStepSchedule');
+  if (debugScheduleBtn) debugScheduleBtn.addEventListener('click', (e) => executeFacebookDebugStep('set_schedule', e.currentTarget));
+
+  const debugPostBtn = document.getElementById('btnFacebookDebugStepPost');
+  if (debugPostBtn) debugPostBtn.addEventListener('click', (e) => executeFacebookDebugStep('click_post', e.currentTarget));
 }
 
 async function executeFacebookDebugStep(stepName, btn) {
@@ -7921,7 +7927,9 @@ async function executeFacebookDebugStep(stepName, btn) {
     'click_upload': '📤 Step 2: แนบไฟล์วิดีโอเข้า Reels (Direct Attach)',
     'click_next_twice': '➡️ Step 3: กด Next 2 ครั้ง (เข้าหน้าตั้งค่า)',
     'insert_caption': '📝 Step 4: ใส่ Description (Caption)',
-    'add_affiliate_product': '🛍️ Step 5: กด Add Product & วาง Affiliate Link'
+    'add_affiliate_product': '🛍️ Step 5: กด Add Product & วาง Affiliate Link',
+    'set_schedule': '⏰ Step 6: ตั้งเวลาโพสต์ (Schedule Time)',
+    'click_post': '🚀 Step 7: กดปุ่มโพสต์ (Post / Schedule)'
   };
   const label = stepLabels[stepName] || stepName;
 
@@ -7929,6 +7937,7 @@ async function executeFacebookDebugStep(stepName, btn) {
   let targetCaption = '';
   let targetAffiliateUrl = '';
   let targetSubfolder = '';
+  let targetScheduledDatetime = '';
   if (typeof facebookPostQueue !== 'undefined' && facebookPostQueue && facebookPostQueue.length > 0) {
     const item = facebookPostQueue.find(p => p.checked !== false && (p.video_path || p.caption)) || facebookPostQueue[0];
     if (item) {
@@ -7936,6 +7945,14 @@ async function executeFacebookDebugStep(stepName, btn) {
       targetCaption = item.caption || '';
       targetAffiliateUrl = item.affiliate_url || '';
       targetSubfolder = item.subfolder_path || '';
+      targetScheduledDatetime = item.scheduled_datetime || '';
+    }
+  }
+  if (!targetScheduledDatetime) {
+    const startDate = document.getElementById('cfg_facebook_start_date')?.value || '';
+    const startHour = String(document.getElementById('cfg_facebook_start_hour')?.value || '18').padStart(2, '0');
+    if (startDate) {
+      targetScheduledDatetime = `${startDate}T${startHour}:00:00`;
     }
   }
   const mainFolder = document.getElementById('cfg_facebook_main_folder')?.value || '';
@@ -7953,7 +7970,8 @@ async function executeFacebookDebugStep(stepName, btn) {
         main_folder: mainFolder,
         caption: targetCaption,
         affiliate_url: targetAffiliateUrl,
-        subfolder_path: targetSubfolder
+        subfolder_path: targetSubfolder,
+        scheduled_datetime: targetScheduledDatetime
       })
     });
 

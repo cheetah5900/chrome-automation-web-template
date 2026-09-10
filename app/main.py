@@ -4957,6 +4957,7 @@ class FacebookDebugStepRequest(BaseModel):
     caption: str = ""
     affiliate_url: str = ""
     subfolder_path: str = ""
+    scheduled_datetime: str = ""
 
 FacebookDebugStepRequest.model_rebuild()
 
@@ -4985,6 +4986,8 @@ def api_facebook_debug_step(req: FacebookDebugStepRequest) -> dict[str, Any]:
         debug_click_next_twice,
         debug_insert_caption,
         debug_add_affiliate_product,
+        debug_set_schedule,
+        debug_click_post_button,
         debug_close_reels_modal,
         debug_reels_full_flow,
     )
@@ -5000,6 +5003,10 @@ def api_facebook_debug_step(req: FacebookDebugStepRequest) -> dict[str, Any]:
             res = debug_insert_caption(driver, caption=req.caption, folder_path=req.subfolder_path, main_folder=req.main_folder)
         elif step in ("add_affiliate_product", "add_product", "product", "affiliate", "step5"):
             res = debug_add_affiliate_product(driver, affiliate_url=req.affiliate_url, folder_path=req.subfolder_path, main_folder=req.main_folder)
+        elif step in ("set_schedule", "schedule", "step6"):
+            res = debug_set_schedule(driver, scheduled_datetime=req.scheduled_datetime, main_folder=req.main_folder)
+        elif step in ("click_post", "post", "submit", "step7"):
+            res = debug_click_post_button(driver)
         elif step in ("close_modal", "close"):
             res = debug_close_reels_modal(driver)
         elif step in ("reels_flow", "flow", "all"):
