@@ -5531,6 +5531,32 @@ def api_shopee_debug_step_2(req: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:
         return {"ok": False, "detail": f"Step 2 ผิดพลาด: {str(e)}"}
 
+@app.post("/api/shopee-affiliate/debug/search-method")
+def api_shopee_debug_search_method(req: dict[str, Any]) -> dict[str, Any]:
+    """Debug Step 2: Test various search input and submission techniques."""
+    from app.shopee_affiliate import reset_shopee_stop, debug_shopee_search_by_method, clean_search_keyword, ShopeeCaptchaBlockedException, ShopeeTabNotFoundException
+    reset_shopee_stop()
+    raw_keyword = (req.get("keyword") or "").strip()
+    keyword = clean_search_keyword(raw_keyword) or "ที่คีบอาหารสแตนเลสพับได้"
+    method = int(req.get("method") or 1)
+    port = 9222
+    if not sync_ensure_chrome_debug_ready(port=port):
+        return {"ok": False, "detail": f"ไม่สามารถเปิดเบราว์เซอร์ Chrome Debug Port {port} ได้"}
+    try:
+        bot = browser_manager.get(target_port=port)
+        if not bot or not bot.driver:
+            return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"}
+        driver = bot.driver
+        _activate_chrome(driver, port=port)
+        res = debug_shopee_search_by_method(driver, keyword, method)
+        return res
+    except ShopeeCaptchaBlockedException:
+        return {"ok": False, "captcha_blocked": True, "detail": "⚠️ ตรวจพบ CAPTCHA กรุณาแก้ในเบราว์เซอร์"}
+    except ShopeeTabNotFoundException as te:
+        return {"ok": False, "detail": str(te)}
+    except Exception as e:
+        return {"ok": False, "detail": f"วิธีที่ {method} ผิดพลาด: {str(e)}"}
+
 @app.post("/api/shopee-affiliate/debug/step-3")
 def api_shopee_debug_step_3() -> dict[str, Any]:
     """Debug Step 3: Sort by best sellers."""

@@ -341,7 +341,7 @@ def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
     return True
 
 def step_2_search_product(driver, keyword: str) -> bool:
-    """Step 2: Enter clean keyword into search box and submit with human-like typing simulation."""
+    """Step 2: Enter clean keyword into search box and submit using ActionChains (Method 1)."""
     check_stop()
     check_shopee_captcha(driver)
     clean_kw = clean_search_keyword(keyword)
@@ -349,70 +349,310 @@ def step_2_search_product(driver, keyword: str) -> bool:
         log("[Shopee Step 2] ⚠️ ไม่พบคีย์เวิร์ดสำหรับค้นหา (ข้ามขั้นตอน)")
         return False
 
-    log(f"[Shopee Step 2] 🔍 กำลังพิมพ์ค้นหาสินค้า: '{clean_kw}'...")
+    log(f"[Shopee Step 2] 🔍 กำลังพิมพ์ค้นหาสินค้า: '{clean_kw}' (ด้วย ActionChains M1)...")
     
-    # 1. Click search input to focus and clear old value
-    driver.execute_script("""
-        const inputs = Array.from(document.querySelectorAll('input'));
-        const searchInput = inputs.find(i => 
-            (i.placeholder && (i.placeholder.includes('ค้นหาสินค้า') || i.placeholder.includes('ค้นหา'))) ||
-            i.classList.contains('ant-input-lg')
-        );
-        if (searchInput) {
-            searchInput.focus();
-            searchInput.click();
-            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-            nativeSetter.call(searchInput, '');
-            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    """)
-    human_delay(0.4, 0.8)
+    from selenium.webdriver.common.action_chains import ActionChains
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.common.by import By
 
-    # 2. Enter keyword simulating input event
-    res = driver.execute_script("""
-        const kw = arguments[0];
-        const inputs = Array.from(document.querySelectorAll('input'));
-        const searchInput = inputs.find(i => 
-            (i.placeholder && (i.placeholder.includes('ค้นหาสินค้า') || i.placeholder.includes('ค้นหา'))) ||
-            i.classList.contains('ant-input-lg')
-        );
-        if (!searchInput) return { success: false, reason: "Search input not found" };
-        
-        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-        nativeSetter.call(searchInput, kw);
-        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-        searchInput.dispatchEvent(new Event('change', { bubbles: true }));
-        return { success: true };
-    """, clean_kw)
+    input_el = driver.find_element(By.CSS_SELECTOR, 'input.ant-input-lg, input[placeholder*="ค้นหา"]')
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", input_el)
+    human_delay(0.2, 0.4)
     
-    human_delay(0.6, 1.2)
-
-    # 3. Click search button or trigger enter key
-    driver.execute_script("""
-        const inputs = Array.from(document.querySelectorAll('input'));
-        const searchInput = inputs.find(i => 
-            (i.placeholder && (i.placeholder.includes('ค้นหาสินค้า') || i.placeholder.includes('ค้นหา'))) ||
-            i.classList.contains('ant-input-lg')
-        );
-        const allDivs = Array.from(document.querySelectorAll('div, button, span'));
-        const searchBtn = allDivs.find(el => 
-            el.children.length === 0 && 
-            el.textContent.trim() === 'ค้นหา' && 
-            el.getBoundingClientRect().width > 0
-        );
-        if (searchBtn) {
-            searchBtn.click();
-        } else if (searchInput) {
-            searchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-            searchInput.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-            searchInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-        }
-    """)
+    # Focus, clear old keyword, and send clean keyword + Enter
+    ActionChains(driver).click(input_el).key_down(Keys.COMMAND).send_keys("a").key_up(Keys.COMMAND).send_keys(Keys.BACKSPACE).perform()
+    human_delay(0.2, 0.3)
+    ActionChains(driver).send_keys(clean_kw).pause(0.3).send_keys(Keys.ENTER).perform()
             
     human_delay(2.5, 4.0)
     check_shopee_captcha(driver)
     log(f"[Shopee Step 2] ✅ ค้นหาคำว่า '{clean_kw}' เรียบร้อยแล้ว")
     return True
+
+def debug_shopee_search_by_method(driver, keyword: str, method: int) -> dict[str, Any]:
+    """Test various search input and submission techniques to isolate anti-bot triggers."""
+    check_stop()
+    ensure_active_tab_valid(driver)
+    check_shopee_captcha(driver)
+    
+    clean_kw = clean_search_keyword(keyword)
+    if not clean_kw:
+        return {"ok": False, "detail": "กรุณาระบุคำค้นหา"}
+        
+    log(f"[Shopee Search Debug] 🧪 กำลังทดสอบ [วิธีที่ {method}] ด้วยคีย์เวิร์ด: '{clean_kw}'...")
+
+    # First, ensure we are on the product offer search page
+    cur = driver.current_url or ""
+    if "offer/product_offer" not in cur:
+        if "affiliate.shopee.co.th" in cur:
+            navigate_back_to_product_offer(driver)
+        else:
+            raise ShopeeTabNotFoundException("❌ ไม่ได้อยู่ในหน้า Shopee Affiliate")
+
+    check_shopee_captcha(driver)
+
+    if method == 1:
+        # Method 1: Selenium ActionChains + Keys.ENTER
+        from selenium.webdriver.common.action_chains import ActionChains
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.common.by import By
+        input_el = driver.find_element(By.CSS_SELECTOR, 'input.ant-input-lg, input[placeholder*="ค้นหา"]')
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", input_el)
+        human_delay(0.2, 0.4)
+        ActionChains(driver).click(input_el).key_down(Keys.COMMAND).send_keys("a").key_up(Keys.COMMAND).send_keys(Keys.BACKSPACE).perform()
+        human_delay(0.2, 0.3)
+        ActionChains(driver).send_keys(clean_kw).pause(0.3).send_keys(Keys.ENTER).perform()
+
+    elif method == 2:
+        # Method 2: CDP Trusted Mouse Click on search button addon
+        rect = driver.execute_script("""
+            const input = document.querySelector('input.ant-input-lg, input[placeholder*="ค้นหา"]');
+            if (!input) return null;
+            input.scrollIntoView({block: 'center'});
+            input.focus();
+            const r = input.getBoundingClientRect();
+            return { x: Math.round(r.x + 20), y: Math.round(r.y + r.height / 2) };
+        """)
+        if rect:
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': rect['x'], 'y': rect['y']})
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+            time.sleep(0.1)
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'rawKeyDown', 'key': 'a', 'code': 'KeyA', 'modifiers': 4})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'a', 'code': 'KeyA', 'modifiers': 0})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'rawKeyDown', 'key': 'Backspace', 'code': 'Backspace', 'windowsVirtualKeyCode': 8})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'Backspace', 'code': 'Backspace'})
+            time.sleep(0.1)
+            driver.execute_cdp_cmd('Input.insertText', {'text': clean_kw})
+            time.sleep(0.3)
+
+        btn_rect = driver.execute_script("""
+            const addon = document.querySelector('.ant-input-group-addon');
+            if (!addon) return null;
+            const r = addon.getBoundingClientRect();
+            return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+        """)
+        if btn_rect:
+            bx, by = btn_rect['x'], btn_rect['y']
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': bx, 'y': by})
+            time.sleep(0.05)
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': bx, 'y': by, 'clickCount': 1})
+            time.sleep(0.08)
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': bx, 'y': by, 'clickCount': 1})
+
+    elif method == 3:
+        # Method 3: CDP Trusted Key Event Enter
+        rect = driver.execute_script("""
+            const input = document.querySelector('input.ant-input-lg, input[placeholder*="ค้นหา"]');
+            if (!input) return null;
+            input.scrollIntoView({block: 'center'});
+            input.focus();
+            const r = input.getBoundingClientRect();
+            return { x: Math.round(r.x + 20), y: Math.round(r.y + r.height / 2) };
+        """)
+        if rect:
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+            time.sleep(0.1)
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'rawKeyDown', 'key': 'a', 'code': 'KeyA', 'modifiers': 4})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'a', 'code': 'KeyA', 'modifiers': 0})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'rawKeyDown', 'key': 'Backspace', 'code': 'Backspace', 'windowsVirtualKeyCode': 8})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'Backspace', 'code': 'Backspace'})
+            time.sleep(0.1)
+            driver.execute_cdp_cmd('Input.insertText', {'text': clean_kw})
+            time.sleep(0.3)
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {
+                'type': 'rawKeyDown',
+                'key': 'Enter',
+                'code': 'Enter',
+                'windowsVirtualKeyCode': 13,
+                'text': '\r',
+                'unmodifiedText': '\r'
+            })
+            time.sleep(0.08)
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {
+                'type': 'keyUp',
+                'key': 'Enter',
+                'code': 'Enter',
+                'windowsVirtualKeyCode': 13
+            })
+
+    elif method == 4:
+        # Method 4: AppleScript Clipboard Paste + Enter
+        import subprocess
+        p = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE, close_fds=True)
+        p.communicate(clean_kw.encode('utf-8'))
+        
+        rect = driver.execute_script("""
+            const input = document.querySelector('input.ant-input-lg, input[placeholder*="ค้นหา"]');
+            if (!input) return null;
+            input.scrollIntoView({block: 'center'});
+            input.focus();
+            const r = input.getBoundingClientRect();
+            return { x: Math.round(r.x + 20), y: Math.round(r.y + r.height / 2) };
+        """)
+        if rect:
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+        time.sleep(0.2)
+        ascript = """
+        tell application "Google Chrome" to activate
+        delay 0.2
+        tell application "System Events"
+            keystroke "a" using {command down}
+            delay 0.1
+            keystroke "v" using {command down}
+            delay 0.3
+            key code 36
+        end tell
+        """
+        subprocess.run(['osascript', '-e', ascript], check=True)
+
+    elif method == 5:
+        # Method 5: Native OS Mouse Click via CoreGraphics (ctypes)
+        rect = driver.execute_script("""
+            const input = document.querySelector('input.ant-input-lg, input[placeholder*="ค้นหา"]');
+            if (!input) return null;
+            input.scrollIntoView({block: 'center'});
+            input.focus();
+            const r = input.getBoundingClientRect();
+            return { x: Math.round(r.x + 20), y: Math.round(r.y + r.height / 2) };
+        """)
+        if rect:
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+            time.sleep(0.1)
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'rawKeyDown', 'key': 'a', 'code': 'KeyA', 'modifiers': 4})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'a', 'code': 'KeyA', 'modifiers': 0})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'rawKeyDown', 'key': 'Backspace', 'code': 'Backspace', 'windowsVirtualKeyCode': 8})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'Backspace', 'code': 'Backspace'})
+            time.sleep(0.1)
+            driver.execute_cdp_cmd('Input.insertText', {'text': clean_kw})
+            time.sleep(0.3)
+
+        coords = driver.execute_script("""
+            const addon = document.querySelector('.ant-input-group-addon');
+            if (!addon) return null;
+            const r = addon.getBoundingClientRect();
+            const screenLeft = window.screenX !== undefined ? window.screenX : window.screenLeft || 0;
+            const screenTop = window.screenY !== undefined ? window.screenY : window.screenTop || 0;
+            const outerH = window.outerHeight || 0;
+            const innerH = window.innerHeight || 0;
+            const barHeight = Math.max(outerH - innerH, 80);
+            return {
+                x: screenLeft + r.x + r.width / 2,
+                y: screenTop + barHeight + r.y + r.height / 2
+            };
+        """)
+        if coords:
+            import ctypes
+            from ctypes import Structure, c_double, c_int, c_void_p
+            class CGPoint(Structure):
+                _fields_ = [('x', c_double), ('y', c_double)]
+            app_services = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices')
+            app_services.CGEventCreateMouseEvent.restype = c_void_p
+            app_services.CGEventCreateMouseEvent.argtypes = [c_void_p, c_int, CGPoint, c_int]
+            app_services.CGEventPost.restype = None
+            app_services.CGEventPost.argtypes = [c_int, c_void_p]
+            pt = CGPoint(coords['x'], coords['y'])
+            import subprocess
+            subprocess.run(['osascript', '-e', 'tell application "Google Chrome" to activate'], check=False)
+            time.sleep(0.2)
+            m_ev = app_services.CGEventCreateMouseEvent(None, 5, pt, 0)
+            app_services.CGEventPost(0, m_ev)
+            time.sleep(0.05)
+            d_ev = app_services.CGEventCreateMouseEvent(None, 1, pt, 0)
+            app_services.CGEventPost(0, d_ev)
+            time.sleep(0.08)
+            u_ev = app_services.CGEventCreateMouseEvent(None, 2, pt, 0)
+            app_services.CGEventPost(0, u_ev)
+
+    elif method == 6:
+        # Method 6: React State Setter + Native Input Tracker
+        driver.execute_script("""
+            const kw = arguments[0];
+            const input = document.querySelector('input.ant-input-lg, input[placeholder*="ค้นหา"]');
+            if (!input) return false;
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+            nativeSetter.call(input, kw);
+            if (input._valueTracker) {
+                input._valueTracker.setValue('');
+            }
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            const k = Object.keys(input).find(key => key.startsWith('__reactEventHandlers'));
+            if (k && input[k] && input[k].onChange) {
+                try { input[k].onChange({ target: { value: kw } }); } catch(e) {}
+            }
+            
+            const addon = document.querySelector('.ant-input-group-addon');
+            const div = addon ? addon.querySelector('div') : null;
+            if (div) {
+                div.click();
+            }
+        """, clean_kw)
+
+    elif method == 7:
+        # Method 7: Human-like typing with random jitter + CDP Enter
+        import random
+        rect = driver.execute_script("""
+            const input = document.querySelector('input.ant-input-lg, input[placeholder*="ค้นหา"]');
+            if (!input) return null;
+            input.scrollIntoView({block: 'center'});
+            input.focus();
+            const r = input.getBoundingClientRect();
+            return { x: Math.round(r.x + 20), y: Math.round(r.y + r.height / 2) };
+        """)
+        if rect:
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+            driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseReleased', 'button': 'left', 'x': rect['x'], 'y': rect['y'], 'clickCount': 1})
+            time.sleep(0.1)
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'rawKeyDown', 'key': 'a', 'code': 'KeyA', 'modifiers': 4})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'a', 'code': 'KeyA', 'modifiers': 0})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'rawKeyDown', 'key': 'Backspace', 'code': 'Backspace', 'windowsVirtualKeyCode': 8})
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'Backspace', 'code': 'Backspace'})
+            time.sleep(0.15)
+            for ch in clean_kw:
+                driver.execute_cdp_cmd('Input.insertText', {'text': ch})
+                time.sleep(random.uniform(0.04, 0.12))
+            time.sleep(random.uniform(0.25, 0.45))
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {
+                'type': 'rawKeyDown',
+                'key': 'Enter',
+                'code': 'Enter',
+                'windowsVirtualKeyCode': 13,
+                'text': '\r',
+                'unmodifiedText': '\r'
+            })
+            time.sleep(0.08)
+            driver.execute_cdp_cmd('Input.dispatchKeyEvent', {
+                'type': 'keyUp',
+                'key': 'Enter',
+                'code': 'Enter',
+                'windowsVirtualKeyCode': 13
+            })
+
+    time.sleep(3.0)
+    cur_url = driver.current_url or ""
+    is_captcha = is_shopee_captcha_url(cur_url)
+    prod_count = 0
+    if not is_captcha:
+        prod_count = driver.execute_script("""
+            return document.querySelectorAll('.product-offer-item, .AffiliateItemCard').length;
+        """) or 0
+
+    status_msg = f"⚠️ ติด CAPTCHA (Scene: crawler_item)" if is_captcha else f"✅ ค้นหาสำเร็จ! พบสินค้า {prod_count} รายการ"
+    log(f"[Shopee Search Debug] วิธีที่ {method}: {status_msg}")
+    return {
+        "ok": not is_captcha,
+        "method": method,
+        "keyword": clean_kw,
+        "captcha_blocked": is_captcha,
+        "product_count": prod_count,
+        "current_url": cur_url,
+        "message": f"วิธีที่ {method}: {status_msg}"
+    }
 
 def check_shopee_no_data(driver) -> bool:
     """Check if the search result page shows 'ไม่มีข้อมูล' or has zero product cards."""

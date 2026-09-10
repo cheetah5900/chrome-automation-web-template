@@ -1965,7 +1965,46 @@
 
           <!-- Right Column: Status, Run Controls & Console -->
           <div style="display: flex; flex-direction: column; gap: 20px;">
-            <section class="card" style="height: 100%; display: flex; flex-direction: column;">
+            <!-- Debug Search Method Tester Card -->
+            <section class="card" style="border: 1px dashed rgba(255, 126, 103, 0.4); background: rgba(238, 77, 45, 0.03);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 0.95rem; color: #ff7e67; display: flex; align-items: center; gap: 6px;">
+                  🧪 ทดสอบค้นหาหลบกันบอท (Search Debugger)
+                </h3>
+                <button id="btnShopeeDebugAutoFill" class="secondary" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; margin: 0;">📋 ดึงชื่อจากคิว</button>
+              </div>
+              <p style="font-size: 0.8rem; color: rgba(255,255,255,0.6); margin: 0 0 10px 0; line-height: 1.3;">
+                ทดสอบพิมพ์/วางชื่อสินค้าและกดค้นหาด้วยวิธีต่างๆ บนหน้า Shopee Affiliate เพื่อเช็คว่าวิธีไหนไม่โดนกันบอท
+              </p>
+              <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                <input id="shopeeDebugKeyword" type="text" value="ที่คีบอาหารสแตนเลสพับได้" placeholder="ระบุชื่อสินค้าเพื่อทดสอบค้นหา..." style="margin-bottom: 0; flex: 1; font-size: 0.85rem; padding: 8px 10px;" />
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+                <button class="secondary shopee-debug-method-btn" data-method="1" style="padding: 8px 6px; font-size: 0.78rem; text-align: left; border-radius: 8px; border-color: rgba(255,255,255,0.15);">
+                  <strong>M1:</strong> Selenium Enter
+                </button>
+                <button class="secondary shopee-debug-method-btn" data-method="2" style="padding: 8px 6px; font-size: 0.78rem; text-align: left; border-radius: 8px; border-color: rgba(255,255,255,0.15);">
+                  <strong>M2:</strong> CDP Click ไอคอน
+                </button>
+                <button class="secondary shopee-debug-method-btn" data-method="3" style="padding: 8px 6px; font-size: 0.78rem; text-align: left; border-radius: 8px; border-color: rgba(255,255,255,0.15);">
+                  <strong>M3:</strong> CDP Enter Key
+                </button>
+                <button class="secondary shopee-debug-method-btn" data-method="4" style="padding: 8px 6px; font-size: 0.78rem; text-align: left; border-radius: 8px; border-color: rgba(255,255,255,0.15);">
+                  <strong>M4:</strong> AppleScript วาง+Enter
+                </button>
+                <button class="secondary shopee-debug-method-btn" data-method="5" style="padding: 8px 6px; font-size: 0.78rem; text-align: left; border-radius: 8px; border-color: rgba(255,255,255,0.15);">
+                  <strong>M5:</strong> OS Native Click
+                </button>
+                <button class="secondary shopee-debug-method-btn" data-method="6" style="padding: 8px 6px; font-size: 0.78rem; text-align: left; border-radius: 8px; border-color: rgba(255,255,255,0.15);">
+                  <strong>M6:</strong> React State + Click
+                </button>
+                <button class="secondary shopee-debug-method-btn" data-method="7" style="padding: 8px 6px; font-size: 0.78rem; text-align: left; border-radius: 8px; border-color: rgba(255,255,255,0.15); grid-column: span 2;">
+                  <strong>M7:</strong> พิมพ์ทีละตัวอักษรจำลองคน (Human Typing + Enter)
+                </button>
+              </div>
+            </section>
+
+            <section class="card" style="flex-grow: 1; display: flex; flex-direction: column;">
               <h2 class="section-title">🚀 Shopee Affiliate Execution</h2>
               <p class="section-subtitle">สถานะและบันทึกการทำงานของบอท Shopee Affiliate</p>
 

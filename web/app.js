@@ -8303,6 +8303,45 @@ async function debugShopeeStep2(btn) {
   }
 }
 
+async function runShopeeSearchDebugMethod(method, btn) {
+  const { keyword } = await getShopeeDebugTarget();
+  if (!keyword) {
+    showToast('กรุณาระบุคีย์เวิร์ด หรือสแกนและเลือกรายการในคิวก่อน', 'warning');
+    logShopeeConsole('⚠️ [Search Debug] ไม่พบคีย์เวิร์ดสำหรับค้นหา', 'warning');
+    return;
+  }
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `⏳ รัน M${method}...`;
+  }
+  logShopeeConsole(`🧪 [Search Debug M${method}] กำลังทดสอบ [วิธีที่ ${method}] ด้วยคำค้นหา: '${keyword}'...`, 'system');
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/debug/search-method', {
+      method: 'POST',
+      body: JSON.stringify({ keyword, method })
+    });
+    if (res.ok) {
+      logShopeeConsole(`✅ [Search Debug M${method}] ${res.message || 'สำเร็จ!'}`, 'success');
+      showToast(`วิธีที่ ${method}: ค้นหาสำเร็จ (พบสินค้า ${res.product_count || 0} รายการ)`, 'success');
+    } else if (res.captcha_blocked) {
+      logShopeeConsole(`⚠️ [Search Debug M${method}] ตรวจพบ CAPTCHA กันบอท! (${res.detail || 'Scene: crawler_item'})`, 'error');
+      showToast(`วิธีที่ ${method}: โดน CAPTCHA บล็อก`, 'error');
+    } else {
+      logShopeeConsole(`❌ [Search Debug M${method}] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
+      showToast(`วิธีที่ ${method} ล้มเหลว: ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
+    }
+  } catch (e) {
+    logShopeeConsole(`❌ [Search Debug M${method}] Exception: ${e.message}`, 'error');
+    showToast(`วิธีที่ ${method} Exception: ${e.message}`, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
+  }
+}
+
 async function debugShopeeStep3(btn) {
   logShopeeConsole('📈 [Step 3] กำลังคลิกจัดเรียงตาม "ขายดี"...', 'system');
   if (btn) btn.disabled = true;
@@ -8535,6 +8574,13 @@ function initShopeeAffiliateListeners() {
       }
     });
   }
+
+  document.querySelectorAll('.shopee-debug-method-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const method = parseInt(e.currentTarget.getAttribute('data-method'), 10) || 1;
+      runShopeeSearchDebugMethod(method, e.currentTarget);
+    });
+  });
 
   const step1Btn = document.getElementById('btnShopeeDebugStep1');
   if (step1Btn) step1Btn.addEventListener('click', (e) => debugShopeeStep1(e.currentTarget));
