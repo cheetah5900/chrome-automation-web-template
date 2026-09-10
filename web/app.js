@@ -7499,7 +7499,15 @@ async function scanFacebookBatch() {
     if (res.ok && Array.isArray(res.items)) {
       facebookPostQueue = res.items;
       renderFacebookPostQueue();
-      writeConsoleLine(`Facebook Auto Post: สแกนพบ ${res.items.length} รายการโพสต์ พร้อมจับคู่วิดีโอและ Caption อัตโนมัติ`, 'success', 'facebookConsole');
+
+      const missingAff = res.items.filter(it => !it.has_affiliate_url || !it.affiliate_url);
+      if (missingAff.length > 0) {
+        const folderList = missingAff.map(x => '• ' + (x.subfolder_name || 'Item')).slice(0, 8).join('\n');
+        writeConsoleLine(`⚠️ แจ้งเตือนการสแกน: ตรวจพบ ${missingAff.length} รายการที่ไม่มีไฟล์ Affiliate Link.md (ระบบยกเลิกติ๊กเลือกรายการเหล่านี้ และจะไม่สามารถโพสต์ได้จนกว่าจะมีไฟล์ครบ)`, 'warning', 'facebookConsole');
+        alert(`⚠️ ตรวจพบ ${missingAff.length} รายการที่ไม่มีไฟล์ Affiliate Link.md:\n\n${folderList}\n\n⛔ รายการที่ไม่มี Affiliate Link จะถูกยกเลิกการเลือก และจะไม่สามารถกดโพสต์ได้จนกว่าจะมีไฟล์ครบถ้วน`);
+      } else {
+        writeConsoleLine(`Facebook Auto Post: สแกนพบ ${res.items.length} รายการโพสต์ พร้อมจับคู่วิดีโอ, Caption และ Affiliate Link ครบถ้วน 100%`, 'success', 'facebookConsole');
+      }
     } else {
       writeConsoleLine(`Facebook Auto Post Scan Error: ${res.detail || res.message || 'ไม่สามารถสแกนได้'}`, 'error', 'facebookConsole');
       alert(`ไม่สามารถสแกนได้: ${res.detail || res.message || 'Unknown error'}`);
@@ -7550,8 +7558,8 @@ function renderFacebookPostQueue() {
     const card = document.createElement('div');
     card.className = 'facebook-post-card';
     card.style.cssText = `
-      background: ${isChecked ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.01)'};
-      border: 1px solid ${isChecked ? 'rgba(24, 119, 242, 0.3)' : 'rgba(255, 255, 255, 0.06)'};
+      background: ${!item.has_affiliate_url ? 'rgba(239, 68, 68, 0.04)' : (isChecked ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.01)')};
+      border: 1px solid ${!item.has_affiliate_url ? 'rgba(239, 68, 68, 0.5)' : (isChecked ? 'rgba(24, 119, 242, 0.3)' : 'rgba(255, 255, 255, 0.06)')};
       border-radius: 12px;
       padding: 14px 16px;
       display: flex;
@@ -7569,13 +7577,18 @@ function renderFacebookPostQueue() {
       ? `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">📝 ${item.caption_file || 'มี Caption'}</span>`
       : `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">⚠️ ไม่มี Caption</span>`;
 
+    const hasAffiliateBadge = item.has_affiliate_url
+      ? `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">🛍️ ${item.affiliate_file || 'มี Affiliate Link'}</span>`
+      : `<span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.25); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.5); font-weight: bold;">❌ ไม่มี Affiliate Link.md</span>`;
+
     card.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           <input type="checkbox" class="facebook-item-checkbox" data-index="${index}" ${isChecked ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer; accent-color: #1877f2; margin: 0;" />
           <span style="font-weight: bold; color: #8da6ff; font-size: 0.95rem;">#${index + 1} โฟลเดอร์: ${item.subfolder_name || 'Manual Post'}</span>
           ${hasVideoBadge}
           ${hasCaptionBadge}
+          ${hasAffiliateBadge}
         </div>
         <button class="delete-post-btn secondary" data-index="${index}" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; color: #ff6b6b; border-color: rgba(255,107,107,0.3); margin: 0;">🗑️ ลบ</button>
       </div>
@@ -7593,6 +7606,13 @@ function renderFacebookPostQueue() {
           <label style="font-size: 0.78rem; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">📅 กำหนดวัน-เวลาที่โพสต์ (Scheduled Time)</label>
           <input type="datetime-local" class="facebook-datetime-input" data-index="${index}" value="${item.scheduled_datetime || ''}" style="font-size: 0.82rem; padding: 8px 10px; margin-bottom: 0; width: 100%;" />
         </div>
+      </div>
+
+      <div>
+        <label style="font-size: 0.78rem; color: ${item.has_affiliate_url ? 'rgba(255,255,255,0.7)' : '#ff8585'}; display: block; margin-bottom: 4px;">
+          🛍️ ลิงก์สินค้า Affiliate (อ่านจาก Affiliate Link.md) ${item.has_affiliate_url ? '' : '<strong style="color: #ff4d4f;">— ⚠️ ไม่มีไฟล์นี้ จะไม่สามารถโพสต์ได้</strong>'}
+        </label>
+        <input type="text" class="facebook-affiliate-input" data-index="${index}" value="${item.affiliate_url || ''}" placeholder="ระบุหรือวางลิงก์ Affiliate (จำเป็นต้องมีเพื่อโพสต์)..." style="font-size: 0.82rem; padding: 8px 10px; margin-bottom: 0; width: 100%; border: 1px solid ${item.has_affiliate_url ? 'rgba(255,255,255,0.1)' : 'rgba(239, 68, 68, 0.6)'}; background: ${item.has_affiliate_url ? 'rgba(0,0,0,0.2)' : 'rgba(239, 68, 68, 0.08)'};" />
       </div>
 
       <div>
@@ -7655,6 +7675,20 @@ function renderFacebookPostQueue() {
         const counter = card ? card.querySelector('.char-counter') : null;
         if (counter) counter.textContent = `${e.target.value.length} ตัวอักษร`;
       }
+    });
+  });
+
+  container.querySelectorAll('.facebook-affiliate-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (facebookPostQueue[idx]) {
+        const val = e.target.value.trim();
+        facebookPostQueue[idx].affiliate_url = val;
+        facebookPostQueue[idx].has_affiliate_url = !!val;
+      }
+    });
+    input.addEventListener('change', () => {
+      renderFacebookPostQueue();
     });
   });
 
@@ -7734,6 +7768,22 @@ async function runFacebookAutoPost(btnElement) {
   if (selectedPosts.length === 0) {
     writeConsoleLine(`[Facebook Auto Post Error] ❌ ไม่มีรายการโพสต์ให้ดำเนินการ กรุณาระบุโฟลเดอร์หลักหรือกดสแกนคิวก่อน`, 'error', 'facebookConsole');
     alert('ไม่มีรายการโพสต์ให้ดำเนินการ กรุณาระบุโฟลเดอร์หลักหรือกดสแกนคิวก่อน');
+    return;
+  }
+
+  // 3. Strict Check: Every selected post MUST have an Affiliate Link!
+  const missingAffiliate = selectedPosts.filter(x => !x.affiliate_url || !x.affiliate_url.trim());
+  if (missingAffiliate.length > 0) {
+    const folderList = missingAffiliate.map(x => '• ' + (x.subfolder_name || 'Item')).slice(0, 8).join('\n');
+    const msg = `❌ ไม่สามารถเริ่มรัน Auto Post ได้!\n\nตรวจพบ ${missingAffiliate.length} รายการที่ไม่มีไฟล์ Affiliate Link.md:\n\n${folderList}\n\n⛔ ระบบกำหนดว่าจะต้องมีไฟล์ Affiliate Link.md ครบทุกรายการจึงจะโพสต์ได้ กรุณาเพิ่มไฟล์หรือกรอกลิงก์ให้ครบถ้วนก่อน`;
+    writeConsoleLine(`[Facebook Auto Post Error] ❌ ไม่สามารถเริ่มรันได้: มี ${missingAffiliate.length} รายการที่ไม่มีไฟล์ Affiliate Link.md`, 'error', 'facebookConsole');
+    alert(msg);
+    if (btnElement) {
+      btnElement.disabled = false;
+      btnElement.classList.remove('loading');
+      const textSpan = btnElement.querySelector('.btn-text');
+      if (textSpan) textSpan.textContent = '🚀 เริ่มรัน Auto Post ตามคิว';
+    }
     return;
   }
 

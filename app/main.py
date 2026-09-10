@@ -4546,41 +4546,57 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
 
         # Find affiliate link file (prioritizing Affiliate Link.md)
         affiliate_url = ""
+        affiliate_filename = ""
         for f in sub_files:
             if f.lower() in ("affiliate link.md", "affiliate_link.md", "affiliatelink.md", "affiliate.md", "affiliate link.txt") and os.path.isfile(os.path.join(folder_path, f)):
-                try:
-                    with open(os.path.join(folder_path, f), "r", encoding="utf-8") as af:
-                        for line in af:
-                            line_str = line.strip()
-                            if line_str.startswith("http://") or line_str.startswith("https://"):
-                                affiliate_url = line_str
-                                break
-                except Exception:
-                    pass
+                aff_file_path = os.path.join(folder_path, f)
+                affiliate_filename = f
+                for enc in ("utf-8", "utf-8-sig", "latin-1"):
+                    try:
+                        with open(aff_file_path, "r", encoding=enc) as af:
+                            for line in af:
+                                line_str = line.strip()
+                                if line_str.startswith("http://") or line_str.startswith("https://"):
+                                    affiliate_url = line_str
+                                    break
+                        if affiliate_url:
+                            break
+                    except Exception:
+                        continue
                 if affiliate_url:
                     break
 
+        has_vid = bool(selected_video and os.path.isfile(video_path))
+        has_cap = bool(caption_text)
+        has_aff = bool(affiliate_url)
+
         items.append({
             "id": idx + 1,
-            "checked": True,
+            "checked": has_aff,  # uncheck by default if missing affiliate link
             "subfolder_name": folder_name,
             "subfolder_path": folder_path,
             "video_path": video_path,
             "video_name": selected_video or "",
-            "has_video": bool(selected_video and os.path.isfile(video_path)),
+            "has_video": has_vid,
             "caption": caption_text,
             "caption_file": caption_filename,
-            "has_caption": bool(caption_text),
+            "has_caption": has_cap,
             "affiliate_url": affiliate_url,
-            "has_affiliate_url": bool(affiliate_url),
+            "affiliate_file": affiliate_filename,
+            "has_affiliate_url": has_aff,
             "scheduled_datetime": scheduled_iso,
-            "status": "ready" if (selected_video and caption_text) else "warning"
+            "status": "ready" if (has_vid and has_cap and has_aff) else ("missing_affiliate" if not has_aff else "warning")
         })
+
+    missing_affiliate_count = sum(1 for it in items if not it["has_affiliate_url"])
+    missing_affiliate_folders = [it["subfolder_name"] for it in items if not it["has_affiliate_url"]]
 
     return {
         "ok": True,
         "items": items,
-        "count": len(items)
+        "count": len(items),
+        "missing_affiliate_count": missing_affiliate_count,
+        "missing_affiliate_folders": missing_affiliate_folders
     }
 
 @app.get("/api/meta-autopost/progress")
@@ -4859,7 +4875,22 @@ def _facebook_autopost_worker(posts: list[dict[str, Any]], target_url: str = "",
             except Exception:
                 pass
 
-        from app.facebook_autopost import run_facebook_autopost_batch, reset_facebook_stop
+        from app.facebook_autopost import run_facebook_autopost_batch, reset_facebook_stop, find_sample_affiliate_url
+
+        # Strict check: Every post must have a valid Affiliate Link.md before posting is allowed
+        missing_aff = []
+        for p in posts:
+            aff = find_sample_affiliate_url(p.get("affiliate_url", ""), folder_path=p.get("subfolder_path", ""))
+            if not aff:
+                name = p.get("subfolder_name") or p.get("video_name") or "Unnamed folder"
+                missing_aff.append(name)
+
+        if missing_aff:
+            err_msg = f"❌ ไม่สามารถโพสต์ได้: ตรวจพบ {len(missing_aff)} รายการที่ไม่มีไฟล์ Affiliate Link.md ({', '.join(missing_aff[:4])}) กรุณาใส่ไฟล์ให้ครบถ้วน"
+            global_facebook_progress["status"] = "error"
+            global_facebook_progress["message"] = err_msg
+            log(f"[Facebook Auto Post Error] {err_msg}")
+            return
 
         reset_facebook_stop()
 

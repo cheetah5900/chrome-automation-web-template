@@ -1706,6 +1706,21 @@ def run_facebook_autopost_batch(
                     "message": msg
                 })
 
+        # Strict check: item MUST have Affiliate Link.md, otherwise reject posting
+        resolved_aff_url = find_sample_affiliate_url(affiliate_url, folder_path=subfolder_path)
+        if not resolved_aff_url:
+            err_msg = f"โฟลเดอร์ '{item_title}' ไม่มีไฟล์ Affiliate Link.md ระบบปฏิเสธการโพสต์"
+            log(f"[Facebook Auto Post Error] ❌ [{item_num}/{total}] {err_msg}")
+            errors.append(f"[{item_num}/{total}] {err_msg}")
+            if progress_callback:
+                progress_callback({
+                    "current": idx,
+                    "total": total,
+                    "percent": base_pct,
+                    "message": f"❌ ข้าม {item_title}: ไม่มีไฟล์ Affiliate Link.md"
+                })
+            continue
+
         try:
             # Step 0: Ensure any lingering dialog from previous run is closed
             try:
@@ -1745,16 +1760,12 @@ def run_facebook_autopost_batch(
                 log(f"[Facebook Auto Post Warning] Description: {r4.get('error')}")
             time.sleep(1.0)
 
-            # Step 5: Add Affiliate Product (Strictly only if Affiliate Link.md exists in this subfolder)
-            target_aff_url = find_sample_affiliate_url(affiliate_url, folder_path=subfolder_path)
-            if target_aff_url:
-                _report(5, "🛍️ 5. เพิ่มสินค้า Affiliate & ลิงก์")
-                r5 = debug_add_affiliate_product(driver, affiliate_url=target_aff_url, folder_path=subfolder_path, main_folder=subfolder_path)
-                if not r5.get("success"):
-                    log(f"[Facebook Auto Post Warning] Add affiliate product: {r5.get('error')}")
-                time.sleep(1.0)
-            else:
-                log(f"[Facebook Auto Post] ℹ️ โฟลเดอร์ '{item_title}' ไม่มีไฟล์ Affiliate Link.md -> ข้ามขั้นตอนเพิ่มสินค้า Affiliate อย่างปลอดภัย")
+            # Step 5: Add Affiliate Product
+            _report(5, "🛍️ 5. เพิ่มสินค้า Affiliate & ลิงก์")
+            r5 = debug_add_affiliate_product(driver, affiliate_url=resolved_aff_url, folder_path=subfolder_path, main_folder=subfolder_path)
+            if not r5.get("success"):
+                log(f"[Facebook Auto Post Warning] Add affiliate product: {r5.get('error')}")
+            time.sleep(1.0)
 
             # Step 6: Set Schedule Time
             _report(6, "⏰ 6. ตั้งเวลาโพสต์")
