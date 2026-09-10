@@ -1945,6 +1945,23 @@
               </div>
             </section>
 
+            <!-- Scanned Items Preview List -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #ff7e67;">🛍️ รายการสินค้าที่สแกนพบ (Scanned Items)</h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button id="toggleAllShopeeItemsBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 20px; margin: 0; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #fff;">Deselect All</button>
+                </div>
+              </div>
+
+              <!-- Queue Container -->
+              <div id="shopeeQueueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 650px; overflow-y: auto; padding-right: 4px;">
+                <div id="shopeeEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
+                  ยังไม่มีข้อมูล — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนและจับคู่ข้อมูล"</strong>
+                </div>
+              </div>
+            </section>
+
             <!-- ShopeeSave Auto-Watcher Card -->
             <section class="card" style="border: 1px solid rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.03);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 8px;">
@@ -1984,23 +2001,6 @@
               </div>
               <div id="shopeeWatcherConsole" class="console-box" style="height: 140px; min-height: 140px; font-size: 0.78rem; overflow-y: auto; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 10px; font-family: monospace;">
                 <div class="console-line system">Ready. Press Start Watcher to monitor ShopeeSave downloads...</div>
-              </div>
-            </section>
-
-            <!-- Scanned Items Preview List -->
-            <section class="card">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
-                <h3 style="margin: 0; font-size: 1.15rem; color: #ff7e67;">🛍️ รายการสินค้าที่สแกนพบ (Scanned Items)</h3>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                  <button id="toggleAllShopeeItemsBtn" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 20px; margin: 0; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #fff;">Deselect All</button>
-                </div>
-              </div>
-
-              <!-- Queue Container -->
-              <div id="shopeeQueueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 650px; overflow-y: auto; padding-right: 4px;">
-                <div id="shopeeEmptyPlaceholder" style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.4); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px;">
-                  ยังไม่มีข้อมูล — กรุณาเลือกโฟลเดอร์แล้วกด <strong>"🔍 สแกนและจับคู่ข้อมูล"</strong>
-                </div>
               </div>
             </section>
           </div>
