@@ -4544,6 +4544,22 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
                     with open(found_caption_file, "r", encoding="latin-1", errors="ignore") as cf:
                         caption_text = cf.read().strip()
 
+        # Find affiliate link file (prioritizing Affiliate Link.md)
+        affiliate_url = ""
+        for f in sub_files:
+            if f.lower() in ("affiliate link.md", "affiliate_link.md", "affiliatelink.md", "affiliate.md", "affiliate link.txt") and os.path.isfile(os.path.join(folder_path, f)):
+                try:
+                    with open(os.path.join(folder_path, f), "r", encoding="utf-8") as af:
+                        for line in af:
+                            line_str = line.strip()
+                            if line_str.startswith("http://") or line_str.startswith("https://"):
+                                affiliate_url = line_str
+                                break
+                except Exception:
+                    pass
+                if affiliate_url:
+                    break
+
         items.append({
             "id": idx + 1,
             "checked": True,
@@ -4555,6 +4571,8 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
             "caption": caption_text,
             "caption_file": caption_filename,
             "has_caption": bool(caption_text),
+            "affiliate_url": affiliate_url,
+            "has_affiliate_url": bool(affiliate_url),
             "scheduled_datetime": scheduled_iso,
             "status": "ready" if (selected_video and caption_text) else "warning"
         })
@@ -4936,6 +4954,9 @@ class FacebookDebugStepRequest(BaseModel):
     step: str
     video_path: str = ""
     main_folder: str = ""
+    caption: str = ""
+    affiliate_url: str = ""
+    subfolder_path: str = ""
 
 FacebookDebugStepRequest.model_rebuild()
 
@@ -4961,6 +4982,9 @@ def api_facebook_debug_step(req: FacebookDebugStepRequest) -> dict[str, Any]:
     from app.facebook_autopost import (
         debug_click_reels_button,
         debug_click_upload_video_button,
+        debug_click_next_twice,
+        debug_insert_caption,
+        debug_add_affiliate_product,
         debug_close_reels_modal,
         debug_reels_full_flow,
     )
@@ -4970,6 +4994,12 @@ def api_facebook_debug_step(req: FacebookDebugStepRequest) -> dict[str, Any]:
             res = debug_click_reels_button(driver)
         elif step in ("click_upload", "upload", "step2"):
             res = debug_click_upload_video_button(driver, video_path=req.video_path, main_folder=req.main_folder)
+        elif step in ("click_next_twice", "next_twice", "next", "step3"):
+            res = debug_click_next_twice(driver)
+        elif step in ("insert_caption", "caption", "desc", "step4"):
+            res = debug_insert_caption(driver, caption=req.caption, folder_path=req.subfolder_path, main_folder=req.main_folder)
+        elif step in ("add_affiliate_product", "add_product", "product", "affiliate", "step5"):
+            res = debug_add_affiliate_product(driver, affiliate_url=req.affiliate_url, folder_path=req.subfolder_path, main_folder=req.main_folder)
         elif step in ("close_modal", "close"):
             res = debug_close_reels_modal(driver)
         elif step in ("reels_flow", "flow", "all"):

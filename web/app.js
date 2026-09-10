@@ -7905,27 +7905,38 @@ function initFacebookAutoPostListeners() {
   const debugUploadBtn = document.getElementById('btnFacebookDebugStepUpload');
   if (debugUploadBtn) debugUploadBtn.addEventListener('click', (e) => executeFacebookDebugStep('click_upload', e.currentTarget));
 
-  const debugFlowBtn = document.getElementById('btnFacebookDebugStepFlow');
-  if (debugFlowBtn) debugFlowBtn.addEventListener('click', (e) => executeFacebookDebugStep('reels_flow', e.currentTarget));
+  const debugNextBtn = document.getElementById('btnFacebookDebugStepNext');
+  if (debugNextBtn) debugNextBtn.addEventListener('click', (e) => executeFacebookDebugStep('click_next_twice', e.currentTarget));
 
-  const debugCloseBtn = document.getElementById('btnFacebookDebugCloseModal');
-  if (debugCloseBtn) debugCloseBtn.addEventListener('click', (e) => executeFacebookDebugStep('close_modal', e.currentTarget));
+  const debugCaptionBtn = document.getElementById('btnFacebookDebugStepCaption');
+  if (debugCaptionBtn) debugCaptionBtn.addEventListener('click', (e) => executeFacebookDebugStep('insert_caption', e.currentTarget));
+
+  const debugAddProductBtn = document.getElementById('btnFacebookDebugStepAddProduct');
+  if (debugAddProductBtn) debugAddProductBtn.addEventListener('click', (e) => executeFacebookDebugStep('add_affiliate_product', e.currentTarget));
 }
 
 async function executeFacebookDebugStep(stepName, btn) {
   const stepLabels = {
     'click_reels': '🎬 Step 1: กดปุ่ม Reels (ข้าง Photo/video)',
     'click_upload': '📤 Step 2: แนบไฟล์วิดีโอเข้า Reels (Direct Attach)',
-    'reels_flow': '⚡ รันต่อเนื่อง (กด Reels ➔ แนบวิดีโอ)',
-    'close_modal': '✖️ ปิดหน้าต่างสร้าง Reels'
+    'click_next_twice': '➡️ Step 3: กด Next 2 ครั้ง (เข้าหน้าตั้งค่า)',
+    'insert_caption': '📝 Step 4: ใส่ Description (Caption)',
+    'add_affiliate_product': '🛍️ Step 5: กด Add Product & วาง Affiliate Link'
   };
   const label = stepLabels[stepName] || stepName;
 
   let targetVideoPath = '';
+  let targetCaption = '';
+  let targetAffiliateUrl = '';
+  let targetSubfolder = '';
   if (typeof facebookPostQueue !== 'undefined' && facebookPostQueue && facebookPostQueue.length > 0) {
-    const checked = facebookPostQueue.find(p => p.checked !== false && p.video_path);
-    if (checked) targetVideoPath = checked.video_path;
-    else if (facebookPostQueue[0].video_path) targetVideoPath = facebookPostQueue[0].video_path;
+    const item = facebookPostQueue.find(p => p.checked !== false && (p.video_path || p.caption)) || facebookPostQueue[0];
+    if (item) {
+      targetVideoPath = item.video_path || '';
+      targetCaption = item.caption || '';
+      targetAffiliateUrl = item.affiliate_url || '';
+      targetSubfolder = item.subfolder_path || '';
+    }
   }
   const mainFolder = document.getElementById('cfg_facebook_main_folder')?.value || '';
 
@@ -7939,7 +7950,10 @@ async function executeFacebookDebugStep(stepName, btn) {
       body: JSON.stringify({
         step: stepName,
         video_path: targetVideoPath,
-        main_folder: mainFolder
+        main_folder: mainFolder,
+        caption: targetCaption,
+        affiliate_url: targetAffiliateUrl,
+        subfolder_path: targetSubfolder
       })
     });
 

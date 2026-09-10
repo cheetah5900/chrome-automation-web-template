@@ -873,6 +873,68 @@ def find_sample_video(preferred_path: str = "", main_folder: str = "") -> str:
                         return candidate
     return ""
 
+def find_sample_caption(preferred_caption: str = "", folder_path: str = "") -> str:
+    """Finds caption text from preference, subfolder files, or channel folders."""
+    if preferred_caption and preferred_caption.strip():
+        return preferred_caption.strip()
+
+    folders_to_check = []
+    if folder_path:
+        if os.path.isfile(folder_path):
+            folders_to_check.append(os.path.dirname(folder_path))
+        elif os.path.isdir(folder_path):
+            folders_to_check.append(folder_path)
+
+    fallback_channel = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/9 - ป้ายยาที่ตาซ้าย"
+    if os.path.isdir(fallback_channel):
+        folders_to_check.append(fallback_channel)
+
+    for folder in folders_to_check:
+        for root, _, files in os.walk(folder):
+            for f in files:
+                if f.lower() in ("caption.md", "caption.txt"):
+                    p = os.path.join(root, f)
+                    try:
+                        with open(p, "r", encoding="utf-8") as cf:
+                            txt = cf.read().strip()
+                            if txt:
+                                return txt
+                    except Exception:
+                        pass
+    return "วิดีโอใหม่วันนี้ กดติดตามรับชมคลิปน่ารักๆ ทุกวัน ✨ #Shorts #Reels"
+
+def find_sample_affiliate_url(preferred_url: str = "", folder_path: str = "") -> str:
+    """Finds affiliate short URL from preference, subfolder files, or channel folders."""
+    if preferred_url and (preferred_url.startswith("http://") or preferred_url.startswith("https://")):
+        return preferred_url.strip()
+
+    folders_to_check = []
+    if folder_path:
+        if os.path.isfile(folder_path):
+            folders_to_check.append(os.path.dirname(folder_path))
+        elif os.path.isdir(folder_path):
+            folders_to_check.append(folder_path)
+
+    fallback_channel = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/9 - ป้ายยาที่ตาซ้าย"
+    if os.path.isdir(fallback_channel):
+        folders_to_check.append(fallback_channel)
+
+    for folder in folders_to_check:
+        for root, _, files in os.walk(folder):
+            for f in files:
+                if f.lower() in ("affiliate link.md", "affiliate_link.md", "affiliatelink.md", "affiliate.md", "affiliate link.txt"):
+                    p = os.path.join(root, f)
+                    try:
+                        with open(p, "r", encoding="utf-8") as af:
+                            for line in af:
+                                l_str = line.strip()
+                                if l_str.startswith("http://") or l_str.startswith("https://"):
+                                    return l_str
+                    except Exception:
+                        pass
+    return "https://s.shopee.co.th/20vHCuY8sU"
+
+
 def debug_click_upload_video_button(driver, video_path: str = "", main_folder: str = "") -> dict[str, Any]:
     """
     Step 2: Directly attaches video file to the Facebook Create Reel modal without opening native file picker.
@@ -1025,6 +1087,293 @@ def debug_reels_full_flow(driver, video_path: str = "", main_folder: str = "") -
         "message": f"รันต่อเนื่องสำเร็จ: {r1.get('message')} ➔ {r2.get('message')}",
         "step1": r1,
         "step2": r2
+    }
+
+def debug_click_next_twice(driver) -> dict[str, Any]:
+    """
+    Step 3: Clicks Next button 2 times to navigate from upload preview -> audio/trim -> Reel settings screen.
+    """
+    if not driver:
+        return {"success": False, "error": "WebDriver is None"}
+
+    ensure_active_window(driver)
+
+    modal_check = driver.execute_script("""
+        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    """)
+    if not modal_check:
+        return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
+
+    # Check if already at Reel settings screen
+    already_at_settings = driver.execute_script("""
+        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+        const text = (modal.innerText || '').toLowerCase();
+        const hasDescBox = !!modal.querySelector('[role="textbox"][contenteditable="true"]');
+        const isSettings = text.includes('reel settings') || text.includes('ตั้งค่า reel') || hasDescBox;
+        return isSettings;
+    """)
+    if already_at_settings:
+        log("[Facebook Debug] ℹ️ ขณะนี้อยู่ที่หน้า Reel settings เรียบร้อยแล้ว ไม่จำเป็นต้องกด Next ซ้ำ")
+        return {
+            "success": True,
+            "message": "ขณะนี้อยู่ที่หน้าตั้งค่า Reels (Reel settings) เรียบร้อยแล้ว",
+            "already_at_settings": True
+        }
+
+    click_results = []
+    for step_idx in range(1, 3):
+        # Poll up to 6 seconds for Next button to be enabled
+        start_t = time.time()
+        clicked = False
+        click_info = None
+        while time.time() - start_t < 6.0:
+            js_next = """
+            const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+            const buttons = Array.from(modal.querySelectorAll('[role="button"], button')).filter(b => {
+                const t = (b.innerText || '').trim().toLowerCase();
+                const a = (b.getAttribute('aria-label') || '').trim().toLowerCase();
+                const rect = b.getBoundingClientRect();
+                const isNext = (t === 'next' || t === 'ถัดไป' || a === 'next' || a === 'ถัดไป');
+                const isEnabled = b.getAttribute('aria-disabled') !== 'true' && !b.disabled;
+                return isNext && isEnabled && rect.width > 0 && rect.height > 0;
+            });
+            if (buttons.length > 0) {
+                const btn = buttons[buttons.length - 1];
+                btn.click();
+                return { success: true, text: btn.innerText || btn.getAttribute('aria-label') };
+            }
+            return { success: false };
+            """
+            res = driver.execute_script(js_next)
+            if res.get("success"):
+                clicked = True
+                click_info = res
+                break
+            time.sleep(0.3)
+
+        if not clicked:
+            # Check if settings screen was already reached
+            at_settings_now = driver.execute_script("""
+                const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+                const text = (modal.innerText || '').toLowerCase();
+                return text.includes('reel settings') || text.includes('ตั้งค่า reel') || !!modal.querySelector('[role="textbox"][contenteditable="true"]');
+            """)
+            if at_settings_now:
+                log(f"[Facebook Debug] ✅ ถึงหน้า Reel settings เรียบร้อยแล้ว (กด Next ไป {len(click_results)} ครั้ง)")
+                return {
+                    "success": True,
+                    "message": f"เข้าสู่หน้าตั้งค่า Reels สำเร็จ (กด Next {len(click_results)} ครั้ง)",
+                    "clicks": click_results
+                }
+            return {
+                "success": False,
+                "error": f"ไม่พบปุ่ม Next หรือปุ่ม Next ยังไม่พร้อมใช้งานในครั้งที่ {step_idx} (อาจกำลังประมวลผลวิดีโออยู่ กรุณารอสักครู่แล้วลองใหม่)"
+            }
+
+        click_results.append(click_info)
+        log(f"[Facebook Debug] ➡️ กดปุ่ม Next ครั้งที่ {step_idx}/2 สำเร็จ")
+        time.sleep(2.0)
+
+    settings_reached = driver.execute_script("""
+        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+        const text = (modal.innerText || '').toLowerCase();
+        return text.includes('reel settings') || text.includes('ตั้งค่า reel') || !!modal.querySelector('[role="textbox"][contenteditable="true"]');
+    """)
+
+    log("[Facebook Debug] ✅ Step 3: กด Next 2 ครั้งเข้าสู่หน้าตั้งค่า Reels สำเร็จ")
+    return {
+        "success": True,
+        "message": "กด Next 2 ครั้งเข้าสู่หน้าตั้งค่า Reels สำเร็จ",
+        "clicks": click_results,
+        "settings_reached": settings_reached
+    }
+
+def debug_insert_caption(driver, caption: str = "", folder_path: str = "", main_folder: str = "") -> dict[str, Any]:
+    """
+    Step 4: Inserts Description / Caption into the 'Describe your reel...' textbox.
+    Uses clipboard paste (pbcopy + Cmd+V) on macOS for ultra-fast and reliable emoji/multiline handling.
+    """
+    if not driver:
+        return {"success": False, "error": "WebDriver is None"}
+
+    ensure_active_window(driver)
+
+    modal_check = driver.execute_script("""
+        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    """)
+    if not modal_check:
+        return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
+
+    target_caption = find_sample_caption(caption, folder_path=folder_path or main_folder)
+    if not target_caption:
+        return {"success": False, "error": "ไม่พบข้อความแคปชั่นสำหรับระบุ"}
+
+    # Locate description input
+    desc_inputs = driver.find_elements(By.CSS_SELECTOR, '[role="dialog"] [role="textbox"][contenteditable="true"], div[aria-modal="true"] [role="textbox"][contenteditable="true"]')
+    if not desc_inputs:
+        desc_inputs = driver.find_elements(By.CSS_SELECTOR, '[role="textbox"][contenteditable="true"]')
+
+    if not desc_inputs:
+        return {"success": False, "error": "ไม่พบช่องกรอก Description ('Describe your reel...') ในหน้าต่าง Reels (กรุณากด Step 3 เพื่อเข้าหน้าตั้งค่าก่อน)"}
+
+    desc_el = desc_inputs[0]
+
+    # Fast paste on macOS
+    pasted = False
+    if sys.platform == "darwin":
+        try:
+            p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+            p.communicate(input=target_caption.encode("utf-8"))
+            time.sleep(0.1)
+            ActionChains(driver).click(desc_el).key_down(Keys.COMMAND).send_keys("a").key_up(Keys.COMMAND).send_keys(Keys.BACKSPACE).perform()
+            time.sleep(0.2)
+            ActionChains(driver).key_down(Keys.COMMAND).send_keys("v").key_up(Keys.COMMAND).perform()
+            time.sleep(0.5)
+            pasted = True
+        except Exception as e:
+            log(f"[Facebook Debug] pbcopy error: {e}")
+
+    if not pasted:
+        try:
+            ActionChains(driver).click(desc_el).key_down(Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL).send_keys("a").key_up(Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL).send_keys(Keys.BACKSPACE).perform()
+            time.sleep(0.2)
+            desc_el.send_keys(target_caption)
+            time.sleep(0.5)
+            pasted = True
+        except Exception as e:
+            log(f"[Facebook Debug] send_keys fallback error: {e}")
+
+    current_text = desc_el.text or ""
+    first_line = (target_caption.splitlines()[0] if target_caption else "")[:40]
+    log(f"[Facebook Debug] ✅ Step 4: ใส่ Description สำเร็จ: '{first_line}...'")
+    return {
+        "success": True,
+        "message": f"ใส่ Description สำเร็จ ({len(target_caption)} ตัวอักษร): '{first_line}...'",
+        "caption_sample": first_line,
+        "full_length": len(target_caption),
+        "text_preview": current_text[:100]
+    }
+
+def debug_add_affiliate_product(driver, affiliate_url: str = "", folder_path: str = "", main_folder: str = "") -> dict[str, Any]:
+    """
+    Step 5: Clicks 'Add product' button, enters the Shopee affiliate link into the URL input, and clicks Save.
+    """
+    if not driver:
+        return {"success": False, "error": "WebDriver is None"}
+
+    ensure_active_window(driver)
+
+    modal_check = driver.execute_script("""
+        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    """)
+    if not modal_check:
+        return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด"}
+
+    target_url = find_sample_affiliate_url(affiliate_url, folder_path=folder_path or main_folder)
+    if not target_url:
+        return {"success": False, "error": "ไม่พบลิงก์ Affiliate (URL) สำหรับเพิ่มสินค้า"}
+
+    # 1. Click 'Add product' button inside modal
+    js_click_add = """
+    const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+    const btn = Array.from(modal.querySelectorAll('*')).find(el => {
+        const t = (el.innerText || '').toLowerCase();
+        const a = (el.getAttribute('aria-label') || '').toLowerCase();
+        const isAdd = t.includes('add product') || t.includes('เพิ่มสินค้า') || a.includes('add product') || a.includes('เพิ่มสินค้า');
+        return isAdd && el.getAttribute('role') === 'button';
+    });
+    if (btn) {
+        btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+        btn.click();
+        return { success: true };
+    }
+    return { success: false, error: "ไม่พบปุ่ม 'Add product' ในหน้าต่าง Reels (กรุณากด Step 3 เพื่อเข้าหน้าตั้งค่าก่อน)" };
+    """
+    r_add = driver.execute_script(js_click_add)
+    if not r_add.get("success"):
+        return r_add
+
+    time.sleep(1.2)
+
+    # 2. Locate URL input field inside the Add affiliate product sub-dialog
+    start_t = time.time()
+    url_input_el = None
+    while time.time() - start_t < 4.0:
+        inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="text"]')
+        for inp in inputs:
+            parent_text = driver.execute_script("""
+                let p = arguments[0].parentElement;
+                for (let k = 0; k < 4; k++) {
+                    if (!p) break;
+                    if ((p.innerText || '').toLowerCase().includes('url')) return p.innerText;
+                    p = p.parentElement;
+                }
+                return '';
+            """, inp)
+            if "url" in parent_text.lower():
+                url_input_el = inp
+                break
+        if url_input_el:
+            break
+        time.sleep(0.3)
+
+    if not url_input_el:
+        return {"success": False, "error": "ไม่พบช่องกรอก URL ในหน้าต่าง Add affiliate product"}
+
+    # 3. Enter the affiliate link into the URL input
+    try:
+        url_input_el.click()
+        ActionChains(driver).key_down(Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL).send_keys("a").key_up(Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL).send_keys(Keys.BACKSPACE).perform()
+        time.sleep(0.2)
+        url_input_el.send_keys(target_url)
+        time.sleep(0.8)
+    except Exception as e:
+        log(f"[Facebook Debug] Error typing affiliate url: {e}")
+        return {"success": False, "error": f"เกิดข้อผิดพลาดในการพิมพ์ URL: {e}"}
+
+    # 4. Wait for Save button to become enabled and click it
+    start_s = time.time()
+    save_clicked = False
+    while time.time() - start_s < 4.0:
+        js_save = """
+        const btns = Array.from(document.querySelectorAll('[role="button"], button')).filter(b => {
+            const t = (b.innerText || '').trim().toLowerCase();
+            const a = (b.getAttribute('aria-label') || '').trim().toLowerCase();
+            const rect = b.getBoundingClientRect();
+            const isSave = (t === 'save' || t === 'บันทึก' || a === 'save' || a === 'บันทึก');
+            const isEnabled = b.getAttribute('aria-disabled') !== 'true' && !b.disabled;
+            return isSave && isEnabled && rect.width > 100 && rect.x > 0;
+        });
+        if (btns.length > 0) {
+            const b = btns[btns.length - 1];
+            b.click();
+            return true;
+        }
+        return false;
+        """
+        if driver.execute_script(js_save):
+            save_clicked = True
+            break
+        time.sleep(0.3)
+
+    if not save_clicked:
+        return {"success": False, "error": "ปุ่ม Save ในหน้าต่างสินค้าไม่เปิดให้กด (URL อาจไม่ถูกต้อง)"}
+
+    time.sleep(1.5)
+
+    # 5. Verify product link added
+    check_added = driver.execute_script("""
+        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
+        const text = modal.innerText || '';
+        return text.includes('Product link added') || text.includes('เพิ่มลิงก์สินค้าแล้ว');
+    """)
+
+    log(f"[Facebook Debug] ✅ Step 5: เพิ่มสินค้า Affiliate สำเร็จ: {target_url}")
+    return {
+        "success": True,
+        "message": f"เพิ่มสินค้า Affiliate สำเร็จ ({target_url})",
+        "affiliate_url": target_url,
+        "verified": check_added
     }
 
 # --- Granular Date Debug Helpers for Step-by-Step UI Control ---
