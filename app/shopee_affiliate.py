@@ -176,9 +176,9 @@ def is_shopee_url(url: str) -> bool:
     return "affiliate.shopee.co.th" in u or "shopee.co.th" in u or "shopee.com" in u
 
 def ensure_shopee_tab_active(driver) -> bool:
-    """Ensures driver is currently focused on a valid Shopee tab.
-    If current tab is not Shopee, searches other open tabs.
-    Returns True if on a Shopee tab, False otherwise."""
+    """Ensures driver is currently focused on a valid Shopee Affiliate tab (affiliate.shopee.co.th).
+    If current tab is not Shopee Affiliate, searches other open tabs.
+    Returns True if on a Shopee Affiliate tab, False otherwise."""
     ensure_active_tab_valid(driver)
     current_url = ""
     try:
@@ -186,13 +186,14 @@ def ensure_shopee_tab_active(driver) -> bool:
     except Exception:
         pass
 
-    if is_shopee_url(current_url):
+    # If current tab is ALREADY on affiliate.shopee.co.th, we are good!
+    if "affiliate.shopee.co.th" in (current_url or "").lower():
         return True
 
-    # Scan open window handles to find Shopee
+    # Scan open window handles to find affiliate.shopee.co.th
     try:
         handles = driver.window_handles
-        # First priority: affiliate.shopee.co.th
+        # 1st priority: find tab on affiliate.shopee.co.th
         for h in handles:
             try:
                 driver.switch_to.window(h)
@@ -202,13 +203,16 @@ def ensure_shopee_tab_active(driver) -> bool:
                     return True
             except Exception:
                 pass
-        # Second priority: any shopee domain
+
+        # 2nd priority: if no affiliate tab open, but any shopee.co.th tab exists, navigate it to affiliate
         for h in handles:
             try:
                 driver.switch_to.window(h)
                 cur = getattr(driver, "current_url", "") or ""
                 if is_shopee_url(cur):
-                    log(f"[Shopee Step 1] 🔄 สลับไปยังแท็บ Shopee: {cur[:80]}")
+                    log("[Shopee Step 1] 🌐 ไม่พบแท็บ Shopee Affiliate กำลังเปิดหน้าข้อเสนอผลิตภัณฑ์...")
+                    driver.get("https://affiliate.shopee.co.th/offer/product_offer")
+                    interruptible_sleep(2.0)
                     return True
             except Exception:
                 pass
@@ -262,6 +266,51 @@ def clean_search_keyword(raw_text: str) -> str:
     s = re.sub(r"\.[^.]+$", "", s)
     s = re.sub(r"^\d+\s*[-_–.]*\s*", "", s).strip()
     return s
+
+def suggest_shortened_keyword(raw_text: str) -> str:
+    """Intelligently suggests a concise product search keyword for Shopee by removing
+    numbers, verbose action verbs, problem clauses ('...ใช้...'), and common filler adjectives."""
+    import re
+    if not raw_text:
+        return ""
+
+    # 1. Remove number prefix e.g. "71 - " or "71."
+    t = re.sub(r"^\d+\s*[-_–.]*\s*", "", raw_text.strip())
+
+    # 2. If text contains problem description followed by 'ใช้' e.g. "น้ำเดือดกระเด็นโดนมือทุกครั้งที่ต้มใช้ฝาครอบหม้อ..."
+    if "ใช้" in t:
+        parts = t.split("ใช้")
+        if len(parts) > 1:
+            candidate = parts[1] if parts[0] else parts[-1]
+            if not candidate.startswith("ซ้ำ"):
+                t = candidate.strip()
+
+    # 3. Strip file extension e.g. .md, .txt
+    t = re.sub(r"\.[a-zA-Z0-9]+$", "", t).strip()
+
+    # 4. Remove common descriptive modifier patterns & filler phrases
+    patterns_to_remove = [
+        r"แบบ(ใช้ซ้ำ|พกพา|พับได้|ติดผนัง|แม่เหล็ก|ปรับระดับได้|ดึงยืดหดได้|หมุนได้|สวม|หนา|มีฝาปิด|มินิ|ตั้งโต๊ะ|เสียบปลั๊ก|ไร้สาย|ชาร์จได้|แขวน|กดติด).*",
+        r"(อเนกประสงค์|พับเก็บได้|พับได้|พกพา|ติดผนัง|อัตโนมัติ|ไฟฟ้ามินิ|มินิ|อย่างดี|ราคาถูก|เกรดพรีเมียม|คุณภาพสูง|คุณภาพดี|24 ชม|24 ชั่วโมง)$",
+        r"(ป้องกัน|กัน)(น้ำเดือดกระเด็น|น้ำกระเด็น|น้ำมันกระเด็น|ฝุ่น|แมลง|สายพันกัน|ลื่น|รอย|กระแทก|แดด).*",
+        r"สำหรับ(เดินทาง|ห้องน้ำ|ครัว|สำนักงาน|ในรถ|บ้าน|ผู้หญิง|ผู้ชาย).*",
+        r"(แบ่งช่อง|ซ้อนพับหลายชั้น|ล้อเลื่อน|หนีบขอบ|ติดผนังซิงค์|หลังเบาะในรถ|ข้างโน้ตบุ๊ก|ป้องกันสายพันกัน)$",
+        r"(ยาวพิเศษ|พิเศษ|ขนาดยาว|หนาพิเศษ|ขนาดใหญ่|แบบหนา|ยาว)$",
+    ]
+
+    prev = ""
+    while prev != t:
+        prev = t
+        for p in patterns_to_remove:
+            t = re.sub(p, "", t).strip()
+            t = re.sub(r"[\s\-_–.]+$", "", t).strip()
+
+    # Domain-specific refinements
+    if t.startswith("ฝาครอบหม้อ"):
+        t = "ฝาครอบหม้อ"
+    t = re.sub(r"(แบบ|ที่สำหรับ|ของ)$", "", t).strip()
+
+    return t or clean_search_keyword(raw_text)
 
 def navigate_back_to_product_offer(driver) -> bool:
     """Navigates back to the product offer search page via sidebar/breadcrumb click without full reload."""
@@ -324,19 +373,21 @@ def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
     except Exception:
         pass
 
-    if current_base.endswith("/offer/product_offer") or has_search_box:
-        log("[Shopee Step 1] ✅ ตรวจพบหน้าข้อเสนอผลิตภัณฑ์ Shopee Affiliate พร้อมทำงาน")
+    if has_search_box:
+        log("[Shopee Step 1] ✅ ตรวจพบหน้าข้อเสนอผลิตภัณฑ์ Shopee Affiliate (พร้อมช่องค้นหา)")
         check_shopee_captcha(driver)
         return True
 
-    # If on affiliate domain but not on product offer page, navigate via SPA link
-    if "affiliate.shopee.co.th" in current.lower():
-        log("[Shopee Step 1] 🌐 อยู่บน Shopee Affiliate กำลังนำทางไปยังหน้าข้อเสนอผลิตภัณฑ์...")
-        if navigate_back_to_product_offer(driver):
-            check_shopee_captcha(driver)
-            return True
+    # If search box is not present, navigate back to product offer
+    log("[Shopee Step 1] 🌐 ยังไม่พบช่องค้นหา กำลังนำทางไปยังหน้าข้อเสนอผลิตภัณฑ์...")
+    if navigate_back_to_product_offer(driver):
+        check_shopee_captcha(driver)
+        return True
 
-    log(f"[Shopee Step 1] ✅ ตรวจพบหน้าเว็บ Shopee ({current[:60]}...) พร้อมทำงาน")
+    # Fallback: direct navigation to product offer search page
+    log("[Shopee Step 1] 🌐 นำทางตรงไปยัง https://affiliate.shopee.co.th/offer/product_offer...")
+    driver.get("https://affiliate.shopee.co.th/offer/product_offer")
+    fast_poll(driver, "document.querySelector('input.ant-input-lg, input[placeholder*=\"ค้นหา\"]')", timeout=5.0)
     check_shopee_captcha(driver)
     return True
 
@@ -354,8 +405,20 @@ def step_2_search_product(driver, keyword: str) -> bool:
     from selenium.webdriver.common.action_chains import ActionChains
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
 
-    input_el = driver.find_element(By.CSS_SELECTOR, 'input.ant-input-lg, input[placeholder*="ค้นหา"]')
+    try:
+        input_el = WebDriverWait(driver, 8.0).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'input.ant-input-lg, input[placeholder*="ค้นหา"]'))
+        )
+    except Exception:
+        log("[Shopee Step 2] ⚠️ ไม่พบช่องค้นหา กำลังโหลดหน้าข้อเสนอผลิตภัณฑ์ใหม่...")
+        driver.get("https://affiliate.shopee.co.th/offer/product_offer")
+        input_el = WebDriverWait(driver, 8.0).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'input.ant-input-lg, input[placeholder*="ค้นหา"]'))
+        )
+
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", input_el)
     human_delay(0.2, 0.4)
     
@@ -848,6 +911,9 @@ def step_4_select_and_open_product(driver) -> dict[str, Any]:
     """)
 
     if not selection or not selection.get("success"):
+        if selection and (selection.get("noData") or selection.get("reason") in ("No data found", "No product cards found")):
+            log("[Shopee Step 4] ⚠️ ตรวจพบ 'ไม่มีข้อมูล' (ไม่พบการ์ดสินค้า) -> ข้ามรายการนี้ทันที")
+            return {"success": False, "skipped": True, "reason": "no_data"}
         log(f"[Shopee Step 4] ❌ ไม่สามารถเลือกรายการสินค้าได้: {selection}")
         return {"success": False, "error": "selection_failed"}
 
@@ -1301,10 +1367,22 @@ def run_shopee_affiliate_batch(
             )
             if item.get("skipped"):
                 folder_desc = item.get("subfolder_name") or item.get("keyword") or f"Item #{idx+1}"
+                kw = item.get("keyword", "")
+                num = item.get("number", "")
+                folder_p = item.get("folder_path", "")
+                file_p = item.get("file_path", "")
+                file_n = item.get("file_name", "")
+                suggested_kw = suggest_shortened_keyword(kw or folder_desc)
                 skipped_items.append({
                     "folder": folder_desc,
-                    "keyword": item.get("keyword", ""),
-                    "reason": item.get("skip_reason", "no_data")
+                    "folder_path": folder_p,
+                    "file_path": file_p,
+                    "file_name": file_n,
+                    "keyword": kw,
+                    "number": num,
+                    "reason": item.get("skip_reason", "no_data"),
+                    "suggested_keyword": suggested_kw,
+                    "item_raw": item
                 })
             elif ok:
                 success_count += 1
@@ -1363,7 +1441,8 @@ def run_shopee_affiliate_batch(
             "status": final_status,
             "message": final_msg,
             "errors": errors,
-            "skipped_items": skipped_items
+            "skipped_items": skipped_items,
+            "success_count": success_count
         })
 
     return {

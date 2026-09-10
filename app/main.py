@@ -5076,6 +5076,21 @@ class ShopeeRunRequest(BaseModel):
     delay_min: float = 5.0
     delay_max: float = 15.0
 
+class ShopeeRetryItem(BaseModel):
+    folder_path: str = ""
+    file_path: str = ""
+    file_name: str = ""
+    number: str = ""
+    old_keyword: str = ""
+    new_keyword: str = ""
+    item_raw: dict[str, Any] | None = None
+
+class ShopeeRetryRequest(BaseModel):
+    items: list[ShopeeRetryItem]
+    delay_min: float = 15.0
+    delay_max: float = 30.0
+    target_url: str = ""
+
 global_shopee_progress: dict[str, Any] = {
     "status": "idle",
     "total": 0,
@@ -5137,8 +5152,10 @@ def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", 
             global_shopee_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
             global_shopee_progress["percent"] = 100
             global_shopee_progress["current"] = len(items)
+            global_shopee_progress["total"] = len(items)
+            global_shopee_progress["success_count"] = res.get("success_count", len(items))
             global_shopee_progress["skipped_items"] = res.get("skipped_items", [])
-            global_shopee_progress["message"] = f"✅ ดำเนินการสำเร็จครบทั้งหมด {res['success_count']} รายการ" if res["ok"] else f"เสร็จสิ้น {res['success_count']}/{len(items)} รายการ"
+            global_shopee_progress["message"] = f"✅ ดำเนินการสำเร็จครบทั้งหมด {res.get('success_count', len(items))} รายการ" if res["ok"] else f"เสร็จสิ้น {res.get('success_count', 0)}/{len(items)} รายการ"
 
     except Exception as e:
         log(f"[Shopee Affiliate Error] {e}")
@@ -5188,6 +5205,95 @@ def run_shopee_affiliate(req: ShopeeRunRequest) -> dict[str, Any]:
         "ok": True,
         "message": f"เริ่มกระบวนการ Shopee Affiliate {len(items)} รายการ",
         "total": len(items)
+    }
+
+@app.post("/api/shopee-affiliate/retry-shortened")
+def retry_shopee_shortened(req: ShopeeRetryRequest) -> dict[str, Any]:
+    global global_shopee_progress, _force_stop_requested
+    _force_stop_requested = False
+    from app.shopee_affiliate import reset_shopee_stop
+    reset_shopee_stop()
+
+    if not req.items:
+        raise HTTPException(status_code=400, detail="ไม่มีรายการให้ดำเนินการ")
+
+    renamed_count = 0
+    batch_items_to_run = []
+
+    for it in req.items:
+        folder = (it.folder_path or "").strip()
+        new_kw = (it.new_keyword or "").strip()
+        old_file = (it.file_path or "").strip()
+        num = (it.number or "").strip()
+
+        if not new_kw and it.old_keyword:
+            new_kw = it.old_keyword.strip()
+
+        new_filename = f"{num} - {new_kw}.md" if num else f"{new_kw}.md"
+        new_filepath = os.path.join(folder, new_filename) if folder else ""
+
+        # Perform rename if folder exists
+        if folder and os.path.exists(folder):
+            # If old_file is not provided or does not exist, search folder for existing .md
+            if not old_file or not os.path.exists(old_file):
+                for f in os.listdir(folder):
+                    if f.endswith(".md") and (not num or f.startswith(f"{num}")):
+                        old_file = os.path.join(folder, f)
+                        break
+
+            if old_file and os.path.exists(old_file):
+                if os.path.abspath(old_file) != os.path.abspath(new_filepath):
+                    try:
+                        os.rename(old_file, new_filepath)
+                        log(f"[Shopee Rename] ✏️ เปลี่ยนชื่อไฟล์สำเร็จ: '{os.path.basename(old_file)}' -> '{new_filename}'")
+                        renamed_count += 1
+                    except Exception as e:
+                        log(f"[Shopee Rename Error] ⚠️ เปลี่ยนชื่อไฟล์ '{old_file}' ล้มเหลว: {e}")
+            elif new_filepath and not os.path.exists(new_filepath):
+                try:
+                    with open(new_filepath, "w", encoding="utf-8") as nf:
+                        nf.write(f"# {new_kw}\n")
+                    renamed_count += 1
+                except Exception:
+                    pass
+
+        raw = it.item_raw or {}
+        item_data = {
+            **raw,
+            "folder_path": folder,
+            "file_name": new_filename,
+            "file_path": new_filepath if (new_filepath and os.path.exists(new_filepath)) else (old_file or new_filepath),
+            "keyword": new_kw,
+            "number": num,
+            "subfolder_name": raw.get("subfolder_name") or (os.path.basename(folder) if folder else f"Item {num}"),
+            "skipped": False,
+            "skip_reason": None
+        }
+        batch_items_to_run.append(item_data)
+
+    global_shopee_progress = {
+        "status": "running",
+        "total": len(batch_items_to_run),
+        "current": 0,
+        "percent": 0,
+        "message": f"เตรียมรันค้นหาใหม่สำหรับ {len(batch_items_to_run)} รายการ (เปลี่ยนชื่อแล้ว {renamed_count} ไฟล์)...",
+        "errors": [],
+        "skipped_items": []
+    }
+
+    import threading
+    t = threading.Thread(
+        target=_shopee_affiliate_worker,
+        args=(batch_items_to_run, req.target_url, req.delay_min, req.delay_max),
+        daemon=True
+    )
+    t.start()
+
+    return {
+        "ok": True,
+        "message": f"เปลี่ยนชื่อเรียบร้อย ({renamed_count} ไฟล์) และเริ่มรันค้นหาใหม่ {len(batch_items_to_run)} รายการ",
+        "renamed_count": renamed_count,
+        "total": len(batch_items_to_run)
     }
 
 @app.post("/api/shopee-affiliate/scan")

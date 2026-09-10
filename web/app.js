@@ -8120,56 +8120,256 @@ async function runShopeeAffiliate(btn) {
 
     logShopeeConsole(`✅ ${res.message}`, 'success');
 
-    if (shopeePollingInterval) clearInterval(shopeePollingInterval);
-    shopeePollingInterval = setInterval(async () => {
-      try {
-        const prog = await jsonFetch('/api/shopee-affiliate/progress');
-        if (progText) progText.textContent = `${prog.percent || 0}% (${prog.current || 0}/${prog.total || selectedItems.length})`;
-        if (progBar) progBar.style.width = `${prog.percent || 0}%`;
+    pollShopeeProgress(btn, selectedItems.length);
+  } catch (e) {
+    logShopeeConsole(`❌ เกิดข้อผิดพลาด: ${e.message}`, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
 
-        if (prog.message) {
-          logShopeeConsole(prog.message, prog.status === 'error' ? 'error' : 'normal');
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function showShopeeSkippedReviewModal(skipped, btn) {
+  if (!skipped || skipped.length === 0) return;
+
+  const rowsHtml = skipped.map((it, idx) => {
+    const folderName = it.folder || `Item #${idx + 1}`;
+    const origKw = it.keyword || '-';
+    const suggestedKw = it.suggested_keyword || origKw;
+    return `
+      <div style="text-align: left; padding: 12px 14px; margin-bottom: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); border-left: 4px solid #f59e0b;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <span style="font-weight: 600; color: #ffb86c; font-size: 0.95rem;">📁 ${escapeHtml(folderName)}</span>
+          <span style="font-size: 0.75rem; color: #ef4444; background: rgba(239,68,68,0.15); padding: 2px 8px; border-radius: 6px; font-weight: 600;">ไม่พบข้อมูล</span>
+        </div>
+        <div style="font-size: 0.82rem; color: rgba(255,255,255,0.6); margin-bottom: 8px;">
+          คำค้นเดิม: <span style="text-decoration: line-through; color: #f87171;">"${escapeHtml(origKw)}"</span>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; color: #38bdf8; font-weight: 600; margin-bottom: 4px;">
+            💡 ชื่อสั้นที่แนะนำ (แก้ไขได้):
+          </label>
+          <input type="text"
+            class="swal-retry-keyword-input"
+            data-idx="${idx}"
+            value="${escapeHtml(suggestedKw)}"
+            style="width: 100%; padding: 8px 12px; background: rgba(0,0,0,0.5); border: 1px solid rgba(56, 189, 248, 0.6); border-radius: 8px; color: #fff; font-size: 0.92rem; outline: none; box-sizing: border-box;"
+            placeholder="ระบุคำค้นหาสินค้าสั้นๆ..."
+          />
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (typeof Swal !== 'undefined') {
+    Swal.fire({
+      icon: 'question',
+      title: `พบสินค้าไม่ครบ (${skipped.length} รายการ)`,
+      width: '660px',
+      html: `
+        <div style="color: rgba(255,255,255,0.85); font-size: 0.92rem; margin-bottom: 12px; text-align: left; line-height: 1.5;">
+          ระบบขึ้นว่า <strong>"ไม่มีข้อมูล"</strong> สำหรับรายการด้านล่าง เนื่องจากคำค้นเดิมยาวหรือเจาะจงเกินไป<br>
+          ระบบได้เสนอ <strong>ชื่อสินค้าที่สั้นลง</strong> ให้เรียบร้อย กรุณาตรวจสอบหรือแก้ไข แล้วกดยืนยันเพื่อ <strong>เปลี่ยนชื่อไฟล์ .md และรันใหม่อัตโนมัติ</strong>:
+        </div>
+        <div style="max-height: 360px; overflow-y: auto; padding-right: 6px; margin-bottom: 6px;">
+          ${rowsHtml}
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: `🔄 ยืนยันเปลี่ยนชื่อ & รันใหม่ (${skipped.length} รายการ)`,
+      cancelButtonText: 'ข้ามรายการเหล่านี้ (Skip)',
+      customClass: {
+        popup: 'swal2-shopee-popup',
+        confirmButton: 'swal2-shopee-confirm-btn',
+        cancelButton: 'swal2-shopee-cancel-btn'
+      },
+      buttonsStyling: false,
+      focusConfirm: false,
+      preConfirm: () => {
+        const inputs = document.querySelectorAll('.swal-retry-keyword-input');
+        const itemsToRetry = [];
+        inputs.forEach(inp => {
+          const idx = parseInt(inp.getAttribute('data-idx'));
+          const orig = skipped[idx];
+          if (orig) {
+            const newKw = inp.value.trim() || orig.suggested_keyword || orig.keyword;
+            itemsToRetry.push({
+              folder_path: orig.folder_path || '',
+              file_path: orig.file_path || '',
+              file_name: orig.file_name || '',
+              number: orig.number || '',
+              old_keyword: orig.keyword || '',
+              new_keyword: newKw,
+              item_raw: orig.item_raw || orig
+            });
+          }
+        });
+        return itemsToRetry;
+      }
+    }).then(async (result) => {
+      if (result.isConfirmed && result.value && result.value.length > 0) {
+        await executeShopeeRetryShortened(result.value, btn);
+      }
+    });
+  } else {
+    alert(`⚠️ ไม่พบข้อมูลสินค้าใน Shopee สำหรับ ${skipped.length} รายการ`);
+  }
+}
+
+async function executeShopeeRetryShortened(itemsToRetry, btn) {
+  const progContainer = document.getElementById('shopeeProgressContainer');
+  const progText = document.getElementById('shopeeProgressText');
+  const progBar = document.getElementById('shopeeProgressBar');
+
+  if (progContainer) progContainer.classList.remove('hidden');
+  if (progText) progText.textContent = `0% (0/${itemsToRetry.length})`;
+  if (progBar) progBar.style.width = '0%';
+
+  const delayMin = parseFloat(document.getElementById('cfg_shopee_delay_min')?.value) || 15;
+  const delayMax = parseFloat(document.getElementById('cfg_shopee_delay_max')?.value) || 30;
+  const targetUrl = document.getElementById('cfg_shopee_target_url')?.value || 'https://affiliate.shopee.co.th';
+
+  logShopeeConsole(`🔄 กำลังบันทึกเปลี่ยนชื่อไฟล์ .md และเริ่มรันซ้ำ ${itemsToRetry.length} รายการ...`, 'info');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await jsonFetch('/api/shopee-affiliate/retry-shortened', {
+      method: 'POST',
+      body: JSON.stringify({
+        items: itemsToRetry,
+        delay_min: delayMin,
+        delay_max: delayMax,
+        target_url: targetUrl
+      })
+    });
+
+    if (!res.ok) {
+      logShopeeConsole(`❌ เริ่มรันซ้ำล้มเหลว: ${res.detail || res.message}`, 'error');
+      alert('เริ่มรันซ้ำล้มเหลว: ' + (res.detail || res.message));
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    logShopeeConsole(`✅ ${res.message}`, 'success');
+    showToast(`🚀 ${res.message}`, 'success');
+
+    pollShopeeProgress(btn, itemsToRetry.length);
+  } catch (err) {
+    logShopeeConsole(`❌ เกิดข้อผิดพลาดในการรันซ้ำ: ${err.message}`, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+function pollShopeeProgress(btn, defaultTotal = 0) {
+  const progText = document.getElementById('shopeeProgressText');
+  const progBar = document.getElementById('shopeeProgressBar');
+
+  if (shopeePollingInterval) clearInterval(shopeePollingInterval);
+  shopeePollingInterval = setInterval(async () => {
+    try {
+      const prog = await jsonFetch('/api/shopee-affiliate/progress');
+      const totalCount = prog.total || defaultTotal || 1;
+      if (progText) progText.textContent = `${prog.percent || 0}% (${prog.current || 0}/${totalCount})`;
+      if (progBar) progBar.style.width = `${prog.percent || 0}%`;
+
+      if (prog.message) {
+        logShopeeConsole(prog.message, prog.status === 'error' ? 'error' : 'normal');
+      }
+
+      if (prog.status === 'captcha_blocked') {
+        clearInterval(shopeePollingInterval);
+        shopeePollingInterval = null;
+        if (btn) btn.disabled = false;
+        logShopeeConsole(`🛑 ตรวจพบระบบกันบอท Shopee (CAPTCHA / Verification): ${prog.captcha_url || ''}`, 'error');
+        showToast('⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA)', 'error');
+
+        const folderMsg = prog.blocked_folder ? `
+          <div style="margin-bottom: 12px; padding: 8px 12px; background: rgba(255,255,255,0.06); border-radius: 8px; border-left: 3px solid #f59e0b;">
+            <span style="color: #ffb86c; font-weight: 600;">📁 โฟลเดอร์ที่ติดปัญหา:</span>
+            <span style="color: #fff; font-weight: 500; margin-left: 6px;">${escapeHtml(prog.blocked_folder)}</span>
+          </div>
+        ` : '';
+
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'warning',
+            title: '⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA)',
+            html: `
+              <div style="text-align: left; font-size: 0.92rem; line-height: 1.6; color: rgba(255,255,255,0.9);">
+                <p style="margin-bottom: 12px; color: #ff7e67; font-weight: 600;">
+                  🛑 ระบบได้หยุดการทำงานทันที เนื่องจาก Shopee ตรวจพบการร้องขออัตโนมัติ และแสดงหน้ายืนยันความปลอดภัย (Anti-bot / CAPTCHA Verification)
+                </p>
+                ${folderMsg}
+                <div style="background: rgba(238, 77, 45, 0.12); border-left: 4px solid #ee4d2d; padding: 12px 14px; border-radius: 8px; margin-bottom: 14px;">
+                  <strong style="color: #ffb86c; font-size: 0.95rem;">📌 คำแนะนำสำหรับผู้ใช้งาน:</strong>
+                  <ol style="margin: 8px 0 0 18px; padding: 0;">
+                    <li style="margin-bottom: 4px;">สลับไปที่หน้าต่างเบราว์เซอร์ <strong>Chrome (Port 9222)</strong></li>
+                    <li style="margin-bottom: 4px;">ทำการ <strong>เลื่อนจิ๊กซอว์ / แก้ไข CAPTCHA</strong> หรือยืนยันตัวตนบนหน้า Shopee ให้เสร็จสิ้น</li>
+                    <li style="margin-bottom: 4px;">รอให้หน้าเว็บโหลดกลับเข้าสู่หน้าสินค้าปกติหรือหน้า Shopee Affiliate</li>
+                    <li>เมื่อผ่านแล้ว ให้กลับมากด <strong>"🚀 เริ่มรัน Shopee Affiliate"</strong> เพื่อทำงานต่อทันที</li>
+                  </ol>
+                </div>
+                <p style="font-size: 0.82rem; color: rgba(255,255,255,0.6); margin: 0;">
+                  💡 <em>คำแนะนำ: หากเจอบ่อย แนะนำให้ปรับเพิ่มช่วง Delay (เช่น ขั้นต่ำ 10 - 20 วินาที) เพื่อลดความถี่ในการเรียกดูสินค้าครับ</em>
+                </p>
+              </div>
+            `,
+            confirmButtonText: 'รับทราบ (ไปปลดล็อค CAPTCHA ใน Chrome 9222)',
+            customClass: {
+              popup: 'swal2-shopee-popup',
+              confirmButton: 'swal2-shopee-confirm-btn'
+            },
+            buttonsStyling: false
+          });
+        } else {
+          alert(`⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA)!\nกรุณาไปที่หน้าต่าง Chrome 9222 เพื่อเลื่อนแก้ CAPTCHA ด้วยตนเอง แล้วจึงกลับมากดรันใหม่`);
+        }
+        return;
+      }
+
+      if (prog.status === 'completed' || prog.status === 'completed_with_errors' || prog.status === 'error' || prog.status === 'stopped') {
+        clearInterval(shopeePollingInterval);
+        shopeePollingInterval = null;
+        if (btn) btn.disabled = false;
+        const isStop = prog.status === 'stopped';
+        logShopeeConsole(`🏁 ${prog.message}`, isStop ? 'error' : (prog.status === 'completed' ? 'success' : 'error'));
+
+        if (isStop) {
+          showToast('🛑 บังคับหยุดการทำงาน Shopee Affiliate สำเร็จ', 'warning');
+          return;
         }
 
-        if (prog.status === 'captcha_blocked') {
-          clearInterval(shopeePollingInterval);
-          shopeePollingInterval = null;
-          if (btn) btn.disabled = false;
-          logShopeeConsole(`🛑 ตรวจพบระบบกันบอท Shopee (CAPTCHA / Verification): ${prog.captcha_url || ''}`, 'error');
-          showToast('⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA)', 'error');
-
-          const folderMsg = prog.blocked_folder ? `
-            <div style="margin-bottom: 12px; padding: 8px 12px; background: rgba(255,255,255,0.06); border-radius: 8px; border-left: 3px solid #f59e0b;">
-              <span style="color: #ffb86c; font-weight: 600;">📁 โฟลเดอร์ที่ติดปัญหา:</span>
-              <span style="color: #fff; font-weight: 500; margin-left: 6px;">${prog.blocked_folder}</span>
-            </div>
-          ` : '';
-
+        // Check if any items could not find products
+        const skipped = prog.skipped_items || [];
+        if (skipped.length > 0) {
+          showShopeeSkippedReviewModal(skipped, btn);
+        } else if (prog.status === 'completed') {
+          // All items succeeded without any issues!
+          const successCount = prog.success_count !== undefined ? prog.success_count : (prog.total || defaultTotal || 0);
           if (typeof Swal !== 'undefined') {
             Swal.fire({
-              icon: 'warning',
-              title: '⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA)',
+              icon: 'success',
+              title: 'ดำเนินการสำเร็จครบถ้วน 🎉',
               html: `
-                <div style="text-align: left; font-size: 0.92rem; line-height: 1.6; color: rgba(255,255,255,0.9);">
-                  <p style="margin-bottom: 12px; color: #ff7e67; font-weight: 600;">
-                    🛑 ระบบได้หยุดการทำงานทันที เนื่องจาก Shopee ตรวจพบการร้องขออัตโนมัติ และแสดงหน้ายืนยันความปลอดภัย (Anti-bot / CAPTCHA Verification)
-                  </p>
-                  ${folderMsg}
-                  <div style="background: rgba(238, 77, 45, 0.12); border-left: 4px solid #ee4d2d; padding: 12px 14px; border-radius: 8px; margin-bottom: 14px;">
-                    <strong style="color: #ffb86c; font-size: 0.95rem;">📌 คำแนะนำสำหรับผู้ใช้งาน:</strong>
-                    <ol style="margin: 8px 0 0 18px; padding: 0;">
-                      <li style="margin-bottom: 4px;">สลับไปที่หน้าต่างเบราว์เซอร์ <strong>Chrome (Port 9222)</strong></li>
-                      <li style="margin-bottom: 4px;">ทำการ <strong>เลื่อนจิ๊กซอว์ / แก้ไข CAPTCHA</strong> หรือยืนยันตัวตนบนหน้า Shopee ให้เสร็จสิ้น</li>
-                      <li style="margin-bottom: 4px;">รอให้หน้าเว็บโหลดกลับเข้าสู่หน้าสินค้าปกติหรือหน้า Shopee Affiliate</li>
-                      <li>เมื่อผ่านแล้ว ให้กลับมากด <strong>"🚀 เริ่มรัน Shopee Affiliate"</strong> เพื่อทำงานต่อทันที</li>
-                    </ol>
+                <div style="font-size: 1rem; color: rgba(255,255,255,0.9); line-height: 1.6; margin-top: 8px;">
+                  ระบบได้ค้นหาและดึงลิงก์ Affiliate สำเร็จเรียบร้อยแล้ว<br>
+                  <strong style="color: #10b981; font-size: 1.28rem; display: inline-block; margin-top: 6px;">
+                    ✅ ครบทั้งหมด ${successCount} รายการ
+                  </strong>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.6); margin-top: 6px;">
+                    (บันทึกลิงก์และจัดเก็บข้อมูลเรียบร้อย ไม่มีรายการใดติดปัญหา)
                   </div>
-                  <p style="font-size: 0.82rem; color: rgba(255,255,255,0.6); margin: 0;">
-                    💡 <em>คำแนะนำ: หากเจอบ่อย แนะนำให้ปรับเพิ่มช่วง Delay (เช่น ขั้นต่ำ 10 - 20 วินาที) เพื่อลดความถี่ในการเรียกดูสินค้าครับ</em>
-                  </p>
                 </div>
               `,
-              confirmButtonText: 'รับทราบ (ไปปลดล็อค CAPTCHA ใน Chrome 9222)',
+              confirmButtonText: 'ตกลง',
               customClass: {
                 popup: 'swal2-shopee-popup',
                 confirmButton: 'swal2-shopee-confirm-btn'
@@ -8177,66 +8377,14 @@ async function runShopeeAffiliate(btn) {
               buttonsStyling: false
             });
           } else {
-            alert(`⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA)!\nกรุณาไปที่หน้าต่าง Chrome 9222 เพื่อเลื่อนแก้ CAPTCHA ด้วยตนเอง แล้วจึงกลับมากดรันใหม่`);
-          }
-          return;
-        }
-
-        if (prog.status === 'completed' || prog.status === 'completed_with_errors' || prog.status === 'error' || prog.status === 'stopped') {
-          clearInterval(shopeePollingInterval);
-          shopeePollingInterval = null;
-          if (btn) btn.disabled = false;
-          const isStop = prog.status === 'stopped';
-          logShopeeConsole(`🏁 ${prog.message}`, isStop ? 'error' : (prog.status === 'completed' ? 'success' : 'error'));
-
-          if (isStop) {
-            showToast('🛑 บังคับหยุดการทำงาน Shopee Affiliate สำเร็จ', 'warning');
-            return;
-          }
-
-          // Check if any items could not find products
-          const skipped = prog.skipped_items || [];
-          if (skipped.length > 0) {
-            const listHtml = skipped.map(it => `
-              <div style="text-align: left; padding: 8px 12px; margin-bottom: 6px; background: rgba(255,255,255,0.06); border-radius: 8px; border-left: 3px solid #f59e0b;">
-                <div style="font-weight: 600; color: #ffb86c; font-size: 0.95rem;">📁 ${it.folder}</div>
-                <div style="font-size: 0.82rem; color: rgba(255,255,255,0.7); margin-top: 2px;">คำค้น: "${it.keyword || '-'}" (ไม่พบข้อมูลใน Shopee)</div>
-              </div>
-            `).join('');
-
-            if (typeof Swal !== 'undefined') {
-              Swal.fire({
-                icon: 'warning',
-                title: `พบสินค้าไม่ครบ (${skipped.length} รายการ)`,
-                html: `
-                  <div style="color: rgba(255,255,255,0.85); font-size: 0.95rem; margin-bottom: 14px; text-align: left;">
-                    ระบบขึ้นว่า <strong>"ไม่มีข้อมูล"</strong> สำหรับโฟลเดอร์ต่อไปนี้ และได้ทำการข้ามรายการอัตโนมัติ:
-                  </div>
-                  <div style="max-height: 220px; overflow-y: auto; padding-right: 4px;">
-                    ${listHtml}
-                  </div>
-                `,
-                confirmButtonText: 'รับทราบ',
-                customClass: {
-                  popup: 'swal2-shopee-popup',
-                  confirmButton: 'swal2-shopee-confirm-btn'
-                },
-                buttonsStyling: false
-              });
-            } else {
-              alert(`⚠️ ไม่พบข้อมูลสินค้าใน Shopee สำหรับโฟลเดอร์:\n` + skipped.map(s => `- ${s.folder} (คำค้น: ${s.keyword})`).join('\n'));
-            }
+            alert(`✅ ดำเนินการสำเร็จครบทั้งหมด ${successCount} รายการ!`);
           }
         }
-      } catch (err) {
-        console.error('Shopee progress poll error:', err);
       }
-    }, 1500);
-
-  } catch (e) {
-    logShopeeConsole(`❌ เกิดข้อผิดพลาด: ${e.message}`, 'error');
-    if (btn) btn.disabled = false;
-  }
+    } catch (err) {
+      console.error('Shopee progress poll error:', err);
+    }
+  }, 1500);
 }
 
 async function stopShopeeAffiliate(btn) {
