@@ -7915,11 +7915,19 @@ function initFacebookAutoPostListeners() {
 async function executeFacebookDebugStep(stepName, btn) {
   const stepLabels = {
     'click_reels': '🎬 Step 1: กดปุ่ม Reels (ข้าง Photo/video)',
-    'click_upload': '📤 Step 2: กดปุ่มเพิ่มวิดีโอ (Add Video)',
-    'reels_flow': '⚡ รันต่อเนื่อง (กด Reels ➔ กด Add Video)',
+    'click_upload': '📤 Step 2: แนบไฟล์วิดีโอเข้า Reels (Direct Attach)',
+    'reels_flow': '⚡ รันต่อเนื่อง (กด Reels ➔ แนบวิดีโอ)',
     'close_modal': '✖️ ปิดหน้าต่างสร้าง Reels'
   };
   const label = stepLabels[stepName] || stepName;
+
+  let targetVideoPath = '';
+  if (typeof facebookPostQueue !== 'undefined' && facebookPostQueue && facebookPostQueue.length > 0) {
+    const checked = facebookPostQueue.find(p => p.checked !== false && p.video_path);
+    if (checked) targetVideoPath = checked.video_path;
+    else if (facebookPostQueue[0].video_path) targetVideoPath = facebookPostQueue[0].video_path;
+  }
+  const mainFolder = document.getElementById('cfg_facebook_main_folder')?.value || '';
 
   writeConsoleLine(`[Reels Debug] ⏳ กำลังรัน: ${label}...`, 'system', 'facebookConsole');
   if (btn) btn.disabled = true;
@@ -7928,7 +7936,11 @@ async function executeFacebookDebugStep(stepName, btn) {
     const res = await jsonFetch('/api/facebook-autopost/debug/step', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ step: stepName })
+      body: JSON.stringify({
+        step: stepName,
+        video_path: targetVideoPath,
+        main_folder: mainFolder
+      })
     });
 
     if (res.ok) {

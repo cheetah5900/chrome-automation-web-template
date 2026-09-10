@@ -4934,6 +4934,8 @@ def api_facebook_autopost_stop() -> dict[str, Any]:
 
 class FacebookDebugStepRequest(BaseModel):
     step: str
+    video_path: str = ""
+    main_folder: str = ""
 
 FacebookDebugStepRequest.model_rebuild()
 
@@ -4967,11 +4969,11 @@ def api_facebook_debug_step(req: FacebookDebugStepRequest) -> dict[str, Any]:
         if step in ("click_reels", "reels", "step1"):
             res = debug_click_reels_button(driver)
         elif step in ("click_upload", "upload", "step2"):
-            res = debug_click_upload_video_button(driver)
+            res = debug_click_upload_video_button(driver, video_path=req.video_path, main_folder=req.main_folder)
         elif step in ("close_modal", "close"):
             res = debug_close_reels_modal(driver)
         elif step in ("reels_flow", "flow", "all"):
-            res = debug_reels_full_flow(driver)
+            res = debug_reels_full_flow(driver, video_path=req.video_path, main_folder=req.main_folder)
         else:
             return {"ok": False, "detail": f"Unknown debug step: {step}"}
         

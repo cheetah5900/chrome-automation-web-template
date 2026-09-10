@@ -833,97 +833,134 @@ def debug_click_reels_button(driver) -> dict[str, Any]:
         log(f"[Facebook Debug Error] {err}")
         return {"success": False, "error": err}
 
-def debug_click_upload_video_button(driver) -> dict[str, Any]:
+def find_sample_video(preferred_path: str = "", main_folder: str = "") -> str:
+    """Finds a valid video file path for testing Reel upload."""
+    if preferred_path and os.path.isfile(preferred_path):
+        return preferred_path
+
+    folders_to_check = []
+    if main_folder and os.path.isdir(main_folder):
+        folders_to_check.append(main_folder)
+
+    try:
+        from app.main import get_config_data
+        cfg = get_config_data()
+        if cfg.get("facebook_main_folder") and os.path.isdir(cfg.get("facebook_main_folder")):
+            folders_to_check.append(cfg.get("facebook_main_folder"))
+        if cfg.get("shopee_main_folder") and os.path.isdir(cfg.get("shopee_main_folder")):
+            folders_to_check.append(cfg.get("shopee_main_folder"))
+        for p in (cfg.get("facebook_presets") or {}).values():
+            if p.get("main_folder") and os.path.isdir(p.get("main_folder")):
+                folders_to_check.append(p.get("main_folder"))
+    except Exception:
+        pass
+
+    for folder in folders_to_check:
+        for root, _, files in os.walk(folder):
+            for f in files:
+                if f.lower().endswith(('.mp4', '.mov', '.mkv', '.webm')) and not f.startswith('.'):
+                    candidate = os.path.join(root, f)
+                    if os.path.getsize(candidate) > 1000:
+                        return candidate
+
+    fallback_channel = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/9 - ป้ายยาที่ตาซ้าย"
+    if os.path.isdir(fallback_channel):
+        for root, _, files in os.walk(fallback_channel):
+            for f in files:
+                if f.lower().endswith(('.mp4', '.mov', '.mkv', '.webm')) and not f.startswith('.'):
+                    candidate = os.path.join(root, f)
+                    if os.path.getsize(candidate) > 1000:
+                        return candidate
+    return ""
+
+def debug_click_upload_video_button(driver, video_path: str = "", main_folder: str = "") -> dict[str, Any]:
     """
-    Step 2: Finds and clicks the 'Add Video' / 'Upload' button inside the Create Reel modal dialog.
-    Supports English ('Add Video', 'Upload video for reel', 'Upload') and Thai ('เพิ่มวิดีโอ', 'อัปโหลดวิดีโอ', 'อัดวิดีโอ', 'อัปโหลด').
+    Step 2: Directly attaches video file to the Facebook Create Reel modal without opening native file picker.
+    Finds input[type="file"] inside the modal, sets style visible, and sends keys.
     """
     if not driver:
         return {"success": False, "error": "WebDriver is None"}
 
     ensure_active_window(driver)
 
-    js_find_upload = """
-    const dialog = document.querySelector('[role="dialog"], div[aria-modal="true"]') || document;
-    const candidates = [];
-    const buttons = Array.from(dialog.querySelectorAll('[role="button"], button, div[tabindex="0"]'));
+    # 1. Check if modal is open; if not, click Reels button
+    modal_check = driver.execute_script("""
+        return !!document.querySelector('[role="dialog"], div[aria-modal="true"]');
+    """)
+    if not modal_check:
+        r_open = debug_click_reels_button(driver)
+        if not r_open.get("success"):
+            return {"success": False, "error": "หน้าต่างสร้าง Reels ยังไม่ได้เปิด และไม่พบปุ่ม Reels ให้คลิก"}
+        time.sleep(2)
 
-    for (const b of buttons) {
-        const rect = b.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) continue;
-        const aria = (b.getAttribute('aria-label') || '').trim().toLowerCase();
-        const text = (b.innerText || '').trim().toLowerCase();
-        
-        let score = 0;
-        if (aria.includes('upload video') || aria.includes('อัปโหลดวิดีโอ') || aria.includes('อัดวิดีโอ')) {
-            score = 30;
-        } else if (text.includes('add video') || text.includes('เพิ่มวิดีโอ') || text.includes('อัดวิดีโอ')) {
-            score = 25;
-        } else if (aria === 'upload' || text === 'upload' || aria === 'อัปโหลด' || text === 'อัปโหลด') {
-            score = 20;
-        } else if (b.tagName === 'INPUT' && b.type === 'file') {
-            score = 15;
+    # 2. Resolve video path
+    target_video = find_sample_video(video_path, main_folder)
+    if not target_video or not os.path.isfile(target_video):
+        return {
+            "success": False,
+            "error": "ไม่พบไฟล์วิดีโอ (.mp4) สำหรับแนบ กรุณาสแกนคิว หรือระบุโฟลเดอร์หลักในช่องตั้งค่า"
         }
 
-        if (score > 0) {
-            candidates.push({
-                el: b,
-                score: score,
-                tag: b.tagName,
-                aria: b.getAttribute('aria-label'),
-                text: b.innerText.trim().slice(0, 50),
-                rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }
-            });
-        }
-    }
+    # 3. Locate file input in modal (prioritize file input inside the open dialog)
+    modals = driver.find_elements(By.CSS_SELECTOR, '[role="dialog"], div[aria-modal="true"]')
+    dialog = modals[0] if modals else driver
 
-    candidates.sort((a, b) => b.score - a.score);
+    file_inputs = dialog.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+    if not file_inputs:
+        file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
 
-    if (candidates.length > 0) {
-        const best = candidates[0];
-        setTimeout(() => {
-            try {
-                best.el.click();
-            } catch (e) {}
-        }, 50);
+    if not file_inputs:
+        return {"success": False, "error": "ไม่พบช่อง input[type='file'] สำหรับอัปโหลดวิดีโอในหน้าต่าง Reels"}
 
+    attached = False
+    for inp in file_inputs:
+        try:
+            driver.execute_script("""
+                arguments[0].style.display = 'block';
+                arguments[0].style.opacity = '1';
+                arguments[0].style.visibility = 'visible';
+                arguments[0].style.width = '50px';
+                arguments[0].style.height = '50px';
+                arguments[0].style.position = 'fixed';
+                arguments[0].style.top = '50px';
+                arguments[0].style.left = '50px';
+                arguments[0].style.zIndex = '999999';
+            """, inp)
+            inp.send_keys(target_video)
+            attached = True
+            break
+        except Exception as e:
+            log(f"[Facebook Debug] send_keys error on input: {e}")
+
+    if not attached:
+        return {"success": False, "error": "ไม่สามารถส่งไฟล์วิดีโอเข้า input[type='file'] ได้"}
+
+    # 4. Wait for Facebook to recognize video upload
+    time.sleep(2.5)
+    status = driver.execute_script("""
+        const modal = document.querySelector('[role="dialog"], div[aria-modal="true"]');
+        if (!modal) return { open: false };
+        const buttons = Array.from(modal.querySelectorAll('[role="button"], button')).map(b => (b.getAttribute('aria-label') || b.innerText || '').trim()).filter(Boolean);
+        const text = (modal.innerText || '').slice(0, 300);
+        const hasNext = buttons.some(b => b.toLowerCase().includes('next') || b.includes('ถัดไป'));
+        const isUploading = text.toLowerCase().includes('uploading') || text.includes('กำลังอัปโหลด') || buttons.some(b => b.toLowerCase().includes('replace'));
         return {
-            success: true,
-            tag: best.tag,
-            aria: best.aria,
-            text: best.text,
-            rect: best.rect,
-            total_candidates: candidates.length
+            open: true,
+            hasNext: hasNext,
+            isUploading: isUploading,
+            buttons: buttons
         };
+    """)
+
+    vid_name = os.path.basename(target_video)
+    log(f"[Facebook Debug] ✅ Step 2: แนบไฟล์วิดีโอ '{vid_name}' เข้าสู่ Reels เรียบร้อยแล้ว (ไม่ต้องคลิกเลือกไฟล์เอง)")
+    return {
+        "success": True,
+        "message": f"แนบวิดีโอ '{vid_name}' เข้าสู่ Reels สำเร็จ (ไม่ต้องคลิกเลือกไฟล์เอง)",
+        "video_name": vid_name,
+        "video_path": target_video,
+        "data": status
     }
-
-    const fileInput = dialog.querySelector('input[type="file"][accept*="video"]');
-    if (fileInput) {
-        setTimeout(() => {
-            try {
-                fileInput.click();
-            } catch (e) {}
-        }, 50);
-        return {
-            success: true,
-            tag: 'INPUT',
-            text: 'input[type=file]',
-            message: 'คลิกที่ input[type=file] เพื่อเปิดหน้าต่างเลือกไฟล์'
-        };
-    }
-
-    return { success: false, error: "ไม่พบปุ่ม 'Add Video' หรือ 'Upload' ในหน้าต่างสร้างคลิป Reels" };
-    """
-
-    res = driver.execute_script(js_find_upload)
-    if res.get("success"):
-        label = res.get("aria") or res.get("text") or "Add Video"
-        log(f"[Facebook Debug] ✅ Step 2: กดปุ่ม '{label}' (สำหรับอัปโหลดวิดีโอ) สำเร็จ")
-        return {"success": True, "message": f"กดปุ่ม '{label}' สำเร็จ (เปิดหน้าต่างเลือกไฟล์วิดีโอ)", "data": res}
-    else:
-        err = res.get("error", "ไม่พบปุ่ม Add Video / Upload")
-        log(f"[Facebook Debug Error] {err}")
-        return {"success": False, "error": err}
 
 def debug_close_reels_modal(driver) -> dict[str, Any]:
     """
@@ -947,17 +984,26 @@ def debug_close_reels_modal(driver) -> dict[str, Any]:
     res = driver.execute_script(js_close)
     if res.get("success"):
         log("[Facebook Debug] ✖️ ปิดหน้าต่างสร้าง Reels เรียบร้อย")
+        # If discard confirmation appears, click discard
+        time.sleep(0.8)
+        driver.execute_script("""
+            const discardBtn = Array.from(document.querySelectorAll('[role="dialog"] [role="button"], div[aria-modal="true"] [role="button"]')).find(b => {
+                const t = (b.innerText || '').toLowerCase();
+                return t.includes('discard') || t.includes('ทิ้ง') || t.includes('ออกจาก');
+            });
+            if (discardBtn) discardBtn.click();
+        """)
         return {"success": True, "message": "ปิดหน้าต่างสร้าง Reels สำเร็จ"}
     return {"success": False, "error": res.get("error", "ไม่พบปุ่มปิด")}
 
-def debug_reels_full_flow(driver) -> dict[str, Any]:
+def debug_reels_full_flow(driver, video_path: str = "", main_folder: str = "") -> dict[str, Any]:
     """
-    Runs full sequence: Click Reels button -> Wait for modal -> Click Add Video button.
+    Runs full sequence: Click Reels button -> Wait for modal -> Directly attach video.
     """
     r1 = debug_click_reels_button(driver)
     if not r1.get("success"):
         return r1
-    
+
     start = time.time()
     modal_opened = False
     while time.time() - start < 5.0:
@@ -968,12 +1014,12 @@ def debug_reels_full_flow(driver) -> dict[str, Any]:
             modal_opened = True
             break
         time.sleep(0.3)
-    
+
     if not modal_opened:
         return {"success": False, "error": "กดปุ่ม Reels แล้ว แต่หน้าต่างสร้างคลิป Reels ไม่เปิดขึ้นมาใน 5 วินาที"}
 
-    time.sleep(0.5)
-    r2 = debug_click_upload_video_button(driver)
+    time.sleep(0.8)
+    r2 = debug_click_upload_video_button(driver, video_path=video_path, main_folder=main_folder)
     return {
         "success": r2.get("success", False),
         "message": f"รันต่อเนื่องสำเร็จ: {r1.get('message')} ➔ {r2.get('message')}",
