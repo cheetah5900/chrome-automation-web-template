@@ -5126,6 +5126,10 @@ def _shopee_affiliate_worker(items: list[dict[str, Any]], target_url: str = "", 
             global_shopee_progress["captcha_url"] = res.get("captcha_url", "")
             global_shopee_progress["blocked_folder"] = res.get("blocked_folder", "")
             global_shopee_progress["message"] = "⚠️ ตรวจพบระบบกันบอท Shopee (CAPTCHA) - กรุณาแก้ CAPTCHA ในเบราว์เซอร์ 9222"
+        elif res.get("status") == "error":
+            global_shopee_progress["status"] = "error"
+            global_shopee_progress["message"] = res.get("message", "เกิดข้อผิดพลาดในการทำงาน")
+            global_shopee_progress["errors"] = res.get("errors", [])
         elif res.get("stopped"):
             global_shopee_progress["status"] = "stopped"
             global_shopee_progress["message"] = "🛑 บังคับหยุดการทำงานเรียบร้อยแล้ว (Force Stopped)"
@@ -5478,10 +5482,9 @@ def api_shopee_affiliate_stop() -> dict[str, Any]:
 
 @app.post("/api/shopee-affiliate/debug/step-1")
 def api_shopee_debug_step_1(req: dict[str, Any] = None) -> dict[str, Any]:
-    """Debug Step 1: Open Shopee Affiliate Offer page."""
-    from app.shopee_affiliate import reset_shopee_stop, step_1_open_shopee_page, ShopeeCaptchaBlockedException
+    """Debug Step 1: Check Shopee tab and ensure ready."""
+    from app.shopee_affiliate import reset_shopee_stop, step_1_open_shopee_page, ShopeeCaptchaBlockedException, ShopeeTabNotFoundException
     reset_shopee_stop()
-    url = ((req or {}).get("url") or "").strip() or "https://affiliate.shopee.co.th/offer/product_offer"
     port = 9222
     if not sync_ensure_chrome_debug_ready(port=port):
         return {"ok": False, "detail": f"ไม่สามารถเปิดเบราว์เซอร์ Chrome Debug Port {port} ได้"}
@@ -5491,10 +5494,12 @@ def api_shopee_debug_step_1(req: dict[str, Any] = None) -> dict[str, Any]:
             return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เชื่อมต่อ"}
         driver = bot.driver
         _activate_chrome(driver, port=port)
-        step_1_open_shopee_page(driver, url)
-        return {"ok": True, "message": f"Step 1: เปิดหน้าเว็บ {url} สำเร็จ"}
+        step_1_open_shopee_page(driver)
+        return {"ok": True, "message": "Step 1: ตรวจพบหน้าเว็บ Shopee บนเบราว์เซอร์พร้อมทำงาน"}
     except ShopeeCaptchaBlockedException as ce:
         return {"ok": False, "captcha_blocked": True, "detail": "⚠️ ตรวจพบ CAPTCHA กรุณาแก้ในเบราว์เซอร์"}
+    except ShopeeTabNotFoundException as te:
+        return {"ok": False, "detail": str(te)}
     except Exception as e:
         return {"ok": False, "detail": f"Step 1 ผิดพลาด: {str(e)}"}
 

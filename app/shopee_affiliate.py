@@ -165,6 +165,58 @@ class ShopeeCaptchaBlockedException(Exception):
         super().__init__(message)
         self.captcha_url = captcha_url
 
+class ShopeeTabNotFoundException(Exception):
+    """Raised immediately when no Shopee tab is found in Chrome."""
+    pass
+
+def is_shopee_url(url: str) -> bool:
+    if not url:
+        return False
+    u = url.lower()
+    return "affiliate.shopee.co.th" in u or "shopee.co.th" in u or "shopee.com" in u
+
+def ensure_shopee_tab_active(driver) -> bool:
+    """Ensures driver is currently focused on a valid Shopee tab.
+    If current tab is not Shopee, searches other open tabs.
+    Returns True if on a Shopee tab, False otherwise."""
+    ensure_active_tab_valid(driver)
+    current_url = ""
+    try:
+        current_url = getattr(driver, "current_url", "") or ""
+    except Exception:
+        pass
+
+    if is_shopee_url(current_url):
+        return True
+
+    # Scan open window handles to find Shopee
+    try:
+        handles = driver.window_handles
+        # First priority: affiliate.shopee.co.th
+        for h in handles:
+            try:
+                driver.switch_to.window(h)
+                cur = getattr(driver, "current_url", "") or ""
+                if "affiliate.shopee.co.th" in cur.lower():
+                    log(f"[Shopee Step 1] 🔄 สลับไปยังแท็บ Shopee Affiliate: {cur[:80]}")
+                    return True
+            except Exception:
+                pass
+        # Second priority: any shopee domain
+        for h in handles:
+            try:
+                driver.switch_to.window(h)
+                cur = getattr(driver, "current_url", "") or ""
+                if is_shopee_url(cur):
+                    log(f"[Shopee Step 1] 🔄 สลับไปยังแท็บ Shopee: {cur[:80]}")
+                    return True
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return False
+
 def is_shopee_captcha_url(url: str) -> bool:
     if not url:
         return False
@@ -222,7 +274,12 @@ def navigate_back_to_product_offer(driver) -> bool:
             
         log("[Shopee Navigation] 🔙 กำลังคลิกกลับไปที่ 'ข้อเสนอผลิตภัณฑ์'...")
         clicked = driver.execute_script("""
-            const link = document.querySelector('a[href="/offer/product_offer"], a[href*="offer/product_offer"]');
+            const links = Array.from(document.querySelectorAll('a, div, span, li'));
+            const link = links.find(el => {
+                const href = el.getAttribute('href') || '';
+                const text = (el.innerText || el.textContent || '').trim();
+                return href.includes('/offer/product_offer') || text === 'ข้อเสนอผลิตภัณฑ์' || text === 'Product Offer';
+            });
             if (link) {
                 link.scrollIntoView({block: 'center'});
                 link.click();
@@ -235,46 +292,51 @@ def navigate_back_to_product_offer(driver) -> bool:
             log("[Shopee Navigation] ✅ กลับมาที่หน้า 'ข้อเสนอผลิตภัณฑ์' เรียบร้อย")
             return True
         else:
-            log("[Shopee Navigation] ⚠️ ไม่พบลิงก์นำทาง -> โหลด URL ตรง")
-            driver.get("https://affiliate.shopee.co.th/offer/product_offer")
-            human_delay(1.5, 2.5)
-            return True
+            log("[Shopee Navigation] ⚠️ ไม่พบลิงก์นำทาง 'ข้อเสนอผลิตภัณฑ์' ในหน้าเว็บ")
+            return False
     except Exception as e:
-        log(f"[Shopee Navigation] ⚠️ นำทางกลับไม่สำเร็จ ({e}) -> โหลด URL ตรง")
-        try:
-            driver.get("https://affiliate.shopee.co.th/offer/product_offer")
-            human_delay(1.5, 2.5)
-        except Exception:
-            pass
+        log(f"[Shopee Navigation] ⚠️ นำทางกลับไม่สำเร็จ: {e}")
         return False
 
 def step_1_open_shopee_page(driver, page_url: str = "") -> bool:
-    """Step 1: Open Shopee Affiliate Platform / Product Offer URL."""
+    """Step 1: Verify that browser is currently on Shopee and ready for automation.
+    Does NOT use driver.get() to avoid anti-bot detection."""
     check_stop()
     ensure_active_tab_valid(driver)
     apply_stealth_cdp(driver)
+
+    if not ensure_shopee_tab_active(driver):
+        err_msg = "❌ ตรวจไม่พบหน้าเว็บ Shopee บนเบราว์เซอร์ กรุณาเปิดหน้า Shopee Affiliate บน Chrome ให้เรียบร้อยก่อนเริ่มทำงาน"
+        log(f"[Shopee Step 1] {err_msg}")
+        raise ShopeeTabNotFoundException(err_msg)
+
     check_shopee_captcha(driver)
-    url = page_url.strip() if page_url else "https://affiliate.shopee.co.th/offer/product_offer"
-    if "offer/product_offer" not in url and url.endswith("shopee.co.th"):
-        url = "https://affiliate.shopee.co.th/offer/product_offer"
-    
+
     current = driver.current_url or ""
     current_base = current.split("?")[0].rstrip("/")
-    target_base = url.split("?")[0].rstrip("/")
-    if current_base == target_base:
-        log("[Shopee Step 1] อยู่ที่หน้าข้อเสนอผลิตภัณฑ์ Shopee Affiliate อยู่แล้ว")
+
+    # Check if search input is already present on the page
+    has_search_box = False
+    try:
+        has_search_box = bool(driver.execute_script("""
+            return !!document.querySelector('input.ant-input-lg, input[placeholder*="ค้นหาสินค้า"], input[placeholder*="ค้นหา"]');
+        """))
+    except Exception:
+        pass
+
+    if current_base.endswith("/offer/product_offer") or has_search_box:
+        log("[Shopee Step 1] ✅ ตรวจพบหน้าข้อเสนอผลิตภัณฑ์ Shopee Affiliate พร้อมทำงาน")
         check_shopee_captcha(driver)
         return True
 
-    # If already on affiliate domain, navigate via SPA link without full page reload
-    if "affiliate.shopee.co.th" in current:
+    # If on affiliate domain but not on product offer page, navigate via SPA link
+    if "affiliate.shopee.co.th" in current.lower():
+        log("[Shopee Step 1] 🌐 อยู่บน Shopee Affiliate กำลังนำทางไปยังหน้าข้อเสนอผลิตภัณฑ์...")
         if navigate_back_to_product_offer(driver):
             check_shopee_captcha(driver)
             return True
 
-    log(f"[Shopee Step 1] กำลังเปิดหน้าเว็บ Shopee: {url}")
-    driver.get(url)
-    human_delay(2.2, 3.8)
+    log(f"[Shopee Step 1] ✅ ตรวจพบหน้าเว็บ Shopee ({current[:60]}...) พร้อมทำงาน")
     check_shopee_captcha(driver)
     return True
 
@@ -1006,6 +1068,19 @@ def run_shopee_affiliate_batch(
                 })
             elif ok:
                 success_count += 1
+        except ShopeeTabNotFoundException as te:
+            stopped_by_user = True
+            log(f"[Shopee Affiliate] 🛑 หยุดทำงานทันที: {te}")
+            errors.append(str(te))
+            return {
+                "ok": False,
+                "stopped": True,
+                "status": "error",
+                "message": str(te),
+                "success_count": success_count,
+                "skipped_items": skipped_items,
+                "errors": errors
+            }
         except ShopeeCaptchaBlockedException as ce:
             stopped_by_user = True
             folder_desc = item.get("subfolder_name") or item.get("keyword") or f"Item #{idx+1}"

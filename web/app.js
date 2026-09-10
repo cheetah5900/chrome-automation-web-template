@@ -855,7 +855,10 @@ function initTabNavigation() {
     { btn: btnVideoGen, view: viewVideoGen, onLoad: loadVideoPrompts },
     { btn: btnWorkflow, view: viewWorkflow, onLoad: loadConfig },
     { btn: btnVideoHelper, view: viewVideoHelper, onLoad: loadConfig },
-    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: null },
+    { btn: btnSeedanceGen, view: viewSeedanceGen, onLoad: () => {
+      const savedClear = localStorage.getItem('seedance_clear_mode') || 'both';
+      if (typeof setSeedanceClearMode === 'function') setSeedanceClearMode(savedClear, false);
+    } },
     { btn: btnFacebookAutoPost, view: viewFacebookAutoPost, onLoad: loadConfig },
     { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig },
     { btn: btnShopeeAffiliate, view: viewShopeeAffiliate, onLoad: loadConfig }
@@ -1130,13 +1133,6 @@ async function loadConfig() {
     if (typeof loadFacebookPresets === 'function') loadFacebookPresets(config.facebook_presets || config.meta_presets);
     
     // Shopee Affiliate Defaults
-    const shopeePageUrl = document.getElementById('cfg_shopee_page_url');
-    if (shopeePageUrl) {
-      const defPageUrl = config.shopee_page_url || localStorage.getItem('shopee_default_page_url') || 'https://affiliate.shopee.co.th/offer/product_offer';
-      if (!shopeePageUrl.value) {
-        shopeePageUrl.value = defPageUrl;
-      }
-    }
     const shopeeMainFolder = document.getElementById('cfg_shopee_main_folder');
     if (shopeeMainFolder) {
       const defShopeeFolder = config.shopee_main_folder || localStorage.getItem('shopee_default_main_folder') || '';
@@ -7930,26 +7926,6 @@ function logShopeeConsole(msg, type = 'normal') {
   consoleBox.scrollTop = consoleBox.scrollHeight;
 }
 
-async function openShopeePageUrl() {
-  const pageUrl = document.getElementById('cfg_shopee_page_url')?.value || '';
-  logShopeeConsole(`🌐 กำลังเปิด URL ใน Chrome 9222: ${pageUrl || 'https://affiliate.shopee.co.th'}`, 'system');
-  try {
-    const res = await jsonFetch('/api/shopee-affiliate/open-url', {
-      method: 'POST',
-      body: JSON.stringify({ url: pageUrl })
-    });
-    if (res.ok) {
-      logShopeeConsole(`✅ ${res.message}`, 'success');
-    } else {
-      const errMsg = res.detail || 'เกิดข้อผิดพลาดในการเปิดหน้าเว็บ';
-      logShopeeConsole(`❌ ${errMsg}`, 'error');
-      alert(`⚠️ ${errMsg}`);
-    }
-  } catch (e) {
-    logShopeeConsole(`❌ เกิดข้อผิดพลาด: ${e.message}`, 'error');
-    alert(`⚠️ เกิดข้อผิดพลาด: ${e.message}`);
-  }
-}
 
 let isShopeeBrowsing = false;
 async function browseShopeeMainFolder() {
@@ -8090,7 +8066,6 @@ async function runShopeeAffiliate(btn) {
     return;
   }
 
-  const targetUrl = document.getElementById('cfg_shopee_page_url')?.value || '';
   const delayMin = parseFloat(document.getElementById('cfg_shopee_delay_min')?.value) || 5;
   const delayMax = parseFloat(document.getElementById('cfg_shopee_delay_max')?.value) || 15;
 
@@ -8110,7 +8085,6 @@ async function runShopeeAffiliate(btn) {
       method: 'POST',
       body: JSON.stringify({
         items: selectedItems,
-        target_url: targetUrl,
         delay_min: delayMin,
         delay_max: delayMax
       })
@@ -8280,17 +8254,16 @@ async function getShopeeDebugTarget() {
 }
 
 async function debugShopeeStep1(btn) {
-  const pageUrl = document.getElementById('cfg_shopee_page_url')?.value?.trim() || '';
-  logShopeeConsole(`🌐 [Step 1] กำลังเปิดหน้าเว็บ Shopee: ${pageUrl || 'https://affiliate.shopee.co.th/offer/product_offer'}`, 'system');
+  logShopeeConsole(`🌐 [Step 1] ตรวจสอบหน้าเว็บ Shopee บนเบราว์เซอร์...`, 'system');
   if (btn) btn.disabled = true;
   try {
     const res = await jsonFetch('/api/shopee-affiliate/debug/step-1', {
       method: 'POST',
-      body: JSON.stringify({ url: pageUrl })
+      body: JSON.stringify({})
     });
     if (res.ok) {
       logShopeeConsole(`✅ [Step 1] ${res.message}`, 'success');
-      showToast('Step 1: เปิดหน้าเว็บสำเร็จ', 'success');
+      showToast(res.message || 'Step 1: ตรวจพบหน้าเว็บ Shopee เรียบร้อย', 'success');
     } else {
       logShopeeConsole(`❌ [Step 1] ${res.detail || 'เกิดข้อผิดพลาด'}`, 'error');
       showToast(res.detail || 'Step 1 ล้มเหลว', 'error');
@@ -8452,33 +8425,6 @@ async function runShopeeSingleItem(item, btn) {
 }
 
 function initShopeeAffiliateListeners() {
-  const openUrlBtn = document.getElementById('btnOpenShopeePageUrl');
-  if (openUrlBtn) openUrlBtn.addEventListener('click', openShopeePageUrl);
-
-  const setPageUrlDefaultBtn = document.getElementById('setShopeePageUrlDefaultBtn');
-  if (setPageUrlDefaultBtn) {
-    setPageUrlDefaultBtn.addEventListener('click', async () => {
-      const input = document.getElementById('cfg_shopee_page_url');
-      const val = input ? input.value.trim() : '';
-      if (!val) {
-        showToast('กรุณาระบุ URL หน้า Shopee ก่อนตั้งเป็นค่าเริ่มต้น', 'warning');
-        return;
-      }
-      localStorage.setItem('shopee_default_page_url', val);
-      try {
-        await jsonFetch('/api/config/set-default', {
-          method: 'POST',
-          body: JSON.stringify({ key: 'shopee_page_url', value: val })
-        });
-        showToast(`บันทึก Shopee URL เป็นค่าเริ่มต้นแล้ว: ${val}`, 'success');
-        logShopeeConsole(`📌 บันทึกค่าเริ่มต้น Shopee URL: ${val}`, 'success');
-      } catch (err) {
-        console.error('Failed to save default Shopee URL:', err);
-        showToast(`บันทึกในเครื่องแล้ว แต่บันทึกลงเซิร์ฟเวอร์ไม่สำเร็จ: ${err.message}`, 'warning');
-      }
-    });
-  }
-
   const browseBtn = document.getElementById('browseShopeeMainFolderBtn');
   if (browseBtn) browseBtn.addEventListener('click', browseShopeeMainFolder);
 
@@ -8708,8 +8654,6 @@ const staticTooltips = {
 
   // Shopee Affiliate
   "tabShopeeAffiliateBtn": "🛍️ แถบ Shopee Affiliate:<br>- จัดการและอัปโหลดเนื้อหา/โพสต์ Shopee Affiliate อัตโนมัติ",
-  "btnOpenShopeePageUrl": "🌐 ไปที่หน้า Shopee (Open / Redirect):<br>- เปิด Chrome ไปยัง URL ของ Shopee Affiliate",
-  "setShopeePageUrlDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึก Shopee URL นี้เป็นค่าเริ่มต้นเมื่อเปิดโปรแกรม",
   "browseShopeeMainFolderBtn": "📁 เลือกโฟลเดอร์หลัก (Browse...):<br>- เลือกโฟลเดอร์ที่บรรจุสื่อและข้อมูลสินค้า",
   "setShopeeMainFolderDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึกพาธโฟลเดอร์นี้เป็นค่าเริ่มต้นเมื่อเปิดโปรแกรม",
   "setShopeeDelayDefaultBtn": "📌 ตั้งเป็นค่าเริ่มต้น (Set Default):<br>- บันทึกช่วงหน่วงเวลาสุ่มนี้ (Min - Max) เป็นค่าเริ่มต้นเมื่อเปิดโปรแกรม",
@@ -8828,16 +8772,18 @@ function setSeedanceImageMode(mode) {
 window.setSeedanceImageMode = setSeedanceImageMode;
 
 function getSeedanceClearMode() {
+  const saved = localStorage.getItem('seedance_clear_mode');
+  if (saved) return saved;
   const hiddenInput = document.getElementById('cfg_seedance_clear_mode');
   if (hiddenInput && hiddenInput.value) return hiddenInput.value;
   const activeBtn = document.querySelector('.seedance-clear-toggle.active');
   if (activeBtn) return activeBtn.getAttribute('data-clear') || 'both';
-  return localStorage.getItem('seedance_clear_mode') || 'both';
+  return 'both';
 }
 window.getSeedanceClearMode = getSeedanceClearMode;
 
-function setSeedanceClearMode(mode) {
-  const targetMode = mode || 'both';
+function setSeedanceClearMode(mode, saveToStorage = true) {
+  const targetMode = mode || localStorage.getItem('seedance_clear_mode') || 'both';
   const hiddenInput = document.getElementById('cfg_seedance_clear_mode');
   if (hiddenInput) hiddenInput.value = targetMode;
 
@@ -8851,7 +8797,9 @@ function setSeedanceClearMode(mode) {
     }
   });
 
-  localStorage.setItem('seedance_clear_mode', targetMode);
+  if (saveToStorage) {
+    localStorage.setItem('seedance_clear_mode', targetMode);
+  }
   if (typeof updateSeedanceRunButtonUI === 'function') {
     updateSeedanceRunButtonUI();
   }
@@ -9014,8 +8962,12 @@ async function applySeedancePreset(silent = false) {
   if (preset.image_mode) {
     setSeedanceImageMode(preset.image_mode);
   }
-  if (preset.clear_mode) {
-    setSeedanceClearMode(preset.clear_mode);
+  // Clear mode: prioritize user's last selected choice in localStorage
+  const savedUserClearMode = localStorage.getItem('seedance_clear_mode');
+  if (savedUserClearMode) {
+    setSeedanceClearMode(savedUserClearMode, false);
+  } else if (preset.clear_mode) {
+    setSeedanceClearMode(preset.clear_mode, true);
   }
   if (document.getElementById('cfg_seedance_character_sheet')) {
     document.getElementById('cfg_seedance_character_sheet').value = preset.character_sheet || '';
