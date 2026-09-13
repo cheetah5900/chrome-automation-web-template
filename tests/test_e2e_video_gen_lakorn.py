@@ -98,48 +98,48 @@ async def run():
         response = await response_info.value
         status = response.status
         body_text = await response.text()
-        print(f"Process API Response Status: {status}")
-        req_id = None
+        print(f"Process API Response Status: {status}", flush=True)
+        scene_id = None
         try:
             body_json = json.loads(body_text)
-            print("Process API Response JSON:", json.dumps(body_json, indent=2, ensure_ascii=False))
+            print("Process API Response JSON:", json.dumps(body_json, indent=2, ensure_ascii=False), flush=True)
             results = body_json.get("results", [])
             if results:
-                req_id = results[0].get("request_id")
+                scene_id = results[0].get("scene_id")
         except Exception:
-            print("Process API Response Text:", body_text)
+            print("Process API Response Text:", body_text, flush=True)
 
         batch_msg = await page.locator("#flowKitMsg").inner_text()
-        print(f"UI Batch Message: {batch_msg}")
+        print(f"UI Batch Message: {batch_msg}", flush=True)
 
-        print("=== E2E PHASE 4: MONITORING GENERATION STATUS ===")
-        print(f"Monitoring request {req_id}...")
+        print("=== E2E PHASE 4: MONITORING GENERATION STATUS ===", flush=True)
+        print(f"Monitoring scene {scene_id}...", flush=True)
         import urllib.request
-        for poll_i in range(30):
-            await asyncio.sleep(3)
-            # Query status from DB or API
+        for poll_i in range(15):
+            await asyncio.sleep(2)
             try:
                 with urllib.request.urlopen("http://127.0.0.1:6969/api/requests?limit=5") as resp:
                     req_data = json.loads(resp.read().decode())
-                    matched = next((r for r in req_data if r.get("id") == req_id), None)
+                    matched = next((r for r in req_data if r.get("scene_id") == scene_id), req_data[0] if req_data else None)
                     if matched:
                         cur_status = matched.get("status")
                         err = matched.get("error_message")
-                        print(f"  [Poll {poll_i+1}/30] Request {req_id[:8]} status: {cur_status} (err: {err})")
+                        req_ident = matched.get("id", "")[:8]
+                        print(f"  [Poll {poll_i+1}/15] Request {req_ident} status: {cur_status} (err: {err})", flush=True)
                         if cur_status in ("COMPLETED", "FAILED"):
                             break
             except Exception as pe:
-                print(f"  [Poll {poll_i+1}/30] Poll err: {pe}")
+                print(f"  [Poll {poll_i+1}/15] Poll err: {pe}", flush=True)
 
         # Read video console output
         console_lines = await page.locator("#videoConsole .console-line").all_inner_texts()
-        print(f"Video Console Lines ({len(console_lines)}):")
+        print(f"Video Console Lines ({len(console_lines)}):", flush=True)
         for line in console_lines[-10:]:
-            print("  >", line)
+            print("  >", line, flush=True)
 
-        print("\nBrowser Console Logs (Last 10):")
+        print("\nBrowser Console Logs (Last 10):", flush=True)
         for log in console_logs[-10:]:
-            print("  *", log)
+            print("  *", log, flush=True)
 
         await browser.close()
 

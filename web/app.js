@@ -8950,6 +8950,7 @@ const staticTooltips = {
   
   // Seedance
   "runSeedanceBatchBtn": "🚀 วาง Prompt / รัน Seedance:<br>- วาง Prompt, แนบ/ล้างรูปภาพ และกดปุ่ม Generate บน Dreamina (ไม่เปลี่ยนแปลงโมเดล, สัดส่วน, หรือระยะเวลา)",
+  "btnCheckSeedanceErrors": "🔍 ตรวจสอบ Error บน Dreamina:<br>- สแกนอ่านรายการที่สร้างไม่สำเร็จ เช่น วิดีโอติดเนื้อหาของบุคคลที่สาม และสรุปรายงานใน Modal",
   "addSeedancePromptBtn": "➕ เพิ่มพรอพต์ (Add Prompt)",
   "saveSeedancePromptsBtn": "💾 บันทึกพรอพต์ (Save)",
   "deleteAllSeedancePromptsBtn": "🗑️ ลบทั้งหมด (Delete All)",
@@ -9463,6 +9464,7 @@ function updateSeedanceRunButtonUI() {
   function renderSeedanceQueue() {
     const container = document.getElementById('seedanceQueueList');
     const badge = document.getElementById('seedancePromptCountBadge');
+    const overBadgeHeader = document.getElementById('seedanceOver4000Badge');
     if (!container) return;
 
     if (seedanceBatchQueue.length === 0) {
@@ -9472,13 +9474,36 @@ function updateSeedanceRunButtonUI() {
         </div>
       `;
       if (badge) badge.textContent = '0 Prompts Ready';
+      if (overBadgeHeader) overBadgeHeader.style.display = 'none';
       updateSeedanceRunButtonUI();
       return;
     }
 
+    // Always float items with prompt_text > 4000 characters to the top
+    seedanceBatchQueue.sort((a, b) => {
+      const aOver = ((a.prompt_text || '').length > 4000);
+      const bOver = ((b.prompt_text || '').length > 4000);
+      if (aOver && !bOver) return -1;
+      if (!aOver && bOver) return 1;
+      const aNum = (a.num !== undefined && a.num !== null) ? Number(a.num) : 999999;
+      const bNum = (b.num !== undefined && b.num !== null) ? Number(b.num) : 999999;
+      if (aNum !== bNum) return aNum - bNum;
+      return (a.id || 0) - (b.id || 0);
+    });
+
     const validCount = seedanceBatchQueue.filter(p => p.has_prompt && p.checked !== false).length;
+    const over4000Count = seedanceBatchQueue.filter(p => (p.prompt_text || '').length > 4000).length;
+
     if (badge) {
       badge.textContent = `${validCount}/${seedanceBatchQueue.length} Prompts Ready`;
+    }
+    if (overBadgeHeader) {
+      if (over4000Count > 0) {
+        overBadgeHeader.style.display = 'inline-block';
+        overBadgeHeader.textContent = `⚠️ เกิน 4,000 ตัวอักษร (${over4000Count} รายการ)`;
+      } else {
+        overBadgeHeader.style.display = 'none';
+      }
     }
 
     container.innerHTML = '';
@@ -9487,6 +9512,8 @@ function updateSeedanceRunButtonUI() {
     seedanceBatchQueue.forEach((item, index) => {
       const isCurrentStep = !isAuto && seedanceStepIndex === index;
       const isCompletedStep = !isAuto && seedanceStepIndex > index;
+      const promptLen = (item.prompt_text || '').length;
+      const isOver4000 = promptLen > 4000;
 
       const card = document.createElement('div');
       card.className = 'seedance-queue-card';
@@ -9501,6 +9528,9 @@ function updateSeedanceRunButtonUI() {
       } else if (isCompletedStep) {
         card.style.background = 'rgba(16, 185, 129, 0.08)';
         card.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      } else if (isOver4000) {
+        card.style.background = 'rgba(239, 68, 68, 0.08)';
+        card.style.border = '1px solid rgba(239, 68, 68, 0.45)';
       } else {
         card.style.background = item.checked ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.2)';
         card.style.border = `1px solid ${item.has_prompt ? 'rgba(127, 92, 255, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`;
@@ -9526,12 +9556,29 @@ function updateSeedanceRunButtonUI() {
 
       const folderTitle = document.createElement('span');
       folderTitle.style.fontWeight = 'bold';
-      folderTitle.style.color = isCurrentStep ? '#f3e8ff' : '#c4b5fd';
+      if (isOver4000) {
+        folderTitle.style.color = '#ef4444';
+      } else {
+        folderTitle.style.color = isCurrentStep ? '#f3e8ff' : '#c4b5fd';
+      }
       folderTitle.style.fontSize = '0.95rem';
       const numLabel = (item.num !== undefined && item.num !== null) ? `[#${item.num}] ` : `[#${index + 1}] `;
       folderTitle.textContent = `${numLabel}${item.subfolder_name}`;
 
       left.appendChild(folderTitle);
+
+      if (isOver4000) {
+        const overBadge = document.createElement('span');
+        overBadge.style.fontSize = '0.78rem';
+        overBadge.style.fontWeight = 'bold';
+        overBadge.style.color = '#fca5a5';
+        overBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+        overBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+        overBadge.style.padding = '2px 8px';
+        overBadge.style.borderRadius = '6px';
+        overBadge.textContent = `⚠️ เกิน 4,000 ตัวอักษร (${promptLen.toLocaleString()} ตัว)`;
+        left.appendChild(overBadge);
+      }
 
       const right = document.createElement('div');
       // ในกล่องนี้ไม่ต้องมีอะไรเลย ตามคำขอของผู้ใช้
@@ -9580,7 +9627,12 @@ function updateSeedanceRunButtonUI() {
         seedanceBatchQueue = res.items;
         renderSeedanceQueue();
         const imgCount = res.items.filter(i => i.has_image).length;
-        writeConsoleLine(`[Seedance Scanner] ✅ สแกนพบทั้งหมด ${res.total} โฟลเดอร์ (Prompt ${res.valid_count} รายการ, รูปภาพ ${imgCount} รายการ)`, 'success', 'seedanceConsole');
+        const overCount = res.items.filter(i => (i.prompt_text || '').length > 4000).length;
+        let logMsg = `[Seedance Scanner] ✅ สแกนพบทั้งหมด ${res.total} โฟลเดอร์ (Prompt ${res.valid_count} รายการ, รูปภาพ ${imgCount} รายการ)`;
+        if (overCount > 0) {
+          logMsg += ` ⚠️ พบรายการเกิน 4,000 ตัวอักษร ${overCount} รายการ (เลื่อนขึ้นบนสุด)`;
+        }
+        writeConsoleLine(logMsg, overCount > 0 ? 'warning' : 'success', 'seedanceConsole');
       } else {
         writeConsoleLine(`[Seedance Scanner Error] ${res.detail || 'ไม่พบข้อมูล'}`, 'error', 'seedanceConsole');
       }
@@ -10567,6 +10619,258 @@ function updateSeedanceRunButtonUI() {
   }
   window.stopSeedanceBatch = stopSeedanceBatch;
 
+  async function checkSeedanceErrors() {
+    writeConsoleLine('🔍 กำลังตรวจสอบข้อผิดพลาดในการสร้างวิดีโอบน CapCut Dreamina (9222)...', 'system', 'seedanceConsole');
+
+    const checkBtn = document.getElementById('btnCheckSeedanceErrors');
+    if (checkBtn) {
+      checkBtn.disabled = true;
+    }
+
+    Swal.fire({
+      title: 'กำลังตรวจสอบข้อผิดพลาด...',
+      background: 'rgba(18, 22, 45, 0.98)',
+      color: '#ffffff',
+      customClass: {
+        popup: 'swal2-seedance-popup'
+      },
+      html: `
+        <div style="text-align: center; color: #cbd5e1; font-size: 0.92rem; padding: 10px 0;">
+          <div style="font-weight: bold; color: #facc15; margin-bottom: 8px;">กำลังสแกนอ่านประวัติบน CapCut Dreamina (9222)</div>
+          <div style="font-size: 0.82rem; color: #94a3b8; line-height: 1.5;">
+            ระบบกำลังตรวจสอบการสร้างวิดีโอทั้งหมด เพื่อค้นหารายการที่ติด Error<br/>
+            เช่น <strong>"วิดีโอนี้อาจมีเนื้อหาของบุคคลที่สาม"</strong> หรือข้อผิดพลาดอื่นๆ
+          </div>
+        </div>
+      `,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    try {
+      const mainFolder = document.getElementById('cfg_seedance_main_folder')?.value?.trim() || '';
+      const subfoldersStr = document.getElementById('cfg_seedance_subfolders')?.value?.trim() || '';
+
+      const res = await jsonFetch('/api/seedance/check-errors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          main_folder: mainFolder,
+          subfolders_str: subfoldersStr
+        })
+      });
+
+      if (!res || !res.ok) {
+        const errMsg = res?.detail || 'ไม่สามารถตรวจสอบข้อผิดพลาดบน Dreamina ได้';
+        writeConsoleLine(`[Seedance Inspector Error] ${errMsg}`, 'error', 'seedanceConsole');
+        Swal.fire({
+          icon: 'error',
+          title: 'ตรวจสอบไม่สำเร็จ',
+          text: errMsg,
+          background: 'rgba(18, 22, 45, 0.98)',
+          color: '#ffffff',
+          confirmButtonColor: '#7f5cff',
+          customClass: {
+            popup: 'swal2-seedance-popup',
+            confirmButton: 'swal2-seedance-confirm-btn'
+          },
+          buttonsStyling: false
+        });
+        return;
+      }
+
+      writeConsoleLine(`[Seedance Inspector] สแกนพบ ${res.total_scanned} รายการ | ติด Error ${res.total_errors} รายการ (บุคคลที่สาม: ${res.third_party_count}, อื่นๆ: ${res.other_errors_count})`, res.total_errors > 0 ? 'warning' : 'success', 'seedanceConsole');
+
+      if (res.total_errors === 0) {
+        Swal.fire({
+          icon: 'success',
+          title: '🎉 ไม่พบข้อผิดพลาด!',
+          background: 'rgba(18, 22, 45, 0.98)',
+          color: '#ffffff',
+          confirmButtonColor: '#10b981',
+          customClass: {
+            popup: 'swal2-seedance-popup',
+            confirmButton: 'swal2-seedance-confirm-btn'
+          },
+          buttonsStyling: false,
+          html: `
+            <div style="font-size: 0.95rem; line-height: 1.6; color: #cbd5e1; text-align: center;">
+              ตรวจสอบงานทั้งหมด <strong>${res.total_scanned || 0}</strong> รายการบน Dreamina แล้ว<br/>
+              <span style="color: #34d399; font-weight: 500;">ทุกวิดีโอสมบูรณ์หรือกำลังประมวลผล ไม่มีรายการใดติดข้อผิดพลาด</span>
+            </div>
+          `
+        });
+        return;
+      }
+
+      // Build Error Modal HTML with dark theme glassmorphism
+      const errorListHtml = (res.errors || []).map(err => {
+        const isThirdParty = err.is_third_party;
+        const borderColor = isThirdParty ? 'rgba(239, 68, 68, 0.45)' : 'rgba(234, 179, 8, 0.45)';
+        const bgBadge = isThirdParty ? 'background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4);' : 'background: rgba(234, 179, 8, 0.2); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.4);';
+        const numBadge = err.num ? `#${err.num}` : (err.subfolder_name || 'งาน');
+        const displayPrompt = err.full_prompt || err.prompt_snippet || '';
+
+        return `
+          <div style="background: rgba(0, 0, 0, 0.4); border: 1px solid ${borderColor}; border-radius: 10px; padding: 10px 12px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.82rem; font-weight: bold; padding: 2px 10px; border-radius: 12px; background: rgba(127, 92, 255, 0.25); border: 1px solid rgba(127, 92, 255, 0.45); color: #c4b5fd;">${numBadge}</span>
+                <span style="font-size: 0.85rem; font-weight: 600; padding: 2px 8px; border-radius: 6px; ${bgBadge}">${escapeHtml(err.reason || 'ข้อผิดพลาด')}</span>
+              </div>
+              ${err.subfolder_name && err.subfolder_name !== String(err.num) ? `<span style="font-size: 0.78rem; color: #8da6ff; font-weight: 500;">📁 ${escapeHtml(err.subfolder_name)}</span>` : ''}
+            </div>
+            ${displayPrompt ? `
+              <div style="font-size: 0.8rem; color: #cbd5e1; line-height: 1.45; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.08); padding: 8px 10px; border-radius: 6px; word-break: break-word; max-height: 80px; overflow-y: auto;">
+                ${escapeHtml(displayPrompt)}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+
+      const failedNumsStr = res.failed_numbers_str || '';
+      const aiCommandText = failedNumsStr
+        ? `โฟลเดอร์ ${failedNumsStr} ติดเงื่อนไขบุคคลที่สาม ช่วยแก้ไขให้หน่อย`
+        : `รายการที่สร้างติดเงื่อนไขบุคคลที่สาม ช่วยแก้ไขให้หน่อย`;
+
+      const modalHtml = `
+        <div style="display: flex; flex-direction: column; gap: 12px; font-family: inherit; color: #ffffff;">
+          <!-- Summary Header Badges -->
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            ${res.third_party_count > 0 ? `
+              <div style="flex: 1; min-width: 200px; background: rgba(239, 68, 68, 0.16); border: 1px solid rgba(239, 68, 68, 0.45); border-radius: 10px; padding: 10px 12px; text-align: left;">
+                <div style="font-weight: bold; color: #fca5a5; font-size: 0.92rem; display: flex; align-items: center; gap: 6px;">
+                  <span>🚫 บุคคลที่สาม:</span> <span>${res.third_party_count} รายการ</span>
+                </div>
+                <div style="font-size: 0.8rem; color: #fecaca; margin-top: 3px;">
+                  วิดีโอนี้อาจมีเนื้อหาของบุคคลที่สาม
+                </div>
+              </div>
+            ` : ''}
+            ${res.other_errors_count > 0 ? `
+              <div style="flex: 1; min-width: 200px; background: rgba(234, 179, 8, 0.16); border: 1px solid rgba(234, 179, 8, 0.45); border-radius: 10px; padding: 10px 12px; text-align: left;">
+                <div style="font-weight: bold; color: #fde047; font-size: 0.92rem; display: flex; align-items: center; gap: 6px;">
+                  <span>⚠️ ข้อผิดพลาดอื่นๆ:</span> <span>${res.other_errors_count} รายการ</span>
+                </div>
+                <div style="font-size: 0.8rem; color: #fef08a; margin-top: 3px;">
+                  การสร้างวิดีโอล้มเหลว
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- AI Prompt Box (One-Click Copy) -->
+          <div style="background: rgba(30, 27, 75, 0.5); border: 1px solid rgba(139, 92, 246, 0.4); border-radius: 12px; padding: 12px 14px; text-align: left;">
+            <div style="margin-bottom: 8px;">
+              <div style="font-size: 0.88rem; font-weight: 700; color: #c4b5fd; display: flex; align-items: center; gap: 6px;">
+                <span>🤖 ข้อความคำสั่งสำหรับส่งให้ AI ช่วยแก้ไข</span>
+              </div>
+            </div>
+
+            <!-- Copy AI Prompt Button -->
+            <button id="btnCopyAiPrompt" type="button" style="width: 100%; padding: 11px 16px; font-size: 0.92rem; font-weight: 700; border-radius: 10px; background: linear-gradient(135deg, #7f5cff, #4338ca); color: #fff; border: 1px solid rgba(167, 139, 250, 0.5); box-shadow: 0 4px 15px rgba(127, 92, 255, 0.35); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease;">
+              <span>🤖 📋 คัดลอก: "${escapeHtml(aiCommandText)}"</span>
+            </button>
+          </div>
+
+          ${failedNumsStr ? `
+            <!-- Action Quick Bar (Failed Numbers) -->
+            <div style="background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+              <div style="font-size: 0.85rem; color: #cbd5e1; text-align: left;">
+                <strong style="color: #fff;">เลขรายการที่ติดปัญหา:</strong>
+                <code style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.35); padding: 2px 8px; border-radius: 4px; color: #fca5a5; font-weight: bold; margin-left: 4px;">${failedNumsStr}</code>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button id="btnCopyFailedNums" type="button" class="secondary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; cursor: pointer; white-space: nowrap; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); color: #fff;">📋 คัดลอกเลข</button>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Scrollable Errors List -->
+          <div style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            ${errorListHtml}
+          </div>
+        </div>
+      `;
+
+      Swal.fire({
+        title: `⚠️ พบข้อผิดพลาด ${res.total_errors} รายการ`,
+        html: modalHtml,
+        width: 720,
+        background: 'rgba(18, 22, 45, 0.98)',
+        color: '#ffffff',
+        customClass: {
+          popup: 'swal2-seedance-popup',
+          confirmButton: 'swal2-seedance-confirm-btn'
+        },
+        buttonsStyling: false,
+        confirmButtonText: 'ปิดหน้าต่าง',
+        didOpen: () => {
+          // Copy AI Prompt handler
+          const copyAiBtn = document.getElementById('btnCopyAiPrompt');
+          if (copyAiBtn) {
+            copyAiBtn.addEventListener('click', () => {
+              navigator.clipboard.writeText(aiCommandText).then(() => {
+                if (typeof showToast === 'function') {
+                  showToast('คัดลอกข้อความสั่ง AI สำเร็จแล้ว!', 'success');
+                }
+                copyAiBtn.innerHTML = '<span>✅ คัดลอกคำสั่ง AI สำเร็จแล้ว!</span>';
+                copyAiBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                setTimeout(() => {
+                  copyAiBtn.innerHTML = `<span>🤖 📋 คัดลอก: "${escapeHtml(aiCommandText)}"</span>`;
+                  copyAiBtn.style.background = 'linear-gradient(135deg, #7f5cff, #4338ca)';
+                }, 2500);
+              }).catch(() => {
+                alert(aiCommandText);
+              });
+            });
+          }
+
+          // Copy Failed Numbers handler
+          const copyBtn = document.getElementById('btnCopyFailedNums');
+          if (copyBtn && failedNumsStr) {
+            copyBtn.addEventListener('click', () => {
+              navigator.clipboard.writeText(failedNumsStr).then(() => {
+                if (typeof showToast === 'function') {
+                  showToast(`คัดลอกเลข ${failedNumsStr} เรียบร้อยแล้ว`, 'success');
+                }
+                copyBtn.textContent = '✅ คัดลอกแล้ว!';
+                setTimeout(() => { copyBtn.textContent = '📋 คัดลอกเลข'; }, 2000);
+              }).catch(() => {
+                alert(`เลขรายการ: ${failedNumsStr}`);
+              });
+            });
+          }
+        }
+      });
+
+    } catch (e) {
+      writeConsoleLine(`[Seedance Inspector Error] ${e.message}`, 'error', 'seedanceConsole');
+      Swal.fire({
+        icon: 'error',
+        title: 'เกิดข้อผิดพลาด',
+        text: e.message,
+        background: 'rgba(18, 22, 45, 0.98)',
+        color: '#ffffff',
+        confirmButtonColor: '#7f5cff',
+        customClass: {
+          popup: 'swal2-seedance-popup',
+          confirmButton: 'swal2-seedance-confirm-btn'
+        },
+        buttonsStyling: false
+      });
+    } finally {
+      if (checkBtn) {
+        checkBtn.disabled = false;
+      }
+    }
+  }
+  window.checkSeedanceErrors = checkSeedanceErrors;
+
   window.handleBrowseSeedanceFolder = async function() {
   try {
     const res = await jsonFetch('/api/batch-uploader/browse-folder', { method: 'POST' });
@@ -11100,6 +11404,11 @@ function initSeedanceGenListeners() {
   const runBtn = document.getElementById('runSeedanceBatchBtn');
   if (runBtn) runBtn.addEventListener('click', (e) => runSeedanceBatch(e.currentTarget));
 
+  const checkBtn = document.getElementById('btnCheckSeedanceErrors');
+  if (checkBtn) {
+    checkBtn.addEventListener('click', checkSeedanceErrors);
+  }
+
   const stopBtn = document.getElementById('btnSeedanceForceStop');
   if (stopBtn) stopBtn.addEventListener('click', stopSeedanceBatch);
 
@@ -11541,7 +11850,29 @@ async function loadFlowKitProjects() {
         res.projects.forEach(p => {
           const opt = document.createElement('option');
           opt.value = p.id;
-          opt.textContent = `${p.name} (${p.id.slice(0, 8)})`;
+          let displayName = p.name || '';
+          if (!displayName || displayName.startsWith('Synced Project')) {
+            for (const [presetKey, presetVal] of Object.entries(globalFlowVideoPresets || {})) {
+              if (presetVal && presetVal.project_id && presetVal.project_id.toLowerCase() === p.id.toLowerCase()) {
+                displayName = presetKey;
+                break;
+              }
+            }
+            if (!displayName || displayName.startsWith('Synced Project')) {
+              for (const [presetKey, presetVal] of Object.entries(globalFlowPoPresets || {})) {
+                if (presetVal && presetVal.project_id && presetVal.project_id.toLowerCase() === p.id.toLowerCase()) {
+                  displayName = presetKey;
+                  break;
+                }
+              }
+            }
+          }
+          const shortId = p.id.slice(0, 8);
+          if (displayName && !displayName.includes(shortId)) {
+            opt.textContent = `${displayName} (${shortId})`;
+          } else {
+            opt.textContent = displayName || shortId;
+          }
           dd.appendChild(opt);
         });
         

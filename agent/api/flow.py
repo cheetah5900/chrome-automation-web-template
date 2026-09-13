@@ -112,12 +112,32 @@ async def list_tabs():
 
 
 @router.get("/inspect-tab")
-async def inspect_tab(url: Optional[str] = None):
+async def inspect_tab(url: Optional[str] = None, code: Optional[str] = None, prompt: Optional[str] = None, js: Optional[str] = None):
     """Inspect Flow tab environment."""
     client = get_flow_client()
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
-    return await client._send("inspect_tab", {"url": url}, timeout=25)
+    params = {}
+    if url:
+        params["url"] = url
+    if code:
+        params["eval"] = code
+    if prompt:
+        params["prompt"] = prompt
+    if js:
+        params["js"] = js
+    return await client._send("inspect_tab", params, timeout=25)
+
+
+@router.post("/test-ui-generate")
+async def test_ui_generate(prompt: str = "Test prompt", orientation: str = "HORIZONTAL"):
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("flow_ui_generate", {
+        "prompt": prompt,
+        "orientation": orientation,
+    }, timeout=35)
 
 
 @router.post("/reload-extension")
@@ -128,7 +148,30 @@ async def reload_ext():
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
     if client._extension_ws:
-        await client._extension_ws.send(json.dumps({"type": "reload_extension"}))
+        import asyncio
+        try:
+            await asyncio.wait_for(client._extension_ws.send(json.dumps({"type": "reload_extension"})), timeout=1.5)
+        except Exception:
+            pass
+    return {"ok": True}
+
+
+@router.post("/reload-flow-tab")
+async def reload_flow_tab():
+    """Trigger reload of the active Google Flow tab via extension."""
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("reload_flow_tab", {}, timeout=10)
+
+
+@router.post("/clear-key")
+async def clear_flow_key():
+    """Clear cached flow key in client and extension."""
+    client = get_flow_client()
+    client._flow_key = None
+    if client.connected:
+        await client._send("clear_flow_key", {}, timeout=5)
     return {"ok": True}
 
 

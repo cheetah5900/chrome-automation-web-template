@@ -120,6 +120,49 @@ async def browse_folder():
 async def get_flow_projects():
     """List projects from Google Flow with fallback to local projects."""
     client = get_flow_client()
+
+    # 1. Discover projects and names from open browser tabs via extension
+    discovered_projects = {}
+    if client.connected:
+        try:
+            tabs_res = await client._send("query_tabs", {}, timeout=5)
+            tabs_list = tabs_res.get("result", []) if isinstance(tabs_res, dict) else []
+            for t in tabs_list:
+                url = t.get("url", "") or t.get("pendingUrl", "")
+                title = t.get("title", "")
+                match = re.search(r'/project/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', url, re.IGNORECASE)
+                if match:
+                    pid = match.group(1).lower()
+                    clean_name = title.replace("Google Flow - ", "").replace("Google Flow", "").strip()
+                    if clean_name:
+                        discovered_projects[pid] = clean_name
+        except Exception as te:
+            logger.warning("Failed to query tabs for project names: %s", te)
+
+    # 2. Discover project names from flow_video_presets in config
+    try:
+        from app.main import load_config
+        cfg = load_config()
+        for pname, pdata in cfg.get("flow_video_presets", {}).items():
+            if isinstance(pdata, dict) and pdata.get("project_id"):
+                pid = pdata["project_id"].lower()
+                if pid not in discovered_projects or not discovered_projects[pid]:
+                    discovered_projects[pid] = pname
+    except Exception as ce:
+        logger.warning("Failed to load preset names: %s", ce)
+
+    # 3. Synchronize discovered names into SQLite DB
+    for pid, real_name in discovered_projects.items():
+        try:
+            existing = await crud.get_project(pid)
+            if not existing:
+                await crud.create_project(id=pid, name=real_name, story="Synced from Google Flow")
+            elif existing.get("name", "").startswith("Synced Project") or (existing.get("name") != real_name and not existing.get("name", "").startswith("Synced Project") and real_name):
+                await crud.update_project(pid, name=real_name)
+        except Exception as dbe:
+            logger.warning("Failed to sync project %s into DB: %s", pid, dbe)
+
+    # 4. Try tRPC if connected
     if client.connected:
         try:
             import urllib.parse
@@ -146,9 +189,7 @@ async def get_flow_projects():
                 "headers": {
                     "accept": "*/*",
                 }
-            }, timeout=30)
-            
-            logger.info("tRPC raw response: %s", res)
+            }, timeout=2)
             
             trpc_data = res.get("data") if isinstance(res, dict) else res
             if isinstance(trpc_data, dict) and "error" not in trpc_data:
@@ -156,19 +197,43 @@ async def get_flow_projects():
                 formatted = []
                 for p in projects_data:
                     title = p.get("projectInfo", {}).get("projectTitle") or p.get("projectTitle") or p.get("title") or p.get("name")
-                    formatted.append({
-                        "id": p.get("projectId") or p.get("id"),
-                        "name": title or p.get("projectId") or p.get("id"),
-                        "material": p.get("material") or p.get("projectInfo", {}).get("material") or None
-                    })
+                    pid = p.get("projectId") or p.get("id")
+                    if pid:
+                        formatted.append({
+                            "id": pid,
+                            "name": title or discovered_projects.get(pid.lower()) or pid,
+                            "material": p.get("material") or p.get("projectInfo", {}).get("material") or None
+                        })
                 if formatted:
                     return {"projects": formatted, "source": "google-flow"}
         except Exception as e:
             logger.warning("Failed to fetch projects from Google Flow, falling back to local: %s", e)
             
-    # Fallback to local DB
+    # 5. Local DB query with discovered name overrides
     rows = await crud.list_projects()
-    formatted = [{"id": r["id"], "name": r["name"], "material": r.get("material", "3d_pixar")} for r in rows]
+    formatted = []
+    seen_ids = set()
+    for r in rows:
+        pid = r["id"].lower()
+        seen_ids.add(pid)
+        name = r["name"]
+        if (name.startswith("Synced Project") or not name) and pid in discovered_projects:
+            name = discovered_projects[pid]
+        formatted.append({
+            "id": r["id"],
+            "name": name,
+            "material": r.get("material", "3d_pixar")
+        })
+
+    # Also add any discovered projects not yet in rows
+    for pid, real_name in discovered_projects.items():
+        if pid not in seen_ids:
+            formatted.append({
+                "id": pid,
+                "name": real_name,
+                "material": "3d_pixar"
+            })
+
     return {"projects": formatted, "source": "local"}
 
 
@@ -516,23 +581,30 @@ async def process_batch(body: ProcessRequest):
                     
                     if upload_res.get("error") or (isinstance(upload_res.get("status"), int) and upload_res["status"] >= 400):
                         error_msg = upload_res.get("error", "Upload failed")
-                        logger.error("Upload failed for %s: %s", file_name, error_msg)
-                        results.append({
-                            "image_path": pair.image_path,
-                            "status": "FAILED",
-                            "error": error_msg
-                        })
-                        continue
-                        
-                    media_id = upload_res.get("_mediaId")
-                    if not media_id:
-                        logger.error("No media_id returned for %s: %s", file_name, upload_res)
-                        results.append({
-                            "image_path": pair.image_path,
-                            "status": "FAILED",
-                            "error": "No media_id returned from upload"
-                        })
-                        continue
+                        if "NO_FLOW_KEY" in str(error_msg) and client.connected:
+                            logger.info("NO_FLOW_KEY for %s, falling back to browser tab session", file_name)
+                            media_id = f"browser_asset_{file_name}"
+                        else:
+                            logger.error("Upload failed for %s: %s", file_name, error_msg)
+                            results.append({
+                                "image_path": pair.image_path,
+                                "status": "FAILED",
+                                "error": error_msg
+                            })
+                            continue
+                    else:
+                        media_id = upload_res.get("_mediaId")
+                        if not media_id:
+                            if client.connected:
+                                media_id = f"browser_asset_{file_name}"
+                            else:
+                                logger.error("No media_id returned for %s: %s", file_name, upload_res)
+                                results.append({
+                                    "image_path": pair.image_path,
+                                    "status": "FAILED",
+                                    "error": "No media_id returned from upload"
+                                })
+                                continue
 
             # 2. Create scene
             prompt_summary = pair.prompt_content[:100] if pair.prompt_content else f"Batch Scene {next_order}"

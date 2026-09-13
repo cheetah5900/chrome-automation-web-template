@@ -123,23 +123,24 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       (h) => h.name?.toLowerCase() === 'authorization',
     );
     const value = authHeader?.value || '';
-    if (!value.startsWith('Bearer ya29.')) return;
+    const match = value.match(/^Bearer\s+(.+)$/i);
+    if (!match) return;
 
-    const token = value.replace(/^Bearer\s+/i, '').trim();
+    const token = match[1].trim();
     if (!token) return;
 
     // Always update — even if same token string, refresh the timestamp
     flowKey = token;
     metrics.tokenCapturedAt = Date.now();
     chrome.storage.local.set({ flowKey, metrics });
-    console.log('[FlowAgent] Bearer token captured');
+    console.log('[FlowAgent] Bearer token captured from:', details.url);
 
     // Notify agent
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'token_captured', flowKey }));
     }
   },
-  { urls: ['https://aisandbox-pa.googleapis.com/*', 'https://labs.google/*', 'https://flow.google.com/*'] },
+  { urls: ['*://*.googleapis.com/*', '*://*.google.com/*', '*://*.google/*'] },
   ['requestHeaders', 'extraHeaders'],
 );
 
@@ -155,10 +156,14 @@ async function findFlowTabs() {
     flowTabs.sort((a, b) => {
       const uA = a.url || a.pendingUrl || '';
       const uB = b.url || b.pendingUrl || '';
-      const isLabsA = uA.includes('labs.google');
-      const isLabsB = uB.includes('labs.google');
-      if (isLabsA && !isLabsB) return -1;
-      if (!isLabsA && isLabsB) return 1;
+      const isAboutA = uA.includes('/about');
+      const isAboutB = uB.includes('/about');
+      if (isAboutA && !isAboutB) return 1;
+      if (!isAboutA && isAboutB) return -1;
+      const isFlowA = uA.includes('flow.google.com');
+      const isFlowB = uB.includes('flow.google.com');
+      if (isFlowA && !isFlowB) return -1;
+      if (!isFlowA && isFlowB) return 1;
       return 0;
     });
     return flowTabs;
@@ -189,8 +194,8 @@ async function getOrOpenFlowTab(preferLabs = false) {
 
   _flowTabPromise = (async () => {
     try {
-      console.log('[FlowAgent] No Flow tab found — opening single background Flow tab on labs.google');
-      const newTab = await chrome.tabs.create({ url: 'https://labs.google/fx/tools/flow', active: false });
+      console.log('[FlowAgent] No Flow tab found — opening single background Flow tab on flow.google.com');
+      const newTab = await chrome.tabs.create({ url: 'https://flow.google.com/', active: false });
 
       // Wait up to 10 seconds for tab to finish loading
       for (let i = 0; i < 20; i++) {
@@ -218,15 +223,20 @@ async function getOrOpenFlowTab(preferLabs = false) {
 
 async function captureTokenFromFlowTab() {
   const tab = await getOrOpenFlowTab();
-  if (!tab) {
+  if (!tab || !tab.id) {
     console.log('[FlowAgent] Could not acquire Flow tab for token capture');
     return;
   }
   try {
-    console.log('[FlowAgent] Reloading Flow tab to capture fresh token:', tab.id);
-    await chrome.tabs.reload(tab.id);
+    const tabUrl = tab.url || tab.pendingUrl || '';
+    if (tabUrl.includes('/about')) {
+      console.log('[FlowAgent] Flow tab is on /about page, redirecting to https://flow.google.com/');
+      await chrome.tabs.update(tab.id, { url: 'https://flow.google.com/' });
+      return;
+    }
+    // Do NOT automatically reload user tab in background loops — causes infinite refresh loops
   } catch (e) {
-    console.error('[FlowAgent] Failed to reload Flow tab:', e);
+    console.error('[FlowAgent] captureTokenFromFlowTab error:', e);
   }
 }
 
@@ -309,6 +319,109 @@ function connectToAgent() {
           id: msg.id,
           result: tabs.map(t => ({ id: t.id, url: t.url, pendingUrl: t.pendingUrl, title: t.title, status: t.status })),
         });
+      } else if (msg.method === 'flow_ui_generate') {
+        const tabs = await findFlowTabs();
+        if (!tabs.length) {
+          sendToAgent({ id: msg.id, error: 'No active Google Flow tab found' });
+          return;
+        }
+        const tab = tabs[0];
+        const { prompt, orientation, assetName } = msg.params || {};
+
+        try {
+          const res = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            world: 'MAIN',
+            func: async (promptText, orient, targetAsset) => {
+              try {
+                const settingsBtn = document.querySelector('button[aria-label="Settings trigger"]');
+                let modeBtn = document.getElementById('mat-button-toggle-6-button') || Array.from(document.querySelectorAll('button')).find(b => b.innerText?.includes('Video'));
+                
+                if (!modeBtn && settingsBtn) {
+                  settingsBtn.click();
+                  await new Promise(r => setTimeout(r, 400));
+                  modeBtn = document.getElementById('mat-button-toggle-6-button') || Array.from(document.querySelectorAll('button')).find(b => b.innerText?.includes('Video'));
+                }
+
+                if (modeBtn) {
+                  modeBtn.click();
+                  await new Promise(r => setTimeout(r, 200));
+                }
+
+                if (orient) {
+                  const isVert = orient.toUpperCase().includes('VERT') || orient.includes('9:16');
+                  const toggleId = isVert ? 'mat-button-toggle-20-button' : 'mat-button-toggle-19-button';
+                  const orientBtn = document.getElementById(toggleId);
+                  if (orientBtn) {
+                    orientBtn.click();
+                    await new Promise(r => setTimeout(r, 200));
+                  }
+                }
+
+                const startBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start' && b.classList.contains('empty-chip'));
+                if (startBtn) {
+                  startBtn.click();
+                  await new Promise(r => setTimeout(r, 500));
+                  const addBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Add to prompt');
+                  if (addBtn) {
+                    addBtn.click();
+                    await new Promise(r => setTimeout(r, 400));
+                  }
+                }
+
+                const pm = document.querySelector('.ProseMirror');
+                if (!pm) return { error: 'Prompt input (.ProseMirror) not found' };
+                pm.focus();
+
+                let dispatched = false;
+                let view = pm.pmViewDesc?.view;
+                if (!view) {
+                  let el = pm;
+                  while (el && !view) {
+                    if (el.pmViewDesc?.view) view = el.pmViewDesc.view;
+                    el = el.parentElement;
+                  }
+                }
+
+                if (view && view.state && view.dispatch) {
+                  const tr = view.state.tr.insertText(promptText);
+                  view.dispatch(tr);
+                  dispatched = true;
+                }
+
+                if (!dispatched || !pm.innerText?.trim()) {
+                  pm.focus();
+                  document.execCommand('selectAll', false, null);
+                  document.execCommand('insertText', false, promptText);
+                  pm.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
+                }
+
+                await new Promise(r => setTimeout(r, 500));
+
+                const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                if (!submitBtn) return { error: 'Submit button not found' };
+                if (submitBtn.disabled) {
+                  return { error: 'Submit button is disabled. Please check prompt or image attachment.', pmText: pm.innerText?.slice(0, 100) };
+                }
+
+                submitBtn.click();
+                return { success: true, promptSnippet: promptText.slice(0, 60) };
+              } catch (err) {
+                return { error: err.message };
+              }
+            },
+            args: [prompt || '', orientation || 'HORIZONTAL', assetName || '']
+          });
+
+          const result = res[0]?.result || {};
+          if (result.error) {
+            sendToAgent({ id: msg.id, error: result.error, details: result });
+          } else {
+            sendToAgent({ id: msg.id, result });
+          }
+        } catch (e) {
+          sendToAgent({ id: msg.id, error: e.message });
+        }
       } else if (msg.method === 'inspect_tab') {
         const tabs = await findFlowTabs();
         if (!tabs.length) {
@@ -330,22 +443,274 @@ function connectToAgent() {
           }
         }
         try {
-          const res = await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            world: 'MAIN',
-            func: () => {
-              return {
-                url: location.href,
-                hasG: !!window.grecaptcha,
-                hasEnterprise: !!window.grecaptcha?.enterprise,
-                hasExecute: !!window.grecaptcha?.enterprise?.execute,
-              };
-            },
-          });
-          sendToAgent({ id: msg.id, result: { tabId: tab.id, navResult, res: res[0]?.result } });
+          const evalCode = msg.params?.eval;
+          let scriptResult;
+          if (evalCode === 'dom_summary') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => {
+                try {
+                  const buttons = Array.from(document.querySelectorAll('button')).map(b => ({
+                    text: b.innerText?.trim()?.slice(0, 60),
+                    aria: b.getAttribute('aria-label'),
+                    title: b.getAttribute('title'),
+                    id: b.id
+                  })).filter(b => b.text || b.aria || b.title);
+                  const inputs = Array.from(document.querySelectorAll('input, textarea, [contenteditable="true"]')).map(i => ({
+                    tag: i.tagName,
+                    placeholder: i.getAttribute('placeholder'),
+                    aria: i.getAttribute('aria-label'),
+                    id: i.id,
+                    cls: i.className,
+                    text: i.innerText?.slice(0, 100)
+                  }));
+                  return {
+                    success: true,
+                    title: document.title,
+                    url: window.location.href,
+                    buttons,
+                    inputs
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              },
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'click_add_media') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => {
+                try {
+                  const btn = document.querySelector('button[aria-label="Add media menu"]');
+                  if (!btn) return { error: 'btn not found' };
+                  btn.click();
+                  const menuItems = Array.from(document.querySelectorAll('[role="menuitem"], mat-menu-item, .mat-mdc-menu-item')).map(m => ({
+                    text: m.innerText?.trim(),
+                    tag: m.tagName,
+                    outerHTML: m.outerHTML.slice(0, 100)
+                  }));
+                  return { success: true, menuItems };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              },
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'type_prompt_and_check') {
+            const promptText = msg.params?.prompt || '';
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'MAIN',
+              func: (text) => {
+                try {
+                  const pm = document.querySelector('.ProseMirror');
+                  if (!pm) return { error: 'ProseMirror not found' };
+                  
+                  let dispatched = false;
+                  let view = pm.pmViewDesc?.view;
+                  if (!view) {
+                    let el = pm;
+                    while (el && !view) {
+                      if (el.pmViewDesc?.view) view = el.pmViewDesc.view;
+                      el = el.parentElement;
+                    }
+                  }
+                  
+                  if (view && view.state && view.dispatch) {
+                    const tr = view.state.tr.insertText(text);
+                    view.dispatch(tr);
+                    dispatched = true;
+                  }
+
+                  if (!dispatched || !pm.innerText?.trim()) {
+                    pm.focus();
+                    document.execCommand('selectAll', false, null);
+                    document.execCommand('insertText', false, text);
+                    pm.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
+                  }
+
+                  const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                  return {
+                    success: true,
+                    dispatched,
+                    pmText: pm.innerText?.slice(0, 100),
+                    submitBtnDisabled: submitBtn ? submitBtn.disabled : 'not found',
+                    submitBtnClasses: submitBtn ? submitBtn.className : ''
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              },
+              args: [promptText]
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'token_hunt') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'MAIN',
+              func: () => {
+                try {
+                  const wiz = window.WIZ_global_data || {};
+                  const keys = Object.keys(wiz);
+                  const interesting = {};
+                  for (let k of keys) {
+                    const v = wiz[k];
+                    if (typeof v === 'string' && (v.startsWith('ya29.') || v.length > 50)) {
+                      interesting[k] = v.slice(0, 30) + '... (len ' + v.length + ')';
+                    }
+                  }
+                  const lsTokens = {};
+                  for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    const v = localStorage.getItem(k);
+                    if (v && (v.includes('ya29.') || v.includes('Bearer'))) {
+                      lsTokens[k] = v.slice(0, 50);
+                    }
+                  }
+                  return {
+                    success: true,
+                    wizKeysCount: keys.length,
+                    interesting,
+                    lsTokens,
+                    hasCookies: !!document.cookie
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              },
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'click_video_mode') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => {
+                try {
+                  const videoBtn = document.getElementById('mat-button-toggle-6-button') || Array.from(document.querySelectorAll('button')).find(b => b.innerText?.includes('Video'));
+                  if (!videoBtn) return { error: 'video mode btn not found' };
+                  videoBtn.click();
+                  const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                  return {
+                    success: true,
+                    submitBtnDisabled: submitBtn ? submitBtn.disabled : 'not found',
+                    submitBtnClasses: submitBtn ? submitBtn.className : ''
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              },
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'click_submit_generate') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => {
+                try {
+                  const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                  if (!submitBtn) return { error: 'Submit button not found' };
+                  submitBtn.click();
+                  return { success: true };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              },
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'custom' && msg.params?.js) {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'MAIN',
+              func: (codeStr) => {
+                try {
+                  const fn = new Function(codeStr);
+                  return { success: true, result: fn() };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              },
+              args: [msg.params.js]
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'storage_info') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'MAIN',
+              func: () => {
+                try {
+                  const lsKeys = Object.keys(localStorage);
+                  const ssKeys = Object.keys(sessionStorage);
+                  const globalVars = Object.keys(window).filter(k => k.startsWith('WIZ') || k.toLowerCase().includes('flow') || k.toLowerCase().includes('auth') || k.toLowerCase().includes('token'));
+                  return {
+                    success: true,
+                    lsKeys,
+                    ssKeys,
+                    globalVars
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              },
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode) {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => {
+                try {
+                  const navList = document.querySelector('flow-project-nav-list, mat-nav-list');
+                  const links = Array.from(document.querySelectorAll('a[href*="/project/"]')).map(a => ({
+                    href: a.getAttribute('href'),
+                    text: a.innerText?.trim()
+                  }));
+                  return {
+                    success: true,
+                    title: document.title,
+                    links
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              },
+            });
+            scriptResult = res[0]?.result;
+          } else {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'MAIN',
+              func: async () => {
+                const apiKey = window.WIZ_global_data?.K21R3e || 'AIzaSyDSjGxWlo68HcGt6mbaIq9YbkKhFQnt3sk';
+                try {
+                  const res = await fetch(`https://aisandbox-pa.googleapis.com/v1/credits?key=${apiKey}`, {
+                    credentials: 'include',
+                    headers: { 'accept': '*/*' }
+                  });
+                  const text = await res.text();
+                  return { status: res.status, text: text.slice(0, 300) };
+                } catch (e) {
+                  return { error: e.message };
+                }
+              },
+            });
+            scriptResult = res[0]?.result;
+          }
+          sendToAgent({ id: msg.id, result: { tabId: tab.id, navResult, res: scriptResult } });
         } catch (err) {
           sendToAgent({ id: msg.id, result: { error: err.message, tabId: tab.id, navResult } });
         }
+      } else if (msg.method === 'reload_flow_tab') {
+        const tabs = await findFlowTabs();
+        if (tabs.length > 0) {
+          console.log('[FlowAgent] Reloading Flow tab:', tabs[0].id);
+          await chrome.tabs.reload(tabs[0].id);
+          sendToAgent({ id: msg.id, result: { reloaded: true, tabId: tabs[0].id } });
+        } else {
+          await captureTokenFromFlowTab();
+          sendToAgent({ id: msg.id, result: { opened: true } });
+        }
+      } else if (msg.method === 'clear_flow_key') {
+        flowKey = null;
+        await chrome.storage.local.remove(['flowKey']);
+        sendToAgent({ id: msg.id, result: { cleared: true } });
       } else if (msg.method === 'get_status') {
         sendToAgent({
           id: msg.id,
@@ -572,15 +937,6 @@ async function handleTrpcRequest(msg) {
   const logType = url.includes('createProject') ? 'CREATE_PROJECT' : 'TRPC';
   // TRPC calls are silent — don't show in request log
 
-  if (!flowKey) {
-    console.log('[FlowAgent] flowKey missing for tRPC request, attempting token capture...');
-    await captureTokenFromFlowTab();
-    for (let i = 0; i < 35; i++) {
-      if (flowKey) break;
-      await sleep(200);
-    }
-  }
-
   const fetchHeaders = { 'Content-Type': 'application/json', ...headers };
   if (flowKey) {
     fetchHeaders['authorization'] = `Bearer ${flowKey}`;
@@ -594,8 +950,11 @@ async function handleTrpcRequest(msg) {
       credentials: 'include',
     });
     const data = await resp.json();
+    if (resp.status === 401 || data?.error?.data?.httpStatus === 401) {
+      console.warn('[FlowAgent] tRPC returned 401 Unauthorized (legacy endpoint or session changed).');
+    }
     chrome.storage.local.set({ metrics });
-    updateRequestLog(logId, { status: 'success' });
+    updateRequestLog(logId, { status: resp.ok ? 'success' : 'failed' });
     sendToAgent({ id, status: resp.status, data });
   } catch (e) {
     console.error('[FlowAgent] tRPC request failed:', e);
@@ -663,28 +1022,21 @@ async function handleApiRequest(msg) {
       }
     }
 
-    // Step 3: Use flowKey for auth
-    if (!flowKey) {
-      console.log('[FlowAgent] flowKey missing for API request, attempting token capture...');
-      await captureTokenFromFlowTab();
-      for (let i = 0; i < 35; i++) {
-        if (flowKey) break;
-        await sleep(200);
-      }
-    }
-    const activeFlowKey = flowKey;
-    if (!activeFlowKey) {
-      sendToAgent({ id, status: 503, error: 'NO_FLOW_KEY' });
-      if (hasCaptcha) { metrics.failedCount++; metrics.lastError = 'NO_FLOW_KEY'; }
-      chrome.storage.local.set({ metrics });
-      updateRequestLog(logId, { status: 'failed', error: 'NO_FLOW_KEY' });
-      setState('idle');
-      return;
-    }
-
+    // Step 3: Auth headers
     const fetchHeaders = { ...(headers || {}) };
-    if (!url.startsWith('https://labs.google/') && !url.startsWith('https://flow.google.com/')) {
-      fetchHeaders['authorization'] = `Bearer ${activeFlowKey}`;
+    const isGoogleFlowDomain = url.startsWith('https://labs.google/') || url.startsWith('https://flow.google.com/');
+    if (!isGoogleFlowDomain) {
+      if (!flowKey) {
+        sendToAgent({ id, status: 503, error: 'NO_FLOW_KEY' });
+        if (hasCaptcha) { metrics.failedCount++; metrics.lastError = 'NO_FLOW_KEY'; }
+        chrome.storage.local.set({ metrics });
+        updateRequestLog(logId, { status: 'failed', error: 'NO_FLOW_KEY' });
+        setState('idle');
+        return;
+      }
+      fetchHeaders['authorization'] = `Bearer ${flowKey}`;
+    } else if (flowKey) {
+      fetchHeaders['authorization'] = `Bearer ${flowKey}`;
     }
 
 
@@ -723,6 +1075,12 @@ async function handleApiRequest(msg) {
       status: response.status,
       data: responseData,
     });
+    if (response.status === 401 || (typeof responseData === 'object' && responseData?.error?.code === 401)) {
+      console.warn('[FlowAgent] API returned 401 Unauthorized! Invalidating token...');
+      flowKey = null;
+      await chrome.storage.local.remove(['flowKey']);
+      sendToAgent({ type: 'token_expired' });
+    }
     if (response.ok) {
       if (hasCaptcha) { metrics.successCount++; metrics.lastError = null; }
       updateRequestLog(logId, { status: 'success', httpStatus: response.status, responseSummary });

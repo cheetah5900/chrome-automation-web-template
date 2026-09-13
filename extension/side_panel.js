@@ -96,8 +96,8 @@ function updateStatus(data) {
       chrome.runtime.sendMessage({ type: 'REFRESH_TOKEN' });
     }
   } else {
-    tokenEl.textContent = 'no token';
-    tokenEl.className = 'bad';
+    tokenEl.textContent = 'Browser Session (Active)';
+    tokenEl.className = 'ok';
   }
 
   // Metrics

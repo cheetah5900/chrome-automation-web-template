@@ -567,6 +567,8 @@ def sync_ensure_chrome_debug_ready(port: int = 9222) -> bool:
 
     chrome_binary = _get_active_browser_binary(profile.get("browser_type", "chrome"))
     ext_dir = str(Path(__file__).resolve().parent.parent / "extension")
+    import shutil
+    shutil.rmtree(os.path.join(ext_dir, "_metadata"), ignore_errors=True)
     startup_urls = _normalize_urls(profile.get("startup_urls", []))
     if not startup_urls:
         startup_urls = ["https://affiliate.shopee.co.th/offer/product_offer"]
@@ -578,6 +580,7 @@ def sync_ensure_chrome_debug_ready(port: int = 9222) -> bool:
         "--disable-blink-features=AutomationControlled",
         "--remote-allow-origins=*",
         f"--load-extension={ext_dir}",
+        f"--disable-extensions-except={ext_dir}",
         *startup_urls
     ]
     log(f"[Chrome Manager] Automatically launching Chrome debug profile ({profile.get('name')}) on port {port}...")
@@ -953,7 +956,7 @@ async def launch_profile(payload: LaunchProfilePayload):
         client = get_flow_client()
         if client._extension_ws:
             try:
-                await client._extension_ws.close()
+                await asyncio.wait_for(client._extension_ws.close(), timeout=1.0)
             except Exception:
                 pass
         client.clear_extension()
@@ -996,6 +999,8 @@ async def launch_profile(payload: LaunchProfilePayload):
     if not profile_path or profile_path == "/Users/litar/Library/Application Support/Google/Chrome" or profile_path == everyday_profile:
         profile_path = str(BASE_DIR / "runtime" / "chrome-profiles" / profile.get("name", "AutomationChrome"))
 
+    import shutil
+    shutil.rmtree(os.path.join(ext_dir, "_metadata"), ignore_errors=True)
     os.makedirs(profile_path, exist_ok=True)
     cmd = [
         chrome_binary,
@@ -1004,6 +1009,7 @@ async def launch_profile(payload: LaunchProfilePayload):
         "--disable-blink-features=AutomationControlled",
         "--remote-allow-origins=*",
         f"--load-extension={ext_dir}",
+        f"--disable-extensions-except={ext_dir}",
         *startup_urls,
     ]
 
@@ -1593,6 +1599,16 @@ def _default_config() -> dict[str, Any]:
             res[global_key] = ""
 
     return res
+
+
+def load_config() -> dict[str, Any]:
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return _default_config()
 
 
 def log(msg: str) -> None:
@@ -7443,6 +7459,12 @@ class SeedancePairWebRequest(BaseModel):
 
 SeedancePairWebRequest.model_rebuild()
 
+class SeedanceCheckErrorsRequest(BaseModel):
+    main_folder: Optional[str] = ""
+    subfolders_str: Optional[str] = ""
+
+SeedanceCheckErrorsRequest.model_rebuild()
+
 global_seedance_progress: dict[str, Any] = {
     "status": "idle",
     "total": 0,
@@ -7943,6 +7965,26 @@ def api_seedance_download(req: SeedanceDownloadRequest) -> dict[str, Any]:
     except Exception as e:
         log(f"[Seedance Download Error]: {e}")
         return {"ok": False, "detail": str(e)}
+
+@app.post("/api/seedance/check-errors")
+def api_seedance_check_errors(req: SeedanceCheckErrorsRequest = None) -> dict[str, Any]:
+    bot = browser_manager.get()
+    if not bot or not bot.driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ยังไม่ได้เปิดใช้งาน"}
+
+    from app.seedance import ensure_seedance_tab, inspect_seedance_errors, reset_seedance_stop
+    reset_seedance_stop()
+    switched = ensure_seedance_tab(bot)
+    if not switched:
+        return {"ok": False, "detail": "ไม่พบแท็บ Dreamina (กรุณาเปิดแท็บ Dreamina บน Chrome 9222 ก่อน)"}
+
+    try:
+        main_folder = req.main_folder.strip() if req and req.main_folder else ""
+        subfolders_str = req.subfolders_str.strip() if req and req.subfolders_str else ""
+        return inspect_seedance_errors(bot.driver, main_folder=main_folder, subfolders_str=subfolders_str)
+    except Exception as e:
+        log(f"[Seedance Check Errors Error]: {e}")
+        return {"ok": False, "detail": str(e), "errors": []}
 
 @app.get("/")
 def index():

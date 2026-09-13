@@ -528,6 +528,9 @@ def scan_seedance_folders(
                 has_image = True
         # If "none", image_files and image_paths remain empty
 
+        prompt_len = len(prompt_text)
+        is_over_4000 = prompt_len > 4000
+
         items.append({
             "id": idx,
             "num": num,
@@ -537,6 +540,8 @@ def scan_seedance_folders(
             "prompt_file": prompt_file or "ไม่พบไฟล์ prompt (.md)",
             "prompt_path": prompt_path or "",
             "prompt_text": prompt_text,
+            "prompt_length": prompt_len,
+            "is_over_4000": is_over_4000,
             "has_prompt": bool(prompt_file and prompt_text),
             "image_mode": image_mode,
             "image_subfolder": image_subfolder,
@@ -550,10 +555,19 @@ def scan_seedance_folders(
             "status": "ready" if (prompt_file and prompt_text) else "warning"
         })
 
+    # Float items exceeding 4000 characters to the top, while maintaining numerical order within each group
+    items.sort(key=lambda x: (
+        not (len(x.get("prompt_text", "")) > 4000),
+        x["num"] is None,
+        x["num"] if x["num"] is not None else 999999,
+        x["subfolder_name"]
+    ))
+
     return {
         "ok": True,
         "total": len(items),
         "valid_count": sum(1 for i in items if i["has_prompt"]),
+        "over_4000_count": sum(1 for i in items if len(i.get("prompt_text", "")) > 4000),
         "items": items
     }
 
@@ -1079,6 +1093,208 @@ def pair_seedance_items(driver, local_items: list[dict[str, Any]]) -> list[dict[
         })
 
     return paired
+
+
+def inspect_seedance_errors(
+    driver,
+    main_folder: str = "",
+    subfolders_str: str = ""
+) -> dict[str, Any]:
+    """
+    Inspects video generation tasks and error states on the Dreamina web tab.
+    Scans the virtual list to detect tasks that failed, particularly those flagged
+    with 'วิดีโอนี้อาจมีเนื้อหาของบุคคลที่สาม' (third-party content / copyright / policy violation).
+    Returns a structured summary of all errors found and maps them to local items if available.
+    """
+    if not driver:
+        return {"ok": False, "detail": "เบราว์เซอร์ Chrome 9222 ไม่ได้เปิดใช้งาน หรือไม่พบหน้าต่าง Dreamina"}
+
+    reset_seedance_stop()
+
+    try:
+        vp_info = driver.execute_script(r"""
+            const vp = document.querySelector('.viewport-M4gznV') || document.querySelector('[class*="viewport"]');
+            return {
+                max: vp ? vp.scrollHeight : 0,
+                clientH: vp ? vp.clientHeight : 800,
+                currScroll: vp ? vp.scrollTop : 0
+            };
+        """)
+    except Exception as e:
+        return {"ok": False, "detail": f"ไม่สามารถอ่านข้อมูลหน้าเว็บ Dreamina ได้: {str(e)}"}
+
+    max_h = vp_info.get("max", 0) if isinstance(vp_info, dict) else 0
+    client_h = (vp_info.get("clientH", 800) if isinstance(vp_info, dict) else 800) or 800
+    orig_scroll = vp_info.get("currScroll", 0) if isinstance(vp_info, dict) else 0
+
+    scan_js = r"""
+    const items = document.querySelectorAll('.content-_w2B98 > div > div, [class*="record-item"], [class*="slot-card"], [class*="record-card"]');
+    const results = [];
+
+    for (const el of items) {
+        if (el.classList.contains('record-list-container-GKMHFh') || el.classList.contains('record-virtual-list')) continue;
+        const text = (el.innerText || '').trim();
+        if (!text) continue;
+
+        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+        const firstLine = lines[0] || '';
+        if (firstLine === 'วันนี้' || firstLine === 'เมื่อวาน' || firstLine.startsWith('7 วันที่ผ่านมา')) continue;
+
+        const vid = el.querySelector('video');
+        const hasVid = !!(vid && (vid.src || vid.currentSrc));
+        const isGen = !!el.querySelector('[class*="generating"], [class*="progress"], [class*="loading"]');
+
+        let errorReason = '';
+        const errTextEl = el.querySelector('[class*="error-tips-text"]');
+        if (errTextEl) {
+            errorReason = errTextEl.innerText.trim();
+        } else {
+            const errEl = el.querySelector('[data-ccfmp-content-type="error"], [class*="error-tips"]');
+            if (errEl) {
+                const clone = errEl.cloneNode(true);
+                const btns = clone.querySelectorAll('button, [class*="button"]');
+                btns.forEach(b => b.remove());
+                errorReason = clone.innerText.trim();
+            } else {
+                const errNodes = el.querySelectorAll('[class*="error"], [class*="fail"]');
+                for (const en of errNodes) {
+                    const t = (en.innerText || '').trim();
+                    if (t.includes('บุคคลที่สาม') || t.includes('ข้อผิดพลาด') || t.includes('ล้มเหลว') || t.includes('third-party') || t.includes('failed') || t.includes('error')) {
+                        errorReason = t;
+                        break;
+                    }
+                }
+            }
+        }
+
+        const hasError = !hasVid && !isGen && (!!errorReason || el.innerHTML.includes('data-ccfmp-content-type="error"'));
+        if (hasError && !errorReason) {
+            errorReason = 'เกิดข้อผิดพลาดในการสร้างวิดีโอ (Failed / Error)';
+        }
+
+        const promptEl = el.querySelector('[class*="prompt"], [class*="desc"], [class*="text-content"]');
+        const cardPrompt = promptEl ? (promptEl.innerText || '').trim() : '';
+
+        results.push({
+            firstLine: firstLine,
+            cardPrompt: cardPrompt,
+            hasVid: hasVid,
+            isGenerating: isGen,
+            hasError: hasError,
+            errorReason: errorReason,
+            fullText: text
+        });
+    }
+    return results;
+    """
+
+    all_records = {}
+    error_records = {}
+
+    positions = list(range(0, max_h + client_h, int(client_h * 0.85))) if max_h > client_h else [0]
+    for pos in positions:
+        if is_seedance_stopped():
+            log("[Seedance Inspector] 🛑 หยุดการตรวจสอบเนื่องจาก Force Stop")
+            break
+        try:
+            driver.execute_script(r"""
+                const vp = document.querySelector('.viewport-M4gznV') || document.querySelector('[class*="viewport"]');
+                if (vp) vp.scrollTop = arguments[0];
+            """, pos)
+            time.sleep(0.10)
+
+            batch = driver.execute_script(scan_js)
+            if isinstance(batch, list):
+                for b in batch:
+                    key = b.get("firstLine", "")
+                    if key and key not in all_records:
+                        all_records[key] = b
+                        if b.get("hasError"):
+                            error_records[key] = b
+        except Exception as scan_err:
+            log(f"[Seedance Inspector Step Warning] {scan_err}")
+
+    # Restore scroll position
+    try:
+        driver.execute_script(r"""
+            const vp = document.querySelector('.viewport-M4gznV') || document.querySelector('[class*="viewport"]');
+            if (vp) vp.scrollTop = arguments[0];
+        """, orig_scroll)
+    except Exception:
+        pass
+
+    # Match with local items if main_folder is provided
+    local_map = {}
+    if main_folder and os.path.isdir(main_folder):
+        try:
+            scan_res = scan_seedance_folders(main_folder, subfolders_str)
+            for item in scan_res.get("items", []):
+                item_num = item.get("num")
+                if item_num is not None:
+                    local_map[item_num] = item
+        except Exception:
+            pass
+
+    parsed_errors = []
+    for k, v in error_records.items():
+        first_line = v.get("firstLine", "")
+        num = extract_leading_number(first_line)
+        reason = v.get("errorReason", "")
+        is_third_party = ("บุคคลที่สาม" in reason) or ("third-party" in reason.lower())
+
+        # Clean prompt snippet: prefer matched local prompt or card prompt
+        card_prompt = v.get("cardPrompt", "")
+        matched_local = local_map.get(num) if num is not None else None
+        if matched_local and matched_local.get("prompt_text"):
+            raw_p = matched_local.get("prompt_text", "").strip().replace("\n", " ")
+            snippet = raw_p[:140] + ("..." if len(raw_p) > 140 else "")
+            full_prompt = matched_local.get("prompt_text", "").strip()
+        elif card_prompt:
+            raw_p = card_prompt.strip().replace("\n", " ")
+            snippet = raw_p[:140] + ("..." if len(raw_p) > 140 else "")
+            full_prompt = card_prompt.strip()
+        else:
+            snippet = first_line[:140]
+            full_prompt = v.get("fullText", "").strip() or first_line
+
+        matched_local = local_map.get(num) if num is not None else None
+        sub_name = matched_local.get("subfolder_name") if matched_local else (str(num) if num is not None else "")
+        sub_path = matched_local.get("subfolder_path") if matched_local else ""
+
+        parsed_errors.append({
+            "num": num,
+            "title": first_line[:60],
+            "reason": reason,
+            "is_third_party": is_third_party,
+            "prompt_snippet": snippet,
+            "full_prompt": full_prompt,
+            "subfolder_name": sub_name,
+            "subfolder_path": sub_path
+        })
+
+    # Sort parsed errors by number
+    parsed_errors.sort(key=lambda x: (x["num"] is None, x["num"] or 0))
+
+    failed_numbers = [e["num"] for e in parsed_errors if e["num"] is not None]
+    failed_numbers_str = ", ".join(str(n) for n in failed_numbers)
+    third_party_count = sum(1 for e in parsed_errors if e["is_third_party"])
+    other_errors_count = sum(1 for e in parsed_errors if not e["is_third_party"])
+
+    story_title = os.path.basename(main_folder.rstrip("/\\")) if main_folder else ""
+
+    log(f"[Seedance Inspector] 🔎 ตรวจสอบเสร็จสิ้น: พบทั้งหมด {len(all_records)} รายการ | ติด Error {len(parsed_errors)} รายการ (บุคคลที่สาม: {third_party_count}, อื่นๆ: {other_errors_count})")
+
+    return {
+        "ok": True,
+        "total_scanned": len(all_records),
+        "total_errors": len(parsed_errors),
+        "third_party_count": third_party_count,
+        "other_errors_count": other_errors_count,
+        "failed_numbers": failed_numbers,
+        "failed_numbers_str": failed_numbers_str,
+        "story_title": story_title,
+        "errors": parsed_errors
+    }
 
 
 def download_seedance_videos(

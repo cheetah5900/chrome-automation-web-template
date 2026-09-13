@@ -18,6 +18,10 @@ web/node_modules/
 *.db-shm
 *.db-wal
 
+# Extension generated metadata
+extension/_metadata/
+**/_metadata/
+
 # OS specific files
 .DS_Store
 
