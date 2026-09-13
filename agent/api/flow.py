@@ -140,6 +140,56 @@ async def test_ui_generate(prompt: str = "Test prompt", orientation: str = "HORI
     }, timeout=35)
 
 
+class UploadFileRequest(BaseModel):
+    image_base64: str
+    file_name: str = "storyboard.png"
+    mime_type: str = "image/png"
+
+
+@router.post("/test-upload-file")
+async def test_upload_file(body: UploadFileRequest):
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("flow_ui_upload_file", {
+        "imageBase64": body.image_base64,
+        "fileName": body.file_name,
+        "mimeType": body.mime_type,
+    }, timeout=45)
+
+
+class CdpUploadFileRequest(BaseModel):
+    file_path: str
+    target: str = "ingredients"
+
+
+@router.post("/cdp-upload-file")
+async def cdp_upload_file(body: CdpUploadFileRequest):
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("flow_cdp_upload_file", {
+        "filePath": body.file_path,
+        "target": body.target,
+    }, timeout=60)
+
+
+class CdpTypeTextRequest(BaseModel):
+    text: str
+    click_submit: bool = False
+
+
+@router.post("/cdp-type-text")
+async def cdp_type_text(body: CdpTypeTextRequest):
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("flow_cdp_type_text", {
+        "text": body.text,
+        "clickSubmit": body.click_submit,
+    }, timeout=30)
+
+
 @router.post("/reload-extension")
 async def reload_ext():
     """Trigger extension reload via WS."""

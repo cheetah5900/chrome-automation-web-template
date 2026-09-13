@@ -473,15 +473,19 @@ class FlowClient:
                               user_paygate_tier: str = "PAYGATE_TIER_TWO",
                               duration_seconds: int = None,
                               output_count: int = 1,
-                              custom_model_key: str = None) -> dict:
+                              custom_model_key: str = None,
+                              image_path: str = None) -> dict:
         """Generate video from start image (i2v) or text (t2v)."""
         if not self._flow_key and self.connected:
-            logger.info("flowKey not present, delegating to active Chrome Flow tab: prompt='%s', aspect='%s'", prompt[:60], aspect_ratio)
+            logger.info("flowKey not present, delegating to active Chrome Flow tab: prompt='%s', aspect='%s', image_path='%s'",
+                        prompt[:60], aspect_ratio, image_path)
             orient_str = "VERTICAL" if "PORTRAIT" in aspect_ratio else "HORIZONTAL"
+            clean_path = image_path.replace("file://", "") if image_path else None
             ui_res = await self._send("flow_ui_generate", {
                 "prompt": prompt,
                 "orientation": orient_str,
-            }, timeout=35)
+                "filePath": clean_path,
+            }, timeout=60)
             if ui_res.get("error"):
                 return {"error": ui_res.get("error")}
             mock_op = f"ui_op_{int(time.time())}"

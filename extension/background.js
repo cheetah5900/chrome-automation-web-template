@@ -116,28 +116,42 @@ async function init() {
 
 // ─── Token Capture ──────────────────────────────────────────
 
+const recentNetRequests = [];
+
 chrome.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
-    if (!details?.requestHeaders?.length) return;
-    const authHeader = details.requestHeaders.find(
-      (h) => h.name?.toLowerCase() === 'authorization',
-    );
-    const value = authHeader?.value || '';
-    const match = value.match(/^Bearer\s+(.+)$/i);
-    if (!match) return;
+    try {
+      const authHeader = details.requestHeaders?.find(
+        (h) => h.name?.toLowerCase() === 'authorization',
+      );
+      const value = authHeader?.value || '';
+      const match = value.match(/^Bearer\s+(.+)$/i);
+      
+      recentNetRequests.unshift({
+        url: details.url?.slice(0, 150),
+        method: details.method,
+        hasAuth: !!match,
+        time: Date.now()
+      });
+      if (recentNetRequests.length > 50) recentNetRequests.pop();
 
-    const token = match[1].trim();
-    if (!token) return;
+      if (!match) return;
 
-    // Always update — even if same token string, refresh the timestamp
-    flowKey = token;
-    metrics.tokenCapturedAt = Date.now();
-    chrome.storage.local.set({ flowKey, metrics });
-    console.log('[FlowAgent] Bearer token captured from:', details.url);
+      const token = match[1].trim();
+      if (!token) return;
 
-    // Notify agent
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'token_captured', flowKey }));
+      // Always update — even if same token string, refresh the timestamp
+      flowKey = token;
+      metrics.tokenCapturedAt = Date.now();
+      chrome.storage.local.set({ flowKey, metrics });
+      console.log('[FlowAgent] Bearer token captured from:', details.url);
+
+      // Notify agent
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'token_captured', flowKey }));
+      }
+    } catch (e) {
+      console.error('[FlowAgent] onBeforeSendHeaders err:', e);
     }
   },
   { urls: ['*://*.googleapis.com/*', '*://*.google.com/*', '*://*.google/*'] },
@@ -326,91 +340,309 @@ function connectToAgent() {
           return;
         }
         const tab = tabs[0];
-        const { prompt, orientation, assetName } = msg.params || {};
+        const { prompt, orientation, filePath, assetName } = msg.params || {};
+
+        try {
+          // 1. Switch to Google Flow tab
+          await chrome.tabs.update(tab.id, { active: true });
+          if (tab.windowId) {
+            chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+          }
+
+          // 2. Dismiss any existing overlay/dialog
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              const dismissBtns = Array.from(document.querySelectorAll('button')).filter(b => b.innerText?.trim() === 'Dismiss');
+              dismissBtns.forEach(b => b.click());
+              const backdrops = Array.from(document.querySelectorAll('.cdk-overlay-backdrop'));
+              backdrops.forEach(b => b.click());
+            }
+          });
+          await sleep(200);
+
+          // 3. Adjust orientation if specified
+          if (orientation) {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: async (targetOrient) => {
+                try {
+                  const isVertical = targetOrient === 'VERTICAL';
+                  const settingsBtn = document.querySelector('button[aria-label="Settings trigger"]');
+                  if (!settingsBtn) return;
+                  const currentText = settingsBtn.innerText || '';
+                  const needsChange = isVertical ? !currentText.includes('crop_9_16') && !currentText.includes('9:16')
+                                                 : !currentText.includes('crop_16_9') && !currentText.includes('16:9');
+                  if (needsChange) {
+                    settingsBtn.click();
+                    await new Promise(r => setTimeout(r, 400));
+                    const targetToggleText = isVertical ? '9:16' : '16:9';
+                    const toggles = Array.from(document.querySelectorAll('.cdk-overlay-container mat-button-toggle, .cdk-overlay-container button'));
+                    const targetToggle = toggles.find(t => t.innerText?.includes(targetToggleText));
+                    if (targetToggle) {
+                      targetToggle.click();
+                      await new Promise(r => setTimeout(r, 300));
+                    }
+                    const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                    if (backdrop) backdrop.click();
+                    else settingsBtn.click();
+                    await new Promise(r => setTimeout(r, 300));
+                  }
+                } catch (e) {}
+              },
+              args: [orientation]
+            });
+            await sleep(300);
+          }
+
+          // 4. If filePath provided, ensure image is uploaded and attached to prompt box
+          let imageAttached = false;
+          if (filePath) {
+            const fileName = filePath.split('/').pop();
+            console.log('[FlowAgent] Preparing image attachment for:', fileName);
+
+            // Step 4a: Clear existing chips in prompt box to avoid reusing old scenes
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => {
+                const chips = Array.from(document.querySelectorAll('flow-prompt-box button[aria-label="Ingredient"], flow-prompt-box .chip-container button, flow-prompt-box button.chip-container'));
+                chips.forEach(c => c.click());
+              }
+            });
+            await sleep(300);
+
+            // Step 4b: Open ingredients overlay & trigger file input
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'MAIN',
+              func: async () => {
+                const addBtn = document.querySelector('button[aria-label="Add ingredients to the prompt box"]') ||
+                               Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
+                if (addBtn && addBtn.innerText?.trim() !== 'close') {
+                  const rect = addBtn.getBoundingClientRect();
+                  const x = rect.left + rect.width / 2;
+                  const y = rect.top + rect.height / 2;
+                  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1 };
+                  addBtn.dispatchEvent(new PointerEvent('pointerdown', opts));
+                  addBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+                  addBtn.dispatchEvent(new PointerEvent('pointerup', opts));
+                  addBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+                  addBtn.dispatchEvent(new MouseEvent('click', opts));
+                  await new Promise(r => setTimeout(r, 600));
+                }
+
+                let uploadBtn = document.querySelector('button[aria-label="Upload media"]') ||
+                                document.querySelector('.upload-button') ||
+                                Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => b.innerText?.includes('Upload') || b.getAttribute('aria-label')?.includes('Upload'));
+
+                if (!uploadBtn) {
+                  const addMediaBtn = document.querySelector('button[aria-label="Add media menu"]');
+                  if (addMediaBtn) {
+                    addMediaBtn.click();
+                    await new Promise(r => setTimeout(r, 500));
+                    uploadBtn = Array.from(document.querySelectorAll('[role="menuitem"], mat-menu-item, button')).find(b => b.innerText?.includes('Upload'));
+                  }
+                }
+
+                if (uploadBtn) {
+                  uploadBtn.click();
+                  await new Promise(r => setTimeout(r, 600));
+                }
+              }
+            });
+
+            // Step 4c: Attach CDP debugger to upload the local file
+            const dbgTarget = { tabId: tab.id };
+            await chrome.debugger.attach(dbgTarget, '1.3');
+            try {
+              await chrome.debugger.sendCommand(dbgTarget, 'DOM.enable');
+              const doc = await chrome.debugger.sendCommand(dbgTarget, 'DOM.getDocument');
+              const node = await chrome.debugger.sendCommand(dbgTarget, 'DOM.querySelector', {
+                nodeId: doc.root.nodeId,
+                selector: 'input[type="file"]'
+              });
+              if (node?.nodeId) {
+                await chrome.debugger.sendCommand(dbgTarget, 'DOM.setFileInputFiles', {
+                  files: [filePath],
+                  nodeId: node.nodeId
+                });
+                console.log('[FlowAgent] CDP setFileInputFiles succeeded:', filePath);
+              }
+            } finally {
+              try { await chrome.debugger.detach(dbgTarget); } catch {}
+            }
+
+            // Step 4d: Wait 3.5 seconds for upload processing in Google Flow
+            await sleep(3500);
+
+            // Step 4e: Click the asset item button to attach it to the prompt box
+            const attachRes = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: async (fname) => {
+                try {
+                  const items = Array.from(document.querySelectorAll('.cdk-overlay-container button.asset-item, button.asset-item'));
+                  const targetItem = items.find(b => b.innerText?.includes(fname)) || items[0];
+                  if (targetItem) {
+                    targetItem.click();
+                    await new Promise(r => setTimeout(r, 600));
+                    return { attached: true, itemText: targetItem.innerText?.trim() };
+                  }
+                  return { attached: false, itemsFound: items.length };
+                } catch (e) {
+                  return { error: e.message };
+                }
+              },
+              args: [fileName]
+            });
+
+            imageAttached = attachRes[0]?.result?.attached || false;
+          }
+
+          // 5. Clear prompt area & type the scene prompt via CDP Input.insertText
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              const clearBtn = document.querySelector('button[aria-label="Clear prompt"]');
+              if (clearBtn) clearBtn.click();
+              const pm = document.querySelector('.ProseMirror');
+              if (pm) {
+                pm.focus();
+                document.execCommand('selectAll', false, null);
+              }
+            }
+          });
+          await sleep(200);
+
+          const dbgTarget = { tabId: tab.id };
+          await chrome.debugger.attach(dbgTarget, '1.3');
+          try {
+            await chrome.debugger.sendCommand(dbgTarget, 'Input.insertText', { text: prompt || '' });
+          } finally {
+            try { await chrome.debugger.detach(dbgTarget); } catch {}
+          }
+
+          // 6. Wait for Angular / Flow validation and click Start generation
+          await sleep(600);
+
+          const submitRes = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: async () => {
+              for (let attempt = 0; attempt < 6; attempt++) {
+                const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                const pm = document.querySelector('.ProseMirror');
+                if (submitBtn && !submitBtn.disabled) {
+                  submitBtn.click();
+                  return { success: true, clicked: true };
+                }
+                await new Promise(r => setTimeout(r, 500));
+              }
+              const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+              const pm = document.querySelector('.ProseMirror');
+              return {
+                error: 'Submit button is disabled after waiting 3s. Check prompt or image attachment.',
+                pmText: pm ? pm.innerText?.trim() : null,
+                disabled: submitBtn ? submitBtn.disabled : true
+              };
+            }
+          });
+
+          const finalResult = submitRes[0]?.result || {};
+          if (finalResult.error) {
+            sendToAgent({ id: msg.id, error: finalResult.error, details: finalResult });
+          } else {
+            sendToAgent({
+              id: msg.id,
+              result: {
+                success: true,
+                imageAttached,
+                filePath,
+                promptSnippet: (prompt || '').slice(0, 60)
+              }
+            });
+          }
+        } catch (e) {
+          console.error('[FlowAgent] flow_ui_generate error:', e);
+          sendToAgent({ id: msg.id, error: e.message });
+        }
+      } else if (msg.method === 'flow_ui_upload_file') {
+        const tabs = await findFlowTabs();
+        if (!tabs.length) {
+          sendToAgent({ id: msg.id, error: 'No active Google Flow tab found' });
+          return;
+        }
+        const tab = tabs[0];
+        const { imageBase64, fileName, mimeType } = msg.params || {};
 
         try {
           const res = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             world: 'MAIN',
-            func: async (promptText, orient, targetAsset) => {
+            func: async (b64, fname, mime) => {
               try {
-                const settingsBtn = document.querySelector('button[aria-label="Settings trigger"]');
-                let modeBtn = document.getElementById('mat-button-toggle-6-button') || Array.from(document.querySelectorAll('button')).find(b => b.innerText?.includes('Video'));
-                
-                if (!modeBtn && settingsBtn) {
-                  settingsBtn.click();
-                  await new Promise(r => setTimeout(r, 400));
-                  modeBtn = document.getElementById('mat-button-toggle-6-button') || Array.from(document.querySelectorAll('button')).find(b => b.innerText?.includes('Video'));
-                }
-
-                if (modeBtn) {
-                  modeBtn.click();
-                  await new Promise(r => setTimeout(r, 200));
-                }
-
-                if (orient) {
-                  const isVert = orient.toUpperCase().includes('VERT') || orient.includes('9:16');
-                  const toggleId = isVert ? 'mat-button-toggle-20-button' : 'mat-button-toggle-19-button';
-                  const orientBtn = document.getElementById(toggleId);
-                  if (orientBtn) {
-                    orientBtn.click();
-                    await new Promise(r => setTimeout(r, 200));
-                  }
-                }
-
-                const startBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start' && b.classList.contains('empty-chip'));
-                if (startBtn) {
-                  startBtn.click();
-                  await new Promise(r => setTimeout(r, 500));
-                  const addBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Add to prompt');
-                  if (addBtn) {
-                    addBtn.click();
+                // 1. Find or trigger file input via Add media menu
+                let fileInput = document.querySelector('input[type="file"]');
+                if (!fileInput) {
+                  const addMediaBtn = document.querySelector('button[aria-label="Add media menu"]');
+                  if (addMediaBtn) {
+                    addMediaBtn.click();
                     await new Promise(r => setTimeout(r, 400));
+                    const uploadItem = Array.from(document.querySelectorAll('[role="menuitem"], mat-menu-item, button')).find(b => b.innerText?.includes('Upload'));
+                    if (uploadItem) {
+                      uploadItem.click();
+                      await new Promise(r => setTimeout(r, 400));
+                    }
                   }
+                  fileInput = document.querySelector('input[type="file"]');
                 }
+                if (!fileInput) return { error: 'Could not find or create input[type="file"]' };
 
+                // 2. Convert base64 to File object
+                const byteCharacters = atob(b64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: mime || 'image/png' });
+                const file = new File([blob], fname || 'storyboard.png', { type: mime || 'image/png' });
+
+                // 3. Set files via DataTransfer
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fileInput.files = dt.files;
+
+                // 4. Dispatch change and input events
+                fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+
+                // 5. Also try dropping onto .ProseMirror if needed
                 const pm = document.querySelector('.ProseMirror');
-                if (!pm) return { error: 'Prompt input (.ProseMirror) not found' };
-                pm.focus();
-
-                let dispatched = false;
-                let view = pm.pmViewDesc?.view;
-                if (!view) {
-                  let el = pm;
-                  while (el && !view) {
-                    if (el.pmViewDesc?.view) view = el.pmViewDesc.view;
-                    el = el.parentElement;
-                  }
+                if (pm) {
+                  const dropEvent = new DragEvent('drop', {
+                    bubbles: true,
+                    cancelable: true,
+                    composed: true,
+                    dataTransfer: dt
+                  });
+                  pm.dispatchEvent(dropEvent);
                 }
 
-                if (view && view.state && view.dispatch) {
-                  const tr = view.state.tr.insertText(promptText);
-                  view.dispatch(tr);
-                  dispatched = true;
-                }
+                // 6. Wait for upload to initiate
+                await new Promise(r => setTimeout(r, 1500));
 
-                if (!dispatched || !pm.innerText?.trim()) {
-                  pm.focus();
-                  document.execCommand('selectAll', false, null);
-                  document.execCommand('insertText', false, promptText);
-                  pm.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
-                }
+                const snackbar = document.querySelector('mat-snack-bar-container, .flow-snackbar-panel')?.innerText || null;
 
-                await new Promise(r => setTimeout(r, 500));
-
-                const submitBtn = document.querySelector('button[aria-label="Start generation"]');
-                if (!submitBtn) return { error: 'Submit button not found' };
-                if (submitBtn.disabled) {
-                  return { error: 'Submit button is disabled. Please check prompt or image attachment.', pmText: pm.innerText?.slice(0, 100) };
-                }
-
-                submitBtn.click();
-                return { success: true, promptSnippet: promptText.slice(0, 60) };
+                return {
+                  success: true,
+                  fileName: fname,
+                  sizeBytes: blob.size,
+                  snackbar
+                };
               } catch (err) {
                 return { error: err.message };
               }
             },
-            args: [prompt || '', orientation || 'HORIZONTAL', assetName || '']
+            args: [imageBase64, fileName, mimeType || 'image/png']
           });
 
           const result = res[0]?.result || {};
@@ -419,6 +651,207 @@ function connectToAgent() {
           } else {
             sendToAgent({ id: msg.id, result });
           }
+        } catch (e) {
+          sendToAgent({ id: msg.id, error: e.message });
+        }
+      } else if (msg.method === 'flow_cdp_upload_file') {
+        const tabs = await findFlowTabs();
+        if (!tabs.length) {
+          sendToAgent({ id: msg.id, error: 'No active Google Flow tab found' });
+          return;
+        }
+        const tab = tabs[0];
+        const { filePath, target = 'ingredients' } = msg.params || {};
+        if (!filePath) {
+          sendToAgent({ id: msg.id, error: 'filePath is required' });
+          return;
+        }
+
+        try {
+          // 1. Trigger upload button to instantiate input[type="file"]
+          const triggerRes = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            world: 'MAIN',
+            func: async (mode) => {
+              try {
+                const dismissBtns = Array.from(document.querySelectorAll('button')).filter(b => b.innerText?.trim() === 'Dismiss');
+                dismissBtns.forEach(b => b.click());
+
+                const addBtn = document.querySelector('button[aria-label="Add ingredients to the prompt box"]') ||
+                               Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
+                
+                if (addBtn && addBtn.innerText?.trim() !== 'close') {
+                  const rect = addBtn.getBoundingClientRect();
+                  const x = rect.left + rect.width / 2;
+                  const y = rect.top + rect.height / 2;
+                  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1 };
+                  addBtn.dispatchEvent(new PointerEvent('pointerdown', opts));
+                  addBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+                  addBtn.dispatchEvent(new PointerEvent('pointerup', opts));
+                  addBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+                  addBtn.dispatchEvent(new MouseEvent('click', opts));
+                  await new Promise(r => setTimeout(r, 600));
+                }
+
+                let uploadBtn = document.querySelector('button[aria-label="Upload media"]') ||
+                                document.querySelector('.upload-button') ||
+                                Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => b.innerText?.includes('Upload') || b.getAttribute('aria-label')?.includes('Upload'));
+
+                if (!uploadBtn) {
+                  const addMediaBtn = document.querySelector('button[aria-label="Add media menu"]');
+                  if (addMediaBtn) {
+                    addMediaBtn.click();
+                    await new Promise(r => setTimeout(r, 500));
+                    uploadBtn = Array.from(document.querySelectorAll('[role="menuitem"], mat-menu-item, button')).find(b => b.innerText?.includes('Upload'));
+                  }
+                }
+
+                if (uploadBtn) {
+                  uploadBtn.click();
+                  await new Promise(r => setTimeout(r, 600));
+                }
+
+                const fileInputs = Array.from(document.querySelectorAll('input[type="file"]')).map(i => ({
+                  id: i.id,
+                  accept: i.accept,
+                  outer: i.outerHTML.slice(0, 100)
+                }));
+
+                return {
+                  addBtnFound: !!addBtn,
+                  uploadBtnFound: !!uploadBtn,
+                  uploadBtnAria: uploadBtn?.getAttribute('aria-label'),
+                  fileInputs
+                };
+              } catch (e) {
+                return { error: e.message };
+              }
+            },
+            args: [target]
+          });
+
+          const diag = triggerRes[0]?.result || {};
+          console.log('[FlowAgent] Trigger diag:', JSON.stringify(diag));
+          if (!diag.fileInputs || !diag.fileInputs.length) {
+            sendToAgent({ id: msg.id, error: 'Could not instantiate input[type="file"]', details: diag });
+            return;
+          }
+
+          // 2. Attach CDP debugger and set file
+          const dbgTarget = { tabId: tab.id };
+          await chrome.debugger.attach(dbgTarget, '1.3');
+          try {
+            await chrome.debugger.sendCommand(dbgTarget, 'DOM.enable');
+            const doc = await chrome.debugger.sendCommand(dbgTarget, 'DOM.getDocument');
+            const node = await chrome.debugger.sendCommand(dbgTarget, 'DOM.querySelector', {
+              nodeId: doc.root.nodeId,
+              selector: 'input[type="file"]'
+            });
+
+            if (!node || !node.nodeId) {
+              throw new Error('Could not find input[type="file"] via CDP');
+            }
+
+            await chrome.debugger.sendCommand(dbgTarget, 'DOM.setFileInputFiles', {
+              files: [filePath],
+              nodeId: node.nodeId
+            });
+            console.log('[FlowAgent] Successfully set file via CDP:', filePath);
+          } finally {
+            try {
+              await chrome.debugger.detach(dbgTarget);
+            } catch {}
+          }
+
+          // 3. Wait for upload to initiate and settle
+          await sleep(3000);
+
+          const checkRes = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              const chips = Array.from(document.querySelectorAll('flow-prompt-box [class*="chip"], flow-prompt-box img, flow-prompt-box button')).map(el => ({
+                tag: el.tagName,
+                text: el.innerText?.trim(),
+                aria: el.getAttribute('aria-label'),
+                src: el.src || el.querySelector('img')?.src
+              }));
+              const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+              const pm = document.querySelector('.ProseMirror');
+              return {
+                chips,
+                canGenerate: submitBtn ? !submitBtn.disabled : false,
+                pmText: pm ? pm.innerText?.trim() : null
+              };
+            }
+          });
+
+          sendToAgent({
+            id: msg.id,
+            result: {
+              success: true,
+              filePath,
+              uiState: checkRes[0]?.result
+            }
+          });
+        } catch (e) {
+          console.error('[FlowAgent] CDP upload error:', e);
+          sendToAgent({ id: msg.id, error: e.message });
+        }
+      } else if (msg.method === 'flow_cdp_type_text') {
+        const tabs = await findFlowTabs();
+        if (!tabs.length) {
+          sendToAgent({ id: msg.id, error: 'No active Google Flow tab found' });
+          return;
+        }
+        const tab = tabs[0];
+        const { text, clickSubmit = false } = msg.params || {};
+
+        try {
+          // Focus pm
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              const pm = document.querySelector('.ProseMirror');
+              if (pm) {
+                pm.focus();
+                document.execCommand('selectAll', false, null);
+              }
+            }
+          });
+
+          // Send CDP Input.insertText
+          const dbgTarget = { tabId: tab.id };
+          await chrome.debugger.attach(dbgTarget, '1.3');
+          try {
+            await chrome.debugger.sendCommand(dbgTarget, 'Input.insertText', { text: text || '' });
+          } finally {
+            try { await chrome.debugger.detach(dbgTarget); } catch {}
+          }
+
+          await sleep(500);
+
+          // Check submit button
+          const checkRes = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: (shouldClick) => {
+              const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+              const pm = document.querySelector('.ProseMirror');
+              const isEnabled = submitBtn ? !submitBtn.disabled : false;
+              let clicked = false;
+              if (shouldClick && isEnabled) {
+                submitBtn.click();
+                clicked = true;
+              }
+              return {
+                pmText: pm ? pm.innerText?.trim() : null,
+                canGenerate: isEnabled,
+                clicked
+              };
+            },
+            args: [clickSubmit]
+          });
+
+          sendToAgent({ id: msg.id, result: checkRes[0]?.result });
         } catch (e) {
           sendToAgent({ id: msg.id, error: e.message });
         }
@@ -506,37 +939,16 @@ function connectToAgent() {
                 try {
                   const pm = document.querySelector('.ProseMirror');
                   if (!pm) return { error: 'ProseMirror not found' };
-                  
-                  let dispatched = false;
-                  let view = pm.pmViewDesc?.view;
-                  if (!view) {
-                    let el = pm;
-                    while (el && !view) {
-                      if (el.pmViewDesc?.view) view = el.pmViewDesc.view;
-                      el = el.parentElement;
-                    }
-                  }
-                  
-                  if (view && view.state && view.dispatch) {
-                    const tr = view.state.tr.insertText(text);
-                    view.dispatch(tr);
-                    dispatched = true;
-                  }
 
-                  if (!dispatched || !pm.innerText?.trim()) {
-                    pm.focus();
-                    document.execCommand('selectAll', false, null);
-                    document.execCommand('insertText', false, text);
-                    pm.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
-                  }
+                  const vd = pm.pmViewDesc;
+                  const vdKeys = vd ? Object.keys(vd) : [];
+                  const viewKeys = vd?.view ? Object.keys(vd.view) : [];
 
-                  const submitBtn = document.querySelector('button[aria-label="Start generation"]');
                   return {
                     success: true,
-                    dispatched,
-                    pmText: pm.innerText?.slice(0, 100),
-                    submitBtnDisabled: submitBtn ? submitBtn.disabled : 'not found',
-                    submitBtnClasses: submitBtn ? submitBtn.className : ''
+                    vdKeys,
+                    hasView: !!vd?.view,
+                    viewKeys
                   };
                 } catch (e) {
                   return { success: false, error: e.message };
@@ -581,6 +993,30 @@ function connectToAgent() {
               },
             });
             scriptResult = res[0]?.result;
+          } else if (evalCode === 'inspect_settings_menu') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: async () => {
+                try {
+                  const settingsBtn = document.querySelector('button[aria-label="Settings trigger"]');
+                  if (!settingsBtn) return { error: 'Settings trigger button not found' };
+                  settingsBtn.click();
+                  await new Promise(r => setTimeout(r, 600));
+                  const menu = document.querySelector('.cdk-overlay-container');
+                  const options = menu ? Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="radio"], [role="option"], mat-button-toggle, span')).map(el => ({
+                    tag: el.tagName,
+                    role: el.getAttribute('role'),
+                    text: el.innerText?.trim()?.slice(0, 40),
+                    aria: el.getAttribute('aria-label'),
+                    cls: el.className
+                  })).filter(x => x.text || x.aria) : [];
+                  return { success: true, optionsCount: options.length, options };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              }
+            });
+            scriptResult = res[0]?.result;
           } else if (evalCode === 'click_video_mode') {
             const res = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
@@ -616,40 +1052,333 @@ function connectToAgent() {
               },
             });
             scriptResult = res[0]?.result;
-          } else if (evalCode === 'custom' && msg.params?.js) {
+          } else if (evalCode === 'inspect_prompt_area') {
             const res = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
-              world: 'MAIN',
-              func: (codeStr) => {
+              func: () => {
                 try {
-                  const fn = new Function(codeStr);
-                  return { success: true, result: fn() };
+                  const pm = document.querySelector('.ProseMirror');
+                  const promptContainer = pm ? (pm.closest('flow-prompt-box') || pm.closest('[class*="prompt-box"]') || pm.parentElement?.parentElement) : null;
+                  const buttons = promptContainer ? Array.from(promptContainer.querySelectorAll('button')).map(b => ({
+                    text: b.innerText?.trim()?.slice(0, 40),
+                    aria: b.getAttribute('aria-label'),
+                    id: b.id,
+                    cls: b.className
+                  })) : [];
+                  
+                  const projectAssets = Array.from(document.querySelectorAll('flow-asset-card, [class*="asset-card"], [class*="media-card"], [class*="tile"], img')).map(el => ({
+                    tag: el.tagName,
+                    src: el.src || el.querySelector('img')?.src,
+                    title: el.getAttribute('title') || el.innerText?.trim()?.slice(0, 30)
+                  })).filter(a => a.src || a.title);
+
+                  const addMediaBtn = document.querySelector('button[aria-label="Add media menu"]');
+                  const addMediaRect = addMediaBtn ? addMediaBtn.getBoundingClientRect() : null;
+
+                  const addIngrBtn = document.querySelector('button[aria-label="Add ingredients to the prompt box"]');
+                  const addIngrRect = addIngrBtn ? addIngrBtn.getBoundingClientRect() : null;
+
+                  const chromeTopBarHeight = window.outerHeight - window.innerHeight;
+                  const chromeSideBorder = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
+
+                  const toScreenCoord = (rect) => {
+                    if (!rect) return null;
+                    return {
+                      x: Math.round(window.screenX + chromeSideBorder + rect.left + rect.width / 2),
+                      y: Math.round(window.screenY + chromeTopBarHeight + rect.top + rect.height / 2)
+                    };
+                  };
+
+                  return {
+                    success: true,
+                    promptContainerTag: promptContainer ? promptContainer.tagName : null,
+                    buttons,
+                    addMediaScreenCoord: toScreenCoord(addMediaRect),
+                    addIngrScreenCoord: toScreenCoord(addIngrRect),
+                    windowMetrics: {
+                      screenX: window.screenX,
+                      screenY: window.screenY,
+                      outerW: window.outerWidth,
+                      outerH: window.outerHeight,
+                      innerW: window.innerWidth,
+                      innerH: window.innerHeight,
+                      chromeTopBarHeight
+                    }
+                  };
                 } catch (e) {
                   return { success: false, error: e.message };
                 }
-              },
-              args: [msg.params.js]
+              }
             });
             scriptResult = res[0]?.result;
-          } else if (evalCode === 'storage_info') {
+          } else if (evalCode === 'click_add_ingredients') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: async () => {
+                try {
+                  const dismissBtns = Array.from(document.querySelectorAll('button')).filter(b => b.innerText?.trim() === 'Dismiss');
+                  dismissBtns.forEach(b => b.click());
+                  await new Promise(r => setTimeout(r, 300));
+                  
+                  const btn = document.querySelector('button[aria-label="Add ingredients to the prompt box"]') || Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
+                  if (!btn) return { error: 'btn not found' };
+                  btn.click();
+                  await new Promise(r => setTimeout(r, 600));
+                  
+                  // Find all overlays / menus
+                  const overlays = Array.from(document.querySelectorAll('.cdk-overlay-container, [role="menu"], mat-bottom-sheet-container, .flow-menu')).map(o => ({
+                    tag: o.tagName,
+                    cls: o.className,
+                    text: o.innerText?.slice(0, 300),
+                    items: Array.from(o.querySelectorAll('button, [role="menuitem"], mat-list-item, input')).map(el => ({
+                      tag: el.tagName,
+                      type: el.type,
+                      text: el.innerText?.trim()?.slice(0, 60),
+                      aria: el.getAttribute('aria-label'),
+                      cls: el.className
+                    }))
+                  }));
+
+                  const allInputs = Array.from(document.querySelectorAll('input[type="file"]')).map(i => ({
+                    id: i.id,
+                    accept: i.accept,
+                    outer: i.outerHTML.slice(0, 150)
+                  }));
+
+                  return {
+                    success: true,
+                    overlays,
+                    allInputs
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              }
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'inspect_overlay_assets') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => {
+                const overlay = document.querySelector('.cdk-overlay-container');
+                const tiles = overlay ? Array.from(overlay.querySelectorAll('[class*="asset"], [class*="card"], [class*="tile"], [class*="item"], img, button')).map(el => ({
+                  tag: el.tagName,
+                  cls: el.className,
+                  text: el.innerText?.trim()?.slice(0, 50),
+                  aria: el.getAttribute('aria-label'),
+                  src: el.src || el.querySelector('img')?.src
+                })).filter(x => x.text || x.aria || x.src) : [];
+
+                const allProjectTiles = Array.from(document.querySelectorAll('flow-asset-tile, [class*="asset-card"], [class*="tile"]')).map(el => ({
+                  tag: el.tagName,
+                  text: el.innerText?.trim()?.slice(0, 50),
+                  aria: el.getAttribute('aria-label')
+                }));
+
+                return {
+                  success: true,
+                  overlayTilesCount: tiles.length,
+                  tiles: tiles.slice(0, 15),
+                  allProjectTiles
+                };
+              }
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'click_asset_item_to_attach') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: async () => {
+                try {
+                  const item = Array.from(document.querySelectorAll('.cdk-overlay-container button.asset-item, button.asset-item')).find(b => b.innerText?.includes('01 - Scene 01.png')) ||
+                               document.querySelector('.cdk-overlay-container button.asset-item');
+                  if (!item) return { error: 'Asset item button not found' };
+
+                  item.click();
+                  await new Promise(r => setTimeout(r, 600));
+
+                  const chips = Array.from(document.querySelectorAll('flow-prompt-box [class*="chip"], flow-prompt-box img, flow-prompt-box button')).map(el => ({
+                    tag: el.tagName,
+                    text: el.innerText?.trim(),
+                    aria: el.getAttribute('aria-label'),
+                    src: el.src || el.querySelector('img')?.src
+                  }));
+
+                  return {
+                    success: true,
+                    clickedItemText: item.innerText?.trim(),
+                    chips
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              }
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'click_upload_item_in_ingredients') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: async () => {
+                try {
+                  const dismissBtns = Array.from(document.querySelectorAll('button')).filter(b => b.innerText?.trim() === 'Dismiss');
+                  dismissBtns.forEach(b => b.click());
+                  await new Promise(r => setTimeout(r, 200));
+
+                  const addBtn = document.querySelector('button[aria-label="Add ingredients to the prompt box"]');
+                  if (!addBtn) return { error: 'Add ingredients button not found' };
+                  
+                  if (addBtn.innerText?.trim() !== 'close') {
+                    const rect = addBtn.getBoundingClientRect();
+                    const x = rect.left + rect.width / 2;
+                    const y = rect.top + rect.height / 2;
+                    const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1 };
+                    
+                    addBtn.dispatchEvent(new PointerEvent('pointerdown', opts));
+                    addBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+                    addBtn.dispatchEvent(new PointerEvent('pointerup', opts));
+                    addBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+                    addBtn.dispatchEvent(new MouseEvent('click', opts));
+
+                    await new Promise(r => setTimeout(r, 600));
+                  }
+
+                  const uploadBtn = document.querySelector('button[aria-label="Upload media"]');
+                  if (!uploadBtn) return { error: 'Upload media button not found' };
+
+                  uploadBtn.click();
+                  await new Promise(r => setTimeout(r, 600));
+
+                  const fileInputs = Array.from(document.querySelectorAll('input[type="file"]')).map(i => ({
+                    id: i.id,
+                    accept: i.accept,
+                    outer: i.outerHTML.slice(0, 150)
+                  }));
+
+                  return {
+                    success: true,
+                    fileInputsCount: fileInputs.length,
+                    fileInputs
+                  };
+
+                  const domBefore = document.body.innerHTML.length;
+                  const inputsBefore = Array.from(document.querySelectorAll('input')).map(i => ({ type: i.type, id: i.id, accept: i.accept }));
+
+                  // Click uploadItem
+                  uploadItem.click();
+                  await new Promise(r => setTimeout(r, 600));
+
+                  const domAfter = document.body.innerHTML.length;
+                  const inputsAfter = Array.from(document.querySelectorAll('input')).map(i => ({ type: i.type, id: i.id, accept: i.accept }));
+
+                  return {
+                    success: true,
+                    uploadItemTag: uploadItem.tagName,
+                    uploadItemCls: uploadItem.className,
+                    domBefore,
+                    domAfter,
+                    inputsBefore,
+                    inputsAfter
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              }
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'click_upload_menu') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: async () => {
+                try {
+                  const addMedia = document.querySelector('button[aria-label="Add media menu"]');
+                  if (!addMedia) return { error: 'Add media menu not found' };
+                  addMedia.click();
+                  await new Promise(r => setTimeout(r, 400));
+                  const uploadBtn = Array.from(document.querySelectorAll('[role="menuitem"], mat-menu-item, .mat-mdc-menu-item, button')).find(b => b.innerText?.includes('Upload'));
+                  if (!uploadBtn) return { error: 'Upload btn not found' };
+                  
+                  const filesBefore = Array.from(document.querySelectorAll('input[type="file"]')).length;
+                  uploadBtn.click();
+                  await new Promise(r => setTimeout(r, 500));
+                  const filesAfter = Array.from(document.querySelectorAll('input[type="file"]')).map(i => ({
+                    id: i.id,
+                    accept: i.accept,
+                    outer: i.outerHTML.slice(0, 150)
+                  }));
+
+                  return {
+                    success: true,
+                    filesBefore,
+                    filesAfter
+                  };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              }
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'inspect_scripts') {
             const res = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               world: 'MAIN',
               func: () => {
                 try {
-                  const lsKeys = Object.keys(localStorage);
-                  const ssKeys = Object.keys(sessionStorage);
-                  const globalVars = Object.keys(window).filter(k => k.startsWith('WIZ') || k.toLowerCase().includes('flow') || k.toLowerCase().includes('auth') || k.toLowerCase().includes('token'));
+                  const scripts = Array.from(document.querySelectorAll('script')).map(s => s.src).filter(Boolean);
+                  return { success: true, scripts };
+                } catch (e) {
+                  return { success: false, error: e.message };
+                }
+              }
+            });
+            scriptResult = res[0]?.result;
+          } else if (evalCode === 'network_log') {
+            scriptResult = {
+              success: true,
+              count: recentNetRequests.length,
+              hasFlowKey: !!flowKey,
+              flowKeyPreview: flowKey ? flowKey.slice(0, 15) + '...' : null,
+              requests: recentNetRequests.slice(0, 20)
+            };
+          } else if (evalCode === 'activate_flow_tab') {
+            await chrome.tabs.update(tab.id, { active: true, selected: true });
+            const flowTab = await chrome.tabs.get(tab.id);
+            if (flowTab.windowId) {
+              await chrome.windows.update(flowTab.windowId, { focused: true });
+            }
+            scriptResult = {
+              success: true,
+              flowTab: {
+                id: flowTab.id,
+                index: flowTab.index,
+                windowId: flowTab.windowId,
+                title: flowTab.title,
+                active: flowTab.active
+              }
+            };
+          } else if (evalCode === 'inspect_menu_coord') {
+            const res = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'MAIN',
+              func: () => {
+                try {
+                  const uploadItem = Array.from(document.querySelectorAll('.cdk-overlay-container [role="menuitem"], .cdk-overlay-container button')).find(b => b.innerText?.includes('Upload'));
+                  if (!uploadItem) return { error: 'Upload item not found' };
+                  
+                  const rect = uploadItem.getBoundingClientRect();
+                  const chromeTopBarHeight = window.outerHeight - window.innerHeight;
+                  const chromeSideBorder = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
+
                   return {
                     success: true,
-                    lsKeys,
-                    ssKeys,
-                    globalVars
+                    text: uploadItem.innerText?.trim(),
+                    coord: {
+                      x: Math.round(window.screenX + chromeSideBorder + rect.left + rect.width / 2),
+                      y: Math.round(window.screenY + chromeTopBarHeight + rect.top + rect.height / 2)
+                    }
                   };
                 } catch (e) {
                   return { success: false, error: e.message };
                 }
-              },
+              }
             });
             scriptResult = res[0]?.result;
           } else if (evalCode) {

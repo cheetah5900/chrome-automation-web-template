@@ -530,6 +530,7 @@ class OperationService:
             duration_seconds=duration_seconds,
             output_count=output_count,
             custom_model_key=custom_model_key,
+            image_path=scene.get(f"{prefix}_image_url"),
         )
 
         if _is_error(submit_result):
