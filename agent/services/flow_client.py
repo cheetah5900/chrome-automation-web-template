@@ -476,8 +476,8 @@ class FlowClient:
                               custom_model_key: str = None,
                               image_path: str = None) -> dict:
         """Generate video from start image (i2v) or text (t2v)."""
-        if not self._flow_key and self.connected:
-            logger.info("flowKey not present, delegating to active Chrome Flow tab: prompt='%s', aspect='%s', image_path='%s'",
+        if (not self._flow_key or image_path) and self.connected:
+            logger.info("Delegating to active Chrome Flow tab: prompt='%s', aspect='%s', image_path='%s'",
                         prompt[:60], aspect_ratio, image_path)
             orient_str = "VERTICAL" if "PORTRAIT" in aspect_ratio else "HORIZONTAL"
             clean_path = image_path.replace("file://", "") if image_path else None
@@ -485,7 +485,7 @@ class FlowClient:
                 "prompt": prompt,
                 "orientation": orient_str,
                 "filePath": clean_path,
-            }, timeout=60)
+            }, timeout=90)
             if ui_res.get("error"):
                 return {"error": ui_res.get("error")}
             mock_op = f"ui_op_{int(time.time())}"

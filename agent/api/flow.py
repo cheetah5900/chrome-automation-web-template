@@ -130,14 +130,15 @@ async def inspect_tab(url: Optional[str] = None, code: Optional[str] = None, pro
 
 
 @router.post("/test-ui-generate")
-async def test_ui_generate(prompt: str = "Test prompt", orientation: str = "HORIZONTAL"):
+async def test_ui_generate(prompt: str = "Test prompt", orientation: str = "VERTICAL", file_path: Optional[str] = None):
     client = get_flow_client()
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
     return await client._send("flow_ui_generate", {
         "prompt": prompt,
         "orientation": orientation,
-    }, timeout=35)
+        "filePath": file_path,
+    }, timeout=90)
 
 
 class UploadFileRequest(BaseModel):
