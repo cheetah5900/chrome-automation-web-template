@@ -11797,6 +11797,106 @@ function initFlowKitUploaderListeners() {
     }
   });
 
+  // --- Flow Step-by-Step Debugger Controls ---
+  let flowDebugCurrentStep = 1;
+  const getSelectedDebugScene = () => {
+    const validPairs = flowScannedPairs.filter(p => p.checked !== false && p.image_path);
+    if (validPairs.length > 0) return validPairs[0];
+    if (flowScannedPairs.length > 0) return flowScannedPairs[0];
+    return {
+      image_path: '/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย/19/6 - Storyboards/EP01/06 - Scene 06.png',
+      prompt_content: 'The pale-gold glass mother stands alone in a dim nursery flashback, both hands trembling as she holds two colored cloths. Dialogue audio in Thai: - Pale-Gold Glass Mother says in a whisper: "แม่แค่... อยากให้ทุกอย่างมันดูสมบูรณ์แบบ" no subtitles, no on-screen text, no watermark, no real human, no live-action actor, no realistic human skin'
+    };
+  };
+
+  const updateDebugStatus = (text, status = 'info', badge = '') => {
+    const statusTextEl = document.getElementById('flowDebugStatusText');
+    const badgeEl = document.getElementById('flowDebugBadge');
+    if (statusTextEl) {
+      statusTextEl.textContent = text;
+      statusTextEl.style.color = status === 'error' ? '#f87171' : (status === 'success' ? '#34d399' : '#93c5fd');
+    }
+    if (badgeEl) {
+      badgeEl.textContent = badge || (status === 'error' ? 'Failed ❌' : (status === 'success' ? 'Success ✅' : 'Running...'));
+      badgeEl.style.background = status === 'error' ? 'rgba(239,68,68,0.2)' : (status === 'success' ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)');
+      badgeEl.style.color = status === 'error' ? '#f87171' : (status === 'success' ? '#34d399' : '#60a5fa');
+    }
+    const videoConsole = document.getElementById('videoConsole');
+    if (videoConsole) {
+      const div = document.createElement('div');
+      div.className = `console-line ${status === 'error' ? 'error' : (status === 'success' ? 'success' : 'info')}`;
+      div.textContent = `[${new Date().toLocaleTimeString()}] [Debug] ${text}`;
+      videoConsole.appendChild(div);
+      videoConsole.scrollTop = videoConsole.scrollHeight;
+    }
+  };
+
+  const runFlowDebugStep = async (stepNum) => {
+    const scene = getSelectedDebugScene();
+    const sceneLabel = document.getElementById('flowDebugCurrentSceneLabel');
+    const fName = scene.image_path ? scene.image_path.split('/').pop() : 'Scene';
+    if (sceneLabel) sceneLabel.textContent = `Target: ${fName}`;
+
+    const stepNames = {
+      1: 'step_1_upload',
+      2: 'step_2_verify_upload',
+      3: 'step_3_attach_chip',
+      4: 'step_4_type_prompt',
+      5: 'step_5_click_generate'
+    };
+    const stepLabels = {
+      1: '1️⃣ Upload Image',
+      2: '2️⃣ Check & Preview',
+      3: '3️⃣ Attach Chip',
+      4: '4️⃣ Type Prompt',
+      5: '5️⃣ Start Generation'
+    };
+
+    const stepCode = stepNames[stepNum];
+    if (!stepCode) return;
+
+    updateDebugStatus(`กำลังดำเนินการ ${stepLabels[stepNum]} สำหรับ ${fName}...`, 'info', `Step ${stepNum} ⏳`);
+
+    try {
+      const res = await jsonFetch('/api/flow/debug-step', {
+        method: 'POST',
+        body: JSON.stringify({
+          step: stepCode,
+          file_path: scene.image_path,
+          prompt: scene.prompt_content,
+          orientation: document.getElementById('cfg_flow_orientation')?.value || 'VERTICAL'
+        })
+      });
+
+      if (res && res.error) {
+        updateDebugStatus(`[${stepLabels[stepNum]} ล้มเหลว]: ${res.error}`, 'error', 'Error ❌');
+      } else if (res && res.result) {
+        const r = res.result;
+        updateDebugStatus(`[${stepLabels[stepNum]} ผ่าน]: ${r.message || 'สำเร็จ'}`, 'success', 'Passed ✅');
+        flowDebugCurrentStep = (stepNum % 5) + 1;
+        const nextBtn = document.getElementById('btnDebugStepNext');
+        if (nextBtn) nextBtn.textContent = `▶️ Run Step ${flowDebugCurrentStep}`;
+      } else {
+        updateDebugStatus(`[${stepLabels[stepNum]}]: ได้รับข้อมูลแต่ไม่พบผลลัพธ์`, 'error', 'No Result');
+      }
+    } catch (e) {
+      updateDebugStatus(`[${stepLabels[stepNum]} Error]: ${e.message || e}`, 'error', 'Error ❌');
+    }
+  };
+
+  document.getElementById('btnDebugStep1')?.addEventListener('click', () => runFlowDebugStep(1));
+  document.getElementById('btnDebugStep2')?.addEventListener('click', () => runFlowDebugStep(2));
+  document.getElementById('btnDebugStep3')?.addEventListener('click', () => runFlowDebugStep(3));
+  document.getElementById('btnDebugStep4')?.addEventListener('click', () => runFlowDebugStep(4));
+  document.getElementById('btnDebugStep5')?.addEventListener('click', () => runFlowDebugStep(5));
+  document.getElementById('btnDebugStepNext')?.addEventListener('click', () => runFlowDebugStep(flowDebugCurrentStep));
+  document.getElementById('btnDebugResetSteps')?.addEventListener('click', () => {
+    flowDebugCurrentStep = 1;
+    const nextBtn = document.getElementById('btnDebugStepNext');
+    if (nextBtn) nextBtn.textContent = '▶️ Run Next Step';
+    updateDebugStatus('รีเซ็ตลำดับขั้นตอนแล้ว พร้อมเริ่ม Step 1', 'info', 'Ready');
+  });
+
   document.getElementById('btnCancelFlowKitBatch')?.addEventListener('click', async () => {
     if (!confirm('คุณต้องการยกเลิกงานที่ค้างในคิวทั้งหมดและหยุดการพยายามยิงซ้ำ (Retry) หรือไม่?')) {
       return;

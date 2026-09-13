@@ -141,6 +141,26 @@ async def test_ui_generate(prompt: str = "Test prompt", orientation: str = "VERT
     }, timeout=90)
 
 
+class FlowDebugStepRequest(BaseModel):
+    step: str  # 'step_1_upload', 'step_2_verify_upload', 'step_3_attach_chip', 'step_4_type_prompt', 'step_5_click_generate'
+    file_path: Optional[str] = None
+    prompt: Optional[str] = None
+    orientation: Optional[str] = "VERTICAL"
+
+
+@router.post("/debug-step")
+async def debug_step(body: FlowDebugStepRequest):
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "Extension not connected")
+    return await client._send("flow_ui_step", {
+        "step": body.step,
+        "filePath": body.file_path,
+        "prompt": body.prompt,
+        "orientation": body.orientation,
+    }, timeout=60)
+
+
 class UploadFileRequest(BaseModel):
     image_base64: str
     file_name: str = "storyboard.png"
