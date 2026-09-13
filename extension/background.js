@@ -187,6 +187,27 @@ async function findFlowTabs() {
   }
 }
 
+async function ensureWindowFrontmost(tab) {
+  try {
+    await fetch('http://127.0.0.1:6969/api/flow/focus-browser', { method: 'POST' });
+  } catch {}
+  if (tab?.windowId) {
+    try {
+      const win = await chrome.windows.get(tab.windowId);
+      if (win.state === 'minimized') {
+        await chrome.windows.update(tab.windowId, { state: 'normal', focused: true });
+      } else {
+        await chrome.windows.update(tab.windowId, { focused: true });
+      }
+    } catch {}
+  }
+  if (tab?.id) {
+    try {
+      await chrome.tabs.update(tab.id, { active: true });
+    } catch {}
+  }
+}
+
 async function getOrOpenFlowTab(preferLabs = false) {
   const tabs = await findFlowTabs();
   if (tabs.length > 0) {
@@ -343,11 +364,9 @@ function connectToAgent() {
         const { prompt, orientation, filePath, assetName } = msg.params || {};
 
         try {
-          // 1. Switch to Google Flow tab
-          await chrome.tabs.update(tab.id, { active: true });
-          if (tab.windowId) {
-            chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
-          }
+          // 1. Switch to Google Flow tab and ensure frontmost
+          await ensureWindowFrontmost(tab);
+          await sleep(250);
 
           // 2. Dismiss any existing overlay/dialog
           await chrome.scripting.executeScript({
@@ -404,46 +423,30 @@ function connectToAgent() {
             targetFileName = fileName;
             console.log('[FlowAgent] Preparing image attachment for:', fileName);
 
-            // Step 4a: Clear existing chips in prompt box to avoid reusing old scenes
+            // Step 4a: Clear existing chips and prompt in prompt box to avoid reusing old scenes
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
+              world: 'MAIN',
               func: () => {
+                const clearBtn = document.querySelector('button[aria-label="Clear prompt"]');
+                if (clearBtn) clearBtn.click();
                 const chips = Array.from(document.querySelectorAll('flow-prompt-box button[aria-label="Ingredient"], flow-prompt-box .chip-container button, flow-prompt-box button.chip-container'));
                 chips.forEach(c => c.click());
               }
             });
             await sleep(300);
 
-            // Step 4b: Open ingredients overlay
+            // Step 4b: Check if image is already in library / Start frame popover
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               world: 'MAIN',
-              func: async () => {
-                const addBtn = document.querySelector('button[aria-label="Add ingredients to the prompt box"]') ||
-                               Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
-                if (addBtn && addBtn.innerText?.trim() !== 'close') {
-                  const rect = addBtn.getBoundingClientRect();
-                  const x = rect.left + rect.width / 2;
-                  const y = rect.top + rect.height / 2;
-                  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1 };
-                  addBtn.dispatchEvent(new PointerEvent('pointerdown', opts));
-                  addBtn.dispatchEvent(new MouseEvent('mousedown', opts));
-                  addBtn.dispatchEvent(new PointerEvent('pointerup', opts));
-                  addBtn.dispatchEvent(new MouseEvent('mouseup', opts));
-                  addBtn.dispatchEvent(new MouseEvent('click', opts));
-                  await new Promise(r => setTimeout(r, 600));
-
-                  const navItems = Array.from(document.querySelectorAll('.cdk-overlay-container mat-list-item, .cdk-overlay-container [class*="nav-item"]'));
-                  const uploadsTab = navItems.find(i => i.innerText && i.innerText.includes('Uploads'));
-                  if (uploadsTab) {
-                    uploadsTab.click();
-                    await new Promise(r => setTimeout(r, 400));
-                  }
-                }
+              func: () => {
+                const startBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
+                if (startBtn) startBtn.click();
               }
             });
+            await sleep(400);
 
-            // Step 4c: Check if image is already in overlay library and finished uploading
             const checkOverlayReady = (fname) => {
               const items = Array.from(document.querySelectorAll('.cdk-overlay-container button.asset-item, button.asset-item'));
               const target = items.find(b => {
@@ -469,57 +472,119 @@ function connectToAgent() {
               args: [fileName]
             });
 
-            // If not already in overlay, trigger upload via CDP
+            // If not already in library, upload via the top-right '+' button: button[aria-label="Add media menu"]
             if (!findRes[0]?.result?.exists) {
+              console.log('[FlowAgent] Image not in library, triggering upload via top-right Add media menu...');
+              
+              // 1. Activate Chrome and focus window & tab before any menu interaction
+              await ensureWindowFrontmost(tab);
+              await sleep(250);
+
+              // 2. Dismiss any open backdrops
               await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => {
+                  document.querySelectorAll('.cdk-overlay-backdrop').forEach(b => b.click());
+                }
+              });
+              await sleep(250);
+
+              // 3. Open Add media menu and find Upload button
+              const menuRes = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 world: 'MAIN',
                 func: async () => {
-                  document.querySelectorAll('input[type="file"]').forEach(i => i.remove());
-                  let uploadBtn = document.querySelector('button[aria-label="Upload media"]') ||
-                                  document.querySelector('.sidebar-upload-btn') ||
-                                  Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => b.innerText?.includes('Upload') || b.getAttribute('aria-label')?.includes('Upload'));
-                  if (uploadBtn) {
-                    uploadBtn.click();
-                    await new Promise(r => setTimeout(r, 600));
-                  }
+                  const addMediaBtn = document.querySelector('button[aria-label="Add media menu"]');
+                  if (!addMediaBtn) return { error: 'Add media menu button not found' };
+                  addMediaBtn.click();
+                  await new Promise(r => setTimeout(r, 400));
+                  
+                  const uploadBtn = Array.from(document.querySelectorAll('.cdk-overlay-container button, .mat-mdc-menu-item')).find(b => b.innerText?.includes('Upload'));
+                  if (!uploadBtn) return { error: 'Upload option not found in menu' };
+                  const r = uploadBtn.getBoundingClientRect();
+                  return {
+                    x: r.left + r.width / 2,
+                    y: r.top + r.height / 2
+                  };
                 }
               });
 
-              // Attach CDP debugger to upload the local file
-              const dbgTarget = { tabId: tab.id };
-              await chrome.debugger.attach(dbgTarget, '1.3');
-              try {
-                await chrome.debugger.sendCommand(dbgTarget, 'DOM.enable');
-                const doc = await chrome.debugger.sendCommand(dbgTarget, 'DOM.getDocument');
-                const nodesRes = await chrome.debugger.sendCommand(dbgTarget, 'DOM.querySelectorAll', {
-                  nodeId: doc.root.nodeId,
-                  selector: 'input[type="file"]'
-                });
-                const nodeIds = nodesRes?.nodeIds || [];
-                const targetNodeId = nodeIds.length > 0 ? nodeIds[nodeIds.length - 1] : null;
-                if (targetNodeId) {
-                  await chrome.debugger.sendCommand(dbgTarget, 'DOM.setFileInputFiles', {
-                    files: [filePath],
-                    nodeId: targetNodeId
+              const uploadCoord = menuRes[0]?.result;
+              if (uploadCoord && !uploadCoord.error) {
+                // Ensure frontmost window right before triggering native file dialog
+                await ensureWindowFrontmost(tab);
+                await sleep(200);
+
+                // 4. Dispatch trusted CDP mouse click on Upload button to trigger native file dialog
+                const dbgTarget = { tabId: tab.id };
+                await chrome.debugger.attach(dbgTarget, '1.3');
+                try {
+                  await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
+                    type: 'mousePressed',
+                    x: uploadCoord.x,
+                    y: uploadCoord.y,
+                    button: 'left',
+                    clickCount: 1
                   });
-                  console.log('[FlowAgent] CDP setFileInputFiles succeeded:', filePath);
-                } else {
-                  throw new Error('CDP could not find input[type="file"]');
+                  await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
+                    type: 'mouseReleased',
+                    x: uploadCoord.x,
+                    y: uploadCoord.y,
+                    button: 'left',
+                    clickCount: 1
+                  });
+                } finally {
+                  try { await chrome.debugger.detach(dbgTarget); } catch {}
                 }
-              } finally {
-                try { await chrome.debugger.detach(dbgTarget); } catch {}
+
+                // Wait 800ms for native macOS file picker modal sheet to open and take keyboard focus
+                await sleep(800);
+
+                // 5. Trigger native macOS file dialog via backend AppleScript handler
+                try {
+                  await fetch('http://127.0.0.1:6969/api/flow/handle-file-dialog', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: filePath })
+                  });
+                } catch (dialogErr) {
+                  console.warn('[FlowAgent] handle-file-dialog callback error:', dialogErr);
+                }
+              } else {
+                throw new Error(uploadCoord?.error || 'Failed to open Add media menu');
               }
             }
 
-            // Wait and poll until upload is 100% finished (not "Uploading") - up to 45 seconds
+            // Wait and poll until upload appears and is 100% finished (not "Uploading") - up to 45 seconds
             let isUploadReady = false;
             let pollItemData = null;
             for (let i = 0; i < 90; i++) {
               await sleep(500);
               const pollRes = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
-                func: checkOverlayReady,
+                func: (fname) => {
+                  const popover = document.querySelector('flow-add-menu-popover-content');
+                  if (!popover) {
+                    const startBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
+                    if (startBtn) startBtn.click();
+                  }
+                  const items = Array.from(document.querySelectorAll('.cdk-overlay-container button.asset-item, button.asset-item'));
+                  const target = items.find(b => {
+                    const text = b.innerText || '';
+                    const isVideo = text.includes('Video') || b.querySelector('.type-subtitle')?.innerText === 'Video';
+                    return !isVideo && text.includes(fname);
+                  });
+                  if (!target) return { exists: false, ready: false };
+                  const text = target.innerText || '';
+                  const isUploading = text.toLowerCase().includes('uploading');
+                  const thumbImg = target.querySelector('img.asset-thumbnail-image') || target.querySelector('img');
+                  return {
+                    exists: true,
+                    ready: !isUploading,
+                    text,
+                    thumbSrc: thumbImg ? thumbImg.src : null
+                  };
+                },
                 args: [fileName]
               });
               const status = pollRes[0]?.result;
@@ -535,24 +600,30 @@ function connectToAgent() {
               throw new Error(`Upload timed out: ${fileName} is still uploading or did not finish within 45s`);
             }
 
-            // Step 4d: Click the asset item, extract preview image link, and attach to prompt box
+            // Step 4d: Attach the image item to Start frame chip
             const attachRes = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
+              world: 'MAIN',
               func: async (fname) => {
                 try {
-                  const items = Array.from(document.querySelectorAll('.cdk-overlay-container button.asset-item, button.asset-item'));
-                  const targetItem = items.find(b => {
-                    const text = b.innerText || '';
-                    const isVideo = text.includes('Video') || b.querySelector('.type-subtitle')?.innerText === 'Video';
-                    return !isVideo && text.includes(fname);
-                  });
+                  let targetItem = null;
+                  for (let t = 0; t < 10; t++) {
+                    const items = Array.from(document.querySelectorAll('.cdk-overlay-container button.asset-item, button.asset-item'));
+                    targetItem = items.find(b => {
+                      const text = b.innerText || '';
+                      const isVideo = text.includes('Video') || b.querySelector('.type-subtitle')?.innerText === 'Video';
+                      return !isVideo && text.includes(fname);
+                    });
+                    if (targetItem) break;
+                    await new Promise(r => setTimeout(r, 300));
+                  }
                   if (!targetItem) return { error: `Asset image item not found for ${fname}` };
 
-                  // 1. Select the asset item to display its preview in detail pane
+                  // 1. Select the asset item
                   targetItem.click();
-                  await new Promise(r => setTimeout(r, 600));
+                  await new Promise(r => setTimeout(r, 500));
 
-                  // 2. Extract preview image URL (Google Cloud CDN / fife link)
+                  // 2. Extract preview image URL
                   const detailImg = document.querySelector('.cdk-overlay-container img.detail-preview-image') ||
                                     document.querySelector('.cdk-overlay-container img.asset-thumbnail-image') ||
                                     targetItem.querySelector('img');
@@ -568,31 +639,27 @@ function connectToAgent() {
                       clickedAdd = true;
                       break;
                     }
-                    const immediateChips = document.querySelectorAll('flow-prompt-box button[aria-label="Ingredient"], flow-prompt-box .chip-container, flow-prompt-box img.chip-image');
-                    if (immediateChips.length > 0) {
+                    const attachedChip = document.querySelector('flow-prompt-box button[aria-label="cancel"], flow-prompt-box .chip-container');
+                    if (attachedChip) {
                       clickedAdd = true;
                       break;
                     }
                     await new Promise(r => setTimeout(r, 300));
                   }
 
-                  // 4. Poll for ingredient chip in prompt box
+                  // 4. Poll for attached frame chip in prompt box
                   let chipConfirmed = false;
                   for (let c = 0; c < 12; c++) {
-                    const chips = Array.from(document.querySelectorAll('flow-prompt-box button[aria-label="Ingredient"], flow-prompt-box .chip-container, flow-prompt-box img.chip-image'));
-                    if (chips.length > 0) {
+                    const chips = Array.from(document.querySelectorAll('flow-prompt-box button')).map(b => b.innerText?.trim());
+                    if (chips.some(text => text === 'cancel' || text === 'close' || text?.includes(fname))) {
                       chipConfirmed = true;
                       break;
                     }
                     await new Promise(r => setTimeout(r, 300));
                   }
 
-                  if (!chipConfirmed && !clickedAdd) {
-                    return { error: 'Could not attach image chip to prompt box' };
-                  }
-
                   return {
-                    attached: chipConfirmed,
+                    attached: chipConfirmed || clickedAdd,
                     itemName: targetItem.innerText?.trim(),
                     previewUrl: previewSrc
                   };
@@ -605,11 +672,11 @@ function connectToAgent() {
 
             const attachData = attachRes[0]?.result || {};
             if (attachData.error || !attachData.attached) {
-              throw new Error(`Failed to attach image to prompt box: ${attachData.error || 'No ingredient chip found after clicking Add to prompt'}`);
+              throw new Error(`Failed to attach image to prompt box: ${attachData.error || 'No frame chip found after clicking Add to prompt'}`);
             }
             imageAttached = true;
             previewUrl = attachData.previewUrl || pollItemData?.thumbSrc;
-            console.log('[FlowAgent] Successfully verified preview & attached image to prompt box:', fileName, 'previewUrl:', previewUrl);
+            console.log('[FlowAgent] Successfully verified preview & attached image to Start frame:', fileName, 'previewUrl:', previewUrl);
           }
 
           // 5. Construct prompt: @[ชื่อรูปที่อัพโหลดไป] + local animation prompt
@@ -621,22 +688,21 @@ function connectToAgent() {
             }
           }
 
-          // Clear prompt area & type the formatted prompt
+          // Type the formatted prompt into ProseMirror (DO NOT clear prompt here to preserve attached chip!)
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
-            func: (textToType) => {
-              const clearBtn = document.querySelector('button[aria-label="Clear prompt"]');
-              if (clearBtn) clearBtn.click();
+            func: async (textToType) => {
               const pm = document.querySelector('.ProseMirror');
               if (pm) {
                 pm.focus();
                 document.execCommand('selectAll', false, null);
                 document.execCommand('insertText', false, textToType);
               }
+              await new Promise(r => setTimeout(r, 400));
             },
             args: [finalPrompt]
           });
-          await sleep(300);
+          await sleep(400);
 
           // Verify text in ProseMirror, fallback to CDP insertText if needed
           const pmCheck = await chrome.scripting.executeScript({
@@ -676,7 +742,7 @@ function connectToAgent() {
           const submitRes = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: async () => {
-              for (let attempt = 0; attempt < 10; attempt++) {
+              for (let attempt = 0; attempt < 15; attempt++) {
                 const submitBtn = document.querySelector('button[aria-label="Start generation"]');
                 const pm = document.querySelector('.ProseMirror');
                 if (submitBtn && !submitBtn.disabled && !submitBtn.classList.contains('mat-mdc-button-disabled')) {
@@ -688,7 +754,7 @@ function connectToAgent() {
               const submitBtn = document.querySelector('button[aria-label="Start generation"]');
               const pm = document.querySelector('.ProseMirror');
               return {
-                error: 'Submit button is disabled after waiting 4s. Check prompt or image attachment.',
+                error: 'Submit button is disabled after waiting 6s. Check prompt or image attachment.',
                 pmText: pm ? pm.innerText?.trim() : null,
                 disabled: submitBtn ? (submitBtn.disabled || submitBtn.classList.contains('mat-mdc-button-disabled')) : true
               };
@@ -757,14 +823,11 @@ function connectToAgent() {
 
         try {
           // Switch to Google Flow tab & bring window frontmost
-          await chrome.tabs.update(tab.id, { active: true });
-          if (tab.windowId) {
-            chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
-          }
-          await sleep(200);
+          await ensureWindowFrontmost(tab);
+          await sleep(250);
 
           if (step === 'step_1_upload') {
-            // Dismiss dialogs
+            // Dismiss dialogs & backdrops
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               func: () => {
@@ -776,36 +839,18 @@ function connectToAgent() {
             });
             await sleep(200);
 
-            // Open ingredients overlay and switch to Uploads tab
+            // Open Start frame popover to check if already in library
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               world: 'MAIN',
-              func: async () => {
-                const addBtn = document.querySelector('button[aria-label="Add ingredients to the prompt box"]') ||
-                               Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
-                if (addBtn && addBtn.innerText?.trim() !== 'close') {
-                  const rect = addBtn.getBoundingClientRect();
-                  const x = rect.left + rect.width / 2;
-                  const y = rect.top + rect.height / 2;
-                  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1 };
-                  addBtn.dispatchEvent(new PointerEvent('pointerdown', opts));
-                  addBtn.dispatchEvent(new MouseEvent('mousedown', opts));
-                  addBtn.dispatchEvent(new PointerEvent('pointerup', opts));
-                  addBtn.dispatchEvent(new MouseEvent('mouseup', opts));
-                  addBtn.dispatchEvent(new MouseEvent('click', opts));
-                  await new Promise(r => setTimeout(r, 600));
-                }
-
-                const navItems = Array.from(document.querySelectorAll('.cdk-overlay-container mat-list-item, .cdk-overlay-container [class*="nav-item"]'));
-                const uploadsTab = navItems.find(i => i.innerText && i.innerText.includes('Uploads'));
-                if (uploadsTab) {
-                  uploadsTab.click();
-                  await new Promise(r => setTimeout(r, 400));
-                }
+              func: () => {
+                const startBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
+                if (startBtn) startBtn.click();
               }
             });
+            await sleep(400);
 
-            // Check if already in overlay (Images only!)
+            // Check if already in library (Images only!)
             const checkRes = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               func: (fname) => {
@@ -823,43 +868,77 @@ function connectToAgent() {
 
             let uploadTriggered = false;
             if (!checkRes[0]?.result?.exists && filePath) {
+              // 1. Activate Chrome and bring window frontmost before opening menu
+              await ensureWindowFrontmost(tab);
+              await sleep(250);
+
+              // 2. Dismiss backdrops
               await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => {
+                  document.querySelectorAll('.cdk-overlay-backdrop').forEach(b => b.click());
+                }
+              });
+              await sleep(250);
+
+              // 3. Open Add media menu and find Upload button
+              const menuRes = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 world: 'MAIN',
                 func: async () => {
-                  document.querySelectorAll('input[type="file"]').forEach(i => i.remove());
-                  let uploadBtn = document.querySelector('button[aria-label="Upload media"]') ||
-                                  document.querySelector('.sidebar-upload-btn') ||
-                                  Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => b.innerText?.includes('Upload') || b.getAttribute('aria-label')?.includes('Upload'));
-                  if (uploadBtn) {
-                    uploadBtn.click();
-                    await new Promise(r => setTimeout(r, 600));
-                  }
+                  const addMediaBtn = document.querySelector('button[aria-label="Add media menu"]');
+                  if (!addMediaBtn) return { error: 'Add media menu button not found' };
+                  addMediaBtn.click();
+                  await new Promise(r => setTimeout(r, 400));
+                  const uploadBtn = Array.from(document.querySelectorAll('.cdk-overlay-container button, .mat-mdc-menu-item')).find(b => b.innerText?.includes('Upload'));
+                  if (!uploadBtn) return { error: 'Upload option not found in menu' };
+                  const r = uploadBtn.getBoundingClientRect();
+                  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
                 }
               });
 
-              const dbgTarget = { tabId: tab.id };
-              await chrome.debugger.attach(dbgTarget, '1.3');
-              try {
-                await chrome.debugger.sendCommand(dbgTarget, 'DOM.enable');
-                const doc = await chrome.debugger.sendCommand(dbgTarget, 'DOM.getDocument');
-                const nodesRes = await chrome.debugger.sendCommand(dbgTarget, 'DOM.querySelectorAll', {
-                  nodeId: doc.root.nodeId,
-                  selector: 'input[type="file"]'
-                });
-                const nodeIds = nodesRes?.nodeIds || [];
-                const targetNodeId = nodeIds.length > 0 ? nodeIds[nodeIds.length - 1] : null;
-                if (targetNodeId) {
-                  await chrome.debugger.sendCommand(dbgTarget, 'DOM.setFileInputFiles', {
-                    files: [filePath],
-                    nodeId: targetNodeId
+              const uploadCoord = menuRes[0]?.result;
+              if (uploadCoord && !uploadCoord.error) {
+                // Ensure frontmost window right before triggering native file dialog
+                await ensureWindowFrontmost(tab);
+                await sleep(200);
+
+                // 4. Dispatch trusted CDP mouse click on Upload button to trigger native file dialog
+                const dbgTarget = { tabId: tab.id };
+                await chrome.debugger.attach(dbgTarget, '1.3');
+                try {
+                  await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
+                    type: 'mousePressed',
+                    x: uploadCoord.x,
+                    y: uploadCoord.y,
+                    button: 'left',
+                    clickCount: 1
+                  });
+                  await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
+                    type: 'mouseReleased',
+                    x: uploadCoord.x,
+                    y: uploadCoord.y,
+                    button: 'left',
+                    clickCount: 1
+                  });
+                } finally {
+                  try { await chrome.debugger.detach(dbgTarget); } catch {}
+                }
+
+                // Wait 800ms for native macOS file picker modal sheet to open and take keyboard focus
+                await sleep(800);
+
+                // 5. Trigger native macOS file dialog via backend AppleScript handler
+                try {
+                  await fetch('http://127.0.0.1:6969/api/flow/handle-file-dialog', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: filePath })
                   });
                   uploadTriggered = true;
-                } else {
-                  throw new Error('CDP could not find input[type="file"]');
+                } catch (dialogErr) {
+                  console.warn('[FlowAgent] handle-file-dialog error:', dialogErr);
                 }
-              } finally {
-                try { await chrome.debugger.detach(dbgTarget); } catch {}
               }
             } else {
               uploadTriggered = true;
@@ -871,49 +950,39 @@ function connectToAgent() {
                 success: true,
                 step: 1,
                 stepName: 'Upload Image',
-                message: checkRes[0]?.result?.exists ? `ไฟล์ ${fileName} มีอยู่ในไลบรารีแล้ว` : `สั่งอัพโหลด ${fileName} ผ่าน CDP สำเร็จ`,
+                message: checkRes[0]?.result?.exists ? `ไฟล์ ${fileName} มีอยู่ในไลบรารีแล้ว` : `สั่งอัพโหลด ${fileName} ผ่าน Add media menu สำเร็จ`,
                 fileName,
                 filePath
               }
             });
 
           } else if (step === 'step_2_verify_upload') {
-            // Ensure drawer overlay is open and switch to Uploads tab
+            // Open Start frame popover if not open
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               world: 'MAIN',
-              func: async () => {
-                const addBtn = document.querySelector('button[aria-label="Add ingredients to the prompt box"]') ||
-                               Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
-                if (addBtn && addBtn.innerText?.trim() !== 'close') {
-                  const rect = addBtn.getBoundingClientRect();
-                  const x = rect.left + rect.width / 2;
-                  const y = rect.top + rect.height / 2;
-                  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1 };
-                  addBtn.dispatchEvent(new PointerEvent('pointerdown', opts));
-                  addBtn.dispatchEvent(new MouseEvent('mousedown', opts));
-                  addBtn.dispatchEvent(new PointerEvent('pointerup', opts));
-                  addBtn.dispatchEvent(new MouseEvent('mouseup', opts));
-                  addBtn.dispatchEvent(new MouseEvent('click', opts));
-                  await new Promise(r => setTimeout(r, 600));
-                }
-                const navItems = Array.from(document.querySelectorAll('.cdk-overlay-container mat-list-item, .cdk-overlay-container [class*="nav-item"]'));
-                const uploadsTab = navItems.find(i => i.innerText && i.innerText.includes('Uploads'));
-                if (uploadsTab) {
-                  uploadsTab.click();
-                  await new Promise(r => setTimeout(r, 400));
+              func: () => {
+                const popover = document.querySelector('flow-add-menu-popover-content');
+                if (!popover) {
+                  const startBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
+                  if (startBtn) startBtn.click();
                 }
               }
             });
 
-            // Poll overlay for completion & extract preview URL
+            // Poll popover for completion & extract preview URL
             let isUploadReady = false;
             let targetText = '';
-            for (let i = 0; i < 80; i++) {
+            for (let i = 0; i < 90; i++) {
               await sleep(500);
               const pollRes = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 func: (fname) => {
+                  const popover = document.querySelector('flow-add-menu-popover-content');
+                  if (!popover) {
+                    const startBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
+                    if (startBtn) startBtn.click();
+                  }
                   const items = Array.from(document.querySelectorAll('.cdk-overlay-container button.asset-item, button.asset-item'));
                   const target = items.find(b => {
                     const text = b.innerText || '';
@@ -936,11 +1005,11 @@ function connectToAgent() {
             }
 
             if (!isUploadReady) {
-              sendToAgent({ id: msg.id, error: `การอัพโหลดไม่เสร็จสิ้นภายใน 40 วินาทีสำหรับ: ${fileName}` });
+              sendToAgent({ id: msg.id, error: `การอัพโหลดไม่เสร็จสิ้นภายใน 45 วินาทีสำหรับ: ${fileName}` });
               return;
             }
 
-            // Extract preview URL from thumbnail or detail pane without prematurely triggering click
+            // Extract preview URL from thumbnail
             const previewRes = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               func: async (fname) => {
@@ -951,10 +1020,8 @@ function connectToAgent() {
                   return !isVideo && text.includes(fname);
                 });
                 const thumbImg = target?.querySelector('img.asset-thumbnail-image') || target?.querySelector('img');
-                const detailImg = document.querySelector('.cdk-overlay-container img.detail-preview-image');
-                const addToPromptBtn = document.querySelector('button.detail-add-to-prompt-btn');
                 return {
-                  previewUrl: (detailImg && detailImg.src) ? detailImg.src : (thumbImg ? thumbImg.src : null),
+                  previewUrl: thumbImg ? thumbImg.src : null,
                   addToPromptReady: !!target
                 };
               },
@@ -976,37 +1043,32 @@ function connectToAgent() {
             });
 
           } else if (step === 'step_3_attach_chip') {
-            // Clear existing prompt & chips first, then ensure drawer overlay is open on Uploads tab
+            // Clear existing prompt & chips first
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               world: 'MAIN',
-              func: async () => {
+              func: () => {
                 const clearBtn = document.querySelector('button[aria-label="Clear prompt"]');
                 if (clearBtn) clearBtn.click();
-                await new Promise(r => setTimeout(r, 300));
+                const chips = Array.from(document.querySelectorAll('flow-prompt-box button[aria-label="Ingredient"], flow-prompt-box .chip-container button, flow-prompt-box button.chip-container'));
+                chips.forEach(c => c.click());
+              }
+            });
+            await sleep(300);
 
-                const addBtn = document.querySelector('button[aria-label="Add ingredients to the prompt box"]') ||
-                               Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
-                if (addBtn && addBtn.innerText?.trim() !== 'close') {
-                  const rect = addBtn.getBoundingClientRect();
-                  const x = rect.left + rect.width / 2;
-                  const y = rect.top + rect.height / 2;
-                  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1 };
-                  addBtn.dispatchEvent(new PointerEvent('pointerdown', opts));
-                  addBtn.dispatchEvent(new MouseEvent('mousedown', opts));
-                  addBtn.dispatchEvent(new PointerEvent('pointerup', opts));
-                  addBtn.dispatchEvent(new MouseEvent('mouseup', opts));
-                  addBtn.dispatchEvent(new MouseEvent('click', opts));
-                  await new Promise(r => setTimeout(r, 600));
-                }
-                const navItems = Array.from(document.querySelectorAll('.cdk-overlay-container mat-list-item, .cdk-overlay-container [class*="nav-item"]'));
-                const uploadsTab = navItems.find(i => i.innerText && i.innerText.includes('Uploads'));
-                if (uploadsTab) {
-                  uploadsTab.click();
-                  await new Promise(r => setTimeout(r, 400));
+            // Open Start frame popover only if not already open
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'MAIN',
+              func: () => {
+                const popover = document.querySelector('flow-add-menu-popover-content');
+                if (!popover) {
+                  const startBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText?.trim() === 'Start');
+                  if (startBtn) startBtn.click();
                 }
               }
             });
+            await sleep(400);
 
             const attachRes = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
@@ -1018,42 +1080,23 @@ function connectToAgent() {
                     const isVideo = text.includes('Video') || b.querySelector('.type-subtitle')?.innerText === 'Video';
                     return !isVideo && text.includes(fname);
                   });
-                  if (!targetItem) return { error: `ไม่พบรูป ${fname} ใน Drawer` };
+                  if (!targetItem) return { error: `ไม่พบรูป ${fname} ใน Start frame library` };
 
                   targetItem.click();
-                  await new Promise(r => setTimeout(r, 400));
+                  await new Promise(r => setTimeout(r, 500));
 
-                  // If "Add to prompt" button is available, click it
-                  let clicked = false;
-                  for (let w = 0; w < 6; w++) {
-                    const addToPromptBtn = document.querySelector('button.detail-add-to-prompt-btn') ||
-                                           Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => b.innerText?.trim() === 'Add to prompt');
-                    if (addToPromptBtn && !addToPromptBtn.disabled && !addToPromptBtn.classList.contains('mat-mdc-button-disabled')) {
-                      addToPromptBtn.click();
-                      clicked = true;
-                      break;
-                    }
-                    const immediateChips = document.querySelectorAll('flow-prompt-box button[aria-label="Ingredient"], flow-prompt-box .chip-container, flow-prompt-box img.chip-image');
-                    if (immediateChips.length > 0) {
-                      clicked = true;
-                      break;
-                    }
-                    await new Promise(r => setTimeout(r, 300));
-                  }
-
+                  // Verify chip attached
                   let chipFound = false;
-                  for (let c = 0; c < 15; c++) {
-                    const chips = Array.from(document.querySelectorAll('flow-prompt-box button[aria-label="Ingredient"], flow-prompt-box .chip-container, flow-prompt-box img.chip-image'));
-                    if (chips.length > 0) {
+                  for (let w = 0; w < 10; w++) {
+                    const cancelChipBtn = document.querySelector('button[aria-label="Cancel"]');
+                    const chipImg = document.querySelector('flow-prompt-box img.chip-image, .chip-container img');
+                    if (cancelChipBtn || chipImg) {
                       chipFound = true;
                       break;
                     }
-                    await new Promise(r => setTimeout(r, 300));
+                    await new Promise(r => setTimeout(r, 200));
                   }
-
-                  if (!chipFound && !clicked) return { error: 'ไม่สามารถแนบชิปรูปภาพเข้า Prompt Box ได้' };
-
-                  return { success: true, chipFound };
+                  return { success: chipFound };
                 } catch (e) {
                   return { error: e.message };
                 }
@@ -1062,20 +1105,21 @@ function connectToAgent() {
             });
 
             const aData = attachRes[0]?.result || {};
-            if (aData.error) {
-              sendToAgent({ id: msg.id, error: aData.error });
-            } else {
-              sendToAgent({
-                id: msg.id,
-                result: {
-                  success: true,
-                  step: 3,
-                  stepName: 'Attach to Prompt Box',
-                  message: 'แนบชิปรูปภาพเข้า Prompt Box สำเร็จ!',
-                  chipFound: aData.chipFound
-                }
-              });
+            if (aData.error || !aData.success) {
+              sendToAgent({ id: msg.id, error: aData.error || `ไม่สามารถแนบ ${fileName} เข้ากับช่อง Start frame ได้` });
+              return;
             }
+
+            sendToAgent({
+              id: msg.id,
+              result: {
+                success: true,
+                step: 3,
+                stepName: 'Attach to Start Frame',
+                message: 'แนบชิปรูปภาพเข้าช่อง Start frame สำเร็จ!',
+                chipFound: aData.success
+              }
+            });
 
           } else if (step === 'step_4_type_prompt') {
             const mentionPrefix = `@[${fileName}]`;
@@ -1505,7 +1549,7 @@ function connectToAgent() {
                 returnByValue: true,
                 awaitPromise: true
               });
-              scriptResult = { success: true, result: evalRes?.result?.value };
+              scriptResult = { success: true, result: evalRes?.result?.value, exception: evalRes?.exceptionDetails, rawResult: evalRes?.result };
             } catch (cdpErr) {
               scriptResult = { success: false, error: cdpErr.message };
             } finally {
@@ -2213,6 +2257,92 @@ function connectToAgent() {
                 active: flowTab.active
               }
             };
+          } else if (evalCode === 'test_upload_via_top_plus') {
+            const filePath = msg.params?.filePath || '/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย/19/6 - Storyboards/EP01/06 - Scene 06.png';
+            
+            // 1. Dismiss any existing backdrops
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => {
+                document.querySelectorAll('.cdk-overlay-backdrop').forEach(b => b.click());
+              }
+            });
+            await sleep(300);
+
+            // 2. Click the top-right '+' button: button[aria-label="Add media menu"]
+            const openRes = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: async () => {
+                const addMediaBtn = document.querySelector('button[aria-label="Add media menu"]');
+                if (!addMediaBtn) return { error: 'Add media menu button not found' };
+                addMediaBtn.click();
+                await new Promise(r => setTimeout(r, 400));
+                
+                const uploadBtn = Array.from(document.querySelectorAll('.cdk-overlay-container button, .mat-mdc-menu-item')).find(b => b.innerText?.includes('Upload'));
+                if (!uploadBtn) return { error: 'Upload option not found in menu' };
+                const r = uploadBtn.getBoundingClientRect();
+                return {
+                  x: r.left + r.width / 2,
+                  y: r.top + r.height / 2
+                };
+              }
+            });
+
+            const uploadCoord = openRes[0]?.result;
+            if (uploadCoord?.error) {
+              scriptResult = { error: uploadCoord.error };
+            } else {
+              const dbgTarget = { tabId: tab.id };
+              await chrome.debugger.attach(dbgTarget, '1.3');
+              try {
+                await chrome.debugger.sendCommand(dbgTarget, 'Page.enable');
+                await chrome.debugger.sendCommand(dbgTarget, 'DOM.enable');
+                
+                // Dispatch trusted mouse click at Upload button
+                await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
+                  type: 'mousePressed',
+                  x: uploadCoord.x,
+                  y: uploadCoord.y,
+                  button: 'left',
+                  clickCount: 1
+                });
+                await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
+                  type: 'mouseReleased',
+                  x: uploadCoord.x,
+                  y: uploadCoord.y,
+                  button: 'left',
+                  clickCount: 1
+                });
+
+                await sleep(600);
+
+                // Check if input[type="file"] was created
+                const doc = await chrome.debugger.sendCommand(dbgTarget, 'DOM.getDocument');
+                const nodesRes = await chrome.debugger.sendCommand(dbgTarget, 'DOM.querySelectorAll', {
+                  nodeId: doc.root.nodeId,
+                  selector: 'input[type="file"]'
+                });
+                const nodeIds = nodesRes?.nodeIds || [];
+                let cdpSetFiles = false;
+                if (nodeIds.length > 0) {
+                  await chrome.debugger.sendCommand(dbgTarget, 'DOM.setFileInputFiles', {
+                    files: [filePath],
+                    nodeId: nodeIds[nodeIds.length - 1]
+                  });
+                  cdpSetFiles = true;
+                }
+
+                scriptResult = {
+                  success: true,
+                  nodeIdsCount: nodeIds.length,
+                  cdpSetFiles,
+                  uploadCoord,
+                  filePath
+                };
+              } finally {
+                try { await chrome.debugger.detach(dbgTarget); } catch {}
+              }
+            }
           } else if (evalCode === 'inspect_menu_coord') {
             const res = await chrome.scripting.executeScript({
               target: { tabId: tab.id },

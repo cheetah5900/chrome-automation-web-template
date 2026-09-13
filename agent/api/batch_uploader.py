@@ -581,8 +581,8 @@ async def process_batch(body: ProcessRequest):
                     
                     if upload_res.get("error") or (isinstance(upload_res.get("status"), int) and upload_res["status"] >= 400):
                         error_msg = upload_res.get("error", "Upload failed")
-                        if "NO_FLOW_KEY" in str(error_msg) and client.connected:
-                            logger.info("NO_FLOW_KEY for %s, falling back to browser tab session", file_name)
+                        if client.connected:
+                            logger.info("Upload via REST encountered %s, falling back to browser tab session for %s", error_msg, file_name)
                             media_id = f"browser_asset_{file_name}"
                         else:
                             logger.error("Upload failed for %s: %s", file_name, error_msg)

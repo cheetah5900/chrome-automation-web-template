@@ -129,15 +129,90 @@ async def inspect_tab(url: Optional[str] = None, code: Optional[str] = None, pro
     return await client._send("inspect_tab", params, timeout=25)
 
 
+class FlowTestUIGenerateRequest(BaseModel):
+    prompt: Optional[str] = "Test prompt"
+    orientation: Optional[str] = "VERTICAL"
+    file_path: Optional[str] = None
+
+
+class HandleFileDialogRequest(BaseModel):
+    file_path: str
+
+
+@router.post("/focus-browser")
+async def focus_browser():
+    import subprocess, asyncio
+    as_script = '''
+    tell application "Google Chrome" to activate
+    tell application "System Events"
+        tell process "Google Chrome"
+            set frontmost to true
+            try
+                repeat with w in windows
+                    if value of attribute "AXMinimized" of w is true then
+                        set value of attribute "AXMinimized" of w to false
+                    end if
+                end repeat
+            end try
+        end tell
+    end tell
+    '''
+    await asyncio.to_thread(subprocess.run, ["osascript", "-e", as_script], check=False)
+    return {"ok": True}
+
+
+@router.post("/handle-file-dialog")
+async def handle_file_dialog(body: HandleFileDialogRequest):
+    import subprocess, asyncio
+    escaped_path = body.file_path.replace('"', '\\"')
+
+    # 1. Set system clipboard directly via pbcopy to handle UTF-8 / Thai / spaces reliably
+    try:
+        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+        p.communicate(input=body.file_path.encode('utf-8'))
+    except Exception as pb_err:
+        logger.warning(f"[Flow Dialog] pbcopy error: {pb_err}")
+
+    # 2. AppleScript to send keystrokes directly to the open sheet
+    # Strict rule (AGENTS.md): DO NOT tell application "Google Chrome" to activate
+    # or tell process "Google Chrome" set frontmost to true here.
+    # Doing so steals/resets focus from the NSOpenPanel sheet to the browser window,
+    # causing Cmd+Shift+G to trigger Chrome's 'Find Previous' instead of the file sheet.
+    as_script = f'''
+    set the clipboard to "{escaped_path}"
+    tell application "System Events"
+        delay 0.8
+        -- Press Cmd + Shift + G to open path sheet
+        key code 5 using {{command down, shift down}}
+        delay 0.8
+        -- Select all existing text in sheet (Cmd + A) and delete
+        key code 0 using {{command down}}
+        delay 0.15
+        key code 51
+        delay 0.2
+        -- Paste path (Cmd + V)
+        key code 9 using {{command down}}
+        delay 0.8
+        -- Return to confirm path sheet
+        key code 36
+        delay 1.2
+        -- Return to confirm open file dialog
+        key code 36
+    end tell
+    '''
+    await asyncio.to_thread(subprocess.run, ["osascript", "-e", as_script], check=False)
+    return {"ok": True}
+
+
 @router.post("/test-ui-generate")
-async def test_ui_generate(prompt: str = "Test prompt", orientation: str = "VERTICAL", file_path: Optional[str] = None):
+async def test_ui_generate(body: FlowTestUIGenerateRequest):
     client = get_flow_client()
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
     return await client._send("flow_ui_generate", {
-        "prompt": prompt,
-        "orientation": orientation,
-        "filePath": file_path,
+        "prompt": body.prompt,
+        "orientation": body.orientation,
+        "filePath": body.file_path,
     }, timeout=90)
 
 
