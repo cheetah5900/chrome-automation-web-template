@@ -709,6 +709,11 @@ import aiohttp
 import re
 
 def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
+    if not project_data or not isinstance(project_data, dict):
+        return []
+    if project_data.get("status") == 401 or project_data.get("error") or project_data.get("data", {}).get("error"):
+        return []
+
     # Check for new projectContents format first (workflows + media)
     project_contents = project_data.get("data", {}).get("result", {}).get("data", {}).get("json", {}).get("projectContents", {})
     if not project_contents:
@@ -1103,7 +1108,8 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
             idx += 1
             
         logger.info("Fallback global scan extracted %d virtual scenes from project data", len(scenes))
-            
+    return scenes
+
     
 async def save_synced_scenes_to_db(project_id: str, scenes: list[dict]):
     from agent.db.schema import get_db, _db_lock
@@ -1129,7 +1135,7 @@ async def save_synced_scenes_to_db(project_id: str, scenes: list[dict]):
         for s in scenes:
             w_id = s["id"]
             display_order = s["display_order"]
-            prompt = s["prompt_content"]
+            prompt = s.get("prompt_content") or s.get("prompt") or ""
             
             vertical_video_media_id = s.get("vertical_video_media_id")
             horizontal_video_media_id = s.get("horizontal_video_media_id")
@@ -1210,7 +1216,7 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
             "method": "GET",
             "headers": {"accept": "*/*"}
         }, timeout=15)
-        if res and isinstance(res, dict) and not res.get("error"):
+        if res and isinstance(res, dict) and not res.get("error") and res.get("status") != 401 and not res.get("data", {}).get("error"):
             try:
                 debug_path = Path("output/debug_project_data.json")
                 debug_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1251,7 +1257,7 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
             logger.warning("Failed to fetch project page %d: %s", page_idx + 1, e)
             break
             
-        if not res or not isinstance(res, dict) or res.get("error"):
+        if not res or not isinstance(res, dict) or res.get("error") or res.get("status") == 401 or res.get("data", {}).get("error"):
             logger.warning("Invalid response or error on page %d: %s", page_idx + 1, res)
             break
             
@@ -1291,7 +1297,9 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
     # Extract all scenes from all pages
     parsed_scenes = []
     for page in all_raw_data:
-        parsed_scenes.extend(extract_scenes_from_flow_project(page))
+        extracted = extract_scenes_from_flow_project(page)
+        if extracted:
+            parsed_scenes.extend(extracted)
         
     # Remove duplicates by ID to be safe
     seen_ids = set()
@@ -1303,6 +1311,102 @@ async def sync_project_from_flow(project_id: str, client) -> list[dict]:
                 continue
             seen_ids.add(sid)
         unique_scenes.append(s)
+
+    # FALLBACK: If tRPC returned no scenes (or 401 Unauthorized), extract directly from open Google Flow tab DOM!
+    if not unique_scenes and client.connected:
+        logger.info("tRPC returned no scenes (or 401 Unauthorized). Extracting video scenes directly from Google Flow tab DOM...")
+        try:
+            target_url = f"https://flow.google.com/project/{project_id}"
+            dom_res = await client._send("inspect_tab", {
+                "url": target_url,
+                "js": """
+                (() => {
+                    const seenUrls = new Set();
+                    const items = [];
+                    let order = 1;
+                    
+                    // Strategy 1: Scan all video elements in DOM
+                    const videoElements = Array.from(document.querySelectorAll("video"));
+                    for (const v of videoElements) {
+                        let videoSrc = v.src || "";
+                        if (!videoSrc) {
+                            const source = v.querySelector("source");
+                            if (source) videoSrc = source.src || "";
+                        }
+                        if (!videoSrc || !videoSrc.startsWith("https://") || seenUrls.has(videoSrc)) continue;
+                        seenUrls.add(videoSrc);
+                        
+                        const card = v.closest("flow-grid-tile-container, flow-asset-tile, [class*='asset-card'], [class*='tile-row'], [class*='card'], [class*='tile']") || v.parentElement;
+                        let text = "";
+                        if (card) {
+                            text = card.getAttribute("aria-label") || "";
+                            if (!text && card.innerText) {
+                                text = card.innerText.replace(/play_circle/g, '').trim().slice(0, 150);
+                            }
+                        }
+                        
+                        let mediaId = null;
+                        const match = videoSrc.match(/\\/video\\/([0-9a-f-]{36})/i) || videoSrc.match(/([0-9a-f-]{36})/);
+                        if (match) mediaId = match[1];
+                        
+                        items.push({
+                            display_order: order++,
+                            id: mediaId ? `virtual_scene_${mediaId.slice(0, 8)}` : `virtual_scene_${order}`,
+                            vertical_video_url: videoSrc,
+                            vertical_video_media_id: mediaId,
+                            horizontal_video_url: videoSrc,
+                            horizontal_video_media_id: mediaId,
+                            prompt_content: text
+                        });
+                    }
+                    
+                    // Strategy 2: If no video elements found directly, scan tiles
+                    if (!items.length) {
+                        const tiles = Array.from(document.querySelectorAll("flow-grid-tile-container, flow-asset-tile, [class*='asset-card'], [class*='tile-row']"));
+                        for (const tile of tiles) {
+                            const v = tile.querySelector("video");
+                            const videoSrc = v ? (v.src || (v.querySelector("source") ? v.querySelector("source").src : null)) : null;
+                            if (!videoSrc || !videoSrc.startsWith("https://") || seenUrls.has(videoSrc)) continue;
+                            seenUrls.add(videoSrc);
+                            
+                            const label = tile.getAttribute("aria-label") || "";
+                            const text = label || (tile.innerText ? tile.innerText.replace(/play_circle/g, '').trim().slice(0, 150) : "");
+                            
+                            let mediaId = null;
+                            const match = videoSrc.match(/\\/video\\/([0-9a-f-]{36})/i);
+                            if (match) mediaId = match[1];
+                            
+                            items.push({
+                                display_order: order++,
+                                id: mediaId ? `virtual_scene_${mediaId.slice(0, 8)}` : `virtual_scene_${order}`,
+                                vertical_video_url: videoSrc,
+                                vertical_video_media_id: mediaId,
+                                horizontal_video_url: videoSrc,
+                                horizontal_video_media_id: mediaId,
+                                prompt_content: text
+                            });
+                        }
+                    }
+                    return items;
+                })()
+                """
+            }, timeout=30)
+            
+            res_obj = dom_res.get("result") if isinstance(dom_res.get("result"), dict) else dom_res
+            tab_script_res = res_obj.get("res") if isinstance(res_obj, dict) else {}
+            raw_tab_items = tab_script_res.get("result") if isinstance(tab_script_res, dict) else None
+            if not raw_tab_items and isinstance(res_obj, dict):
+                raw_tab_items = res_obj.get("result")
+            if not raw_tab_items and isinstance(dom_res.get("res"), dict):
+                raw_tab_items = dom_res["res"].get("result")
+            if not raw_tab_items:
+                raw_tab_items = []
+                
+            if isinstance(raw_tab_items, list) and raw_tab_items:
+                logger.info("Successfully extracted %d scenes directly from Google Flow DOM!", len(raw_tab_items))
+                unique_scenes = raw_tab_items
+        except Exception as dome:
+            logger.warning("DOM extraction fallback failed: %s", dome)
         
     if unique_scenes:
         try:
@@ -2075,7 +2179,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     logger.warning("Failed to lookup GCS URL in DB for scene %s: %s", scene_id, dbe)
 
             temp_downloaded_path = None
-            if not local_path and url.startswith("http"):
+            if not local_path and url and url.startswith("http"):
                 videos_debug[p]["http_download_attempted"] = True
                 try:
                     temp_downloaded_path = await download_file_to_temp(url)

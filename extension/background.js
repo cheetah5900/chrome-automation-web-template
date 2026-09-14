@@ -269,7 +269,18 @@ async function captureTokenFromFlowTab() {
       await chrome.tabs.update(tab.id, { url: 'https://flow.google.com/' });
       return;
     }
-    // Do NOT automatically reload user tab in background loops — causes infinite refresh loops
+    // If tab is open and no flowKey, ping user.session to trigger token capture via onBeforeSendHeaders
+    if (!flowKey) {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: () => {
+          try {
+            fetch('https://labs.google/fx/api/trpc/user.session', { credentials: 'include' }).catch(() => {});
+          } catch {}
+        }
+      });
+    }
   } catch (e) {
     console.error('[FlowAgent] captureTokenFromFlowTab error:', e);
   }
@@ -1522,8 +1533,27 @@ function connectToAgent() {
           sendToAgent({ id: msg.id, error: e.message });
         }
       } else if (msg.method === 'inspect_tab') {
-        const tabs = await findFlowTabs();
+        let tabs = await findFlowTabs();
         if (!tabs.length) {
+          if (msg.params?.url) {
+            console.log('[FlowAgent] No Flow tab found for inspect_tab — creating requested tab:', msg.params.url);
+            try {
+              const newTab = await chrome.tabs.create({ url: msg.params.url, active: false });
+              for (let i = 0; i < 30; i++) {
+                await sleep(500);
+                const cur = await chrome.tabs.get(newTab.id);
+                if (cur && cur.status === 'complete') break;
+              }
+              tabs = [newTab];
+            } catch (e) {
+              console.error('[FlowAgent] Failed to open inspect_tab requested url:', e);
+            }
+          } else {
+            const flowTab = await getOrOpenFlowTab();
+            if (flowTab) tabs = [flowTab];
+          }
+        }
+        if (!tabs || !tabs.length) {
           sendToAgent({ id: msg.id, result: { error: 'no tab' } });
           return;
         }
@@ -1532,7 +1562,7 @@ function connectToAgent() {
         if (msg.params?.url && tab.url !== msg.params.url) {
           console.log('[FlowAgent] Updating tab to requested url:', msg.params.url);
           await chrome.tabs.update(tab.id, { url: msg.params.url });
-          for (let i = 0; i < 25; i++) {
+          for (let i = 0; i < 30; i++) {
             await sleep(500);
             const cur = await chrome.tabs.get(tab.id);
             if (cur && cur.status === 'complete') {
@@ -1540,6 +1570,7 @@ function connectToAgent() {
               break;
             }
           }
+          await sleep(1500);
         }
         try {
           const evalCode = msg.params?.eval;
@@ -2650,6 +2681,17 @@ async function handleTrpcRequest(msg) {
   if (!url || (!url.startsWith('https://labs.google/') && !url.startsWith('https://flow.google.com/'))) {
     sendToAgent({ id, error: 'INVALID_TRPC_URL' });
     return;
+  }
+
+  // Attempt token capture if flowKey is missing
+  if (!flowKey) {
+    try {
+      await captureTokenFromFlowTab();
+      for (let i = 0; i < 6; i++) {
+        if (flowKey) break;
+        await sleep(500);
+      }
+    } catch {}
   }
 
   setState('running');
