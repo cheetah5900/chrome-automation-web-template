@@ -178,15 +178,21 @@ button.gear { font-size: 1.2rem; padding: 10px 12px; }
 .prompt-row { border: 1px solid var(--card-border); border-radius: 12px; padding: 16px; background: var(--row-bg); }
 
 /* Spin loader */
+button.loading,
+.btn.loading,
 .send-btn.loading {
   position: relative;
   pointer-events: none;
+  opacity: 0.75;
+  cursor: not-allowed !important;
 }
+button.loading::after,
+.btn.loading::after,
 .send-btn.loading::after {
   content: "";
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   margin-left: 8px;
   border: 2px solid #ffffffaa;
   border-top-color: transparent;

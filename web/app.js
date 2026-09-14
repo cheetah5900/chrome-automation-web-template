@@ -9607,6 +9607,18 @@ function updateSeedanceRunButtonUI() {
       return;
     }
 
+    const scanBtn = document.getElementById('btnScanSeedanceBatch');
+    const origBtnHtml = scanBtn ? scanBtn.querySelector('.btn-text')?.innerHTML || scanBtn.innerHTML : '';
+
+    if (scanBtn) {
+      scanBtn.disabled = true;
+      scanBtn.classList.add('loading');
+      const textSpan = scanBtn.querySelector('.btn-text');
+      if (textSpan) {
+        textSpan.textContent = '⏳ กำลังสแกนหาไฟล์ Prompt...';
+      }
+    }
+
     seedanceStepIndex = -1;
     writeConsoleLine(`[Seedance Scanner] กำลังสแกนหาไฟล์ Prompt ใน "${mainFolder}" (ช่วงโฟลเดอร์: ${subfoldersStr || 'ทั้งหมด'}, Mode: ${imageMode}, โฟลเดอร์รูป: ${imageSubfolder})...`, 'system', 'seedanceConsole');
 
@@ -9638,6 +9650,15 @@ function updateSeedanceRunButtonUI() {
       }
     } catch (err) {
       writeConsoleLine(`[Seedance Scanner Error] ${err.message}`, 'error', 'seedanceConsole');
+    } finally {
+      if (scanBtn) {
+        scanBtn.disabled = false;
+        scanBtn.classList.remove('loading');
+        const textSpan = scanBtn.querySelector('.btn-text');
+        if (textSpan) {
+          textSpan.innerHTML = origBtnHtml || '🔍 สแกนหาไฟล์ Prompt (*prompt*.md)';
+        }
+      }
     }
   }
   window.scanSeedanceBatch = scanSeedanceBatch;
