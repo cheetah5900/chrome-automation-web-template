@@ -1604,13 +1604,7 @@ def apply_all_seedance_settings(
     elif image_path and os.path.isfile(image_path):
         target_imgs = [image_path]
 
-    # 1. Handle Prompt based on clear_mode (Set Prompt first so user sees it immediately)
-    if prompt_text and prompt_text.strip():
-        results["prompt"] = set_seedance_prompt(driver, prompt_text)
-    elif clear_mode in ("both", "prompt"):
-        results["prompt"] = clear_seedance_prompt(driver)
-
-    # 2. Handle Image based on clear_mode
+    # 1. Handle Image based on clear_mode (แนบรูปก่อน)
     if clear_mode in ("both", "image"):
         if target_imgs:
             results["image"] = set_seedance_images(driver, target_imgs)
@@ -1623,7 +1617,13 @@ def apply_all_seedance_settings(
         elif clear_image:
             results["image"] = clear_seedance_image(driver)
 
-    # 3. Wait for image upload & button readiness BEFORE clicking Generate
+    # 2. Handle Prompt based on clear_mode (วาง Prompt หลังแนบรูป)
+    if prompt_text and prompt_text.strip():
+        results["prompt"] = set_seedance_prompt(driver, prompt_text)
+    elif clear_mode in ("both", "prompt"):
+        results["prompt"] = clear_seedance_prompt(driver)
+
+    # 3. Wait 5s and check spinner BEFORE clicking Generate (รอ 5 วินาที จากนั้นเช็คเรื่อง spinner)
     if click_generate:
         if target_imgs:
             wait_for_seedance_upload_and_button_ready(driver, min_wait=5.0, max_timeout=30.0)
@@ -1748,13 +1748,7 @@ def run_seedance_batch(
                     "message": f"[{idx+1}/{total}] กำลังตั้งค่าและวางข้อมูลสำหรับ {sub_name}..."
                 })
 
-            # 1. Handle Prompt based on clear_mode (Set Prompt first so user sees it immediately on screen)
-            if prompt_text and prompt_text.strip():
-                set_seedance_prompt(driver, prompt_text)
-            elif clear_mode in ("both", "prompt"):
-                clear_seedance_prompt(driver)
-
-            # 2. Handle Image Attachment based on mode and clear_mode
+            # 1. Handle Image Attachment based on mode and clear_mode (แนบรูปก่อน)
             if clear_mode in ("both", "image"):
                 if item_mode == "subfolder":
                     if item_img_paths:
@@ -1797,7 +1791,13 @@ def run_seedance_batch(
                 else:
                     log("[Seedance] ℹ️ ข้ามการลบรูปภาพตาม Clear Mode: ล้างเฉพาะ Prompt (คงรูปเดิมไว้)")
 
-            # 3. Wait for image upload & button readiness BEFORE clicking Generate
+            # 2. Handle Prompt based on clear_mode (วาง Prompt หลังแนบรูป)
+            if prompt_text and prompt_text.strip():
+                set_seedance_prompt(driver, prompt_text)
+            elif clear_mode in ("both", "prompt"):
+                clear_seedance_prompt(driver)
+
+            # 3. Wait 5s and check spinner BEFORE clicking Generate (รอ 5 วินาที จากนั้นเช็คเรื่อง spinner)
             if click_generate:
                 if (item_mode == "subfolder" and item_img_paths) or (item_mode == "character_sheet"):
                     wait_for_seedance_upload_and_button_ready(driver, min_wait=5.0, max_timeout=30.0)
