@@ -317,16 +317,25 @@ def wait_for_seedance_upload_and_button_ready(driver, min_wait: float = 5.0, max
 
         try:
             status = driver.execute_script("""
-                const refSpinners = Array.from(document.querySelectorAll(
-                    '[data-content-generator-references="true"] [class*="spin"], ' +
-                    '[data-content-generator-references="true"] [class*="loading"], ' +
-                    '[class*="reference"] [class*="spin"], ' +
-                    '[class*="reference"] [class*="loading"], ' +
-                    '.spin-biqUgp, .loading-aAPnJQ, .lottie-player-o8evZm'
-                )).filter(el => {
-                    const r = el.getBoundingClientRect();
-                    return r.width > 0 && r.height > 0;
-                });
+                const composerRefContainer = document.querySelector('[data-content-generator-references="true"]') ||
+                                              document.querySelector('div[class*="content-generator-references"]');
+                let refSpinners = [];
+                if (composerRefContainer) {
+                    refSpinners = Array.from(composerRefContainer.querySelectorAll(
+                        '[class*="spin"], [class*="loading"], .spin-biqUgp, .loading-aAPnJQ, .lottie-player-o8evZm'
+                    )).filter(el => {
+                        const r = el.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0;
+                    });
+                } else {
+                    refSpinners = Array.from(document.querySelectorAll(
+                        '.reference-item-ZGVyJs [class*="spin"], .reference-item-ZGVyJs [class*="loading"], ' +
+                        '[class*="reference-item"] [class*="spin"], [class*="reference-item"] [class*="loading"]'
+                    )).filter(el => {
+                        const r = el.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0 && r.top > 520;
+                    });
+                }
 
                 const submitButtons = Array.from(document.querySelectorAll('button[class*="submit-button"], button.submit-button-IG_OEx'));
                 const activeSubmitBtn = submitButtons.find(b => {
