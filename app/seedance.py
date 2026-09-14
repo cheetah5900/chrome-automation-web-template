@@ -32,6 +32,14 @@ def log(msg: str) -> None:
         log_bus.publish(msg)
     except Exception:
         pass
+    try:
+        import os
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "runtime")
+        os.makedirs(log_dir, exist_ok=True)
+        with open(os.path.join(log_dir, "automation.log"), "a", encoding="utf-8") as f:
+            f.write(f"{msg}\n")
+    except Exception:
+        pass
 
 def parse_range_string(range_str: str) -> list[int]:
     """Parses range strings like '1-10, 15, 20-25' into a list of ints."""
@@ -394,7 +402,7 @@ def set_seedance_images(driver, image_paths: list[str]) -> bool:
                 file_inp.send_keys(os.path.abspath(img_path))
                 time.sleep(0.5)
             log(f"[Seedance] 📤 แนบไฟล์ผ่าน input[type=file] สำเร็จ {len(valid_paths)} รูป")
-            wait_for_seedance_upload_and_button_ready(driver, min_wait=5.0, max_timeout=30.0)
+            time.sleep(0.5)
             return True
     except Exception as e:
         log(f"[Seedance] Direct file input check notice: {e}")
@@ -495,9 +503,7 @@ def set_seedance_images(driver, image_paths: list[str]) -> bool:
         return False
 
     log(f"[Seedance] 📤 แนบไฟล์ผ่าน {res.get('method')} สำเร็จ {res.get('count')} รูป")
-
-    # Wait at least 5.0s and poll until image upload and button spinners are complete
-    wait_for_seedance_upload_and_button_ready(driver, min_wait=5.0, max_timeout=30.0)
+    time.sleep(0.5)
 
     # Verify upload thumbnail count in composer
     img_count = driver.execute_script("""
@@ -833,32 +839,58 @@ def set_seedance_prompt(driver, prompt_text: str) -> bool:
     clean_prompt = prompt_text.strip()
     log(f"[Seedance] กำลังวาง Prompt ({len(clean_prompt)} ตัวอักษร)...")
 
-    # Locate editor
+    # Locate visible editor (avoid hidden sizer measuring element)
     editor = fast_poll(driver, """
-        return document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
+        const editors = Array.from(document.querySelectorAll('div.tiptap.ProseMirror[contenteditable="true"], [contenteditable="true"]'));
+        return editors.find(el => {
+            const r = el.getBoundingClientRect();
+            const s = window.getComputedStyle(el);
+            return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+        }) || editors[0] || null;
     """, timeout=10.0, poll_interval=0.2)
 
     if not editor:
         raise RuntimeError("ไม่พบกล่องข้อความ Prompt (ProseMirror Editor)")
 
     res = driver.execute_script("""
-    const editor = document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
+    const cleanText = arguments[0];
+    const editors = Array.from(document.querySelectorAll('div.tiptap.ProseMirror[contenteditable="true"], [contenteditable="true"]'));
+    const editor = editors.find(el => {
+        const r = el.getBoundingClientRect();
+        const s = window.getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+    }) || editors[0];
+
     if (!editor) return false;
 
-    // 1. Primary: Use native TipTap API if exposed on the DOM element
+    editor.focus();
+
+    // 1. TipTap API setContent
+    let success = false;
     if (editor.editor && typeof editor.editor.commands?.setContent === 'function') {
-        editor.editor.commands.setContent(arguments[0]);
-    } else {
-        // 2. Fallback: Select all node contents across all paragraphs, delete, and insert text
-        editor.focus();
-        const sel = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(editor);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        document.execCommand('delete', false, null);
-        document.execCommand('insertText', false, arguments[0]);
+        try {
+            editor.editor.commands.setContent(cleanText);
+            success = true;
+        } catch(e) {
+            console.warn('TipTap setContent failed:', e);
+        }
     }
+
+    // 2. Fallback: Selection insertText if setContent not available or text didn't update
+    if (!success || !editor.innerText || editor.innerText.trim() === '') {
+        try {
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(editor);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            document.execCommand('delete', false, null);
+            document.execCommand('insertText', false, cleanText);
+        } catch(e) {
+            editor.innerHTML = '<p>' + cleanText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
+        }
+    }
+
     editor.dispatchEvent(new Event('input', { bubbles: true }));
     editor.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
@@ -1572,7 +1604,13 @@ def apply_all_seedance_settings(
     elif image_path and os.path.isfile(image_path):
         target_imgs = [image_path]
 
-    # 1. Handle Image based on clear_mode
+    # 1. Handle Prompt based on clear_mode (Set Prompt first so user sees it immediately)
+    if prompt_text and prompt_text.strip():
+        results["prompt"] = set_seedance_prompt(driver, prompt_text)
+    elif clear_mode in ("both", "prompt"):
+        results["prompt"] = clear_seedance_prompt(driver)
+
+    # 2. Handle Image based on clear_mode
     if clear_mode in ("both", "image"):
         if target_imgs:
             results["image"] = set_seedance_images(driver, target_imgs)
@@ -1585,14 +1623,11 @@ def apply_all_seedance_settings(
         elif clear_image:
             results["image"] = clear_seedance_image(driver)
 
-    # 2. Handle Prompt based on clear_mode
-    if prompt_text and prompt_text.strip():
-        results["prompt"] = set_seedance_prompt(driver, prompt_text)
-    elif clear_mode in ("both", "prompt"):
-        results["prompt"] = clear_seedance_prompt(driver)
-
-    # 3. Click Generate if requested
+    # 3. Wait for image upload & button readiness BEFORE clicking Generate
     if click_generate:
+        if target_imgs:
+            wait_for_seedance_upload_and_button_ready(driver, min_wait=5.0, max_timeout=30.0)
+
         results["generate"] = click_seedance_generate(driver)
 
         # 4. Post-Generate Clearing (ล้างข้อมูลหลังกดสั่งงานและกดส่งเรียบร้อยแล้ว)
@@ -1689,7 +1724,7 @@ def run_seedance_batch(
                 break
 
         try:
-            prompt_text = item.get("prompt_text", "")
+            prompt_text = item.get("prompt_text") or item.get("prompt") or item.get("text", "")
             sub_name = item.get("subfolder_name", f"Item #{idx+1}")
             item_mode = image_mode or item.get("image_mode", "none")
             item_img_paths = item.get("image_paths") or item.get("subfolder_image_paths") or ([item.get("image_path")] if item.get("image_path") else [])
@@ -1713,7 +1748,13 @@ def run_seedance_batch(
                     "message": f"[{idx+1}/{total}] กำลังตั้งค่าและวางข้อมูลสำหรับ {sub_name}..."
                 })
 
-            # 1. Handle Image Attachment based on mode and clear_mode
+            # 1. Handle Prompt based on clear_mode (Set Prompt first so user sees it immediately on screen)
+            if prompt_text and prompt_text.strip():
+                set_seedance_prompt(driver, prompt_text)
+            elif clear_mode in ("both", "prompt"):
+                clear_seedance_prompt(driver)
+
+            # 2. Handle Image Attachment based on mode and clear_mode
             if clear_mode in ("both", "image"):
                 if item_mode == "subfolder":
                     if item_img_paths:
@@ -1756,14 +1797,11 @@ def run_seedance_batch(
                 else:
                     log("[Seedance] ℹ️ ข้ามการลบรูปภาพตาม Clear Mode: ล้างเฉพาะ Prompt (คงรูปเดิมไว้)")
 
-            # 2. Handle Prompt based on clear_mode
-            if prompt_text and prompt_text.strip():
-                set_seedance_prompt(driver, prompt_text)
-            elif clear_mode in ("both", "prompt"):
-                clear_seedance_prompt(driver)
-
-            # Click generate IF AND ONLY IF explicitly requested
+            # 3. Wait for image upload & button readiness BEFORE clicking Generate
             if click_generate:
+                if (item_mode == "subfolder" and item_img_paths) or (item_mode == "character_sheet"):
+                    wait_for_seedance_upload_and_button_ready(driver, min_wait=5.0, max_timeout=30.0)
+
                 log(f"[Seedance] 🚀 กำลังกดปุ่ม Generate สำหรับ {sub_name}...")
                 click_seedance_generate(driver)
 
