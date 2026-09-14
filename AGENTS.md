@@ -52,7 +52,9 @@ Always respond using the **i-have-adhd** skill exclusively:
 1. **Zero Fluff**: Strip out conversational filler, repetitive summaries, passive phrasing, and preamble.
 2. **Exclusively Section 4 Table**: Output ONLY the 4-column **Issues Encountered & Solutions Table** (`### 🛠️ ปัญหาที่เจอ และวิธีแก้ปัญหา`).
 3. **Bold Keywords**: Bold key numbers, product names, modes, and decisive actions.
-4. **Clean Status Footer**: End with Branch, Commit ID, and Test Suite status (`### 🚀 ท้ายรายงาน (Footer / Status)`).
+4. **No Code Explanations (ห้ามอธิบายโค้ด)**: ห้ามอธิบายชื่อฟังก์ชัน, เมธอด, ไฟล์โค้ด หรือรายละเอียดโค้ด ให้สรุปเป็นภาษาพูดที่เข้าใจง่ายและสั้นกระชับที่สุด (High-level, plain language only).
+5. **Ultra-Brief (อธิบายสั้นกระชับ)**: แต่ละช่องในตารางต้องสั้นกระชับ ไม่เกิน 1-2 ประโยค ไม่เวิ่นเว้อ.
+6. **Clean Status Footer**: End with Branch, Commit ID, and Test Suite status (`### 🚀 ท้ายรายงาน (Footer / Status)`).
 
 # Session Learnings
 
