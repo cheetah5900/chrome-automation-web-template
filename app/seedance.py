@@ -110,13 +110,14 @@ def find_all_images_in_folder(
             if ext in valid_exts:
                 candidates.append((fname, os.path.join(folder_path, fname)))
 
-    # Sort naturally by number if present (e.g. 1.png, 2.png, 10.png)
+    # Sort naturally (case-insensitive) by number if present (e.g. 1.png, 2.png, 10.png, baby, Orange Cat)
     def _sort_key(item):
         name = item[0]
         num = extract_leading_number(name)
+        parts = [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', name)]
         if num is not None:
-            return (0, num, name)
-        return (1, 0, name)
+            return (0, num, parts)
+        return (1, 0, parts)
 
     candidates.sort(key=_sort_key)
     return candidates
