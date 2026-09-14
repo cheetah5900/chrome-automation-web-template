@@ -284,6 +284,87 @@ def clear_seedance_image_and_prompt(driver) -> dict[str, bool]:
     prompt_cleared = clear_seedance_prompt(driver)
     return {"image_cleared": img_cleared, "prompt_cleared": prompt_cleared}
 
+def wait_for_seedance_upload_and_button_ready(driver, min_wait: float = 5.0, max_timeout: float = 30.0) -> bool:
+    """
+    Waits after attaching reference image(s):
+    1. Waits at least min_wait seconds (default 5.0s) to allow image processing and upload.
+    2. Polls Dreamina DOM to check if the reference thumbnail or Generate button is still spinning/loading.
+    3. Waits until all loading spinners disappear and the button is ready.
+    """
+    log(f"[Seedance] ⏳ รอรูปภาพอัปโหลดและประมวลผลบน Dreamina อย่างน้อย {min_wait:.0f} วินาที...")
+    start_t = time.time()
+
+    # Minimum wait (5 seconds) with force-stop responsiveness
+    while time.time() - start_t < min_wait:
+        if is_seedance_stopped():
+            return False
+        time.sleep(0.5)
+
+    # Poll until reference image spinners and button spinning indicators disappear
+    last_log_t = time.time()
+    while time.time() - start_t < max_timeout:
+        if is_seedance_stopped():
+            return False
+
+        try:
+            status = driver.execute_script("""
+                const refSpinners = Array.from(document.querySelectorAll(
+                    '[data-content-generator-references="true"] [class*="spin"], ' +
+                    '[data-content-generator-references="true"] [class*="loading"], ' +
+                    '[class*="reference"] [class*="spin"], ' +
+                    '[class*="reference"] [class*="loading"], ' +
+                    '.spin-biqUgp, .loading-aAPnJQ, .lottie-player-o8evZm'
+                )).filter(el => {
+                    const r = el.getBoundingClientRect();
+                    return r.width > 0 && r.height > 0;
+                });
+
+                const submitButtons = Array.from(document.querySelectorAll('button[class*="submit-button"], button.submit-button-IG_OEx'));
+                const activeSubmitBtn = submitButtons.find(b => {
+                    const cls = b.className || '';
+                    const isCollapsed = cls.includes('collapsed');
+                    const r = b.getBoundingClientRect();
+                    return !isCollapsed && r.width > 0 && r.height > 0;
+                });
+
+                const btnSpinning = activeSubmitBtn ? (
+                    activeSubmitBtn.classList.contains('lv-btn-loading') ||
+                    activeSubmitBtn.classList.contains('loading') ||
+                    !!activeSubmitBtn.querySelector('[class*="loading"], [class*="spin"], svg.lv-icon-loading, .lottie-player-o8evZm')
+                ) : false;
+
+                return {
+                    refSpinning: refSpinners.length > 0,
+                    btnSpinning: btnSpinning
+                };
+            """)
+        except Exception:
+            status = {}
+
+        ref_spinning = status.get("refSpinning", False)
+        btn_spinning = status.get("btnSpinning", False)
+
+        if not ref_spinning and not btn_spinning:
+            elapsed = time.time() - start_t
+            log(f"[Seedance] ✅ รูปภาพอัปโหลดเสร็จสมบูรณ์ และปุ่ม Generate หยุดหมุนพร้อมทำงานแล้ว (ใช้เวลารอ {elapsed:.1f}s)")
+            return True
+
+        now = time.time()
+        if now - last_log_t >= 2.0:
+            elapsed = now - start_t
+            if btn_spinning:
+                log(f"[Seedance] ⏳ ปุ่ม Generate ยังคงหมุนรอโหลดอยู่... (รอมาแล้ว {elapsed:.1f}s)")
+            elif ref_spinning:
+                log(f"[Seedance] ⏳ รูปภาพยังคงอัปโหลดอยู่ (พบ spinner)... (รอมาแล้ว {elapsed:.1f}s)")
+            last_log_t = now
+
+        time.sleep(0.5)
+
+    elapsed = time.time() - start_t
+    log(f"[Seedance] ⚠️ ครบกำหนดเวลาตรวจสอบอัปโหลด ({elapsed:.1f}s) ดำเนินการขั้นตอนถัดไป...")
+    return True
+
+
 def set_seedance_images(driver, image_paths: list[str]) -> bool:
     """Uploads/attaches multiple images to Dreamina via React handler, synthetic drop, or file input."""
     import base64
@@ -313,6 +394,7 @@ def set_seedance_images(driver, image_paths: list[str]) -> bool:
                 file_inp.send_keys(os.path.abspath(img_path))
                 time.sleep(0.5)
             log(f"[Seedance] 📤 แนบไฟล์ผ่าน input[type=file] สำเร็จ {len(valid_paths)} รูป")
+            wait_for_seedance_upload_and_button_ready(driver, min_wait=5.0, max_timeout=30.0)
             return True
     except Exception as e:
         log(f"[Seedance] Direct file input check notice: {e}")
@@ -413,7 +495,9 @@ def set_seedance_images(driver, image_paths: list[str]) -> bool:
         return False
 
     log(f"[Seedance] 📤 แนบไฟล์ผ่าน {res.get('method')} สำเร็จ {res.get('count')} รูป")
-    time.sleep(0.8)
+
+    # Wait at least 5.0s and poll until image upload and button spinners are complete
+    wait_for_seedance_upload_and_button_ready(driver, min_wait=5.0, max_timeout=30.0)
 
     # Verify upload thumbnail count in composer
     img_count = driver.execute_script("""
@@ -784,33 +868,59 @@ def set_seedance_prompt(driver, prompt_text: str) -> bool:
     log(f"[Seedance] ✅ วางข้อความ Prompt สำเร็จ ({len(clean_prompt)} ตัวอักษร)")
     return bool(res)
 
-def click_seedance_generate(driver, timeout: float = 6.0) -> bool:
-    """Clicks the active Generate/Submit button on Dreamina, avoiding collapsed dummy buttons."""
-    time.sleep(0.5)  # Allow React state to enable button
+def click_seedance_generate(driver, timeout: float = 15.0) -> bool:
+    """Clicks the active Generate/Submit button on Dreamina, waiting if it is spinning or loading."""
+    time.sleep(0.5)  # Allow React state to settle
     start_t = time.time()
+    last_spin_log = 0.0
+
     while time.time() - start_t < timeout:
+        if is_seedance_stopped():
+            return False
+
         res = driver.execute_script("""
         const buttons = Array.from(document.querySelectorAll('button[class*="submit-button"], button.submit-button-IG_OEx'));
         const activeBtn = buttons.find(b => {
             const cls = b.className || '';
-            const isDisabled = b.disabled || b.classList.contains('lv-btn-disabled') || b.getAttribute('aria-disabled') === 'true';
             const isCollapsed = cls.includes('collapsed');
             const rect = b.getBoundingClientRect();
-            return !isDisabled && !isCollapsed && rect.width > 0 && rect.height > 0;
+            return !isCollapsed && rect.width > 0 && rect.height > 0;
         });
 
-        if (activeBtn) {
-            activeBtn.scrollIntoView({ block: 'nearest' });
-            activeBtn.click();
-            return true;
+        if (!activeBtn) {
+            return { status: 'not_found' };
         }
-        return false;
+
+        const isSpinning = activeBtn.classList.contains('lv-btn-loading') ||
+                           activeBtn.classList.contains('loading') ||
+                           !!activeBtn.querySelector('[class*="loading"], [class*="spin"], svg.lv-icon-loading, .lottie-player-o8evZm');
+
+        if (isSpinning) {
+            return { status: 'spinning' };
+        }
+
+        const isDisabled = activeBtn.disabled || activeBtn.classList.contains('lv-btn-disabled') || activeBtn.getAttribute('aria-disabled') === 'true';
+        if (isDisabled) {
+            return { status: 'disabled' };
+        }
+
+        activeBtn.scrollIntoView({ block: 'nearest' });
+        activeBtn.click();
+        return { status: 'clicked' };
         """)
 
-        if res:
+        status = res.get("status") if isinstance(res, dict) else None
+        if status == "clicked":
             log("[Seedance] ✅ กดปุ่ม Generate บน Dreamina สำเร็จ")
             return True
-        time.sleep(0.3)
+        elif status == "spinning":
+            now = time.time()
+            if now - last_spin_log >= 2.0:
+                elapsed = now - start_t
+                log(f"[Seedance] ⏳ ปุ่ม Generate ยังคงหมุนรอโหลดอยู่... (รอมาแล้ว {elapsed:.1f}s)")
+                last_spin_log = now
+
+        time.sleep(0.4)
 
     # Fallback with Selenium element click
     real_btn = fast_poll(driver, """

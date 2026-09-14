@@ -8949,7 +8949,7 @@ const staticTooltips = {
   "addVideoCombineSetBtn": "➕ เพิ่มเซ็ตวิดีโอ (Add Set):<br>- สร้างช่วงการรวมโฟลเดอร์อัตโนมัติ",
   
   // Seedance
-  "runSeedanceBatchBtn": "🚀 วาง Prompt / รัน Seedance:<br>- วาง Prompt, แนบ/ล้างรูปภาพ และกดปุ่ม Generate บน Dreamina (ไม่เปลี่ยนแปลงโมเดล, สัดส่วน, หรือระยะเวลา)",
+  "runSeedanceBatchBtn": "🚀 วาง Prompt / รัน Seedance:<br>- วาง Prompt, แนบ/ล้างรูปภาพ (รออัปโหลดอย่างน้อย 5 วินาที พร้อมตรวจเช็คปุ่มหมุน) และกดปุ่ม Generate บน Dreamina (ไม่เปลี่ยนแปลงโมเดล, สัดส่วน, หรือระยะเวลา)",
   "btnCheckSeedanceErrors": "🔍 ตรวจสอบ Error บน Dreamina:<br>- สแกนอ่านรายการที่สร้างไม่สำเร็จ เช่น วิดีโอติดเนื้อหาของบุคคลที่สาม และสรุปรายงานใน Modal",
   "addSeedancePromptBtn": "➕ เพิ่มพรอพต์ (Add Prompt)",
   "saveSeedancePromptsBtn": "💾 บันทึกพรอพต์ (Save)",
