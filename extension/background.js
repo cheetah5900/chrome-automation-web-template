@@ -364,9 +364,11 @@ function connectToAgent() {
         const { prompt, orientation, filePath, assetName } = msg.params || {};
 
         try {
-          // 1. Switch to Google Flow tab and ensure frontmost
-          await ensureWindowFrontmost(tab);
-          await sleep(250);
+          // 1. Only switch to Google Flow tab and bring frontmost IF native file dialog is needed (i.e. filePath present)
+          if (filePath) {
+            await ensureWindowFrontmost(tab);
+            await sleep(250);
+          }
 
           // 2. Dismiss any existing overlay/dialog
           await chrome.scripting.executeScript({
@@ -712,7 +714,9 @@ function connectToAgent() {
               return pm ? pm.innerText?.trim() : '';
             }
           });
-          if (!pmCheck[0]?.result || !pmCheck[0]?.result.includes(targetFileName || '')) {
+          const hasText = !!pmCheck[0]?.result;
+          const hasTargetFile = targetFileName ? pmCheck[0]?.result.includes(targetFileName) : true;
+          if (!hasText || !hasTargetFile) {
             const dbgTarget = { tabId: tab.id };
             await chrome.debugger.attach(dbgTarget, '1.3');
             try {
