@@ -187,20 +187,33 @@ async function findFlowTabs() {
   }
 }
 
+let _lastEnsureWindowTime = 0;
 async function ensureWindowFrontmost(tab) {
+  const now = Date.now();
+  if (now - _lastEnsureWindowTime < 4000) return;
+  _lastEnsureWindowTime = now;
+
   try {
-    await fetch('http://127.0.0.1:6969/api/flow/focus-browser', { method: 'POST' });
-  } catch {}
-  if (tab?.windowId) {
-    try {
+    if (tab?.windowId) {
       const win = await chrome.windows.get(tab.windowId);
+      if (win.focused && win.state !== 'minimized') {
+        if (tab?.id) {
+          await chrome.tabs.update(tab.id, { active: true });
+        }
+        return;
+      }
       if (win.state === 'minimized') {
         await chrome.windows.update(tab.windowId, { state: 'normal', focused: true });
       } else {
         await chrome.windows.update(tab.windowId, { focused: true });
       }
-    } catch {}
-  }
+    }
+  } catch {}
+
+  try {
+    await fetch('http://127.0.0.1:6969/api/flow/focus-browser', { method: 'POST' });
+  } catch {}
+
   if (tab?.id) {
     try {
       await chrome.tabs.update(tab.id, { active: true });

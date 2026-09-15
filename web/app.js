@@ -11510,8 +11510,12 @@ initApp();
 
 let flowScannedPairs = [];
 let flowProjectsList = [];
+let flowKitUploaderListenersInitialized = false;
 
 function initFlowKitUploaderListeners() {
+  if (flowKitUploaderListenersInitialized) return;
+  flowKitUploaderListenersInitialized = true;
+
   // Initialize dropdowns with a default tier on startup
   updateFlowVideoModelDropdowns('PAYGATE_TIER_TWO');
 
@@ -11704,15 +11708,59 @@ function initFlowKitUploaderListeners() {
   });
   document.getElementById('btnApplyFlowRange')?.addEventListener('click', applyFlowRangeSelection);
 
+  // Helper to toggle button state between Start and Force Stop
+  let flowBatchRunningInterval = null;
+  const setFlowBatchButtonRunning = (btn, isRunning, defaultText, defaultBg) => {
+    if (!btn) return;
+    if (isRunning) {
+      btn.dataset.state = 'running';
+      btn.innerHTML = '🛑 Force Stop';
+      btn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+      btn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
+    } else {
+      btn.dataset.state = 'idle';
+      btn.innerHTML = defaultText;
+      btn.style.background = defaultBg;
+      btn.style.boxShadow = '';
+    }
+  };
+
   // 6. Process Batch Button
   document.getElementById('btnProcessFlowKitBatch')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnProcessFlowKitBatch');
+    const msg = document.getElementById('flowKitMsg');
+    
+    // If already running, clicking acts as Force Stop
+    if (btn && btn.dataset.state === 'running') {
+      if (!confirm('คุณต้องการหยุดการทำงานทั้งหมด (Force Stop) ทันทีหรือไม่?')) {
+        return;
+      }
+      try {
+        const res = await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
+        logToConsole(`🛑 Force Stop: ยกเลิกงานในคิวทั้งหมดแล้ว (${res?.cancelled_count || 0} งาน)`, 'error');
+        if (msg) {
+          msg.className = 'msg';
+          msg.style.color = '#ef4444';
+          msg.textContent = `🛑 สั่งหยุดการทำงานเรียบร้อยแล้ว (ยกเลิก ${res?.cancelled_count || 0} งาน)`;
+        }
+      } catch (err) {
+        console.error(err);
+        logToConsole(`Error stopping batch: ${err.message || err}`, 'error');
+      }
+      setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+      if (flowBatchRunningInterval) {
+        clearInterval(flowBatchRunningInterval);
+        flowBatchRunningInterval = null;
+      }
+      updateProjectStats();
+      return;
+    }
+
     const project = document.getElementById('cfg_flow_project_dropdown')?.value;
     const orientation = document.getElementById('cfg_flow_orientation')?.value;
     const videoModel = document.getElementById('cfg_flow_video_model')?.value || null;
     const outputCount = parseInt(document.getElementById('cfg_flow_output_count')?.value, 10) || 1;
     const upscaleResolution = document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE';
-    
-    const msg = document.getElementById('flowKitMsg');
     
     if (!project) {
       if (msg) {
@@ -11800,6 +11848,25 @@ function initFlowKitUploaderListeners() {
           msg.style.color = '#10b981';
           msg.textContent = `ส่งคำขอเจเนอเรทสำเร็จทั้งหมด ${queued.length} ฉาก (ล้มเหลว ${failed.length} ฉาก)`;
         }
+
+        // Toggle button to Force Stop state and poll for completion
+        if (queued.length > 0) {
+          setFlowBatchButtonRunning(btn, true, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+          if (flowBatchRunningInterval) clearInterval(flowBatchRunningInterval);
+          flowBatchRunningInterval = setInterval(async () => {
+            try {
+              const statusRes = await jsonFetch(`/api/requests/batch-status?video_id=${res.video_id || ''}`);
+              if (statusRes && statusRes.done) {
+                clearInterval(flowBatchRunningInterval);
+                flowBatchRunningInterval = null;
+                setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+                if (msg) {
+                  msg.textContent = statusRes.all_succeeded ? 'เจเนอเรทเสร็จสมบูรณ์ทุกฉากแล้ว ✅' : 'ประมวลผลงานเสร็จสิ้น';
+                }
+              }
+            } catch {}
+          }, 3000);
+        }
       } else {
         if (msg) {
           msg.className = 'msg error';
@@ -11820,6 +11887,8 @@ function initFlowKitUploaderListeners() {
 
   // --- Flow Step-by-Step Debugger Controls ---
   let flowDebugCurrentStep = 1;
+  let isFlowDebugStepRunning = false;
+
   const getSelectedDebugScene = () => {
     const validPairs = flowScannedPairs.filter(p => p.checked !== false && p.image_path);
     if (validPairs.length > 0) return validPairs[0];
@@ -11853,6 +11922,17 @@ function initFlowKitUploaderListeners() {
   };
 
   const runFlowDebugStep = async (stepNum) => {
+    if (isFlowDebugStepRunning) {
+      console.warn('Flow debug step already in progress. Ignoring duplicate click.');
+      return;
+    }
+    isFlowDebugStepRunning = true;
+
+    const debugBtns = [1, 2, 3, 4, 5].map(n => document.getElementById(`btnDebugStep${n}`)).filter(Boolean);
+    const nextBtn = document.getElementById('btnDebugStepNext');
+    debugBtns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+    if (nextBtn) { nextBtn.disabled = true; nextBtn.style.opacity = '0.5'; }
+
     const scene = getSelectedDebugScene();
     const sceneLabel = document.getElementById('flowDebugCurrentSceneLabel');
     const fName = scene.image_path ? scene.image_path.split('/').pop() : 'Scene';
@@ -11874,7 +11954,12 @@ function initFlowKitUploaderListeners() {
     };
 
     const stepCode = stepNames[stepNum];
-    if (!stepCode) return;
+    if (!stepCode) {
+      isFlowDebugStepRunning = false;
+      debugBtns.forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+      if (nextBtn) { nextBtn.disabled = false; nextBtn.style.opacity = '1'; }
+      return;
+    }
 
     updateDebugStatus(`กำลังดำเนินการ ${stepLabels[stepNum]} สำหรับ ${fName}...`, 'info', `Step ${stepNum} ⏳`);
 
@@ -11895,28 +11980,37 @@ function initFlowKitUploaderListeners() {
         const r = res.result;
         updateDebugStatus(`[${stepLabels[stepNum]} ผ่าน]: ${r.message || 'สำเร็จ'}`, 'success', 'Passed ✅');
         flowDebugCurrentStep = (stepNum % 5) + 1;
-        const nextBtn = document.getElementById('btnDebugStepNext');
         if (nextBtn) nextBtn.textContent = `▶️ Run Step ${flowDebugCurrentStep}`;
       } else {
         updateDebugStatus(`[${stepLabels[stepNum]}]: ได้รับข้อมูลแต่ไม่พบผลลัพธ์`, 'error', 'No Result');
       }
     } catch (e) {
       updateDebugStatus(`[${stepLabels[stepNum]} Error]: ${e.message || e}`, 'error', 'Error ❌');
+    } finally {
+      isFlowDebugStepRunning = false;
+      debugBtns.forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+      if (nextBtn) { nextBtn.disabled = false; nextBtn.style.opacity = '1'; }
     }
   };
 
-  document.getElementById('btnDebugStep1')?.addEventListener('click', () => runFlowDebugStep(1));
-  document.getElementById('btnDebugStep2')?.addEventListener('click', () => runFlowDebugStep(2));
-  document.getElementById('btnDebugStep3')?.addEventListener('click', () => runFlowDebugStep(3));
-  document.getElementById('btnDebugStep4')?.addEventListener('click', () => runFlowDebugStep(4));
-  document.getElementById('btnDebugStep5')?.addEventListener('click', () => runFlowDebugStep(5));
-  document.getElementById('btnDebugStepNext')?.addEventListener('click', () => runFlowDebugStep(flowDebugCurrentStep));
-  document.getElementById('btnDebugResetSteps')?.addEventListener('click', () => {
+  const b1 = document.getElementById('btnDebugStep1');
+  if (b1) b1.onclick = () => runFlowDebugStep(1);
+  const b2 = document.getElementById('btnDebugStep2');
+  if (b2) b2.onclick = () => runFlowDebugStep(2);
+  const b3 = document.getElementById('btnDebugStep3');
+  if (b3) b3.onclick = () => runFlowDebugStep(3);
+  const b4 = document.getElementById('btnDebugStep4');
+  if (b4) b4.onclick = () => runFlowDebugStep(4);
+  const b5 = document.getElementById('btnDebugStep5');
+  if (b5) b5.onclick = () => runFlowDebugStep(5);
+  const bNext = document.getElementById('btnDebugStepNext');
+  if (bNext) bNext.onclick = () => runFlowDebugStep(flowDebugCurrentStep);
+  const bReset = document.getElementById('btnDebugResetSteps');
+  if (bReset) bReset.onclick = () => {
     flowDebugCurrentStep = 1;
-    const nextBtn = document.getElementById('btnDebugStepNext');
-    if (nextBtn) nextBtn.textContent = '▶️ Run Next Step';
+    if (bNext) bNext.textContent = '▶️ Run Next Step';
     updateDebugStatus('รีเซ็ตลำดับขั้นตอนแล้ว พร้อมเริ่ม Step 1', 'info', 'Ready');
-  });
+  };
 
   document.getElementById('btnCancelFlowKitBatch')?.addEventListener('click', async () => {
     if (!confirm('คุณต้องการยกเลิกงานที่ค้างในคิวทั้งหมดและหยุดการพยายามยิงซ้ำ (Retry) หรือไม่?')) {
@@ -11949,6 +12043,11 @@ function initFlowKitUploaderListeners() {
         msg.style.color = '#f56565';
         msg.textContent = `เกิดข้อผิดพลาด: ${err.message || err}`;
       }
+    }
+    setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatch'), false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+    if (flowBatchRunningInterval) {
+      clearInterval(flowBatchRunningInterval);
+      flowBatchRunningInterval = null;
     }
     updateProjectStats();
   });
@@ -12812,15 +12911,44 @@ document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () 
   }
 });
 
+let flowBatchPORunningInterval = null;
+
 document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btnProcessFlowKitBatchPO');
+  const msg = document.getElementById('flowKitPOMsg');
+
+  // Handle Force Stop if clicked while already running
+  if (btn && btn.dataset.state === 'running') {
+    if (!confirm('คุณต้องการหยุดการทำงานทั้งหมด (Force Stop) ทันทีหรือไม่?')) {
+      return;
+    }
+    try {
+      const res = await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
+      logToConsole(`🛑 Force Stop: ยกเลิกงานในคิวทั้งหมดแล้ว (${res?.cancelled_count || 0} งาน)`, 'error');
+      if (msg) {
+        msg.className = 'msg';
+        msg.style.color = '#ef4444';
+        msg.textContent = `🛑 สั่งหยุดการทำงานเรียบร้อยแล้ว (ยกเลิก ${res?.cancelled_count || 0} งาน)`;
+      }
+    } catch (err) {
+      console.error(err);
+      logToConsole(`Error stopping batch: ${err.message || err}`, 'error');
+    }
+    setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
+    if (flowBatchPORunningInterval) {
+      clearInterval(flowBatchPORunningInterval);
+      flowBatchPORunningInterval = null;
+    }
+    updateProjectStats();
+    return;
+  }
+
   const project = document.getElementById('cfg_flow_po_project_dropdown')?.value;
   const orientation = document.getElementById('cfg_flow_po_orientation')?.value;
   const videoModel = document.getElementById('cfg_flow_po_video_model')?.value || null;
   const outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
   const durationSeconds = 10;
   const upscaleResolution = document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE';
-  
-  const msg = document.getElementById('flowKitPOMsg');
   
   if (!project) {
     if (msg) {
@@ -12893,6 +13021,21 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
         msg.style.color = '#10b981';
         msg.textContent = `เริ่มเจเนอเรทวิดีโอแบบกลุ่มสำเร็จ (Video ID: ${res.video_id})`;
       }
+      setFlowBatchButtonRunning(btn, true, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
+      if (flowBatchPORunningInterval) clearInterval(flowBatchPORunningInterval);
+      flowBatchPORunningInterval = setInterval(async () => {
+        try {
+          const statusRes = await jsonFetch(`/api/requests/batch-status?video_id=${res.video_id || ''}`);
+          if (statusRes && statusRes.done) {
+            clearInterval(flowBatchPORunningInterval);
+            flowBatchPORunningInterval = null;
+            setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
+            if (msg) {
+              msg.textContent = statusRes.all_succeeded ? 'เจเนอเรทเสร็จสมบูรณ์ทุกฉากแล้ว ✅' : 'ประมวลผลงานเสร็จสิ้น';
+            }
+          }
+        } catch {}
+      }, 3000);
     } else {
       logToConsole(`Batch submission failed: ${res?.error || 'Unknown error'}`, 'error');
       if (msg) {
@@ -12943,6 +13086,11 @@ document.getElementById('btnCancelFlowKitBatchPO')?.addEventListener('click', as
       msg.style.color = '#f56565';
       msg.textContent = `เกิดข้อผิดพลาด: ${err.message || err}`;
     }
+  }
+  setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatchPO'), false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
+  if (flowBatchPORunningInterval) {
+    clearInterval(flowBatchPORunningInterval);
+    flowBatchPORunningInterval = null;
   }
   updateProjectStats();
 });

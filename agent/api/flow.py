@@ -144,18 +144,6 @@ async def focus_browser():
     import subprocess, asyncio
     as_script = '''
     tell application "Google Chrome" to activate
-    tell application "System Events"
-        tell process "Google Chrome"
-            set frontmost to true
-            try
-                repeat with w in windows
-                    if value of attribute "AXMinimized" of w is true then
-                        set value of attribute "AXMinimized" of w to false
-                    end if
-                end repeat
-            end try
-        end tell
-    end tell
     '''
     await asyncio.to_thread(subprocess.run, ["osascript", "-e", as_script], check=False)
     return {"ok": True}
