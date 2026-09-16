@@ -164,6 +164,7 @@ class Operation:
     project_id: Optional[str]
     status: Optional[str]
     error: Optional[str] = None
+    scene_id: Optional[str] = None
 
     @property
     def done(self) -> bool:
@@ -487,6 +488,7 @@ def read_operation(payload: Any) -> Operation:
         project_id=record[1] if len(record) > 1 else None,
         status=record[3] if len(record) > 3 else None,
         error=read_operation_error(record),
+        scene_id=record[2] if len(record) > 2 and isinstance(record[2], str) else None,
     )
 
 
@@ -527,7 +529,7 @@ def find_media_id(payload: Any, operation_id: str) -> Optional[str]:
 #: The media slot in a listing entry, matched straight off the wire: a title,
 #: a timestamp pair, two nulls, then the media id. Escaped or not, both forms
 #: appear depending on whether the text has been through a JSON decode.
-_MEDIA_SLOT = re.compile(r'null,null,\\?"([0-9a-fA-F-]{36})\\?"')
+_MEDIA_SLOT = re.compile(r'(?:null,null|null),\\?"([0-9a-fA-F-]{36})\\?"')
 
 
 def find_media_id_in_text(text: str, operation_id: str) -> Optional[str]:

@@ -50,6 +50,7 @@ class FlowClient:
         # `_operation_polls` counts rounds, to keep the listing off most of them.
         self._operation_projects: dict[str, str] = {}
         self._operation_media: dict[str, str] = {}
+        self._operation_scenes: dict[str, str] = {}
         self._operation_polls: dict[str, int] = {}
         # WS stats
         self._ws_connect_count = 0
@@ -557,10 +558,10 @@ class FlowClient:
         legacy = VIDEO_MODELS.get(tier, {}).get(gen_type, {}).get(aspect_ratio)
         return fb.resolve_video_model(legacy)
 
-    def _remember_operation(self, operation_id: str, project_id: str):
-        """Which project an operation belongs to — the listing lookup needs it.
+    def _remember_operation(self, operation_id: str, project_id: str, scene_id: str = None):
+        """Which project and scene an operation belongs to — the listing lookup needs it.
 
-        A poll record usually carries the project id, but old operations decay
+        A poll record usually carries the project id and scene id, but old operations decay
         to a bare id, so keep our own note. Bounded: this is a cache, and the
         pinned project is always a workable fallback.
         """
@@ -569,8 +570,11 @@ class FlowClient:
         if len(self._operation_projects) > 512:
             self._operation_projects.clear()
             self._operation_media.clear()
+            self._operation_scenes.clear()
             self._operation_polls.clear()
         self._operation_projects[operation_id] = project_id
+        if scene_id:
+            self._operation_scenes[operation_id] = scene_id
 
     # ─── High-level API Methods ──────────────────────────────
 
@@ -736,7 +740,8 @@ class FlowClient:
         except Exception as e:
             return _batch_error(e)
 
-        self._remember_operation(operation.operation_id, pid)
+        scene_uuid = operation.scene_id if hasattr(operation, "scene_id") else None
+        self._remember_operation(operation.operation_id, pid, scene_uuid)
         return {"status": 200, "data": {"operations": [_as_pending_operation(operation.operation_id)]}}
 
 
@@ -805,6 +810,10 @@ class FlowClient:
                 out.append({"operation": {}, "status": "MEDIA_GENERATION_STATUS_FAILED",
                             "error": "operation carried no name"})
                 continue
+            entry_pid = entry.get("project_id") or entry.get("projectId") or (entry.get("operation") or {}).get("project_id")
+            entry_scene = entry.get("scene_id") or entry.get("sceneId") or (entry.get("operation") or {}).get("scene_id")
+            if entry_pid:
+                self._remember_operation(op_id, entry_pid, entry_scene)
             try:
                 out.append(await self._poll_batch_operation(op_id))
             except Exception as e:
@@ -826,12 +835,12 @@ class FlowClient:
         try:
             urls = await self._batch_media_urls(media_id)
         except Exception as e:
+            err_str = str(e)
+            if "failed: [5]" in err_str or "failed: [3]" in err_str or "NOT_FOUND" in err_str or "not ready" in err_str.lower():
+                return _as_pending_operation(operation_id, error=err_str, media_id=media_id)
             self._operation_media.pop(operation_id, None)
-            raise
+            return _as_pending_operation(operation_id, error=err_str)
         if not urls.video:
-            # The id landed but the clip is still being written or was an image ref;
-            # clear cache so next cycle re-checks listing if needed
-            self._operation_media.pop(operation_id, None)
             return _as_pending_operation(operation_id, error=complaint, media_id=media_id)
 
         # The media id stays cached once verified with video URL
@@ -855,6 +864,7 @@ class FlowClient:
         self._operation_polls[operation_id] = rounds
 
         project_id = self._operation_projects.get(operation_id) or FLOW_PROJECT_ID
+        scene_id = self._operation_scenes.get(operation_id)
         complaint = None
         worth_looking = False
         try:
@@ -864,12 +874,12 @@ class FlowClient:
             )
             complaint = operation.error
             project_id = operation.project_id or project_id
+            if hasattr(operation, "scene_id") and operation.scene_id:
+                scene_id = operation.scene_id
             if project_id:
-                self._remember_operation(operation_id, project_id)
-            worth_looking = operation.done or operation.complained or (rounds >= 20 and rounds % 3 == 0)
+                self._remember_operation(operation_id, project_id, scene_id)
+            worth_looking = operation.done or operation.complained or (rounds >= 5)
         except Exception as e:
-            # An operation that has decayed to a bare id still shows up in the
-            # listing, so a failed poll is a reason to look there, not to stop.
             logger.debug("Operation %s poll unreadable (%s), trying the listing",
                          operation_id[:20], e)
             worth_looking = True
@@ -878,29 +888,28 @@ class FlowClient:
             return None, complaint
         if not project_id:
             return None, "no project id for the listing lookup"
-        return await self._media_id_for(operation_id, project_id), complaint
+        return await self._media_id_for(operation_id, project_id, scene_id=scene_id), complaint
 
-    async def _media_id_for(self, operation_id: str, project_id: str) -> str | None:
+    async def _media_id_for(self, operation_id: str, project_id: str, scene_id: str = None) -> str | None:
         """Find an operation's media id in the project listing.
 
-        Asks the extension for an 800-byte window around the operation id
-        rather than the whole listing — that payload is past 17 MB and grows
-        with every generation, so anything that ships it whole gets truncated
-        and loses roughly half of all lookups.
+        Asks the extension for a window around the scene id or operation id.
         """
+        target_id = scene_id or operation_id
         result = await self.batch_rpc(
             fb.RPC_PROJECT_MEDIA, fb.project_media_request(project_id),
-            match=operation_id, timeout=120,
+            match=target_id, timeout=120,
         )
         if result.get("error"):
             raise fb.FlowBatchError(f"{fb.RPC_PROJECT_MEDIA}: {result['error']}")
         raw = result.get("data") or ""
-        media_id = fb.find_media_id_in_text(raw, operation_id)
+        media_id = fb.find_media_id_in_text(raw, target_id)
+        if not media_id and scene_id and target_id != operation_id:
+            media_id = fb.find_media_id_in_text(raw, operation_id)
         if not media_id and raw.lstrip().startswith(")]}"):
-            # an extension that cannot filter hands back the whole envelope
             try:
                 media_id = fb.find_media_id(
-                    fb.first_payload(raw, fb.RPC_PROJECT_MEDIA), operation_id)
+                    fb.first_payload(raw, fb.RPC_PROJECT_MEDIA), target_id)
             except (fb.FlowBatchError, fb.RpcError, json.JSONDecodeError):
                 media_id = None
         return media_id

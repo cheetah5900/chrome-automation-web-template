@@ -546,6 +546,12 @@ class OperationService:
         if request_id:
             await crud.update_request(request_id, request_id=op_name)
 
+        for op in operations:
+            if not op.get("project_id"):
+                op["project_id"] = pid
+            if not op.get("scene_id"):
+                op["scene_id"] = scene.get("id", "")
+
         status = operations[0].get("status", "")
         if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
             logger.info("Video gen completed immediately")
