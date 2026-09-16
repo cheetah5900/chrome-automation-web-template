@@ -2059,18 +2059,27 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
             detail="Extension is not connected. Please connect the extension first."
         )
         
+    scenes = []
     try:
         logger.info("Attempting to pull project %s directly from Google Flow...", body.project_id[:12])
         scenes = await sync_project_from_flow(body.project_id, client)
     except Exception as e:
-        logger.error("Failed to pull project directly from Google Flow: %s", e)
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to pull project from Google Flow: {e}"
-        )
+        logger.warning("Failed to pull project directly from Google Flow: %s", e)
+        scenes = []
         
     if not scenes:
-        raise HTTPException(status_code=404, detail="No scenes found for this project on Google Flow.")
+        logger.info("Google Flow direct sync returned no scenes. Falling back to local DB scenes for project %s...", body.project_id[:12])
+        is_google_flow = False
+        all_local_scenes = await crud.list_project_scenes(body.project_id)
+        completed_scenes = [
+            s for s in all_local_scenes
+            if s.get("vertical_video_url") or s.get("horizontal_video_url") or
+               s.get("vertical_video_media_id") or s.get("horizontal_video_media_id")
+        ]
+        scenes = completed_scenes if completed_scenes else all_local_scenes
+        
+    if not scenes:
+        raise HTTPException(status_code=404, detail="No scenes found for this project on Google Flow or in local database.")
         
     try:
         local_scenes = await crud.list_project_scenes(body.project_id)
@@ -2177,6 +2186,15 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                             url = db_url
                 except Exception as dbe:
                     logger.warning("Failed to lookup GCS URL in DB for scene %s: %s", scene_id, dbe)
+
+            if (not url or not url.startswith("http")) and media_id and client.connected:
+                try:
+                    fresh_urls = await client._batch_media_urls(media_id)
+                    if fresh_urls and fresh_urls.video:
+                        url = fresh_urls.video
+                        logger.info("Retrieved fresh video URL via batch RPC for media %s: %s", media_id[:12], url[:80])
+                except Exception as b_err:
+                    logger.debug("Failed to fetch fresh media URL via batch_rpc for %s: %s", media_id[:12], b_err)
 
             temp_downloaded_path = None
             if not local_path and url and url.startswith("http"):
