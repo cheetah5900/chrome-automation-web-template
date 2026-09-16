@@ -98,7 +98,7 @@ async def run_ws_server():
         _force_free_port(WS_PORT)
         await asyncio.sleep(0.3)
         try:
-            async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
+            async with websockets.serve(ws_handler, WS_HOST, WS_PORT, max_size=None):
                 logger.info("WebSocket server listening on ws://%s:%d", WS_HOST, WS_PORT)
                 retry_delay = 0.5  # reset delay on success
                 await asyncio.Future()  # run forever

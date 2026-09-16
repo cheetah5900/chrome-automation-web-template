@@ -9,6 +9,15 @@ const AGENT_WS_URL = 'ws://127.0.0.1:9225';
 // NOTE: This is a browser-restricted public API key — safe to ship in extension bundles.
 const API_KEY = 'AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY';
 
+const flowUrls = [
+  'https://flow.google.com/*',
+  'https://labs.google/fx/tools/flow*',
+  'https://labs.google/fx/*/tools/flow*',
+];
+const FLOW_TAB_URL = 'https://flow.google.com/';
+const CAPTCHA_SLOT = '__CAPTCHA__';
+const MAX_RPC_TEXT = 32000000;
+
 let ws = null;
 let pingIntervalId = null;
 let flowKey = null;
@@ -348,6 +357,8 @@ function connectToAgent() {
         console.log('[FlowAgent] Reloading extension via command');
         chrome.runtime.reload();
         return;
+      } else if (msg.method === 'batch_rpc') {
+        await handleBatchRpc(msg);
       } else if (msg.method === 'api_request') {
         await handleApiRequest(msg);
       } else if (msg.method === 'trigger_media_prefetch') {
@@ -2685,7 +2696,133 @@ async function handleSolveCaptcha(msg) {
   sendToAgent({ id, result });
 }
 
+// ─── batchexecute RPC Runner (flow.google.com) ─────────────
+
+async function reviveTabIfNeeded(tab) {
+  if (!tab?.discarded) return tab;
+  try {
+    await chrome.tabs.reload(tab.id);
+    await sleep(2500);
+    return await chrome.tabs.get(tab.id);
+  } catch {
+    return null;
+  }
+}
+
+async function runBatchRpc(cmd) {
+  const tabs = await chrome.tabs.query({ url: flowUrls });
+  let candidate = tabs.find((t) => !t.discarded) || tabs[0];
+  if (!candidate) {
+    let opened;
+    try {
+      opened = await chrome.tabs.create({ url: FLOW_TAB_URL, active: false });
+      await sleep(5000);
+      candidate = opened?.id ? await chrome.tabs.get(opened.id).catch(() => null) : null;
+    } catch (e) {
+      return { error: e?.message || 'NO_FLOW_TAB' };
+    }
+    if (!candidate) return { error: 'NO_FLOW_TAB' };
+  }
+  const tab = await reviveTabIfNeeded(candidate);
+  if (!tab) return { error: 'FLOW_TAB_DISCARDED' };
+
+  let freq = cmd.freq;
+  if (cmd.captchaAction) {
+    const solved = await solveCaptcha(cmd.id, cmd.captchaAction);
+    if (!solved?.token) return { error: `CAPTCHA_FAILED: ${solved?.error || 'no token'}` };
+    freq = freq.split(CAPTCHA_SLOT).join(solved.token);
+  }
+
+  const [injected] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    world: 'MAIN',
+    args: [cmd.rpcid, freq, MAX_RPC_TEXT, cmd.match || null],
+    func: async (rpcid, freqStr, maxText, match) => {
+      const wiz = globalThis.WIZ_global_data || {};
+      const at = wiz.SNlM0e;
+      const sid = wiz.FdrFJe;
+      const bl = wiz.cfb2h;
+      if (!at) return { error: 'NO_AT_TOKEN' };
+      const reqid = Math.floor(Math.random() * 900000) + 100000;
+      const prefix = (window.location.pathname.match(/^\/u\/\d+/) || [''])[0];
+      const url =
+        `${prefix}/_/AiSandboxAngularFrontend/data/batchexecute?rpcids=${encodeURIComponent(rpcid)}` +
+        `&f.sid=${encodeURIComponent(sid || '')}&bl=${encodeURIComponent(bl || '')}` +
+        `&hl=en-AU&_reqid=${reqid}&rt=c`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'x-same-domain': '1',
+        },
+        body: new URLSearchParams({ 'f.req': freqStr, at }),
+      });
+      const text = await resp.text();
+      if (match) {
+        const found = text.indexOf(match);
+        return {
+          status: resp.status,
+          matched: found !== -1,
+          text: found === -1 ? '' : text.slice(found, found + 800),
+        };
+      }
+      return { status: resp.status, text: text.slice(0, maxText) };
+    },
+  });
+
+  return injected?.result || { error: 'NO_INJECTION_RESULT' };
+}
+
+async function handleBatchRpc(msg) {
+  const { id, params } = msg;
+  const { rpcid, freq, captchaAction, match } = params || {};
+  if (!rpcid || !freq) {
+    sendToAgent({ id, status: 400, error: 'INVALID_BATCH_RPC' });
+    return;
+  }
+
+  setState('running');
+  const hasCaptcha = !!captchaAction;
+  if (hasCaptcha) metrics.requestCount++;
+  const visible = hasCaptcha;
+  if (visible) {
+    addRequestLog({
+      id, type: `RPC:${rpcid}`, time: new Date().toISOString(),
+      status: 'processing', error: null, outputUrl: null, url: rpcid,
+      payloadSummary: freq.slice(0, 200),
+    });
+  }
+
+  try {
+    const out = await runBatchRpc({ id, rpcid, freq, captchaAction, match });
+    if (out.error) {
+      if (hasCaptcha) { metrics.failedCount++; metrics.lastError = out.error; }
+      if (visible) updateRequestLog(id, { status: 'failed', error: out.error });
+      sendToAgent({ id, status: 502, error: out.error });
+    } else {
+      if (hasCaptcha) { metrics.successCount++; metrics.lastError = null; }
+      if (visible) {
+        updateRequestLog(id, {
+          status: 'success', httpStatus: out.status,
+          responseSummary: (out.text || '').slice(0, 300),
+        });
+      }
+      sendToAgent({ id, status: out.status, data: out.text });
+    }
+  } catch (e) {
+    const err = e?.message || 'BATCH_RPC_FAILED';
+    if (hasCaptcha) { metrics.failedCount++; metrics.lastError = err; }
+    if (visible) updateRequestLog(id, { status: 'failed', error: err });
+    sendToAgent({ id, status: 500, error: err });
+  }
+
+  chrome.storage.local.set({ metrics });
+  setState('idle');
+}
+
 // ─── API Request Proxy ──────────────────────────────────────
+
 
 async function handleTrpcRequest(msg) {
   const { id, params } = msg;
