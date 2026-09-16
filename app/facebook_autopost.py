@@ -748,6 +748,16 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
                 return hOk && mOk;
             ''', timeout=5.0, poll_interval=0.2, js_args=[hour_str, min_str])
 
+            # Commit input values, trigger React validation, and close lingering calendar overlays
+            driver.execute_script('''
+                const escEvt = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true });
+                document.dispatchEvent(escEvt);
+                const dialog = document.querySelector('[role="dialog"]') || document.body;
+                const neutralHeader = dialog.querySelector('h1, h2, h3, [role="heading"]') || dialog;
+                neutralHeader.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            ''')
+            time.sleep(0.3)
+
             if not has_ig:
                 log(f"[Meta Step 5] ✅ กำหนดวัน-เวลา Facebook เรียบร้อยแล้ว (ไม่มีช่อง Instagram จึงข้าม) -> พร้อมกดปุ่ม Schedule ทันที")
             else:
@@ -2202,66 +2212,136 @@ def _real_step_6_submit_schedule(driver) -> bool:
     """Step 6: Poll for final Schedule submit button (distinguished from Radio and Nav Header) and click."""
     log("[Meta Step 6] กำลังตรวจจับปุ่มกดยืนยัน Schedule (ตัดตัวเลือก Radio และแท็บด้านบนออก)...")
 
+    # Ensure any lingering overlays or active input focus are settled
+    try:
+        driver.execute_script('''
+            const escEvt = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true });
+            document.dispatchEvent(escEvt);
+            const dialog = document.querySelector('[role="dialog"]') || document.body;
+            const heading = dialog.querySelector('h1, h2, h3, [role="heading"]') || dialog;
+            heading.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        ''')
+    except Exception:
+        pass
+    time.sleep(0.3)
+
     sched_submit_el = fast_poll(driver, '''
         const allBtns = Array.from(document.querySelectorAll('button, div[role="button"]'));
 
-        // Strategy A: Find submit button in the same footer container as 'Back' or 'Cancel'
+        // Helper to check if button text matches submit action (Schedule / Share)
+        const isSubmitText = (t) => {
+            const clean = (t || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+            const isOption = clean.includes('option') || clean.includes('ตัวเลือก');
+            if (isOption) return false;
+            return clean === 'schedule' || clean.startsWith('schedule') || clean.includes('schedule')
+                || clean === 'กำหนดเวลา' || clean.startsWith('กำหนดเวลา') || clean.includes('กำหนดเวลา')
+                || clean === 'share' || clean.startsWith('share')
+                || clean === 'แชร์' || clean.startsWith('แชร์');
+        };
+
+        // Strategy A: Find submit button in dialog footer by traversing ancestors from Back/Cancel button up to 4 levels
         const backBtn = allBtns.find(b => {
-            const t = (b.innerText || '').trim();
-            return t === 'Back' || t === 'ย้อนกลับ' || t === 'Cancel' || t === 'ยกเลิก';
+            const t = (b.innerText || '').trim().toLowerCase();
+            return t === 'back' || t === 'ย้อนกลับ' || t === 'cancel' || t === 'ยกเลิก';
         });
 
-        if (backBtn && backBtn.parentElement) {
-            const footerParent = backBtn.parentElement;
-            const siblingSubmit = Array.from(footerParent.querySelectorAll('button, div[role="button"]')).find(b => {
-                const t = (b.innerText || '').trim().toLowerCase();
-                const isMatch = t === 'schedule' || t === 'กำหนดเวลา' || t === 'share' || t === 'แชร์';
-                const isEnabled = b.getAttribute('aria-disabled') !== 'true';
-                return isMatch && b !== backBtn && isEnabled;
-            });
-            if (siblingSubmit) return siblingSubmit;
+        if (backBtn) {
+            let container = backBtn.parentElement;
+            for (let i = 0; i < 4 && container && container !== document.body; i++) {
+                const siblingBtns = Array.from(container.querySelectorAll('button, div[role="button"]'));
+                const siblingSubmit = siblingBtns.find(b => {
+                    if (b === backBtn) return false;
+                    const t = b.innerText || b.textContent || '';
+                    if (!isSubmitText(t)) return false;
+                    const isRadio = b.getAttribute('role') === 'radio'
+                                 || !!b.querySelector('input[type="radio"], [role="radio"]')
+                                 || !!b.closest('[role="radiogroup"], [role="radio"]');
+                    const isEnabled = b.getAttribute('aria-disabled') !== 'true' && !b.disabled;
+                    const isVisible = b.offsetWidth > 20 && b.offsetHeight > 20;
+                    return !isRadio && isVisible && isEnabled;
+                });
+                if (siblingSubmit) return siblingSubmit;
+                container = container.parentElement;
+            }
         }
 
-        // Strategy B: Semantic filtering across all buttons (must NOT be Radio and must NOT be Nav Header)
+        // Strategy B: Semantic filtering across all buttons, sorted bottom-most & right-most (Footer Action Button)
         const candidates = allBtns.filter(b => {
-            const t = (b.innerText || '').trim().toLowerCase();
-            const isMatch = t === 'schedule' || t === 'กำหนดเวลา' || t === 'share' || t === 'แชร์';
-            const isNavHeader = !!b.closest('[role="listitem"], [role="list"], nav, header');
+            const t = b.innerText || b.textContent || '';
+            if (!isSubmitText(t)) return false;
+            const isNavHeader = !!b.closest('[role="listitem"], [role="list"], nav, header') || b.getBoundingClientRect().y < 150;
             const isRadio = b.getAttribute('role') === 'radio'
                          || !!b.querySelector('input[type="radio"], [role="radio"]')
                          || !!b.closest('[role="radiogroup"], [role="radio"]');
             const isVisible = b.offsetWidth > 20 && b.offsetHeight > 20;
-            const isEnabled = b.getAttribute('aria-disabled') !== 'true';
-            return isMatch && !isNavHeader && !isRadio && isVisible && isEnabled;
+            const isEnabled = b.getAttribute('aria-disabled') !== 'true' && !b.disabled;
+            return !isNavHeader && !isRadio && isVisible && isEnabled;
         });
 
-        // The final submit button is always the last action button in document order
-        return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+        if (candidates.length > 0) {
+            // Sort bottom-most first, then right-most first
+            candidates.sort((a, b) => {
+                const rectA = a.getBoundingClientRect();
+                const rectB = b.getBoundingClientRect();
+                if (Math.abs(rectA.bottom - rectB.bottom) > 10) {
+                    return rectB.bottom - rectA.bottom;
+                }
+                return rectB.right - rectA.right;
+            });
+            return candidates[0];
+        }
+
+        return null;
     ''', timeout=20.0, poll_interval=0.1)
 
     if not sched_submit_el:
-        # Fallback query without waiting for aria-disabled if it lags
+        # Fallback query without waiting for aria-disabled / disabled if it lags
         sched_submit_el = fast_poll(driver, '''
             const allBtns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+            const isSubmitText = (t) => {
+                const clean = (t || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+                const isOption = clean.includes('option') || clean.includes('ตัวเลือก');
+                if (isOption) return false;
+                return clean === 'schedule' || clean.startsWith('schedule') || clean.includes('schedule')
+                    || clean === 'กำหนดเวลา' || clean.startsWith('กำหนดเวลา') || clean.includes('กำหนดเวลา')
+                    || clean === 'share' || clean.startsWith('share')
+                    || clean === 'แชร์' || clean.startsWith('แชร์');
+            };
             const candidates = allBtns.filter(b => {
-                const t = (b.innerText || '').trim().toLowerCase();
-                const isMatch = t === 'schedule' || t === 'กำหนดเวลา' || t === 'share' || t === 'แชร์';
-                const isNavHeader = !!b.closest('[role="listitem"], [role="list"], nav, header');
+                const t = b.innerText || b.textContent || '';
+                if (!isSubmitText(t)) return false;
+                const isNavHeader = !!b.closest('[role="listitem"], [role="list"], nav, header') || b.getBoundingClientRect().y < 150;
                 const isRadio = b.getAttribute('role') === 'radio'
                              || !!b.querySelector('input[type="radio"], [role="radio"]')
                              || !!b.closest('[role="radiogroup"], [role="radio"]');
                 const isVisible = b.offsetWidth > 20 && b.offsetHeight > 20;
-                return isMatch && !isNavHeader && !isRadio && isVisible;
+                return !isNavHeader && !isRadio && isVisible;
             });
-            return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+            if (candidates.length > 0) {
+                candidates.sort((a, b) => {
+                    const rectA = a.getBoundingClientRect();
+                    const rectB = b.getBoundingClientRect();
+                    if (Math.abs(rectA.bottom - rectB.bottom) > 10) {
+                        return rectB.bottom - rectA.bottom;
+                    }
+                    return rectB.right - rectA.right;
+                });
+                return candidates[0];
+            }
+            return null;
         ''', timeout=5.0, poll_interval=0.2)
 
     if sched_submit_el:
         try:
-            ActionChains(driver).move_to_element(sched_submit_el).pause(0.1).click().perform()
+            ActionChains(driver).move_to_element(sched_submit_el).pause(0.15).click().perform()
         except Exception:
             pass
-        driver.execute_script("arguments[0].scrollIntoView({block: 'nearest'}); arguments[0].click();", sched_submit_el)
+        driver.execute_script("""
+            arguments[0].scrollIntoView({block: 'nearest'});
+            arguments[0].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+            arguments[0].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+            arguments[0].click();
+        """, sched_submit_el)
     else:
         raise RuntimeError("ไม่พบปุ่ม Schedule ยืนยันที่พร้อมคลิก (กรุณาตรวจสอบว่ากรอกวัน-เวลาถูกต้อง)")
 
