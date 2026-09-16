@@ -1025,15 +1025,45 @@ def toggle_seedance_download_enhancer(driver, enabled: Optional[bool] = None) ->
         log(f"[Seedance] ⚠️ ข้อผิดพลาดขณะคืนค่าขนาดปุ่ม Download: {e}")
         return {"ok": False, "detail": str(e)}
 
+def extract_prompt_search_snippets(prompt_text: str) -> list[str]:
+    """Extracts distinctive scene snippets from prompt_text to match against Dreamina web cards."""
+    if not prompt_text:
+        return []
+    lines = [l.strip() for l in prompt_text.split("\n") if l.strip()]
+    snippets = []
+    
+    # 1. Look for distinctive scene action lines with timestamps (e.g. 0s-3s, 3s-6s, 0:)
+    scene_lines = [l for l in lines if any(k in l for k in ["0s-", "3s-", "6s-", "9s-", "12s-", "0:", "1:"])]
+    for sl in scene_lines[:4]:
+        clean = sl.replace('"', '').replace("'", '').strip()
+        if len(clean) >= 15:
+            snippets.append(clean[:80])
+            
+    # 2. Look for lines that aren't generic style headers or negative prompts
+    for l in lines:
+        clean = l.replace('"', '').replace("'", '').strip()
+        if len(clean) >= 20 and not any(k in clean.lower() for k in ["negative:", "camera:", "audio:"]):
+            if clean[:80] not in snippets:
+                snippets.append(clean[:80])
+        if len(snippets) >= 6:
+            break
+            
+    # 3. Fallback to first line
+    if not snippets and lines:
+        snippets.append(lines[0][:80])
+        
+    return snippets
+
+
 def find_record_on_dreamina(
     driver,
     num: Optional[Any] = None,
     name: str = "",
-    prompt_snippet: str = "",
+    prompt_snippet: Union[str, list[str]] = "",
     scroll_to_found: bool = True
 ) -> dict[str, Any]:
     """
-    Searches for a record card on Dreamina virtual list matching num, name, or prompt_snippet.
+    Searches for a record card on Dreamina virtual list matching num, name, or distinctive prompt snippets.
     Checks current viewport first; if not found, scans through the viewport scroll positions.
     Returns:
       {
@@ -1050,14 +1080,23 @@ def find_record_on_dreamina(
 
     num_str = str(num) if num is not None else ""
     name = (name or "").strip()
-    prompt_snippet = (prompt_snippet or "").strip().replace("\n", " ")[:50]
+    if isinstance(prompt_snippet, list):
+        snippets_list = prompt_snippet
+    elif prompt_snippet and len(prompt_snippet) > 80:
+        snippets_list = extract_prompt_search_snippets(prompt_snippet)
+    elif prompt_snippet:
+        snippets_list = [prompt_snippet.strip().replace("\n", " ")[:80]]
+    else:
+        snippets_list = []
 
     check_code = r"""
-    function checkTarget(num, name, snippet) {
-        const items = document.querySelectorAll('.content-_w2B98 > div > div, [class*="record-item"], [class*="slot-card"], [class*="record-card"]');
+    function checkTarget(num, name, snips) {
+        const snipList = Array.isArray(snips) ? snips : (snips ? [snips] : []);
+        const items = document.querySelectorAll('[class*="record-ej"], [class*="video-record"], .content-_w2B98 > div > div, [class*="record-item"]');
         for (const el of items) {
             if (el.classList.contains('record-list-container-GKMHFh') || el.classList.contains('record-virtual-list')) continue;
-            const text = (el.innerText || '').trim();
+            const recordContainer = el.closest('[class*="record-ej"], [class*="video-record"]') || el;
+            const text = (recordContainer.innerText || recordContainer.textContent || '').trim();
             if (!text) continue;
 
             let matched = false;
@@ -1065,27 +1104,32 @@ def find_record_on_dreamina(
             if (name && text.includes(name)) {
                 matched = true;
                 matchType = 'name';
-            } else if (num && (text.includes(num + ' -') || text.includes(num + '-') || text.startsWith(num + ' '))) {
+            } else if (num && (text.includes(num + ' -') || text.includes(num + '-') || text.startsWith(num + ' ') || text.includes(' ' + num + ' '))) {
                 matched = true;
                 matchType = 'num';
-            } else if (snippet && snippet.length > 15 && text.includes(snippet)) {
-                matched = true;
-                matchType = 'snippet';
+            } else if (snipList.length > 0) {
+                for (const snip of snipList) {
+                    if (snip && snip.length >= 10 && text.includes(snip)) {
+                        matched = true;
+                        matchType = 'snippet';
+                        break;
+                    }
+                }
             }
 
             if (matched) {
-                const vid = el.querySelector('video');
-                const isGen = !!el.querySelector('[class*="generating"], [class*="progress"], [class*="loading"]');
-                const dlBtn = el.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
+                const vid = recordContainer.querySelector('video');
+                const isGen = !!recordContainer.querySelector('[class*="generating"], [class*="progress"], [class*="loading"]');
+                const dlBtn = recordContainer.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
                 return {
                     found: true,
                     matchType: matchType,
-                    text: text.slice(0, 120),
+                    text: text.slice(0, 150),
                     hasVideo: !!vid,
                     videoSrc: vid ? (vid.src || vid.currentSrc) : null,
                     isGenerating: isGen,
                     hasDlBtn: !!dlBtn,
-                    el: el
+                    el: recordContainer
                 };
             }
         }
@@ -1117,7 +1161,7 @@ def find_record_on_dreamina(
                 clientHeight: vp ? vp.clientHeight : 800,
                 currScroll: vp ? vp.scrollTop : 0
             };
-        """, num_str, name, prompt_snippet, scroll_to_found)
+        """, num_str, name, snippets_list, scroll_to_found)
 
         if isinstance(res, dict) and res.get("found"):
             return res
@@ -1132,8 +1176,9 @@ def find_record_on_dreamina(
         if max_scroll <= client_h:
             return {"found": False}
 
-        # Step-scan through virtual list
-        positions = list(range(curr_scroll, max_scroll + client_h, client_h)) + list(range(0, curr_scroll, client_h))
+        # Step-scan reliably through virtual list
+        step = 350
+        positions = list(range(0, max_scroll + step, step))
         
         for pos in positions:
             if is_seedance_stopped():
@@ -1143,7 +1188,7 @@ def find_record_on_dreamina(
                 const vp = document.querySelector('.viewport-M4gznV') || document.querySelector('[class*="viewport"]');
                 if (vp) vp.scrollTop = arguments[0];
             """, pos)
-            time.sleep(0.12)
+            time.sleep(0.15)
             match = driver.execute_script(check_code + r"""
                 const found = checkTarget(arguments[0], arguments[1], arguments[2]);
                 if (found) {
@@ -1161,7 +1206,7 @@ def find_record_on_dreamina(
                     };
                 }
                 return null;
-            """, num_str, name, prompt_snippet, scroll_to_found)
+            """, num_str, name, snippets_list, scroll_to_found)
             if match and isinstance(match, dict) and match.get("found"):
                 return match
 
@@ -1195,7 +1240,7 @@ def pair_seedance_items(driver, local_items: list[dict[str, Any]]) -> list[dict[
         sub_path = item.get("subfolder_path", "")
         num = item.get("num")
         prompt_text = item.get("prompt_text", "")
-        prompt_snippet = prompt_text.strip().replace("\n", " ")[:50] if prompt_text else ""
+        prompt_snippets = extract_prompt_search_snippets(prompt_text)
 
         # Check local mp4
         local_mp4 = os.path.join(sub_path, f"{sub_name}.mp4") if (sub_path and os.path.isdir(sub_path)) else None
@@ -1211,7 +1256,7 @@ def pair_seedance_items(driver, local_items: list[dict[str, Any]]) -> list[dict[
 
         if driver:
             try:
-                web_res = find_record_on_dreamina(driver, num=num, name=sub_name, prompt_snippet=prompt_snippet, scroll_to_found=False)
+                web_res = find_record_on_dreamina(driver, num=num, name=sub_name, prompt_snippet=prompt_snippets, scroll_to_found=False)
                 if web_res.get("found"):
                     web_matched = True
                     web_has_video = bool(web_res.get("hasVideo") and web_res.get("videoSrc"))
