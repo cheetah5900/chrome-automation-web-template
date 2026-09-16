@@ -28,8 +28,9 @@ This project is a web-based automation controller for managing Google Chrome pro
 - **Backend Server**: Running locally on `http://127.0.0.1:6969`.
 - **WebSocket Extension Port**: Running on `ws://127.0.0.1:9225`.
 - **Chrome Automation Port**: Configured to `9222` (Chrome) and `9223` (Brave).
-- **Active Git Branch**: `feat/google-flow-agent-integration`.
+- **Active Git Branch**: `feat/flowkit-github-agent`.
 - **Latest Fixes & Features**:
+  - **FlowKit Batch RPC Integration**: Ported upstream FlowKit `batch_rpc` protocol (`flow_batch.py` and `AiSandboxAngularFrontend/data/batchexecute`) into agent and extension, enabling direct API video/image generation without activating browser windows.
   - **Unified 3-Card Flow Kit Layout**: Unified standard image-to-video mode and prompt-only mode to share an identical 3-card structure and the exact same Downloader/Exporter card.
   - **Prompt-Only Mode Default Prompts Path**: Added a `Default` button to set and persist the default prompts folder path in `localStorage` (`flowkit_po_default_prompts_path`).
   - **Google Flow Project Creation Bridge**: Added a `+ New Project` button in both Flow Kit card headers and created `POST /api/batch-uploader/create-project` to allow creating new Google Flow projects directly on Google Flow via tRPC bridge.
@@ -103,4 +104,10 @@ Always respond using the **i-have-adhd** skill exclusively:
 - **Product Link.md vs Affiliate Link.md Storage Rule**:
   - `Product Link.md` must store the **REAL Shopee product link** (e.g. `https://shopee.co.th/product/...`), extracted from the `ดูสินค้า` link/button or product details DOM, NEVER the internal affiliate offer URL (`https://affiliate.shopee.co.th/...`).
   - `Affiliate Link.md` strictly stores the affiliate short link (e.g. `https://s.shopee.co.th/...`) generated from the modal.
+
+## Google Flow Batch RPC & FlowKit Architecture
+- Upstream `crisng95/flowkit` uses Google Internal RPC (`batch_rpc` via `/_/AiSandboxAngularFrontend/data/batchexecute`) proxied through the Chrome extension background worker.
+- Multi-Account Support: When the user's Google Flow tab is signed in as a secondary profile (`/u/1/`), batchexecute requests must include the `/u/1` URL prefix matching the tab's active session.
+- WebSocket Envelope Size: When listing project media via RPC, the response envelope often exceeds Python websockets' default 1MB buffer. Set `max_size=None` in `websockets.serve()` to allow arbitrary response sizes.
+- Direct Cloud Video CDN URLs: Videos generated through `batch_rpc` provide direct signed MP4 URLs from `flow-content.google`, allowing download without browser DOM scraping.
 
