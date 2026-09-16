@@ -725,7 +725,7 @@ class FlowClient:
 
         # 3. Standard Image-to-Video mode
         try:
-            model = custom_model_key or self._batch_video_model(user_paygate_tier, gen_type, aspect_ratio)
+            model = fb.resolve_video_model(custom_model_key) if custom_model_key else self._batch_video_model(user_paygate_tier, gen_type, aspect_ratio)
             freq = fb.video_request(
                 prompt, pid, start_image_media_id, aspect=aspect_ratio,
                 model=model,
@@ -823,16 +823,18 @@ class FlowClient:
                 return _as_pending_operation(operation_id, error=complaint)
             self._operation_media[operation_id] = media_id
 
-        urls = await self._batch_media_urls(media_id)
+        try:
+            urls = await self._batch_media_urls(media_id)
+        except Exception as e:
+            self._operation_media.pop(operation_id, None)
+            raise
         if not urls.video:
-            # The id landed but the clip is still being written; downloading
-            # now would save the poster still instead of the video.
+            # The id landed but the clip is still being written or was an image ref;
+            # clear cache so next cycle re-checks listing if needed
+            self._operation_media.pop(operation_id, None)
             return _as_pending_operation(operation_id, error=complaint, media_id=media_id)
 
-        # The media id stays cached rather than being cleared here: a batch
-        # with several operations re-polls the finished ones alongside the
-        # pending ones, and a cleared entry would report them PENDING again.
-        # Growth is bounded by _remember_operation.
+        # The media id stays cached once verified with video URL
         return {
             "operation": {
                 "name": operation_id,
@@ -846,15 +848,15 @@ class FlowClient:
 
         The listing is the authority — the poll has been seen to never report a
         finished job the listing already knows about — but it is also the
-        expensive call, so it is only consulted when the poll says something
-        happened, when the poll is unreadable, or every third round regardless.
+        expensive call, so it is only consulted when the operation reports done,
+        when the poll is unreadable, or after 20 rounds.
         """
         rounds = self._operation_polls.get(operation_id, 0) + 1
         self._operation_polls[operation_id] = rounds
 
         project_id = self._operation_projects.get(operation_id) or FLOW_PROJECT_ID
         complaint = None
-        worth_looking = rounds % 3 == 0
+        worth_looking = False
         try:
             operation = fb.read_operation(
                 await self._batch_payload(
@@ -864,7 +866,7 @@ class FlowClient:
             project_id = operation.project_id or project_id
             if project_id:
                 self._remember_operation(operation_id, project_id)
-            worth_looking = worth_looking or operation.done or operation.complained
+            worth_looking = operation.done or operation.complained or (rounds >= 20 and rounds % 3 == 0)
         except Exception as e:
             # An operation that has decayed to a bare id still shows up in the
             # listing, so a failed poll is a reason to look there, not to stop.
