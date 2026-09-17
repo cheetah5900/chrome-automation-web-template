@@ -287,10 +287,11 @@ async def _poll_operations(
                 continue
             elif status == "MEDIA_GENERATION_STATUS_FAILED":
                 op_name = op.get('operation', {}).get('name', '?')
+                op_err = op.get("error") or f"Operation failed: {op_name}"
                 # Log full operation for debugging failure reason
                 import json as _json
-                logger.error("Operation FAILED: name=%s full=%s", op_name, _json.dumps(op)[:1000])
-                error_msg = f"Operation failed: {op_name}"
+                logger.error("Operation FAILED: name=%s err=%s full=%s", op_name, op_err, _json.dumps(op)[:1000])
+                error_msg = op_err
                 has_error = True
                 break
             else:

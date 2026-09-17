@@ -850,6 +850,13 @@ class FlowClient:
         if not media_id:
             media_id, complaint = await self._find_operation_media(operation_id)
             if not media_id:
+                if complaint and any(k in complaint.lower() for k in ("unsafe", "safety", "policy", "violat", "filter", "content")):
+                    logger.warning("Operation %s rejected by safety filter: %s", operation_id[:20], complaint)
+                    return {
+                        "operation": {"name": operation_id},
+                        "status": "MEDIA_GENERATION_STATUS_FAILED",
+                        "error": f"Google Safety Filter Blocked: {complaint}",
+                    }
                 return _as_pending_operation(operation_id, error=complaint)
             self._operation_media[operation_id] = media_id
 
@@ -857,6 +864,12 @@ class FlowClient:
             urls = await self._batch_media_urls(media_id)
         except Exception as e:
             err_str = str(e)
+            if any(k in err_str.lower() for k in ("unsafe", "safety", "policy", "violat", "filter", "content")):
+                return {
+                    "operation": {"name": operation_id},
+                    "status": "MEDIA_GENERATION_STATUS_FAILED",
+                    "error": f"Google Safety Filter Blocked: {err_str}",
+                }
             if "failed: [5]" in err_str or "failed: [3]" in err_str or "NOT_FOUND" in err_str or "not ready" in err_str.lower():
                 return _as_pending_operation(operation_id, error=err_str, media_id=media_id)
             self._operation_media.pop(operation_id, None)

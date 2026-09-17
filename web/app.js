@@ -11727,6 +11727,49 @@ function initFlowKitUploaderListeners() {
     }
   };
 
+  const playFlowAlertSound = (type = 'error') => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (type === 'error') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        osc.frequency.setValueAtTime(293.66, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.45);
+      } else {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.35);
+      }
+    } catch (_) {}
+  };
+
+  const showFlowDesktopNotification = (title, body) => {
+    try {
+      if (typeof Notification !== 'undefined') {
+        if (Notification.permission === 'granted') {
+          new Notification(title, { body });
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then(p => {
+            if (p === 'granted') new Notification(title, { body });
+          });
+        }
+      }
+    } catch (_) {}
+  };
+
   // 6. Process Batch Button
   document.getElementById('btnProcessFlowKitBatch')?.addEventListener('click', async () => {
     const btn = document.getElementById('btnProcessFlowKitBatch');
@@ -11837,17 +11880,24 @@ function initFlowKitUploaderListeners() {
         logToConsole(`Batch submitted successfully! Video Container ID: ${res.video_id}`, 'success');
         logToConsole(`Queued: ${queued.length} scenes, Failed: ${failed.length} scenes.`);
         
-        res.results.forEach(r => {
+        res.results.forEach((r, idx) => {
+          const matchedPair = flowScannedPairs.find(p => p.image_path === r.image_path) || flowScannedPairs[idx];
+          if (matchedPair) {
+            matchedPair.scene_id = r.scene_id;
+            matchedPair.status = r.status === 'QUEUED' ? 'PENDING' : 'FAILED';
+            if (r.error) matchedPair.error_message = r.error;
+          }
           if (r.status === 'QUEUED') {
             logToConsole(`Scene queued: Image path: ${r.image_path || 'None'}, Media ID: ${r.media_id || 'None'}`, 'success');
           } else {
             logToConsole(`Scene failed: Image path: ${r.image_path || 'None'}, Error: ${r.error}`, 'error');
           }
         });
+        renderFlowScannedGrid();
         
         if (msg) {
           msg.className = 'msg';
-          msg.style.color = '#10b981';
+          msg.style.color = failed.length > 0 ? '#f59e0b' : '#10b981';
           msg.textContent = `ส่งคำขอเจเนอเรทสำเร็จทั้งหมด ${queued.length} ฉาก (ล้มเหลว ${failed.length} ฉาก)`;
         }
 
@@ -11855,15 +11905,61 @@ function initFlowKitUploaderListeners() {
         if (queued.length > 0) {
           setFlowBatchButtonRunning(btn, true, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
           if (flowBatchRunningInterval) clearInterval(flowBatchRunningInterval);
+          const loggedStatusKeys = new Set();
           flowBatchRunningInterval = setInterval(async () => {
             try {
               const statusRes = await jsonFetch(`/api/requests/batch-status?video_id=${res.video_id || ''}`);
-              if (statusRes && statusRes.done) {
+              if (!statusRes) return;
+
+              // Real-time per-scene monitoring and alerting
+              if (statusRes.items && Array.isArray(statusRes.items)) {
+                let statusChanged = false;
+                statusRes.items.forEach(item => {
+                  const pair = flowScannedPairs.find(p => p.scene_id === item.scene_id);
+                  if (pair && pair.status !== item.status) {
+                    pair.status = item.status;
+                    pair.error_message = item.error_message;
+                    statusChanged = true;
+                    
+                    const sceneTitle = pair.image_name || pair.prompt_name || `ฉาก ${pair.order || ''}`;
+                    const logKey = `${item.id}_${item.status}`;
+                    if (!loggedStatusKeys.has(logKey)) {
+                      loggedStatusKeys.add(logKey);
+                      if (item.status === 'PROCESSING') {
+                        logToConsole(`⏳ กำลังสร้างวิดีโอ: ${sceneTitle}...`, 'info');
+                      } else if (item.status === 'COMPLETED') {
+                        logToConsole(`✅ สำเร็จ: ${sceneTitle} สร้างวิดีโอเรียบร้อย`, 'success');
+                      } else if (item.status === 'FAILED') {
+                        const err = item.error_message || 'ติดขัดการประมวลผล';
+                        const isBlock = /safety|unsafe|content filter|policy|violat/i.test(err);
+                        const label = isBlock ? '🚫 ติดบล็อกความปลอดภัย' : '❌ ล้มเหลว';
+                        logToConsole(`${label}: ${sceneTitle} - ${err}`, 'error');
+                        playFlowAlertSound('error');
+                        showFlowDesktopNotification(`⚠️ แจ้งเตือน: ${sceneTitle} ${label}`, err);
+                      }
+                    }
+                  }
+                });
+                if (statusChanged) renderFlowScannedGrid();
+              }
+
+              if (statusRes.done) {
                 clearInterval(flowBatchRunningInterval);
                 flowBatchRunningInterval = null;
                 setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
                 if (msg) {
-                  msg.textContent = statusRes.all_succeeded ? 'เจเนอเรทเสร็จสมบูรณ์ทุกฉากแล้ว ✅' : 'ประมวลผลงานเสร็จสิ้น';
+                  if (statusRes.all_succeeded) {
+                    msg.className = 'msg';
+                    msg.style.color = '#10b981';
+                    msg.textContent = `🎉 เจเนอเรทเสร็จสมบูรณ์ทุกฉากแล้ว (${statusRes.completed}/${statusRes.total} ฉาก) ✅`;
+                    playFlowAlertSound('success');
+                    showFlowDesktopNotification('🎉 Flow Kit Success', 'สร้างวิดีโอเสร็จสมบูรณ์ครบทุกฉากแล้ว');
+                  } else {
+                    msg.className = 'msg error';
+                    msg.style.color = '#ef4444';
+                    msg.textContent = `⚠️ ประมวลผลเสร็จสิ้น: สำเร็จ ${statusRes.completed} ฉาก, ติดบล็อก/ล้มเหลว ${statusRes.failed} ฉาก (ตรวจสอบรายละเอียดในคอนโซลด้านล่าง)`;
+                    playFlowAlertSound('error');
+                  }
                 }
               }
             } catch {}
@@ -12287,13 +12383,24 @@ function renderScannedPairs() {
       tdCheck.appendChild(checkbox);
       tr.appendChild(tdCheck);
       
-      // 2. Source/File name
+      // 2. Source/File name + Status Badge
       const tdSource = document.createElement('td');
       tdSource.style.padding = '4px 8px';
-      tdSource.style.color = 'rgba(255,255,255,0.5)';
+      tdSource.style.color = 'rgba(255,255,255,0.7)';
       tdSource.style.fontSize = '0.8rem';
       tdSource.style.wordBreak = 'break-all';
-      tdSource.textContent = pair.image_name || pair.prompt_name || 'Manual Scene';
+      
+      let statusHtml = '';
+      if (pair.status === 'PROCESSING') {
+        statusHtml = ' <span style="display: inline-block; padding: 2px 6px; font-size: 0.7rem; border-radius: 4px; background: rgba(59,130,246,0.3); color: #60a5fa; margin-left: 6px;">⏳ กำลังสร้าง...</span>';
+      } else if (pair.status === 'COMPLETED') {
+        statusHtml = ' <span style="display: inline-block; padding: 2px 6px; font-size: 0.7rem; border-radius: 4px; background: rgba(16,185,129,0.3); color: #34d399; margin-left: 6px;">✅ เสร็จแล้ว</span>';
+      } else if (pair.status === 'FAILED') {
+        const isBlock = /safety|unsafe|content filter|policy|violat/i.test(pair.error_message || '');
+        const lbl = isBlock ? '🚫 ติดบล็อกความปลอดภัย' : '❌ ล้มเหลว';
+        statusHtml = ` <span title="${pair.error_message || ''}" style="display: inline-block; padding: 2px 6px; font-size: 0.7rem; border-radius: 4px; background: rgba(239,68,68,0.3); color: #f87171; margin-left: 6px; cursor: help;">${lbl}</span>`;
+      }
+      tdSource.innerHTML = `<span>${pair.image_name || pair.prompt_name || 'Manual Scene'}</span>${statusHtml}`;
       tr.appendChild(tdSource);
       
       tbody.appendChild(tr);
@@ -12382,6 +12489,42 @@ function renderScannedPairs() {
         placeholder.style.justifyContent = 'center';
         placeholder.textContent = 'No Image';
         imgWrapper.appendChild(placeholder);
+      }
+      
+      // Real-time Status Badge
+      if (pair.status) {
+        const badge = document.createElement('div');
+        badge.style.position = 'absolute';
+        badge.style.bottom = '4px';
+        badge.style.left = '4px';
+        badge.style.right = '4px';
+        badge.style.padding = '3px 4px';
+        badge.style.fontSize = '0.68rem';
+        badge.style.fontWeight = 'bold';
+        badge.style.borderRadius = '4px';
+        badge.style.textAlign = 'center';
+        badge.style.zIndex = '3';
+        badge.style.whiteSpace = 'nowrap';
+        badge.style.overflow = 'hidden';
+        badge.style.textOverflow = 'ellipsis';
+        badge.style.boxShadow = '0 2px 6px rgba(0,0,0,0.5)';
+        
+        if (pair.status === 'PROCESSING') {
+          badge.style.background = 'rgba(37, 99, 235, 0.92)';
+          badge.style.color = '#fff';
+          badge.textContent = '⏳ กำลังสร้าง...';
+        } else if (pair.status === 'COMPLETED') {
+          badge.style.background = 'rgba(16, 185, 129, 0.92)';
+          badge.style.color = '#fff';
+          badge.textContent = '✅ เสร็จแล้ว';
+        } else if (pair.status === 'FAILED') {
+          const isBlock = /safety|unsafe|content filter|policy|violat/i.test(pair.error_message || '');
+          badge.style.background = 'rgba(239, 68, 68, 0.95)';
+          badge.style.color = '#fff';
+          badge.textContent = isBlock ? '🚫 ติดบล็อก' : '❌ ล้มเหลว';
+          badge.title = pair.error_message || 'เกิดข้อผิดพลาด';
+        }
+        imgWrapper.appendChild(badge);
       }
       
       cell.appendChild(imgWrapper);
@@ -12891,6 +13034,17 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
     
     if (res && res.video_id) {
       logToConsole(`Batch submitted successfully! Video Container ID: ${res.video_id}`, 'success');
+      if (res.results && Array.isArray(res.results)) {
+        res.results.forEach((r, idx) => {
+          const matchedPair = flowScannedPairs[idx];
+          if (matchedPair) {
+            matchedPair.scene_id = r.scene_id;
+            matchedPair.status = r.status === 'QUEUED' ? 'PENDING' : 'FAILED';
+            if (r.error) matchedPair.error_message = r.error;
+          }
+        });
+        renderFlowScannedGrid();
+      }
       if (msg) {
         msg.className = 'msg';
         msg.style.color = '#10b981';
@@ -12898,15 +13052,61 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
       }
       setFlowBatchButtonRunning(btn, true, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
       if (flowBatchPORunningInterval) clearInterval(flowBatchPORunningInterval);
+      const loggedStatusKeysPO = new Set();
       flowBatchPORunningInterval = setInterval(async () => {
         try {
           const statusRes = await jsonFetch(`/api/requests/batch-status?video_id=${res.video_id || ''}`);
-          if (statusRes && statusRes.done) {
+          if (!statusRes) return;
+
+          // Real-time per-scene monitoring and alerting
+          if (statusRes.items && Array.isArray(statusRes.items)) {
+            let statusChanged = false;
+            statusRes.items.forEach(item => {
+              const pair = flowScannedPairs.find(p => p.scene_id === item.scene_id);
+              if (pair && pair.status !== item.status) {
+                pair.status = item.status;
+                pair.error_message = item.error_message;
+                statusChanged = true;
+                
+                const sceneTitle = pair.prompt_name || `ฉาก ${pair.order || ''}`;
+                const logKey = `${item.id}_${item.status}`;
+                if (!loggedStatusKeysPO.has(logKey)) {
+                  loggedStatusKeysPO.add(logKey);
+                  if (item.status === 'PROCESSING') {
+                    logToConsole(`⏳ กำลังสร้างวิดีโอ: ${sceneTitle}...`, 'info');
+                  } else if (item.status === 'COMPLETED') {
+                    logToConsole(`✅ สำเร็จ: ${sceneTitle} สร้างวิดีโอเรียบร้อย`, 'success');
+                  } else if (item.status === 'FAILED') {
+                    const err = item.error_message || 'ติดขัดการประมวลผล';
+                    const isBlock = /safety|unsafe|content filter|policy|violat/i.test(err);
+                    const label = isBlock ? '🚫 ติดบล็อกความปลอดภัย' : '❌ ล้มเหลว';
+                    logToConsole(`${label}: ${sceneTitle} - ${err}`, 'error');
+                    playFlowAlertSound('error');
+                    showFlowDesktopNotification(`⚠️ แจ้งเตือน: ${sceneTitle} ${label}`, err);
+                  }
+                }
+              }
+            });
+            if (statusChanged) renderFlowScannedGrid();
+          }
+
+          if (statusRes.done) {
             clearInterval(flowBatchPORunningInterval);
             flowBatchPORunningInterval = null;
             setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
             if (msg) {
-              msg.textContent = statusRes.all_succeeded ? 'เจเนอเรทเสร็จสมบูรณ์ทุกฉากแล้ว ✅' : 'ประมวลผลงานเสร็จสิ้น';
+              if (statusRes.all_succeeded) {
+                msg.className = 'msg';
+                msg.style.color = '#10b981';
+                msg.textContent = `🎉 เจเนอเรทเสร็จสมบูรณ์ทุกฉากแล้ว (${statusRes.completed}/${statusRes.total} ฉาก) ✅`;
+                playFlowAlertSound('success');
+                showFlowDesktopNotification('🎉 Flow Kit Success', 'สร้างวิดีโอเสร็จสมบูรณ์ครบทุกฉากแล้ว');
+              } else {
+                msg.className = 'msg error';
+                msg.style.color = '#ef4444';
+                msg.textContent = `⚠️ ประมวลผลเสร็จสิ้น: สำเร็จ ${statusRes.completed} ฉาก, ติดบล็อก/ล้มเหลว ${statusRes.failed} ฉาก (ตรวจสอบรายละเอียดในคอนโซลด้านล่าง)`;
+                playFlowAlertSound('error');
+              }
             }
           }
         } catch {}
