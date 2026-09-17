@@ -2760,11 +2760,14 @@ async function runBatchRpc(cmd) {
       });
       const text = await resp.text();
       if (match) {
-        const found = text.indexOf(match);
+        const lowerText = text.toLowerCase();
+        const lowerMatch = match.toLowerCase();
+        const found = lowerText.indexOf(lowerMatch);
+        const start = Math.max(0, found === -1 ? 0 : found - 50);
         return {
           status: resp.status,
           matched: found !== -1,
-          text: found === -1 ? '' : text.slice(found, found + 800),
+          text: found === -1 ? '' : text.slice(start, start + 1200),
         };
       }
       return { status: resp.status, text: text.slice(0, maxText) };

@@ -353,10 +353,13 @@ def video_request(prompt: str, project_id: str, source_media_id: str,
                   crop: Optional[list] = None,
                   aspect: Any = VIDEO_ASPECT_LANDSCAPE,
                   model: str = VIDEO_MODEL) -> str:
+    aspect_val = resolve_video_aspect(aspect)
+    effective_crop = crop
+    if effective_crop is None and aspect_val == VIDEO_ASPECT_LANDSCAPE:
+        effective_crop = FULL_FRAME_CROP
     inner = [
-        [[[None, None, [[[prompt]]]], model, resolve_video_aspect(aspect), None,
-          [None, source_media_id, None, None, None,
-           FULL_FRAME_CROP if crop is None else crop],
+        [[[None, None, [[[prompt]]]], model, aspect_val, None,
+          [None, source_media_id, None, None, None, effective_crop],
           [None, None, None, None, _client_uuid(), _client_uuid()]]],
         _context(project_id),
         [_client_uuid(), 2],

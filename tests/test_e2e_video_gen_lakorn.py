@@ -120,7 +120,7 @@ async def run():
         print("=== E2E PHASE 4: MONITORING GENERATION STATUS ===", flush=True)
         print(f"Monitoring scene {scene_id}...", flush=True)
         import urllib.request
-        for poll_i in range(50):
+        for poll_i in range(80):
             await asyncio.sleep(3)
             try:
                 with urllib.request.urlopen("http://127.0.0.1:6969/api/requests?limit=5") as resp:
@@ -132,12 +132,12 @@ async def run():
                         req_ident = matched.get("id", "")[:8]
                         media_id = matched.get("media_id")
                         output_url = matched.get("output_url")
-                        print(f"  [Poll {poll_i+1}/50] Request {req_ident} status: {cur_status} (media: {media_id}, err: {err})", flush=True)
+                        print(f"  [Poll {poll_i+1}/80] Request {req_ident} status: {cur_status} (media: {media_id}, err: {err})", flush=True)
                         if cur_status in ("COMPLETED", "FAILED"):
                             print(f"Final status reached: {cur_status}, output_url: {output_url}", flush=True)
                             break
             except Exception as pe:
-                print(f"  [Poll {poll_i+1}/50] Poll err: {pe}", flush=True)
+                print(f"  [Poll {poll_i+1}/80] Poll err: {pe}", flush=True)
 
         # Read video console output
         console_lines = await page.locator("#videoConsole .console-line").all_inner_texts()

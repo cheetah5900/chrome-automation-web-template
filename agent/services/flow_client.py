@@ -849,6 +849,7 @@ class FlowClient:
 
         if not media_id:
             media_id, complaint = await self._find_operation_media(operation_id)
+            logger.info("Poll batch op %s: media_id=%s, complaint=%s", operation_id[:8], media_id, complaint)
             if not media_id:
                 if complaint and any(k in complaint.lower() for k in ("unsafe", "safety", "policy", "violat", "filter", "content")):
                     logger.warning("Operation %s rejected by safety filter: %s", operation_id[:20], complaint)
@@ -860,10 +861,13 @@ class FlowClient:
                 return _as_pending_operation(operation_id, error=complaint)
             self._operation_media[operation_id] = media_id
 
+        logger.info("Poll batch op %s checking media URLs for %s", operation_id[:8], media_id)
         try:
             urls = await self._batch_media_urls(media_id)
+            logger.info("Poll batch op %s media URLs: video=%s, image=%s", operation_id[:8], bool(urls.video), bool(urls.image))
         except Exception as e:
             err_str = str(e)
+            logger.warning("Operation %s media %s check failed: %s", operation_id[:8], media_id[:8], err_str)
             if any(k in err_str.lower() for k in ("unsafe", "safety", "policy", "violat", "filter", "content")):
                 return {
                     "operation": {"name": operation_id},
@@ -913,8 +917,10 @@ class FlowClient:
             if project_id:
                 self._remember_operation(operation_id, project_id, scene_id)
             worth_looking = operation.done or operation.complained or (rounds >= 5)
+            logger.info("_find_op_media: op=%s done=%s comp=%s rounds=%d worth=%s proj=%s",
+                        operation_id[:8], operation.done, complaint, rounds, worth_looking, project_id)
         except Exception as e:
-            logger.debug("Operation %s poll unreadable (%s), trying the listing",
+            logger.info("Operation %s poll unreadable (%s), trying the listing",
                          operation_id[:20], e)
             worth_looking = True
 
@@ -927,9 +933,9 @@ class FlowClient:
     async def _media_id_for(self, operation_id: str, project_id: str, scene_id: str = None) -> str | None:
         """Find an operation's media id in the project listing.
 
-        Asks the extension for a window around the scene id or operation id.
+        Asks the extension for a window around the operation id.
         """
-        target_id = scene_id or operation_id
+        target_id = operation_id
         result = await self.batch_rpc(
             fb.RPC_PROJECT_MEDIA, fb.project_media_request(project_id),
             match=target_id, timeout=120,
@@ -938,14 +944,14 @@ class FlowClient:
             raise fb.FlowBatchError(f"{fb.RPC_PROJECT_MEDIA}: {result['error']}")
         raw = result.get("data") or ""
         media_id = fb.find_media_id_in_text(raw, target_id)
-        if not media_id and scene_id and target_id != operation_id:
-            media_id = fb.find_media_id_in_text(raw, operation_id)
         if not media_id and raw.lstrip().startswith(")]}"):
             try:
                 media_id = fb.find_media_id(
                     fb.first_payload(raw, fb.RPC_PROJECT_MEDIA), target_id)
             except (fb.FlowBatchError, fb.RpcError, json.JSONDecodeError):
                 media_id = None
+        logger.info("Listing lookup for op %s: media_id=%s (raw_len=%d)",
+                    operation_id[:8], media_id, len(raw))
         return media_id
 
     async def _batch_media_urls(self, media_id: str) -> "fb.MediaUrls":
