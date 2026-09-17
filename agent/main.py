@@ -59,16 +59,18 @@ async def ws_handler(websocket):
         async for raw in websocket:
             try:
                 data = json.loads(raw)
-                await client.handle_message(data)
+                await client.handle_message(data, websocket=websocket)
             except json.JSONDecodeError:
                 logger.warning("Invalid JSON from extension")
+            except websockets.ConnectionClosed:
+                break
             except Exception as e:
                 logger.exception("Error handling extension message: %s", e)
     except websockets.ConnectionClosed:
         pass
     finally:
         keepalive_task.cancel()
-        client.clear_extension()
+        client.clear_extension(websocket)
         logger.info("Extension disconnected")
 
 

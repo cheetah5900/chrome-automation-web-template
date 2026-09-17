@@ -254,7 +254,10 @@ class FlowClient:
             # Respond to keepalive
             target_ws = websocket or self._extension_ws
             if target_ws:
-                await target_ws.send(json.dumps({"type": "pong"}))
+                try:
+                    await target_ws.send(json.dumps({"type": "pong"}))
+                except Exception:
+                    pass
             return
 
         # Response to a pending request
@@ -742,7 +745,19 @@ class FlowClient:
 
         scene_uuid = operation.scene_id if hasattr(operation, "scene_id") else None
         self._remember_operation(operation.operation_id, pid, scene_uuid)
-        return {"status": 200, "data": {"operations": [_as_pending_operation(operation.operation_id)]}}
+
+        media_id = getattr(operation, "media_id", None)
+        if media_id:
+            self._operation_media[operation.operation_id] = media_id
+
+        res_data = {
+            "operations": [_as_pending_operation(operation.operation_id, media_id=media_id)],
+        }
+        if media_id:
+            res_data["media"] = [{"name": media_id}]
+            res_data["workflow_id"] = operation.operation_id
+
+        return {"status": 200, "data": res_data}
 
 
     async def generate_video_from_references(self, reference_media_ids: list[str],
@@ -814,6 +829,9 @@ class FlowClient:
             entry_scene = entry.get("scene_id") or entry.get("sceneId") or (entry.get("operation") or {}).get("scene_id")
             if entry_pid:
                 self._remember_operation(op_id, entry_pid, entry_scene)
+            entry_mid = entry.get("media_id") or (entry.get("operation") or {}).get("metadata", {}).get("video", {}).get("mediaId")
+            if entry_mid and op_id not in self._operation_media:
+                self._operation_media[op_id] = entry_mid
             try:
                 out.append(await self._poll_batch_operation(op_id))
             except Exception as e:

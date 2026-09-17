@@ -57,6 +57,7 @@ with open(_MODELS_FILE) as _f:
 VIDEO_MODELS = _MODELS["video_models"]
 UPSCALE_MODELS = _MODELS["upscale_models"]
 IMAGE_MODELS = _MODELS["image_models"]
+DEFAULT_IMAGE_MODEL = os.environ.get("DEFAULT_IMAGE_MODEL", "NANO_BANANA_PRO")
 
 # ─── API Endpoints ───────────────────────────────────────────
 ENDPOINTS = {

@@ -165,6 +165,7 @@ class Operation:
     status: Optional[str]
     error: Optional[str] = None
     scene_id: Optional[str] = None
+    media_id: Optional[str] = None
 
     @property
     def done(self) -> bool:
@@ -476,19 +477,44 @@ def read_text_video_submit(payload: Any) -> dict:
 def read_operation(payload: Any) -> Operation:
     """`[null, 50, [[opId, projectId, sceneId, status, …]]]`.
 
-    Note the third uuid is the **scene**, not the media. Reading it as a media
-    id is what made every `as29s` lookup answer NOT_FOUND.
+    Note the third uuid is the **scene**, not the media. In video submissions
+    (eb1hJf / YhhmEf), media_id is carried directly in payload[3][0][0] or record[3][4].
     """
     records = payload[2] if isinstance(payload, list) and len(payload) > 2 else None
     record = records[0] if isinstance(records, list) and records else None
     if not isinstance(record, list) or not record:
         raise FlowBatchError("operation payload carried no record")
+
+    media_id = None
+    project_id = record[1] if len(record) > 1 and isinstance(record[1], str) else None
+    if not project_id and len(record) > 4 and isinstance(record[4], str):
+        project_id = record[4]
+
+    status = record[3] if len(record) > 3 and isinstance(record[3], str) else None
+
+    # Check payload[3][0] (standard video submit record format)
+    if isinstance(payload, list) and len(payload) > 3 and isinstance(payload[3], list) and payload[3]:
+        r3 = payload[3][0]
+        if isinstance(r3, list) and len(r3) > 0 and isinstance(r3[0], str) and r3[0]:
+            media_id = r3[0]
+            if not project_id and len(r3) > 1 and isinstance(r3[1], str):
+                project_id = r3[1]
+            if not status and len(r3) > 3 and isinstance(r3[3], str):
+                status = r3[3]
+
+    # Fallback to record[3][4] if media_id still not found
+    if not media_id and len(record) > 3 and isinstance(record[3], list) and len(record[3]) > 4:
+        cand = record[3][4]
+        if isinstance(cand, str) and cand:
+            media_id = cand
+
     return Operation(
         operation_id=record[0],
-        project_id=record[1] if len(record) > 1 else None,
-        status=record[3] if len(record) > 3 else None,
+        project_id=project_id,
+        status=status,
         error=read_operation_error(record),
         scene_id=record[2] if len(record) > 2 and isinstance(record[2], str) else None,
+        media_id=media_id,
     )
 
 
