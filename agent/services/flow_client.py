@@ -52,6 +52,7 @@ class FlowClient:
         self._operation_media: dict[str, str] = {}
         self._operation_scenes: dict[str, str] = {}
         self._operation_polls: dict[str, int] = {}
+        self._not_found_counts: dict[str, int] = {}
         # WS stats
         self._ws_connect_count = 0
         self._ws_disconnect_count = 0
@@ -851,12 +852,21 @@ class FlowClient:
             media_id, complaint = await self._find_operation_media(operation_id)
             logger.info("Poll batch op %s: media_id=%s, complaint=%s", operation_id[:8], media_id, complaint)
             if not media_id:
+                count = self._not_found_counts.get(operation_id, 0) + 1
+                self._not_found_counts[operation_id] = count
                 if complaint and any(k in complaint.lower() for k in ("unsafe", "safety", "policy", "violat", "filter", "content")):
                     logger.warning("Operation %s rejected by safety filter: %s", operation_id[:20], complaint)
                     return {
                         "operation": {"name": operation_id},
                         "status": "MEDIA_GENERATION_STATUS_FAILED",
                         "error": f"Google Safety Filter Blocked: {complaint}",
+                    }
+                if complaint and count >= 6:
+                    logger.warning("Operation %s failed on Google Flow: %s", operation_id[:20], complaint)
+                    return {
+                        "operation": {"name": operation_id},
+                        "status": "MEDIA_GENERATION_STATUS_FAILED",
+                        "error": f"Google Flow generation failed: {complaint}",
                     }
                 return _as_pending_operation(operation_id, error=complaint)
             self._operation_media[operation_id] = media_id
@@ -865,6 +875,7 @@ class FlowClient:
         try:
             urls = await self._batch_media_urls(media_id)
             logger.info("Poll batch op %s media URLs: video=%s, image=%s", operation_id[:8], bool(urls.video), bool(urls.image))
+            self._not_found_counts.pop(operation_id, None)
         except Exception as e:
             err_str = str(e)
             logger.warning("Operation %s media %s check failed: %s", operation_id[:8], media_id[:8], err_str)
@@ -874,10 +885,18 @@ class FlowClient:
                     "status": "MEDIA_GENERATION_STATUS_FAILED",
                     "error": f"Google Safety Filter Blocked: {err_str}",
                 }
-            if "failed: [5]" in err_str or "failed: [3]" in err_str or "NOT_FOUND" in err_str or "not ready" in err_str.lower():
-                return _as_pending_operation(operation_id, error=err_str, media_id=media_id)
-            self._operation_media.pop(operation_id, None)
-            return _as_pending_operation(operation_id, error=err_str)
+            count = self._not_found_counts.get(operation_id, 0) + 1
+            self._not_found_counts[operation_id] = count
+            logger.info("Operation %s media %s still rendering (round %d): %s",
+                        operation_id[:8], media_id[:8], count, err_str)
+            if count >= 6:
+                found_id, _ = await self._find_operation_media(operation_id)
+                if found_id and found_id != media_id:
+                    self._operation_media[operation_id] = found_id
+                    logger.info("Operation %s media re-resolved from listing: %s -> %s",
+                                operation_id[:8], media_id[:8], found_id[:8])
+                    media_id = found_id
+            return _as_pending_operation(operation_id, error=err_str, media_id=media_id)
         if not urls.video:
             return _as_pending_operation(operation_id, error=complaint, media_id=media_id)
 
@@ -916,7 +935,7 @@ class FlowClient:
                 scene_id = operation.scene_id
             if project_id:
                 self._remember_operation(operation_id, project_id, scene_id)
-            worth_looking = operation.done or operation.complained or (rounds >= 5)
+            worth_looking = operation.done or operation.complained or (rounds >= 5) or (operation_id in self._not_found_counts)
             logger.info("_find_op_media: op=%s done=%s comp=%s rounds=%d worth=%s proj=%s",
                         operation_id[:8], operation.done, complaint, rounds, worth_looking, project_id)
         except Exception as e:

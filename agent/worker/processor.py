@@ -410,19 +410,27 @@ async def _dispatch(req: dict, orientation: str) -> dict:
 async def _reupload_media(url: str, project_id: str) -> str | None:
     """Download image from URL and re-upload to get a fresh media_id."""
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                if resp.status != 200:
-                    logger.warning("Re-upload: failed to download %s (status %d)", url[:60], resp.status)
-                    return None
-                image_bytes = await resp.read()
-                content_type = resp.headers.get("Content-Type", "image/jpeg")
+        if url.startswith("file://"):
+            from urllib.parse import unquote
+            file_path = unquote(url[7:])
+            with open(file_path, "rb") as f:
+                image_bytes = f.read()
+            ext = file_path.lower().split(".")[-1]
+            mime = "image/png" if ext == "png" else ("image/webp" if ext == "webp" else "image/jpeg")
+        else:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status != 200:
+                        logger.warning("Re-upload: failed to download %s (status %d)", url[:60], resp.status)
+                        return None
+                    image_bytes = await resp.read()
+                    content_type = resp.headers.get("Content-Type", "image/jpeg")
 
-        if not content_type.startswith("image/"):
-            logger.warning("Re-upload: unexpected content-type %s from %s", content_type, url[:60])
-            return None
+            if not content_type.startswith("image/"):
+                logger.warning("Re-upload: unexpected content-type %s from %s", content_type, url[:60])
+                return None
+            mime = content_type.split(";")[0].strip()
         image_b64 = base64.b64encode(image_bytes).decode()
-        mime = content_type.split(";")[0].strip()
 
         client = get_flow_client()
         result = await client.upload_image(image_b64, mime_type=mime, project_id=project_id)
