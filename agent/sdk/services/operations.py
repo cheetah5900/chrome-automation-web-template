@@ -970,54 +970,10 @@ class OperationService:
 # ------------------------------------------------------------------
 
 async def _build_video_prompt(base_prompt: str, scene: dict, project_id: str | None) -> str:
-    """Enhance video prompt with Veo 3 audio instructions and negative prompt."""
-    parts = [base_prompt.strip()]
-
-    # Only append voice context when video_prompt contains dialogue (verb-based detection)
-    dialogue_verbs = ("says", "whispers", "shouts", "asks", "replies", "murmurs", "exclaims", "gasps", "laughs", "mutters")
-    prompt_lower = base_prompt.lower()
-    has_dialogue = any(verb in prompt_lower for verb in dialogue_verbs)
-    if project_id and has_dialogue:
-        char_names_raw = scene.get("character_names")
-        if isinstance(char_names_raw, str):
-            try:
-                char_names_raw = json.loads(char_names_raw)
-            except json.JSONDecodeError:
-                char_names_raw = []
-        if isinstance(char_names_raw, list) and char_names_raw:
-            project_chars = await crud.get_project_characters(project_id)
-            char_names_set = set(char_names_raw)
-            voices = []
-            for c in project_chars:
-                if _char_matches(c, char_names_set) and c.get("voice_description"):
-                    voices.append(f"{c['name']}: {c['voice_description']}")
-            if voices:
-                parts.append("Character voices: " + ". ".join(voices) + ".")
-
-    # Check project-level audio flags — Veo 3 Audio label format
-    allow_music = False
-    allow_voice = False
-    if project_id:
-        project = await crud.get_project(project_id)
-        if project:
-            if project.get("allow_music"):
-                allow_music = True
-            if project.get("allow_voice"):
-                allow_voice = True
-
-    if not allow_music:
-        # Only append if prompt doesn't already have Audio:/Music: labels
-        if "audio:" not in prompt_lower and "music:" not in prompt_lower:
-            if allow_voice:
-                parts.append("Audio: no background music. Keep character dialogue and natural ambient sounds.")
-            else:
-                parts.append("Audio: natural ambient sounds only, no background music, no narration, no voiceover.")
-
-    # Veo 3 negative prompt — always append unless already present
-    if "negative:" not in prompt_lower:
-        parts.append("Negative: subtitles, captions, watermark, text on screen, logo, blurry faces, distorted hands.")
-
-    return " ".join(parts)
+    """Enhance video prompt with sanitization and clean natural language."""
+    from agent.services.prompt_sanitizer import sanitize_lakorn_prompt
+    base_prompt = sanitize_lakorn_prompt(base_prompt)
+    return base_prompt.strip()
 
 
 async def _upload_character_image(client: FlowClient, char: dict, project_id: str) -> str | None:

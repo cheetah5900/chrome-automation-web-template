@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from agent.services.flow_client import get_flow_client
+from agent.services.prompt_sanitizer import sanitize_lakorn_prompt
 from agent.db import crud
 from agent.sdk.persistence.sqlite_repository import SQLiteRepository
 
@@ -619,12 +620,13 @@ async def process_batch(body: ProcessRequest):
                     if not prompt_summary.startswith(prefix):
                         prompt_summary = f"{prefix} {prompt_summary}"
 
+            clean_video_prompt = sanitize_lakorn_prompt(pair.prompt_content) if pair.prompt_content else ""
             logger.info("Creating scene for display_order %d", next_order)
             sdk_scene = await _repo.create_scene(
                 video_id=video_id,
                 display_order=next_order,
                 prompt=prompt_summary,
-                video_prompt=pair.prompt_content,
+                video_prompt=clean_video_prompt,
                 chain_type="CONTINUATION" if next_order > 0 else "ROOT",
                 source="user"
             )

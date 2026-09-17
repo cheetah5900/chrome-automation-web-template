@@ -82,7 +82,7 @@ ASPECT_BY_NAME = {
 #: [tier][quality][aspect] and carried `…_portrait` / `…_fl` / `…_relaxed`
 #: variants; those are gone — aspect is its own slot now, and the suffixed
 #: names are rejected.
-VIDEO_MODEL = "veo_3_1_i2v_lite_low_priority"
+VIDEO_MODEL = "veo_3_1_i2v_s_fast_ultra"
 VIDEO_MODELS = {
     "veo_3_1_i2v_lite_low_priority",
     "veo_3_1_i2v_lite",

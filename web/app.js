@@ -5346,6 +5346,7 @@ function updateFlowVideoModelDropdowns(tier) {
     
     if (tier === 'PAYGATE_TIER_ONE') {
       const options = [
+        { value: 'veo_3_1_i2v_s_fast_ultra', text: 'veo_3_1_i2v_s_fast_ultra (Ultra Fast 30s)' },
         { value: 'fast', text: 'veo3 (Quality / Fast)' },
         { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
         { value: 'lite', text: 'lite (Lite)' },
@@ -5360,6 +5361,7 @@ function updateFlowVideoModelDropdowns(tier) {
       });
     } else {
       const options = [
+        { value: 'veo_3_1_i2v_s_fast_ultra', text: 'veo_3_1_i2v_s_fast_ultra (Ultra Fast 30s)' },
         { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
         { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' },
         { value: 'veo_3_1_r2v_fast_landscape_ultra_relaxed', text: 'veo_3_1_r2v_fast_landscape_ultra_relaxed (Reference Frame Relaxed)' }

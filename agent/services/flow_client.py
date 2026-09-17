@@ -670,6 +670,9 @@ class FlowClient:
                               custom_model_key: str = None,
                               image_path: str = None) -> dict:
         """Submit a video generation (i2v, auto-uploaded image, or text-to-video t2v)."""
+        from agent.services.prompt_sanitizer import sanitize_lakorn_prompt
+        prompt = sanitize_lakorn_prompt(prompt)
+
         if not USE_BATCH_RPC:
             return await self._legacy_generate_video(
                 start_image_media_id, prompt, project_id, scene_id,

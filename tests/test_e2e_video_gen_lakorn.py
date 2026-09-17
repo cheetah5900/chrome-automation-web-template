@@ -16,7 +16,7 @@ async def run():
             localStorage.setItem('flowVideoPresets', JSON.stringify({
                 'ละคร': {
                     'project_id': '21a1632e-9926-46fa-954c-240d71d78f41',
-                    'video_model': 'veo_3_1_i2v_s_fast_portrait',
+                    'video_model': 'veo_3_1_i2v_s_fast_ultra',
                     'orientation': 'VERTICAL',
                     'output_count': '1',
                     'upscale_resolution': 'NONE',
@@ -54,6 +54,11 @@ async def run():
             const sel = document.getElementById('flowVideoPresetSelect');
             if (sel) sel.value = 'ละคร';
             if (typeof applyFlowVideoPreset === 'function') applyFlowVideoPreset('ละคร');
+            const modelDd = document.getElementById('cfg_flow_video_model');
+            if (modelDd) {
+                modelDd.value = 'veo_3_1_i2v_s_fast_ultra';
+                modelDd.dispatchEvent(new Event('change'));
+            }
             if (typeof calculateFlowKitPaths === 'function') calculateFlowKitPaths();
         }""")
         await asyncio.sleep(1)
