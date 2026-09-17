@@ -11893,7 +11893,7 @@ function initFlowKitUploaderListeners() {
             logToConsole(`Scene failed: Image path: ${r.image_path || 'None'}, Error: ${r.error}`, 'error');
           }
         });
-        renderFlowScannedGrid();
+        renderScannedPairs();
         
         if (msg) {
           msg.className = 'msg';
@@ -11940,7 +11940,7 @@ function initFlowKitUploaderListeners() {
                     }
                   }
                 });
-                if (statusChanged) renderFlowScannedGrid();
+                if (statusChanged) renderScannedPairs();
               }
 
               if (statusRes.done) {
@@ -12289,6 +12289,8 @@ function updateSelectAllButtonText() {
   const allChecked = flowScannedPairs.every(p => p.checked !== false);
   btn.textContent = allChecked ? 'Deselect All' : 'Select All';
 }
+
+const renderFlowScannedGrid = (...args) => renderScannedPairs(...args);
 
 function renderScannedPairs() {
   const section = document.getElementById('scannedPairsSection');
@@ -13043,7 +13045,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
             if (r.error) matchedPair.error_message = r.error;
           }
         });
-        renderFlowScannedGrid();
+        renderScannedPairs();
       }
       if (msg) {
         msg.className = 'msg';
@@ -13087,7 +13089,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
                 }
               }
             });
-            if (statusChanged) renderFlowScannedGrid();
+            if (statusChanged) renderScannedPairs();
           }
 
           if (statusRes.done) {
