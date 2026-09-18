@@ -517,7 +517,7 @@ class OperationService:
             if tier == "PAYGATE_TIER_ONE":
                 custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
             else:
-                custom_model_key = "veo_3_1_i2v_lite_low_priority"
+                custom_model_key = "veo_3_1_i2v_lite"
                 tier = "PAYGATE_TIER_TWO"
 
         # Heuristic: bare UUID = workflow name → skip shortcut. Slash/colon = old operation path.

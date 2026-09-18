@@ -123,10 +123,11 @@ async def get_flow_projects():
     client = get_flow_client()
 
     # 1. Discover projects and names from open browser tabs via extension
+    open_tab_pids = set()
     discovered_projects = {}
     if client.connected:
         try:
-            tabs_res = await client._send("query_tabs", {}, timeout=5)
+            tabs_res = await client._send("query_tabs", {}, timeout=10)
             tabs_list = tabs_res.get("result", []) if isinstance(tabs_res, dict) else []
             for t in tabs_list:
                 url = t.get("url", "") or t.get("pendingUrl", "")
@@ -134,6 +135,7 @@ async def get_flow_projects():
                 match = re.search(r'/project/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', url, re.IGNORECASE)
                 if match:
                     pid = match.group(1).lower()
+                    open_tab_pids.add(pid)
                     clean_name = title.replace("Google Flow - ", "").replace("Google Flow", "").strip()
                     if clean_name:
                         discovered_projects[pid] = clean_name
@@ -236,8 +238,7 @@ async def get_flow_projects():
             })
 
     # Prioritize active open browser projects at the top of the list
-    active_pids = set(discovered_projects.keys())
-    formatted.sort(key=lambda p: (0 if p["id"].lower() in active_pids else 1, p["name"].lower()))
+    formatted.sort(key=lambda p: (0 if p["id"].lower() in open_tab_pids else 1, p["name"].lower()))
 
     return {"projects": formatted, "source": "local"}
 
@@ -247,42 +248,6 @@ async def get_flow_tier():
     client = get_flow_client()
     tier = getattr(client, "user_paygate_tier", "PAYGATE_TIER_TWO")
     return {"tier": tier}
-
-
-@router.get("/test-get-project/{project_id}")
-async def test_get_project_endpoint(project_id: str):
-    client = get_flow_client()
-    if not client.connected:
-        return {"error": "Extension not connected"}
-    import urllib.parse
-    import json
-    input_params = {"json": {"projectId": project_id, "toolName": "PINHOLE"}}
-    encoded_input = urllib.parse.quote(json.dumps(input_params))
-    url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
-    res = await client._send("trpc_request", {
-        "url": url,
-        "method": "GET",
-        "headers": {"accept": "*/*"}
-    }, timeout=30)
-    return res
-
-
-@router.get("/test-get-initial-data/{project_id}")
-async def test_get_initial_data_endpoint(project_id: str):
-    client = get_flow_client()
-    if not client.connected:
-        return {"error": "Extension not connected"}
-    import urllib.parse
-    import json
-    input_params = {"json": {"projectId": project_id}}
-    encoded_input = urllib.parse.quote(json.dumps(input_params))
-    url = f"https://labs.google/fx/api/trpc/flow.projectInitialData?input={encoded_input}"
-    res = await client._send("trpc_request", {
-        "url": url,
-        "method": "GET",
-        "headers": {"accept": "*/*"}
-    }, timeout=30)
-    return res
 
 
 class CreateFlowProjectRequest(BaseModel):

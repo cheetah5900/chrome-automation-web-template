@@ -904,12 +904,6 @@ class FlowClient:
                         "status": "MEDIA_GENERATION_STATUS_FAILED",
                         "error": tab_err,
                     }
-                if count >= 15:
-                    return {
-                        "operation": {"name": operation_id},
-                        "status": "MEDIA_GENERATION_STATUS_FAILED",
-                        "error": f"Media not found on Google Flow (as29s [5]): {err_str}",
-                    }
             return _as_pending_operation(operation_id, error=err_str, media_id=media_id)
         if not urls.video:
             return _as_pending_operation(operation_id, error=complaint, media_id=media_id)

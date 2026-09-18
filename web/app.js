@@ -5361,6 +5361,7 @@ function updateFlowVideoModelDropdowns(tier) {
       });
     } else {
       const options = [
+        { value: 'lite', text: 'veo_3_1_i2v_lite (Lite - มาตรฐาน)' },
         { value: 'veo_3_1_i2v_s_fast_ultra', text: 'veo_3_1_i2v_s_fast_ultra (Ultra Fast 30s)' },
         { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
         { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' },
