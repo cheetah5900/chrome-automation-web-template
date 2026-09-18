@@ -11511,8 +11511,20 @@ initApp();
 // ==========================================
 
 let flowScannedPairs = [];
+try {
+  Object.defineProperty(window, 'flowScannedPairs', {
+    get: () => flowScannedPairs,
+    set: (val) => { flowScannedPairs = val; },
+    configurable: true
+  });
+} catch (e) {}
 let flowProjectsList = [];
 let flowKitUploaderListenersInitialized = false;
+
+function renderFlowScannedGrid(...args) {
+  return typeof renderScannedPairs === 'function' ? renderScannedPairs(...args) : null;
+}
+window.renderFlowScannedGrid = renderFlowScannedGrid;
 
 function initFlowKitUploaderListeners() {
   if (flowKitUploaderListenersInitialized) return;
@@ -12290,7 +12302,7 @@ function updateSelectAllButtonText() {
   btn.textContent = allChecked ? 'Deselect All' : 'Select All';
 }
 
-const renderFlowScannedGrid = (...args) => renderScannedPairs(...args);
+window.renderScannedPairs = renderScannedPairs;
 
 function renderScannedPairs() {
   const section = document.getElementById('scannedPairsSection');

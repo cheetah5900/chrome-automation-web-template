@@ -896,6 +896,20 @@ class FlowClient:
                     logger.info("Operation %s media re-resolved from listing: %s -> %s",
                                 operation_id[:8], media_id[:8], found_id[:8])
                     media_id = found_id
+            if count >= 8 and ("as29s failed: [5]" in err_str or "[5]" in err_str):
+                tab_err = await self._check_flow_tab_404()
+                if tab_err:
+                    return {
+                        "operation": {"name": operation_id},
+                        "status": "MEDIA_GENERATION_STATUS_FAILED",
+                        "error": tab_err,
+                    }
+                if count >= 15:
+                    return {
+                        "operation": {"name": operation_id},
+                        "status": "MEDIA_GENERATION_STATUS_FAILED",
+                        "error": f"Media not found on Google Flow (as29s [5]): {err_str}",
+                    }
             return _as_pending_operation(operation_id, error=err_str, media_id=media_id)
         if not urls.video:
             return _as_pending_operation(operation_id, error=complaint, media_id=media_id)
@@ -908,6 +922,19 @@ class FlowClient:
             },
             "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
         }
+
+    async def _check_flow_tab_404(self) -> str | None:
+        """Check if any active Flow tab is stuck on a 404 page."""
+        try:
+            tabs_res = await self._send("query_tabs", {}, timeout=5)
+            tabs_list = tabs_res.get("result", []) if isinstance(tabs_res, dict) else []
+            for t in tabs_list:
+                url = t.get("url", "") or t.get("pendingUrl", "")
+                if "/404" in url and ("flow.google.com" in url or "labs.google" in url):
+                    return f"Google Flow tab is at 404 (Project not found: {url}). Please open a valid project in Google Flow."
+        except Exception:
+            pass
+        return None
 
     async def _find_operation_media(self, operation_id: str) -> tuple[str | None, str | None]:
         """Ask the operation how it is going, then the listing where its media is.

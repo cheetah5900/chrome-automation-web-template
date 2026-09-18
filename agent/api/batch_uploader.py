@@ -235,6 +235,10 @@ async def get_flow_projects():
                 "material": "3d_pixar"
             })
 
+    # Prioritize active open browser projects at the top of the list
+    active_pids = set(discovered_projects.keys())
+    formatted.sort(key=lambda p: (0 if p["id"].lower() in active_pids else 1, p["name"].lower()))
+
     return {"projects": formatted, "source": "local"}
 
 
