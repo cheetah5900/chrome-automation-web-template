@@ -1246,6 +1246,19 @@ def find_record_on_dreamina(
         }
         return null;
     }
+
+    function getScrollContainer() {
+        const card = document.querySelector('[class*="record-ej"], [class*="video-record"], [class*="record-item"]');
+        if (card) {
+            let curr = card.parentElement;
+            while (curr && curr !== document.body) {
+                if (curr.scrollHeight > curr.clientHeight + 100) return curr;
+                curr = curr.parentElement;
+            }
+        }
+        const viewports = Array.from(document.querySelectorAll('div[class*="viewport-"], div[class*="viewport"]'));
+        return viewports.find(v => v.scrollHeight > v.clientHeight + 100) || document.querySelector('.viewport-j2F4pH') || document.querySelector('.viewport-M4gznV') || document.documentElement;
+    }
     """
 
     try:
@@ -1266,7 +1279,7 @@ def find_record_on_dreamina(
                     hasDlBtn: found.hasDlBtn
                 };
             }
-            const vp = document.querySelector('.viewport-M4gznV') || document.querySelector('[class*="viewport"]');
+            const vp = getScrollContainer();
             return {
                 found: false,
                 maxScroll: vp ? vp.scrollHeight : 0,
@@ -1288,19 +1301,22 @@ def find_record_on_dreamina(
         if max_scroll <= client_h:
             return best_match if best_match else {"found": False}
 
-        # Step-scan reliably through virtual list
-        step = 350
-        positions = list(range(0, max_scroll + step, step))
+        # Step-scan reliably through virtual list and trigger lazy-load
+        step = 600
+        pos = 0
 
-        for pos in positions:
+        while pos <= max_scroll:
             if is_seedance_stopped():
                 log("[Seedance Find Record] 🛑 ยกเลิกการค้นหาเนื่องจากคำสั่ง Force Stop")
                 return {"found": False, "stopped": True}
-            driver.execute_script(r"""
-                const vp = document.querySelector('.viewport-M4gznV') || document.querySelector('[class*="viewport"]');
-                if (vp) vp.scrollTop = arguments[0];
+            driver.execute_script(check_code + r"""
+                const vp = getScrollContainer();
+                if (vp) {
+                    vp.scrollTop = arguments[0];
+                    vp.dispatchEvent(new Event('scroll', { bubbles: true }));
+                }
             """, pos)
-            time.sleep(0.15)
+            time.sleep(0.18)
             match = driver.execute_script(check_code + r"""
                 const found = checkTarget(arguments[0], arguments[1], arguments[2]);
                 if (found) {
@@ -1318,13 +1334,22 @@ def find_record_on_dreamina(
                         hasDlBtn: found.hasDlBtn
                     };
                 }
-                return null;
+                const vp = getScrollContainer();
+                return {
+                    found: false,
+                    newMaxScroll: vp ? vp.scrollHeight : 0
+                };
             """, num_str, name, snippets_list, scroll_to_found)
             if match and isinstance(match, dict) and match.get("found"):
                 if match.get("score", 0) >= 80:
                     return match
                 if not best_match or match.get("score", 0) > best_match.get("score", 0):
                     best_match = match
+
+            if match and isinstance(match, dict) and match.get("newMaxScroll", 0) > max_scroll:
+                max_scroll = match.get("newMaxScroll")
+
+            pos += step
 
         if best_match:
             return best_match
