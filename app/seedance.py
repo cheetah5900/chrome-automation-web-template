@@ -1064,11 +1064,23 @@ def extract_prompt_search_snippets(prompt_text: str) -> list[str]:
     lines = [l.strip() for l in prompt_text.split("\n") if l.strip()]
     snippets = []
 
+    # 0. User-suggested prefix matching: collapse all newlines/spaces and take first 15-35 characters
+    # Bridges local files with newlines (\n\n) directly with Seedance's single-line rendering
+    norm_full = re.sub(r"\s+", " ", prompt_text).strip()
+    if len(norm_full) >= 6:
+        prefix_35 = norm_full[:35].strip()
+        if prefix_35 and not any(bp in prefix_35.lower() for bp in BOILERPLATE):
+            snippets.append(prefix_35)
+        elif prefix_35:
+            # If it starts with a number (e.g. "44 Attach the prod..."), keep the prefix
+            snippets.append(norm_full[:25].strip())
+
     # 1. First line (often contains sequence number or specific title e.g. "44 - น้ำอาบไหลช้า...")
     if lines:
         first_line = lines[0].strip()
-        if not any(bp in first_line.lower() for bp in BOILERPLATE) and len(first_line) >= 5:
-            snippets.append(first_line[:80])
+        if not any(bp in first_line.lower() for bp in BOILERPLATE) and len(first_line) >= 4:
+            if first_line[:80] not in snippets:
+                snippets.append(first_line[:80])
 
     # 2. Extract dialogue quotes in quotes (Thai or English) e.g. "..." or “...”
     quotes = re.findall(r'["“]([^\n"“”]{8,120})["”]', prompt_text)
@@ -1169,11 +1181,14 @@ def find_record_on_dreamina(
             const text = (el.innerText || el.textContent || '').trim();
             if (!text) continue;
 
+            // Normalize card text by collapsing all whitespace/newlines into single spaces
+            const normText = text.replace(/\s+/g, ' ').trim();
+
             let score = 0;
             let matchType = '';
 
             // 1. Exact full name match (highest confidence: 100)
-            if (name && text.includes(name)) {
+            if (name && (text.includes(name) || normText.includes(name))) {
                 score += 100;
                 matchType = 'name';
             }
@@ -1181,23 +1196,26 @@ def find_record_on_dreamina(
             // 2. Exact Sequence Number Header match:
             if (num) {
                 const numStr = String(num).trim();
-                const headerRegex = new RegExp('(?:^|[\\n\\r])\\s*' + numStr + '\\s*[-.:_\\s]', 'i');
-                const wordRegex = new RegExp('(?:^|[^\\w\\d:])' + numStr + '\\s*[-_]', 'i');
-                if (headerRegex.test(text)) {
+                const headerRegex = new RegExp('(?:^|[\\n\\r\\s])' + numStr + '(?![\\d:])(?:\\s*[-.:_\\s]|\\s+[a-zA-Zก-๙])', 'i');
+                const wordRegex = new RegExp('(?:^|[^\\w\\d:])' + numStr + '(?![\\d:])', 'i');
+                if (headerRegex.test(normText) || headerRegex.test(text)) {
                     score += 80;
                     if (!matchType) matchType = 'num_header';
-                } else if (wordRegex.test(text)) {
+                } else if (wordRegex.test(normText) || wordRegex.test(text)) {
                     score += 60;
                     if (!matchType) matchType = 'num';
                 }
             }
 
-            // 3. Distinctive prompt snippets (Thai quotes, distinctive actions)
+            // 3. Normalized prefix & snippet match (bridges local newlines with single-line web cards)
             if (snipList.length > 0) {
                 for (const snip of snipList) {
-                    if (snip && snip.length >= 8 && text.includes(snip)) {
-                        score += 30;
-                        if (!matchType) matchType = 'snippet';
+                    const normSnip = snip.replace(/\s+/g, ' ').trim();
+                    if (normSnip && normSnip.length >= 6) {
+                        if (normText.startsWith(normSnip) || normText.includes(normSnip) || text.includes(snip)) {
+                            score += 40;
+                            if (!matchType) matchType = 'snippet';
+                        }
                     }
                 }
             }
@@ -1210,7 +1228,7 @@ def find_record_on_dreamina(
             }
         }
 
-        if (bestCard && bestScore >= 50) {
+        if (bestCard && bestScore >= 40) {
             const vid = bestCard.querySelector('video');
             const isGen = !!bestCard.querySelector('[class*="generating"], [class*="progress"], [class*="loading"]');
             const dlBtn = bestCard.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
