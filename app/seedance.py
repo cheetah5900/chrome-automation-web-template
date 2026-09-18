@@ -1026,33 +1026,88 @@ def toggle_seedance_download_enhancer(driver, enabled: Optional[bool] = None) ->
         return {"ok": False, "detail": str(e)}
 
 def extract_prompt_search_snippets(prompt_text: str) -> list[str]:
-    """Extracts distinctive scene snippets from prompt_text to match against Dreamina web cards."""
+    """Extracts distinctive scene snippets and dialogue quotes from prompt_text to match against Dreamina web cards."""
     if not prompt_text:
         return []
+
+    BOILERPLATE = [
+        "attach the product image",
+        "strict visual reference",
+        "vertical 9:16",
+        "ultra-realistic",
+        "setting:",
+        "characters:",
+        "dialogue & audio style:",
+        "style requirements:",
+        "negative constraints:",
+        "no subtitles",
+        "no on-screen text",
+        "fictional characters",
+        "polished ai realism",
+        "handheld phone-video energy",
+        "negative:",
+        "camera:",
+        "audio:",
+        "aspect ratio",
+        "cinematic thai social drama",
+        "spoken thai dialogue",
+        "dramatic contrast between",
+        "dialogue & audio",
+        "shallow depth of field",
+        "natural handheld micro-shake",
+        "vertical social-media composition",
+        "no kids",
+        "no children",
+        "adults only"
+    ]
+
     lines = [l.strip() for l in prompt_text.split("\n") if l.strip()]
     snippets = []
-    
-    # 1. Look for distinctive scene action lines with timestamps (e.g. 0s-3s, 3s-6s, 0:)
+
+    # 1. First line (often contains sequence number or specific title e.g. "44 - น้ำอาบไหลช้า...")
+    if lines:
+        first_line = lines[0].strip()
+        if not any(bp in first_line.lower() for bp in BOILERPLATE) and len(first_line) >= 5:
+            snippets.append(first_line[:80])
+
+    # 2. Extract dialogue quotes in quotes (Thai or English) e.g. "..." or “...”
+    quotes = re.findall(r'["“]([^\n"“”]{8,120})["”]', prompt_text)
+    for q in quotes:
+        clean_q = q.strip()
+        if len(clean_q) >= 10 and not any(bp in clean_q.lower() for bp in BOILERPLATE):
+            if clean_q[:80] not in snippets:
+                snippets.append(clean_q[:80])
+
+    # 3. Action lines with timestamps (e.g. 0:00-0:02, 0s-3s, etc.)
     scene_lines = [l for l in lines if any(k in l for k in ["0s-", "3s-", "6s-", "9s-", "12s-", "0:", "1:"])]
-    for sl in scene_lines[:4]:
+    for sl in scene_lines:
         clean = sl.replace('"', '').replace("'", '').strip()
-        if len(clean) >= 15:
-            snippets.append(clean[:80])
-            
-    # 2. Look for lines that aren't generic style headers or negative prompts
+        if not any(bp in clean.lower() for bp in BOILERPLATE) and len(clean) >= 15:
+            if "—" in clean:
+                distinctive = clean.split("—", 1)[1].strip()
+            elif "-" in clean:
+                distinctive = clean.split("-", 1)[1].strip()
+            else:
+                distinctive = clean
+            if len(distinctive) >= 15 and distinctive[:80] not in snippets:
+                snippets.append(distinctive[:80])
+            elif clean[:80] not in snippets:
+                snippets.append(clean[:80])
+
+    # 4. Other non-boilerplate lines
     for l in lines:
         clean = l.replace('"', '').replace("'", '').strip()
-        if len(clean) >= 20 and not any(k in clean.lower() for k in ["negative:", "camera:", "audio:"]):
+        if len(clean) >= 20 and not any(bp in clean.lower() for bp in BOILERPLATE):
             if clean[:80] not in snippets:
                 snippets.append(clean[:80])
-        if len(snippets) >= 6:
+        if len(snippets) >= 8:
             break
-            
-    # 3. Fallback to first line
+
+    # 5. Fallback to first line if nothing extracted
     if not snippets and lines:
         snippets.append(lines[0][:80])
-        
-    return snippets
+
+    return snippets[:8]
 
 
 def find_record_on_dreamina(
@@ -1092,46 +1147,84 @@ def find_record_on_dreamina(
     check_code = r"""
     function checkTarget(num, name, snips) {
         const snipList = Array.isArray(snips) ? snips : (snips ? [snips] : []);
-        const items = document.querySelectorAll('[class*="record-ej"], [class*="video-record"], .content-_w2B98 > div > div, [class*="record-item"]');
-        for (const el of items) {
+        const rawItems = document.querySelectorAll('[class*="record-ej"], [class*="video-record"], .content-_w2B98 > div > div, [class*="record-item"]');
+        const seen = new Set();
+        const uniqueCards = [];
+        for (const el of rawItems) {
             if (el.classList.contains('record-list-container-GKMHFh') || el.classList.contains('record-virtual-list')) continue;
-            const recordContainer = el.closest('[class*="record-ej"], [class*="video-record"]') || el;
-            const text = (recordContainer.innerText || recordContainer.textContent || '').trim();
+            const card = el.closest('[class*="record-ej"], [class*="video-record-FTTE4w"]') || el;
+            if (!seen.has(card)) {
+                seen.add(card);
+                uniqueCards.push(card);
+            }
+        }
+
+        let bestCard = null;
+        let bestScore = 0;
+        let bestMatchType = '';
+        let bestText = '';
+
+        for (let idx = 0; idx < uniqueCards.length; idx++) {
+            const el = uniqueCards[idx];
+            const text = (el.innerText || el.textContent || '').trim();
             if (!text) continue;
 
-            let matched = false;
+            let score = 0;
             let matchType = '';
+
+            // 1. Exact full name match (highest confidence: 100)
             if (name && text.includes(name)) {
-                matched = true;
+                score += 100;
                 matchType = 'name';
-            } else if (num && (text.includes(num + ' -') || text.includes(num + '-') || text.startsWith(num + ' ') || text.includes(' ' + num + ' '))) {
-                matched = true;
-                matchType = 'num';
-            } else if (snipList.length > 0) {
+            }
+
+            // 2. Exact Sequence Number Header match:
+            if (num) {
+                const numStr = String(num).trim();
+                const headerRegex = new RegExp('(?:^|[\\n\\r])\\s*' + numStr + '\\s*[-.:_\\s]', 'i');
+                const wordRegex = new RegExp('(?:^|[^\\w\\d:])' + numStr + '\\s*[-_]', 'i');
+                if (headerRegex.test(text)) {
+                    score += 80;
+                    if (!matchType) matchType = 'num_header';
+                } else if (wordRegex.test(text)) {
+                    score += 60;
+                    if (!matchType) matchType = 'num';
+                }
+            }
+
+            // 3. Distinctive prompt snippets (Thai quotes, distinctive actions)
+            if (snipList.length > 0) {
                 for (const snip of snipList) {
-                    if (snip && snip.length >= 10 && text.includes(snip)) {
-                        matched = true;
-                        matchType = 'snippet';
-                        break;
+                    if (snip && snip.length >= 8 && text.includes(snip)) {
+                        score += 30;
+                        if (!matchType) matchType = 'snippet';
                     }
                 }
             }
 
-            if (matched) {
-                const vid = recordContainer.querySelector('video');
-                const isGen = !!recordContainer.querySelector('[class*="generating"], [class*="progress"], [class*="loading"]');
-                const dlBtn = recordContainer.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
-                return {
-                    found: true,
-                    matchType: matchType,
-                    text: text.slice(0, 150),
-                    hasVideo: !!vid,
-                    videoSrc: vid ? (vid.src || vid.currentSrc) : null,
-                    isGenerating: isGen,
-                    hasDlBtn: !!dlBtn,
-                    el: recordContainer
-                };
+            if (score > bestScore) {
+                bestScore = score;
+                bestCard = el;
+                bestMatchType = matchType;
+                bestText = text;
             }
+        }
+
+        if (bestCard && bestScore >= 50) {
+            const vid = bestCard.querySelector('video');
+            const isGen = !!bestCard.querySelector('[class*="generating"], [class*="progress"], [class*="loading"]');
+            const dlBtn = bestCard.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
+            return {
+                found: true,
+                score: bestScore,
+                matchType: bestMatchType,
+                text: bestText.slice(0, 150),
+                hasVideo: !!vid,
+                videoSrc: vid ? (vid.src || vid.currentSrc) : null,
+                isGenerating: isGen,
+                hasDlBtn: !!dlBtn,
+                el: bestCard
+            };
         }
         return null;
     }
@@ -1146,6 +1239,7 @@ def find_record_on_dreamina(
                 }
                 return {
                     found: true,
+                    score: found.score,
                     matchType: found.matchType,
                     text: found.text,
                     hasVideo: found.hasVideo,
@@ -1164,22 +1258,22 @@ def find_record_on_dreamina(
         """, num_str, name, snippets_list, scroll_to_found)
 
         if isinstance(res, dict) and res.get("found"):
-            return res
+            if res.get("score", 0) >= 80:
+                return res
 
-        if not isinstance(res, dict):
-            return {"found": False}
+        best_match = res if (isinstance(res, dict) and res.get("found")) else None
 
-        max_scroll = res.get("maxScroll", 0)
-        client_h = res.get("clientHeight", 800)
-        curr_scroll = res.get("currScroll", 0)
+        max_scroll = res.get("maxScroll", 0) if isinstance(res, dict) else 0
+        client_h = res.get("clientHeight", 800) if isinstance(res, dict) else 800
+        curr_scroll = res.get("currScroll", 0) if isinstance(res, dict) else 0
 
         if max_scroll <= client_h:
-            return {"found": False}
+            return best_match if best_match else {"found": False}
 
         # Step-scan reliably through virtual list
         step = 350
         positions = list(range(0, max_scroll + step, step))
-        
+
         for pos in positions:
             if is_seedance_stopped():
                 log("[Seedance Find Record] 🛑 ยกเลิกการค้นหาเนื่องจากคำสั่ง Force Stop")
@@ -1197,6 +1291,7 @@ def find_record_on_dreamina(
                     }
                     return {
                         found: true,
+                        score: found.score,
                         matchType: found.matchType,
                         text: found.text,
                         hasVideo: found.hasVideo,
@@ -1208,7 +1303,13 @@ def find_record_on_dreamina(
                 return null;
             """, num_str, name, snippets_list, scroll_to_found)
             if match and isinstance(match, dict) and match.get("found"):
-                return match
+                if match.get("score", 0) >= 80:
+                    return match
+                if not best_match or match.get("score", 0) > best_match.get("score", 0):
+                    best_match = match
+
+        if best_match:
+            return best_match
 
     except Exception as ex:
         log(f"[Seedance Find Record Warning] {ex}")
@@ -1529,7 +1630,7 @@ def download_seedance_videos(
         sub_name = item.get("subfolder_name", f"Item #{idx+1}")
         sub_path = item.get("subfolder_path", "")
         prompt_text = item.get("prompt_text", "")
-        prompt_snippet = prompt_text.strip().replace("\n", " ")[:50] if prompt_text else ""
+        prompt_snippets = extract_prompt_search_snippets(prompt_text)
 
         log(f"[Seedance Download] 🔍 กำลังค้นหาวิดีโอสำหรับ [{idx+1}/{total}] {sub_name} (เลข: {num})...")
         if progress_callback:
@@ -1545,7 +1646,7 @@ def download_seedance_videos(
         match_res = None
 
         if not video_src:
-            match_res = find_record_on_dreamina(driver, num=num, name=sub_name, prompt_snippet=prompt_snippet, scroll_to_found=True)
+            match_res = find_record_on_dreamina(driver, num=num, name=sub_name, prompt_snippet=prompt_snippets, scroll_to_found=True)
             if match_res.get("found"):
                 video_src = match_res.get("videoSrc")
 
