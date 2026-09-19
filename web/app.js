@@ -11581,6 +11581,8 @@ function showBatchStatusSummaryModal(statusRes, pairsArray) {
         reasonText = '<span style="color: #fca5a5; font-weight: 500;">💳 โควตาหรือเครดิตบัญชีไม่เพียงพอ</span>';
       } else if (isTimeout) {
         reasonText = '<span style="color: #fca5a5; font-weight: 500;">⏱️ หมดเวลารอผลจากระบบ (Timeout)</span>';
+      } else if (/is not defined|nameerror|typeerror/i.test(err)) {
+        reasonText = `<span style="color: #fca5a5; font-weight: 500;">⚙️ ข้อผิดพลาดจากระบบคำนวณเวลา (${typeof escapeHtml === 'function' ? escapeHtml(err) : err})</span>`;
       } else {
         const safeErr = typeof escapeHtml === 'function' ? escapeHtml(err) : err;
         reasonText = `<span style="color: #fca5a5;">${safeErr}</span>`;
