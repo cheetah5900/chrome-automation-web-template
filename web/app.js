@@ -11968,10 +11968,23 @@ function initFlowKitUploaderListeners() {
                     playFlowAlertSound('success');
                     showFlowDesktopNotification('🎉 Flow Kit Success', 'สร้างวิดีโอเสร็จสมบูรณ์ครบทุกฉากแล้ว');
                   } else {
+                    const failText = `⚠️ ประมวลผลเสร็จสิ้น: สำเร็จ ${statusRes.completed} ฉาก, ติดบล็อก/ล้มเหลว ${statusRes.failed} ฉาก (ตรวจสอบรายละเอียดในคอนโซลด้านล่าง)`;
                     msg.className = 'msg error';
                     msg.style.color = '#ef4444';
-                    msg.textContent = `⚠️ ประมวลผลเสร็จสิ้น: สำเร็จ ${statusRes.completed} ฉาก, ติดบล็อก/ล้มเหลว ${statusRes.failed} ฉาก (ตรวจสอบรายละเอียดในคอนโซลด้านล่าง)`;
+                    msg.textContent = failText;
                     playFlowAlertSound('error');
+                    if (typeof Swal !== 'undefined') {
+                      Swal.fire({
+                        icon: 'warning',
+                        title: failText,
+                        background: 'rgba(18, 22, 45, 0.98)',
+                        color: '#ffffff',
+                        confirmButtonText: 'ตกลง',
+                        confirmButtonColor: '#f59e0b',
+                        allowOutsideClick: false,
+                        showConfirmButton: true
+                      });
+                    }
                   }
                 }
               }
@@ -13117,10 +13130,23 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
                 playFlowAlertSound('success');
                 showFlowDesktopNotification('🎉 Flow Kit Success', 'สร้างวิดีโอเสร็จสมบูรณ์ครบทุกฉากแล้ว');
               } else {
+                const failText = `⚠️ ประมวลผลเสร็จสิ้น: สำเร็จ ${statusRes.completed} ฉาก, ติดบล็อก/ล้มเหลว ${statusRes.failed} ฉาก (ตรวจสอบรายละเอียดในคอนโซลด้านล่าง)`;
                 msg.className = 'msg error';
                 msg.style.color = '#ef4444';
-                msg.textContent = `⚠️ ประมวลผลเสร็จสิ้น: สำเร็จ ${statusRes.completed} ฉาก, ติดบล็อก/ล้มเหลว ${statusRes.failed} ฉาก (ตรวจสอบรายละเอียดในคอนโซลด้านล่าง)`;
+                msg.textContent = failText;
                 playFlowAlertSound('error');
+                if (typeof Swal !== 'undefined') {
+                  Swal.fire({
+                    icon: 'warning',
+                    title: failText,
+                    background: 'rgba(18, 22, 45, 0.98)',
+                    color: '#ffffff',
+                    confirmButtonText: 'ตกลง',
+                    confirmButtonColor: '#f59e0b',
+                    allowOutsideClick: false,
+                    showConfirmButton: true
+                  });
+                }
               }
             }
           }
