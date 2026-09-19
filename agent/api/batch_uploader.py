@@ -566,17 +566,29 @@ async def process_batch(body: ProcessRequest):
                             continue
                     else:
                         media_id = upload_res.get("_mediaId")
-                        if not media_id:
-                            if client.connected:
-                                media_id = f"browser_asset_{file_name}"
-                            else:
-                                logger.error("No media_id returned for %s: %s", file_name, upload_res)
-                                results.append({
-                                    "image_path": pair.image_path,
-                                    "status": "FAILED",
-                                    "error": "No media_id returned from upload"
-                                })
-                                continue
+                        if media_id:
+                            # Cache media_id in flow_media_ids.json so the same image is never re-uploaded
+                            try:
+                                meta = {}
+                                if os.path.isfile(meta_path):
+                                    with open(meta_path, "r", encoding="utf-8") as f:
+                                        meta = json.load(f)
+                                meta[file_name] = media_id
+                                with open(meta_path, "w", encoding="utf-8") as f:
+                                    json.dump(meta, f, indent=2)
+                                logger.info("Cached mediaId for %s: %s (preventing duplicate uploads)", file_name, media_id)
+                            except Exception as cache_err:
+                                logger.warning("Failed to cache media_id: %s", cache_err)
+                        elif client.connected:
+                            media_id = f"browser_asset_{file_name}"
+                        else:
+                            logger.error("No media_id returned for %s: %s", file_name, upload_res)
+                            results.append({
+                                "image_path": pair.image_path,
+                                "status": "FAILED",
+                                "error": "No media_id returned from upload"
+                            })
+                            continue
 
             # 2. Create scene
             prompt_summary = pair.prompt_content[:100] if pair.prompt_content else f"Batch Scene {next_order}"

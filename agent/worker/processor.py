@@ -505,14 +505,6 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
     if isinstance(error_msg, dict):
         error_msg = json.dumps(error_msg)[:200]
 
-    # Auto-recover expired media by re-uploading
-    if "not found" in str(error_msg).lower():
-        recovered = await _recover_entity_not_found(req)
-        if recovered:
-            logger.info("Request %s: recovered expired media, retrying", rid[:8])
-            await crud.update_request(rid, status="PENDING", error_message=f"recovered: {error_msg}")
-            return
-
     error_lower = str(error_msg).lower()
 
     # Check for permanent non-retryable errors (timeouts, quota/billing limits, safety blocks, parameters issues)
@@ -531,6 +523,14 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
         await _mark_scene_failed(req)
         logger.error("Request %s FAILED permanently (non-retryable): %s", rid[:8], error_msg)
         return
+
+    # Auto-recover expired media by re-uploading ONLY if not permanent and specifically image entity missing
+    if "not found" in error_lower and not any(kw in error_lower for kw in ("failed: [5]", "as29s", "media not found or cancelled")):
+        recovered = await _recover_entity_not_found(req)
+        if recovered:
+            logger.info("Request %s: recovered expired media, retrying", rid[:8])
+            await crud.update_request(rid, status="PENDING", error_message=f"recovered: {error_msg}")
+            return
 
     # WS transient errors (extension disconnect/reconnect): retry without incrementing count
     if "extension reconnected" in error_lower or "extension disconnected" in error_lower or "extension not connected" in error_lower:
