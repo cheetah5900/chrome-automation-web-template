@@ -105,5 +105,58 @@ class TestFlowBatchUnit(unittest.TestCase):
         self.assertEqual(res.get("status"), "MEDIA_GENERATION_STATUS_FAILED")
         self.assertIn("[5]", res.get("error"))
 
+    def test_gemini_key_save_and_get(self):
+        from agent.api.batch_uploader import save_gemini_api_key, get_saved_gemini_key
+        original_key = get_saved_gemini_key()
+        try:
+            save_gemini_api_key("test_gemini_api_key_123456789")
+            self.assertEqual(get_saved_gemini_key(), "test_gemini_api_key_123456789")
+        finally:
+            save_gemini_api_key(original_key)
+
+    def test_fix_prompts_gemini_mocked(self):
+        import asyncio
+        from unittest.mock import patch, MagicMock
+        from agent.api.batch_uploader import fix_prompts_with_gemini, FixPromptsRequest, FixPromptItem
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "A beautiful cinematic landscape at sunset with dramatic golden lighting and camera pan."}
+                        ]
+                    }
+                }
+            ]
+        }
+
+        req = FixPromptsRequest(
+            gemini_api_key="mock_key",
+            items=[
+                FixPromptItem(
+                    scene_id="scene-1",
+                    order=1,
+                    prompt="A scene with baby and forbidden words",
+                    error_message="Safety policy block"
+                )
+            ]
+        )
+
+        from agent.api.batch_uploader import get_saved_gemini_key, save_gemini_api_key
+        original_key = get_saved_gemini_key()
+        try:
+            with patch("httpx.AsyncClient.post", return_value=mock_resp):
+                res = asyncio.run(fix_prompts_with_gemini(req))
+                self.assertTrue(res["ok"])
+                self.assertEqual(res["count"], 1)
+                self.assertEqual(res["fixed_items"][0]["status"], "SUCCESS")
+                self.assertIn("cinematic landscape", res["fixed_items"][0]["fixed_prompt"])
+        finally:
+            save_gemini_api_key(original_key)
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -11650,6 +11650,7 @@ function initFlowKitUploaderListeners() {
 
   // Initialize dropdowns with a default tier on startup
   updateFlowVideoModelDropdowns('PAYGATE_TIER_TWO');
+  initFlowGeminiKey();
 
   // 1. Sync Inputs between Selenium and Flow Kit
   const syncInputs = (id1, id2) => {
@@ -12458,6 +12459,7 @@ function renderScannedPairs() {
   if (flowScannedPairs.length === 0) {
     if (section) section.style.display = 'none';
     updateSelectAllButtonText();
+    renderSafetyResolutionSection();
     return;
   }
   
@@ -12724,6 +12726,493 @@ function renderScannedPairs() {
     
     container.appendChild(gridContainer);
   }
+  renderSafetyResolutionSection();
+}
+
+
+// ─── Flow Kit AI Safety & Policy Prompt Resolution ──────────
+
+function renderSafetyResolutionSection() {
+  const card = document.getElementById('flow_safety_resolver_card');
+  const tbody = document.getElementById('safetyProblemsTbody');
+  const badge = document.getElementById('safetyProblemCountBadge');
+  if (!card || !tbody) return;
+
+  // Filter scenes that failed
+  const problemScenes = (flowScannedPairs || []).filter(p => p.status === 'FAILED');
+
+  if (badge) {
+    badge.textContent = `${problemScenes.length} ฉากที่ติดปัญหา`;
+    if (problemScenes.length > 0) {
+      badge.style.background = 'rgba(239, 68, 68, 0.2)';
+      badge.style.color = '#f87171';
+      badge.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+    } else {
+      badge.style.background = 'rgba(16, 185, 129, 0.15)';
+      badge.style.color = '#10b981';
+      badge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+    }
+  }
+
+  if (problemScenes.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="padding: 24px 16px; text-align: center; color: rgba(255,255,255,0.5);">
+          🎉 ขณะนี้ไม่มีฉากที่ติดปัญหาความปลอดภัยหรือบุคคลที่ 3 (เมื่อสั่งสร้างแล้วมีฉากที่ไม่ผ่าน ระบบจะรวบรวมมาแสดงที่นี่)
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = '';
+  problemScenes.forEach((pair, idx) => {
+    const orderNum = pair.order || pair.index || idx + 1;
+    const sceneName = pair.image_name || pair.prompt_name || `ฉาก ${orderNum}`;
+    const err = pair.error_message || 'ติดขัดการประมวลผล';
+    const isBlock = /safety|unsafe|content filter|policy|violat|third[- ]?party|copyright|person|celebrity/i.test(err);
+    const isNotFound = /as29s failed: \[5\]|not found/i.test(err);
+
+    let reasonBadge = '';
+    if (isBlock) {
+      reasonBadge = `<div style="display: inline-block; padding: 3px 8px; border-radius: 4px; background: rgba(239, 68, 68, 0.25); color: #f87171; font-weight: 600; font-size: 0.78rem; border: 1px solid rgba(239, 68, 68, 0.4); margin-bottom: 4px;">🚫 ติดบล็อกความปลอดภัย / นโยบาย</div><div style="font-size: 0.75rem; color: #fca5a5; line-height: 1.3;">${escapeHtml(err)}</div>`;
+    } else if (isNotFound) {
+      reasonBadge = `<div style="display: inline-block; padding: 3px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.25); color: #fbbf24; font-weight: 600; font-size: 0.78rem; border: 1px solid rgba(245, 158, 11, 0.4); margin-bottom: 4px;">⚠️ ถูกยกเลิกโดย Flow (ตรวจพบลักษณะต้องห้าม)</div><div style="font-size: 0.75rem; color: #fde68a; line-height: 1.3;">${escapeHtml(err)}</div>`;
+    } else {
+      reasonBadge = `<div style="display: inline-block; padding: 3px 8px; border-radius: 4px; background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: 600; font-size: 0.78rem; margin-bottom: 4px;">❌ ล้มเหลว</div><div style="font-size: 0.75rem; color: #fca5a5; line-height: 1.3;">${escapeHtml(err)}</div>`;
+    }
+
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
+    tr.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.03)';
+
+    const initialFixedPrompt = pair.fixed_prompt || pair.prompt_content || '';
+
+    tr.innerHTML = `
+      <td style="padding: 10px 12px; text-align: center; font-weight: bold; color: #f1f5f9; vertical-align: top;">
+        ${orderNum}
+      </td>
+      <td style="padding: 10px 12px; vertical-align: top;">
+        <div style="font-weight: 600; color: #cbd5e1; word-break: break-all;">${escapeHtml(sceneName)}</div>
+        ${pair.image_path ? `<div style="font-size: 0.72rem; color: rgba(255,255,255,0.4); margin-top: 4px; word-break: break-all;">${escapeHtml(pair.image_path)}</div>` : ''}
+      </td>
+      <td style="padding: 10px 12px; vertical-align: top;">
+        ${reasonBadge}
+      </td>
+      <td style="padding: 10px 12px; vertical-align: top;">
+        <div style="font-size: 0.82rem; color: rgba(255,255,255,0.8); line-height: 1.4; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); white-space: pre-wrap;">${escapeHtml(pair.prompt_content || '')}</div>
+      </td>
+      <td style="padding: 10px 12px; vertical-align: top;">
+        <textarea 
+          class="fixed-prompt-textarea" 
+          data-scene-id="${pair.scene_id || ''}" 
+          data-order="${orderNum}"
+          style="width: 100%; min-height: 90px; max-height: 160px; font-size: 0.82rem; line-height: 1.4; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(168, 85, 247, 0.4); color: #f3e8ff; padding: 8px; box-sizing: border-box; resize: vertical;"
+          placeholder="ข้อความ Prompt ที่ปรับแก้โดย AI จะแสดงที่นี่ (สามารถแก้ไขได้เอง)"
+        >${escapeHtml(initialFixedPrompt)}</textarea>
+      </td>
+    `;
+
+    const ta = tr.querySelector('.fixed-prompt-textarea');
+    if (ta) {
+      ta.addEventListener('input', (e) => {
+        pair.fixed_prompt = e.target.value;
+        pair.prompt_content = e.target.value;
+      });
+    }
+
+    tbody.appendChild(tr);
+  });
+}
+
+let flowGeminiKeyInitialized = false;
+async function initFlowGeminiKey() {
+  if (flowGeminiKeyInitialized) return;
+  flowGeminiKeyInitialized = true;
+
+  // Load saved key from server
+  try {
+    const res = await jsonFetch('/api/batch-uploader/get-gemini-key');
+    if (res && res.raw_key) {
+      const input = document.getElementById('flowGeminiApiKey');
+      if (input && !input.value) {
+        input.value = res.raw_key;
+      }
+      const st = document.getElementById('flowGeminiKeyStatus');
+      if (st) {
+        st.innerHTML = '<span style="color: #10b981; font-weight: 500;">✓ มี Key ที่บันทึกไว้</span>';
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to load saved Gemini key:', err);
+  }
+
+  // Toggle visibility
+  document.getElementById('btnToggleFlowGeminiKeyVisibility')?.addEventListener('click', () => {
+    const input = document.getElementById('flowGeminiApiKey');
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+
+  // Save Key
+  document.getElementById('btnSaveFlowGeminiKey')?.addEventListener('click', async () => {
+    const key = document.getElementById('flowGeminiApiKey')?.value.trim();
+    const st = document.getElementById('flowGeminiKeyStatus');
+    if (!key) {
+      if (st) st.innerHTML = '<span style="color: #f87171;">กรุณากรอก Key</span>';
+      return;
+    }
+    try {
+      if (st) st.innerHTML = '<span style="color: #8da6ff;">กำลังบันทึก...</span>';
+      await jsonFetch('/api/batch-uploader/save-gemini-key', {
+        method: 'POST',
+        body: JSON.stringify({ api_key: key })
+      });
+      if (st) st.innerHTML = '<span style="color: #10b981; font-weight: 600;">💾 บันทึกสำเร็จ ✅</span>';
+    } catch (e) {
+      if (st) st.innerHTML = `<span style="color: #f87171;">บันทึกล้มเหลว: ${e.message || e}</span>`;
+    }
+  });
+
+  // Test Key
+  document.getElementById('btnTestFlowGeminiKey')?.addEventListener('click', async () => {
+    const key = document.getElementById('flowGeminiApiKey')?.value.trim();
+    const st = document.getElementById('flowGeminiKeyStatus');
+    if (!key) {
+      if (st) st.innerHTML = '<span style="color: #f87171;">กรุณากรอก Key ก่อนทดสอบ</span>';
+      return;
+    }
+    try {
+      if (st) st.innerHTML = '<span style="color: #38bdf8;">กำลังทดสอบการเชื่อมต่อ...</span>';
+      const data = await jsonFetch('/api/test-provider', {
+        method: 'POST',
+        body: JSON.stringify({ provider: 'gemini', api_key: key })
+      });
+      if (data && data.ok) {
+        if (st) st.innerHTML = '<span style="color: #10b981; font-weight: bold;">⚡ เชื่อมต่อ Gemini สำเร็จ (200 OK) ✅</span>';
+      } else {
+        if (st) st.innerHTML = `<span style="color: #f87171;">เชื่อมต่อไม่สำเร็จ (${data?.status_code || 'Error'})</span>`;
+      }
+    } catch (e) {
+      if (st) st.innerHTML = `<span style="color: #f87171;">เชื่อมต่อไม่สำเร็จ: ${e.message || e}</span>`;
+    }
+  });
+
+  // AI Rewrite button
+  document.getElementById('btnFixAllPromptsGemini')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnFixAllPromptsGemini');
+    const msg = document.getElementById('safetyResolverMsg');
+    const keyInput = document.getElementById('flowGeminiApiKey');
+    const apiKey = keyInput ? keyInput.value.trim() : '';
+
+    const problemScenes = (flowScannedPairs || []).filter(p => p.status === 'FAILED');
+    if (problemScenes.length === 0) {
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg';
+        msg.style.color = '#10b981';
+        msg.textContent = 'ไม่มีฉากที่ติดปัญหาที่ต้องปรับแก้';
+      }
+      return;
+    }
+
+    if (!apiKey) {
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg error';
+        msg.style.color = '#f87171';
+        msg.textContent = 'กรุณากรอกและบันทึก Gemini API Key ก่อนใช้งาน AI ปรับแก้ Prompt';
+      }
+      keyInput?.focus();
+      return;
+    }
+
+    const origBtnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ กำลังส่งให้ Gemini AI ปรับแก้ Prompt...</span>';
+    if (msg) {
+      msg.style.display = 'block';
+      msg.className = 'msg';
+      msg.style.color = '#d8b4fe';
+      msg.textContent = `กำลังวิเคราะห์และปรับแก้ ${problemScenes.length} ฉากด้วย Gemini AI...`;
+    }
+
+    try {
+      const payload = {
+        gemini_api_key: apiKey,
+        items: problemScenes.map((p, idx) => ({
+          scene_id: p.scene_id || null,
+          order: p.order || p.index || idx + 1,
+          prompt: p.prompt_content || '',
+          error_message: p.error_message || '',
+          image_name: p.image_name || null,
+          image_path: p.image_path || null,
+          prompt_path: p.prompt_path || null
+        })),
+        save_to_disk: true
+      };
+
+      const res = await jsonFetch('/api/batch-uploader/fix-prompts-gemini', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      if (res && res.fixed_items) {
+        let successCount = 0;
+        res.fixed_items.forEach(item => {
+          const ta = document.querySelector(`.fixed-prompt-textarea[data-order="${item.order}"]`)
+            || (item.scene_id ? document.querySelector(`.fixed-prompt-textarea[data-scene-id="${item.scene_id}"]`) : null);
+          if (ta && item.fixed_prompt) {
+            ta.value = item.fixed_prompt;
+            ta.style.borderColor = '#10b981';
+            ta.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.4)';
+            setTimeout(() => {
+              ta.style.boxShadow = 'none';
+            }, 2500);
+          }
+
+          const pair = flowScannedPairs.find(p => (p.order || p.index) === item.order || (item.scene_id && p.scene_id === item.scene_id));
+          if (pair) {
+            pair.prompt_content = item.fixed_prompt;
+            pair.fixed_prompt = item.fixed_prompt;
+            if (item.status === 'SUCCESS') successCount++;
+          }
+        });
+
+        if (msg) {
+          msg.style.display = 'block';
+          msg.className = 'msg';
+          msg.style.color = '#10b981';
+          msg.textContent = `✨ ปรับแก้ Prompt สำเร็จเรียบร้อยแล้ว (${successCount}/${res.fixed_items.length} ฉาก) ตรวจสอบและกด "สั่งสร้างวิดีโอใหม่บน Flow" ได้ทันที`;
+        }
+        playFlowAlertSound('success');
+      } else {
+        throw new Error('ไม่ได้รับผลลัพธ์จาก Gemini AI');
+      }
+    } catch (err) {
+      console.error('Error fixing prompts with Gemini:', err);
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg error';
+        msg.style.color = '#f87171';
+        msg.textContent = `เกิดข้อผิดพลาดในการปรับแก้: ${err.message || err}`;
+      }
+      playFlowAlertSound('error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origBtnHtml;
+    }
+  });
+
+  // Retry Fixed Scenes on Flow button
+  document.getElementById('btnRetryFixedScenesFlow')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnRetryFixedScenesFlow');
+    const msg = document.getElementById('safetyResolverMsg');
+
+    const problemScenes = (flowScannedPairs || []).filter(p => p.status === 'FAILED');
+    if (problemScenes.length === 0) {
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg';
+        msg.style.color = '#10b981';
+        msg.textContent = 'ไม่มีฉากที่ติดปัญหาที่ต้องสั่งสร้างใหม่';
+      }
+      return;
+    }
+
+    // Update flowScannedPairs with latest text from textareas
+    problemScenes.forEach(p => {
+      const orderNum = p.order || p.index;
+      const ta = document.querySelector(`.fixed-prompt-textarea[data-order="${orderNum}"]`)
+        || (p.scene_id ? document.querySelector(`.fixed-prompt-textarea[data-scene-id="${p.scene_id}"]`) : null);
+      if (ta && ta.value.trim()) {
+        p.prompt_content = ta.value.trim();
+      }
+      p.status = 'PENDING';
+      p.error_message = '';
+      p.checked = true;
+    });
+
+    const hasImages = flowScannedPairs.some(p => Boolean(p.image_path));
+    let projectId = '';
+    let orientation = 'VERTICAL';
+    let videoModel = null;
+    let outputCount = 1;
+    let durationSeconds = hasImages ? 5 : 10;
+    let upscaleResolution = 'NONE';
+    let delayMin = 10.0;
+    let delayMax = 20.0;
+
+    if (hasImages) {
+      projectId = document.getElementById('cfg_flow_project_dropdown')?.value;
+      orientation = document.getElementById('cfg_flow_orientation')?.value || 'VERTICAL';
+      videoModel = document.getElementById('cfg_flow_video_model')?.value || null;
+      outputCount = parseInt(document.getElementById('cfg_flow_output_count')?.value, 10) || 1;
+      upscaleResolution = document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE';
+      delayMin = parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0;
+      delayMax = parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0;
+    } else {
+      projectId = document.getElementById('cfg_flow_po_project_dropdown')?.value || document.getElementById('cfg_flow_project_dropdown')?.value;
+      orientation = document.getElementById('cfg_flow_po_orientation')?.value || 'VERTICAL';
+      videoModel = document.getElementById('cfg_flow_po_video_model')?.value || null;
+      outputCount = parseInt(document.getElementById('cfg_flow_po_output_count')?.value, 10) || 1;
+      upscaleResolution = document.getElementById('cfg_flow_po_upscale_auto')?.value || 'NONE';
+      delayMin = parseFloat(document.getElementById('cfg_flow_po_worker_delay_min')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0;
+      delayMax = parseFloat(document.getElementById('cfg_flow_po_worker_delay_max')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0;
+    }
+
+    if (!projectId) {
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg error';
+        msg.style.color = '#f87171';
+        msg.textContent = 'กรุณาเลือกโปรเจกต์ Google Flow ด้านบนก่อนสั่งสร้างใหม่';
+      }
+      return;
+    }
+
+    const origBtnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>🚀 กำลังส่งฉากที่แก้ไขเข้าคิว Flow...</span>';
+
+    const videoConsole = document.getElementById('videoConsole');
+    const logToConsole = (text, type = 'info') => {
+      if (!videoConsole) return;
+      const div = document.createElement('div');
+      div.className = `console-line ${type}`;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      videoConsole.appendChild(div);
+      videoConsole.scrollTop = videoConsole.scrollHeight;
+    };
+
+    logToConsole(`Retrying ${problemScenes.length} fixed safety scenes on Project ID: ${projectId}...`, 'info');
+
+    try {
+      const payload = {
+        project_id: projectId,
+        orientation: orientation,
+        pairs: problemScenes.map(p => ({
+          image_path: p.image_path || null,
+          prompt_content: p.prompt_content
+        })),
+        video_model: videoModel,
+        output_count: outputCount,
+        duration_seconds: durationSeconds,
+        upscale_resolution: upscaleResolution,
+        delay_min: delayMin,
+        delay_max: delayMax
+      };
+
+      const res = await jsonFetch('/api/batch-uploader/process', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      if (res && res.results) {
+        res.results.forEach((r, idx) => {
+          const matchedPair = problemScenes[idx];
+          if (matchedPair) {
+            matchedPair.scene_id = r.scene_id;
+            matchedPair.status = r.status === 'QUEUED' ? 'PENDING' : 'FAILED';
+            if (r.error) matchedPair.error_message = r.error;
+          }
+        });
+
+        renderScannedPairs();
+        renderSafetyResolutionSection();
+
+        if (msg) {
+          msg.style.display = 'block';
+          msg.className = 'msg';
+          msg.style.color = '#10b981';
+          msg.textContent = `🚀 ส่งคำขอสร้างใหม่สำเร็จ ${problemScenes.length} ฉาก (กำลังประมวลผลในเบื้องหลัง)`;
+        }
+
+        if (res.video_id) {
+          if (flowBatchRunningInterval) clearInterval(flowBatchRunningInterval);
+          const batchBtn = hasImages
+            ? document.getElementById('btnProcessFlowKitBatch')
+            : document.getElementById('btnProcessFlowKitBatchPO');
+          if (batchBtn) {
+            setFlowBatchButtonRunning(batchBtn, true, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+          }
+
+          const loggedStatusKeys = new Set();
+          flowBatchRunningInterval = setInterval(async () => {
+            try {
+              const statusRes = await jsonFetch(`/api/requests/batch-status?video_id=${res.video_id}`);
+              if (!statusRes) return;
+
+              if (statusRes.items && Array.isArray(statusRes.items)) {
+                let statusChanged = false;
+                statusRes.items.forEach(item => {
+                  const pair = flowScannedPairs.find(p => p.scene_id === item.scene_id);
+                  if (pair && pair.status !== item.status) {
+                    pair.status = item.status;
+                    pair.error_message = item.error_message;
+                    statusChanged = true;
+
+                    const sceneTitle = pair.image_name || pair.prompt_name || `ฉาก ${pair.order || ''}`;
+                    const logKey = `${item.id}_${item.status}`;
+                    if (!loggedStatusKeys.has(logKey)) {
+                      loggedStatusKeys.add(logKey);
+                      if (item.status === 'PROCESSING') {
+                        logToConsole(`⏳ กำลังสร้างวิดีโอ (Retry): ${sceneTitle}...`, 'info');
+                      } else if (item.status === 'COMPLETED') {
+                        logToConsole(`✅ สำเร็จ (Retry): ${sceneTitle} สร้างวิดีโอเรียบร้อย`, 'success');
+                      } else if (item.status === 'FAILED') {
+                        const err = item.error_message || 'ติดขัดการประมวลผล';
+                        const isBlock = /safety|unsafe|content filter|policy|violat/i.test(err);
+                        const label = isBlock ? '🚫 ติดบล็อกความปลอดภัย' : '❌ ล้มเหลว';
+                        logToConsole(`${label} (Retry): ${sceneTitle} - ${err}`, 'error');
+                        playFlowAlertSound('error');
+                      }
+                    }
+                  }
+                });
+                if (statusChanged) {
+                  renderScannedPairs();
+                  renderSafetyResolutionSection();
+                }
+              }
+
+              const allFinished = problemScenes.every(p => p.status === 'COMPLETED' || p.status === 'FAILED');
+              if (statusRes.done || allFinished) {
+                clearInterval(flowBatchRunningInterval);
+                flowBatchRunningInterval = null;
+                if (batchBtn) {
+                  setFlowBatchButtonRunning(batchBtn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+                }
+                renderScannedPairs();
+                renderSafetyResolutionSection();
+                if (statusRes.all_succeeded) {
+                  playFlowAlertSound('success');
+                  showFlowDesktopNotification('🎉 Flow Kit Retry Success', 'สร้างวิดีโอรอบแก้เสร็จสมบูรณ์ครบทุกฉากแล้ว');
+                } else {
+                  playFlowAlertSound('error');
+                  showBatchStatusSummaryModal(statusRes, flowScannedPairs);
+                }
+              }
+            } catch (pErr) {
+              console.error('Error polling retry batch status:', pErr);
+            }
+          }, 3000);
+        }
+      }
+    } catch (err) {
+      console.error('Error retrying fixed scenes:', err);
+      if (msg) {
+        msg.style.display = 'block';
+        msg.className = 'msg error';
+        msg.style.color = '#f87171';
+        msg.textContent = `ส่งคำขอสร้างใหม่ล้มเหลว: ${err.message || err}`;
+      }
+      playFlowAlertSound('error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origBtnHtml;
+    }
+  });
 }
 
 

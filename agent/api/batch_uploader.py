@@ -1,7 +1,9 @@
 import os
+import json
 import base64
 import mimetypes
 import logging
+import httpx
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -2513,4 +2515,256 @@ async def generate_pending_scenes(body: GeneratePendingRequest):
                 
     logger.info("Queued %d pending scenes for generation in project %s", queued_count, body.project_id)
     return {"status": "SUCCESS", "queued_count": queued_count, "queued_scenes": queued_scenes}
+
+
+# ─── Gemini AI Safety Resolution & Key Management ──────────────────────
+
+class FixPromptItem(BaseModel):
+    scene_id: Optional[str] = None
+    order: Optional[int] = None
+    prompt: str
+    error_message: Optional[str] = None
+    image_name: Optional[str] = None
+    image_path: Optional[str] = None
+    prompt_path: Optional[str] = None
+
+
+class FixPromptsRequest(BaseModel):
+    gemini_api_key: Optional[str] = None
+    items: List[FixPromptItem]
+    model: Optional[str] = "gemini-2.5-flash"
+    save_to_disk: Optional[bool] = False
+
+
+class SaveGeminiKeyRequest(BaseModel):
+    api_key: str
+
+
+def get_saved_gemini_key() -> str:
+    """Read saved Gemini API key from settings.json, config.json, or environment."""
+    # 1. settings.json
+    try:
+        from app.main import SETTINGS_FILE
+        settings_path = SETTINGS_FILE
+    except Exception:
+        settings_path = os.path.join(os.getcwd(), "runtime", "settings.json")
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+                k = str(data.get("gemini_api_key", "")).strip()
+                if k:
+                    return k
+        except Exception:
+            pass
+
+    # 2. config.json
+    try:
+        from app.main import CONFIG_FILE
+        config_path = CONFIG_FILE
+    except Exception:
+        config_path = os.path.join(os.getcwd(), "runtime", "config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+                k = str(data.get("gemini_api_key", "")).strip()
+                if k:
+                    return k
+        except Exception:
+            pass
+
+    # 3. Environment
+    return os.environ.get("GEMINI_API_KEY", "").strip()
+
+
+def save_gemini_api_key(key: str) -> None:
+    """Save Gemini API key to runtime/settings.json and runtime/config.json."""
+    key = (key or "").strip()
+    # settings.json
+    try:
+        from app.main import SETTINGS_FILE
+        settings_path = SETTINGS_FILE
+    except Exception:
+        settings_path = os.path.join(os.getcwd(), "runtime", "settings.json")
+    try:
+        s_data = {}
+        if os.path.exists(settings_path):
+            with open(settings_path, "r", encoding="utf-8") as f:
+                s_data = json.load(f) or {}
+        s_data["gemini_api_key"] = key
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(s_data, f, indent=2)
+    except Exception as err:
+        logger.warning("Failed to save gemini_api_key to settings.json: %s", err)
+
+    # config.json
+    try:
+        from app.main import CONFIG_FILE
+        config_path = CONFIG_FILE
+    except Exception:
+        config_path = os.path.join(os.getcwd(), "runtime", "config.json")
+    try:
+        c_data = {}
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                c_data = json.load(f) or {}
+        c_data["gemini_api_key"] = key
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(c_data, f, indent=2)
+    except Exception as err:
+        logger.warning("Failed to save gemini_api_key to config.json: %s", err)
+
+
+@router.post("/save-gemini-key")
+async def save_gemini_key_api(body: SaveGeminiKeyRequest):
+    save_gemini_api_key(body.api_key)
+    return {"ok": True, "message": "บันทึก Gemini API Key เรียบร้อยแล้ว"}
+
+
+@router.get("/get-gemini-key")
+async def get_gemini_key_api():
+    key = get_saved_gemini_key()
+    has_key = bool(key)
+    masked = (key[:6] + "..." + key[-4:]) if len(key) > 10 else ("***" if key else "")
+    return {"has_key": has_key, "masked_key": masked, "raw_key": key}
+
+
+@router.post("/fix-prompts-gemini")
+async def fix_prompts_with_gemini(body: FixPromptsRequest):
+    key = (body.gemini_api_key or "").strip()
+    if not key:
+        key = get_saved_gemini_key()
+    if not key:
+        raise HTTPException(400, "ไม่พบ Gemini API Key กรุณาระบุหรือบันทึก API Key ก่อนดำเนินการ")
+
+    # Persist key if provided in request
+    if body.gemini_api_key and body.gemini_api_key.strip():
+        save_gemini_api_key(body.gemini_api_key.strip())
+
+    if not body.items:
+        return {"ok": True, "fixed_items": [], "count": 0}
+
+    model = body.model or "gemini-2.5-flash"
+
+    async def _rewrite_single(item: FixPromptItem):
+        prompt = item.prompt.strip()
+        err_msg = item.error_message or "Violates safety policy or content guidelines"
+        models_to_try = [model, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
+        seen = set()
+        unique_models = [m for m in models_to_try if m and not (m in seen or seen.add(m))]
+
+        system_instruction = (
+            "You are an expert AI video prompt director for Google Flow (Veo).\n"
+            "Your job is to rewrite a video generation prompt that was BLOCKED or REJECTED by Google Flow "
+            "due to safety filters, content policy, or third-party / copyright restrictions.\n\n"
+            "RULES FOR REWRITING:\n"
+            "1. Strictly remove or replace any copyrighted brands, celebrities, named living people, trademarks, or public figures with neutral artistic archetype descriptions (e.g., 'a young Thai female artist in elegant contemporary silk attire').\n"
+            "2. If the block is related to infants or babies, replace with a stylized artistic prop or symbolic object (e.g. 'a glowing celestial crystal figurine cradled in silk', 'a radiant golden amulet', 'a handcrafted wooden doll').\n"
+            "3. Soften any violence, weapons, conflict, or gore into theatrical drama, dynamic camera motion, wind effects, expressive lighting, or silhouette storytelling.\n"
+            "4. PRESERVE the original cinematic camera movements (tracking, pan, slow zoom), lighting style, color grading, shot type (close-up, wide-angle), and atmosphere.\n"
+            "5. Output ONLY the rewritten English prompt text. Do not wrap in markdown quotes, and do not include explanations, greetings, or conversational remarks."
+        )
+
+        user_content = (
+            f"Original Prompt:\n{prompt}\n\n"
+            f"Rejection / Error Reason:\n{err_msg}\n\n"
+            f"Please rewrite this prompt to be 100% compliant with Google Flow safety policies while maintaining the cinematic style and motion."
+        )
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": f"{system_instruction}\n\n{user_content}"}
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 1024
+            }
+        }
+
+        last_error = None
+        async with httpx.AsyncClient(timeout=35.0) as http_client:
+            for target_model in unique_models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent"
+                try:
+                    resp = await http_client.post(
+                        url,
+                        params={"key": key},
+                        json=payload,
+                        headers={"Content-Type": "application/json"}
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                res_text = parts[0].get("text", "").strip()
+                                res_text = re.sub(r'^```[a-z]*\s*', '', res_text)
+                                res_text = re.sub(r'\s*```$', '', res_text)
+                                res_text = res_text.strip(' "\'\n\r')
+                                if res_text:
+                                    return res_text
+                        return prompt
+                    elif resp.status_code == 404:
+                        logger.warning("Gemini model %s returned 404, trying fallback", target_model)
+                        last_error = f"Model {target_model} not found (404)"
+                        continue
+                    else:
+                        err_body = resp.text
+                        logger.error("Gemini API call failed (%d): %s", resp.status_code, err_body)
+                        last_error = f"Gemini API Error {resp.status_code}: {err_body}"
+                        if resp.status_code in (400, 401, 403):
+                            raise HTTPException(resp.status_code, last_error)
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    logger.exception("Exception calling Gemini API with model %s", target_model)
+                    last_error = str(e)
+                    continue
+
+        raise HTTPException(500, last_error or "Failed to generate fixed prompt from Gemini")
+
+    # Execute all rewrites concurrently
+    results = await asyncio.gather(*[_rewrite_single(item) for item in body.items], return_exceptions=True)
+
+    fixed_items = []
+    for item, res in zip(body.items, results):
+        if isinstance(res, Exception):
+            logger.error("Failed to rewrite prompt for item %s: %s", item.order, res)
+            fixed_text = item.prompt
+            status = f"FAILED: {str(res)}"
+        else:
+            fixed_text = res
+            status = "SUCCESS"
+            if body.save_to_disk and item.prompt_path and os.path.isfile(item.prompt_path):
+                try:
+                    with open(item.prompt_path, "w", encoding="utf-8") as f:
+                        f.write(fixed_text)
+                    logger.info("Saved fixed prompt to disk: %s", item.prompt_path)
+                except Exception as disk_err:
+                    logger.warning("Failed to save fixed prompt to %s: %s", item.prompt_path, disk_err)
+
+        fixed_items.append({
+            "scene_id": item.scene_id,
+            "order": item.order,
+            "original_prompt": item.prompt,
+            "fixed_prompt": fixed_text,
+            "error_message": item.error_message,
+            "image_name": item.image_name,
+            "image_path": item.image_path,
+            "prompt_path": item.prompt_path,
+            "status": status
+        })
+
+    return {
+        "ok": True,
+        "count": len(fixed_items),
+        "fixed_items": fixed_items
+    }
+
 
