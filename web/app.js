@@ -11644,6 +11644,163 @@ function showBatchStatusSummaryModal(statusRes, pairsArray) {
   });
 }
 
+function showFlowBatchSubmittingModal({ projectName, totalScenes, videoModel, orientation, outputCount, durationSeconds, upscaleResolution, delayMin, delayMax, mode = 'i2v' }) {
+  const isLandscape = orientation === 'LANDSCAPE' || orientation === 'HORIZONTAL';
+  const orientationText = isLandscape ? 'แนวนอน (16:9 Landscape)' : 'แนวตั้ง (9:16 Portrait)';
+  const modeText = mode === 'prompt_only' ? '⚡ Prompt-Only (Text-to-Video)' : '📸 Standard (Image-to-Video)';
+  const modelClean = videoModel ? String(videoModel).replace(/^veo_3_1_/, '').replace(/_/g, ' ') : 'Default Veo Model';
+  const upscaleText = upscaleResolution && upscaleResolution !== 'NONE' ? upscaleResolution.replace('VIDEO_RESOLUTION_', '') : 'ปิด (Original)';
+
+  return Swal.fire({
+    title: '🚀 กำลังส่งคำขอไปยังคิว Flow Kit...',
+    width: '580px',
+    background: 'rgba(18, 22, 45, 0.98)',
+    color: '#ffffff',
+    customClass: {
+      popup: 'swal2-flowkit-popup'
+    },
+    html: `
+      <div style="text-align: left; font-size: 0.88rem; line-height: 1.5; color: #e2e8f0;">
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 1.6rem; line-height: 1;">⏳</div>
+          <div>
+            <div style="font-weight: bold; color: #34d399; font-size: 0.95rem;">กำลังประมวลผลส่งงานเข้าคิว...</div>
+            <div style="font-size: 0.8rem; color: #94a3b8;">ระบบกำลังรวบรวมข้อมูลและส่งงานไปยัง Google Flow ผ่าน Extension Bridge</div>
+          </div>
+        </div>
+
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px;">
+          <div style="font-weight: 600; font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;">
+            📋 รายละเอียดงานที่กำลังส่ง (Batch Information)
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; font-size: 0.84rem;">
+            <div>
+              <span style="color: #64748b;">🎯 โปรเจกต์:</span>
+              <div style="font-weight: 600; color: #60a5fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${projectName}">${projectName}</div>
+            </div>
+            <div>
+              <span style="color: #64748b;">🎬 จำนวนฉาก:</span>
+              <div style="font-weight: bold; color: #10b981;">${totalScenes} ฉาก</div>
+            </div>
+            <div>
+              <span style="color: #64748b;">🤖 โมเดลวิดีโอ:</span>
+              <div style="font-weight: 500; color: #c084fc; text-transform: capitalize;">${modelClean}</div>
+            </div>
+            <div>
+              <span style="color: #64748b;">📐 ทิศทางภาพ:</span>
+              <div style="font-weight: 500; color: #facc15;">${orientationText}</div>
+            </div>
+            <div>
+              <span style="color: #64748b;">⏱️ ความยาว / Upscale:</span>
+              <div style="font-weight: 500; color: #38bdf8;">${durationSeconds}s • ${upscaleText}</div>
+            </div>
+            <div>
+              <span style="color: #64748b;">⏳ ช่วง Delay คิว:</span>
+              <div style="font-weight: 500; color: #cbd5e1;">${delayMin} - ${delayMax} วินาที</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 12px 14px;">
+          <div style="font-weight: 600; font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;">
+            ⚙️ สิ่งที่ระบบกำลังทำขณะนี้ (Current Progress)
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="color: #34d399; font-weight: bold;">✓</span>
+              <span style="color: #cbd5e1;">1. ตรวจสอบความถูกต้องของพรอพต์และไฟล์รูปภาพ</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="color: #34d399; font-weight: bold;">✓</span>
+              <span style="color: #cbd5e1;">2. จัดเตรียมคิวงานในฐานข้อมูลภายใน (SQLite Tasks)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="color: #60a5fa; font-weight: bold;">⏳</span>
+              <span style="color: #93c5fd; font-weight: 600;">3. ส่งคำขอเข้าคิวงาน Google Flow ผ่าน Extension Bridge...</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="color: #64748b;">○</span>
+              <span style="color: #64748b;">4. เริ่ม Background Worker และระบบตรวจสอบสถานะแบบเรียลไทม์</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    showConfirmButton: false,
+    didOpen: () => {
+      Swal.showLoading();
+    }
+  });
+}
+
+function showFlowBatchResultModal({ successCount, failedCount, videoId }) {
+  const isPartial = failedCount > 0;
+  return Swal.fire({
+    icon: isPartial ? 'warning' : 'success',
+    title: isPartial ? '⚠️ ส่งคำขอเข้าคิวเรียบร้อย (มีบางฉากไม่ผ่าน)' : '✅ ส่งคำขอเข้าคิว Flow Kit สำเร็จแล้ว!',
+    width: '560px',
+    background: 'rgba(18, 22, 45, 0.98)',
+    color: '#ffffff',
+    customClass: {
+      popup: 'swal2-flowkit-popup',
+      confirmButton: 'swal2-flowkit-confirm-btn'
+    },
+    html: `
+      <div style="text-align: left; font-size: 0.88rem; line-height: 1.5; color: #e2e8f0;">
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 14px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 6px;">
+            <span style="color: #94a3b8;">✅ ส่งเข้าคิวสำเร็จ:</span>
+            <strong style="color: #34d399; font-size: 1rem;">${successCount} ฉาก</strong>
+          </div>
+          ${isPartial ? `
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 6px;">
+            <span style="color: #94a3b8;">❌ ส่งไม่ผ่าน/ล้มเหลว:</span>
+            <strong style="color: #ef4444; font-size: 1rem;">${failedCount} ฉาก</strong>
+          </div>` : ''}
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: #64748b;">🆔 Video Container ID:</span>
+            <span style="color: #94a3b8; font-family: monospace; font-size: 0.82rem;">${videoId || '--'}</span>
+          </div>
+        </div>
+
+        <div style="background: rgba(16, 185, 129, 0.08); border-radius: 10px; padding: 10px 14px; border-left: 3px solid #10b981; font-size: 0.82rem; color: #cbd5e1;">
+          🚀 ระบบเบื้องหลัง (Background Worker) กำลังเริ่มประมวลผลสร้างวิดีโอบน Google Flow แล้ว คุณสามารถติดตามความคืบหน้าแบบเรียลไทม์ได้ที่คอนโซลและตารางด้านล่าง
+        </div>
+      </div>
+    `,
+    confirmButtonText: 'ตกลง (เริ่มติดตามงาน)',
+    timer: 3500,
+    timerProgressBar: true
+  });
+}
+
+function showFlowBatchErrorModal(errorMessage) {
+  return Swal.fire({
+    icon: 'error',
+    title: '❌ ส่งคำขอไปยังคิว Flow Kit ล้มเหลว',
+    width: '540px',
+    background: 'rgba(18, 22, 45, 0.98)',
+    color: '#ffffff',
+    customClass: {
+      popup: 'swal2-flowkit-popup'
+    },
+    html: `
+      <div style="text-align: left; font-size: 0.88rem; line-height: 1.5; color: #e2e8f0;">
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; color: #fca5a5;">
+          ${errorMessage}
+        </div>
+        <div style="font-size: 0.82rem; color: #94a3b8;">
+          💡 กรุณาตรวจสอบว่าได้เปิดแท็บ Google Flow และส่วนขยาย Flow Kit Extension แสดงสถานะ Connected เรียบร้อยแล้ว
+        </div>
+      </div>
+    `,
+    confirmButtonText: 'ปิด',
+    confirmButtonColor: '#ef4444'
+  });
+}
+
 function initFlowKitUploaderListeners() {
   if (flowKitUploaderListenersInitialized) return;
   flowKitUploaderListenersInitialized = true;
@@ -11967,6 +12124,25 @@ function initFlowKitUploaderListeners() {
       msg.style.color = '#8da6ff';
       msg.textContent = 'กำลังส่งคำขอไปยังคิว Flow Kit...';
     }
+
+    const projectSelect = document.getElementById('cfg_flow_project_dropdown');
+    const projectName = projectSelect?.selectedOptions?.[0]?.textContent || project;
+    const delayMin = parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0;
+    const delayMax = parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0;
+    const durationSeconds = 5;
+
+    showFlowBatchSubmittingModal({
+      projectName,
+      totalScenes: validPairs.length,
+      videoModel,
+      orientation,
+      outputCount,
+      durationSeconds,
+      upscaleResolution,
+      delayMin,
+      delayMax,
+      mode: 'i2v'
+    });
     
     const videoConsole = document.getElementById('videoConsole');
     if (videoConsole) {
@@ -11981,8 +12157,6 @@ function initFlowKitUploaderListeners() {
       videoConsole.appendChild(div);
       videoConsole.scrollTop = videoConsole.scrollHeight;
     };
-    
-    const durationSeconds = 5;
 
     try {
       const payload = {
@@ -11996,8 +12170,8 @@ function initFlowKitUploaderListeners() {
         output_count: outputCount,
         duration_seconds: durationSeconds,
         upscale_resolution: upscaleResolution,
-        delay_min: parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0,
-        delay_max: parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0
+        delay_min: delayMin,
+        delay_max: delayMax
       };
       
       logToConsole(`Submitting batch of ${validPairs.length} scenes to Project ID: ${project}...`);
@@ -12010,6 +12184,12 @@ function initFlowKitUploaderListeners() {
       if (res && res.results) {
         const queued = res.results.filter(r => r.status === 'QUEUED');
         const failed = res.results.filter(r => r.status === 'FAILED');
+
+        showFlowBatchResultModal({
+          successCount: queued.length,
+          failedCount: failed.length,
+          videoId: res.video_id
+        });
         
         logToConsole(`Batch submitted successfully! Video Container ID: ${res.video_id}`, 'success');
         logToConsole(`Queued: ${queued.length} scenes, Failed: ${failed.length} scenes.`);
@@ -12120,6 +12300,7 @@ function initFlowKitUploaderListeners() {
         }
       } else {
         setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatch') || btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+        showFlowBatchErrorModal('ส่งคำขอล้มเหลว: ไม่พบผลลัพธ์จากเซิร์ฟเวอร์');
         if (msg) {
           msg.className = 'msg error';
           msg.style.color = '#f56565';
@@ -12130,6 +12311,7 @@ function initFlowKitUploaderListeners() {
       console.error(err);
       logToConsole(`Error submitting batch: ${err.message || err}`, 'error');
       setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatch') || btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+      showFlowBatchErrorModal(`ส่งคำขอล้มเหลว: ${err.message || err}`);
       if (msg) {
         msg.className = 'msg error';
         msg.style.color = '#f56565';
@@ -13641,6 +13823,24 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
     msg.style.color = '#8da6ff';
     msg.textContent = 'กำลังส่งคำขอไปยังคิว Flow Kit...';
   }
+
+  const projectSelectPO = document.getElementById('cfg_flow_po_project_dropdown');
+  const projectNamePO = projectSelectPO?.selectedOptions?.[0]?.textContent || project;
+  const delayMinPO = parseFloat(document.getElementById('cfg_flow_po_worker_delay_min')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0;
+  const delayMaxPO = parseFloat(document.getElementById('cfg_flow_po_worker_delay_max')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0;
+
+  showFlowBatchSubmittingModal({
+    projectName: projectNamePO,
+    totalScenes: validPairs.length,
+    videoModel,
+    orientation,
+    outputCount,
+    durationSeconds,
+    upscaleResolution,
+    delayMin: delayMinPO,
+    delayMax: delayMaxPO,
+    mode: 'prompt_only'
+  });
   
   const videoConsole = document.getElementById('videoConsole');
   if (videoConsole) {
@@ -13668,8 +13868,8 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
       output_count: outputCount,
       duration_seconds: durationSeconds,
       upscale_resolution: upscaleResolution,
-      delay_min: parseFloat(document.getElementById('cfg_flow_po_worker_delay_min')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_min')?.value) || 10.0,
-      delay_max: parseFloat(document.getElementById('cfg_flow_po_worker_delay_max')?.value) || parseFloat(document.getElementById('cfg_flowkit_worker_delay_max')?.value) || 20.0
+      delay_min: delayMinPO,
+      delay_max: delayMaxPO
     };
     
     logToConsole(`Submitting prompt-only batch of ${validPairs.length} scenes to Project ID: ${project}...`);
@@ -13680,6 +13880,13 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
     });
     
     if (res && res.video_id) {
+      const queuedCount = res.results ? res.results.filter(r => r.status === 'QUEUED').length : validPairs.length;
+      const failedCount = res.results ? res.results.filter(r => r.status === 'FAILED').length : 0;
+      showFlowBatchResultModal({
+        successCount: queuedCount,
+        failedCount: failedCount,
+        videoId: res.video_id
+      });
       logToConsole(`Batch submitted successfully! Video Container ID: ${res.video_id}`, 'success');
       if (res.results && Array.isArray(res.results)) {
         res.results.forEach((r, idx) => {
@@ -13778,6 +13985,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
     } else {
       setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatchPO') || btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
       logToConsole(`Batch submission failed: ${res?.error || 'Unknown error'}`, 'error');
+      showFlowBatchErrorModal(`ส่งคำขอล้มเหลว: ${res?.error || 'ส่งเจเนอเรทล้มเหลว'}`);
       if (msg) {
         msg.className = 'msg error';
         msg.style.color = '#f56565';
@@ -13788,6 +13996,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
     console.error(err);
     logToConsole(`Error submitting batch: ${err.message || err}`, 'error');
     setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatchPO') || btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
+    showFlowBatchErrorModal(`ส่งคำขอล้มเหลว: ${err.message || err}`);
     if (msg) {
       msg.className = 'msg error';
       msg.style.color = '#f56565';
