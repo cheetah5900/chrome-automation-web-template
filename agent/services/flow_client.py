@@ -904,6 +904,13 @@ class FlowClient:
                         "status": "MEDIA_GENERATION_STATUS_FAILED",
                         "error": tab_err,
                     }
+                logger.warning("Operation %s media %s not found on Google Flow after %d rounds (as29s [5]): marking failed",
+                               operation_id[:8], media_id[:8], count)
+                return {
+                    "operation": {"name": operation_id},
+                    "status": "MEDIA_GENERATION_STATUS_FAILED",
+                    "error": f"Google Flow generation failed: media not found or cancelled ({err_str})",
+                }
             return _as_pending_operation(operation_id, error=err_str, media_id=media_id)
         if not urls.video:
             return _as_pending_operation(operation_id, error=complaint, media_id=media_id)

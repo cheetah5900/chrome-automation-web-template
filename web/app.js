@@ -11841,17 +11841,20 @@ function initFlowKitUploaderListeners() {
   // Helper to toggle button state between Start and Force Stop
   let flowBatchRunningInterval = null;
   const setFlowBatchButtonRunning = (btn, isRunning, defaultText, defaultBg) => {
-    if (!btn) return;
+    const targetBtn = btn || (defaultBg && defaultBg.includes('#10b981')
+      ? document.getElementById('btnProcessFlowKitBatch')
+      : document.getElementById('btnProcessFlowKitBatchPO'));
+    if (!targetBtn) return;
     if (isRunning) {
-      btn.dataset.state = 'running';
-      btn.innerHTML = '🛑 Force Stop';
-      btn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-      btn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
+      targetBtn.dataset.state = 'running';
+      targetBtn.innerHTML = '🛑 Force Stop';
+      targetBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+      targetBtn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
     } else {
-      btn.dataset.state = 'idle';
-      btn.innerHTML = defaultText;
-      btn.style.background = defaultBg;
-      btn.style.boxShadow = '';
+      targetBtn.dataset.state = 'idle';
+      targetBtn.innerHTML = defaultText;
+      targetBtn.style.background = defaultBg;
+      targetBtn.style.boxShadow = '';
     }
   };
 
@@ -12071,10 +12074,19 @@ function initFlowKitUploaderListeners() {
                 if (statusChanged) renderScannedPairs();
               }
 
-              if (statusRes.done) {
+              // Check if batch is completed
+              const allPairsFinished = flowScannedPairs.length > 0 &&
+                validPairs.every(vp => {
+                  const pair = flowScannedPairs.find(p => p.scene_id === vp.scene_id || (vp.image_path && p.image_path === vp.image_path));
+                  return pair && (pair.status === 'COMPLETED' || pair.status === 'FAILED');
+                });
+              const isBatchDone = Boolean(statusRes.done || allPairsFinished);
+
+              if (isBatchDone) {
                 clearInterval(flowBatchRunningInterval);
                 flowBatchRunningInterval = null;
-                setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+                const batchBtn = document.getElementById('btnProcessFlowKitBatch') || btn;
+                setFlowBatchButtonRunning(batchBtn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
                 if (msg) {
                   if (statusRes.all_succeeded) {
                     msg.className = 'msg';
@@ -12088,14 +12100,23 @@ function initFlowKitUploaderListeners() {
                     msg.style.color = '#ef4444';
                     msg.textContent = failText;
                     playFlowAlertSound('error');
-                    showBatchStatusSummaryModal(statusRes, flowScannedPairs);
+                    try {
+                      showBatchStatusSummaryModal(statusRes, flowScannedPairs);
+                    } catch (mErr) {
+                      console.error('Error showing batch summary modal:', mErr);
+                    }
                   }
                 }
               }
-            } catch {}
+            } catch (pErr) {
+              console.error('Error during batch status polling:', pErr);
+            }
           }, 3000);
+        } else {
+          setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatch') || btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
         }
       } else {
+        setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatch') || btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
         if (msg) {
           msg.className = 'msg error';
           msg.style.color = '#f56565';
@@ -12105,6 +12126,7 @@ function initFlowKitUploaderListeners() {
     } catch (err) {
       console.error(err);
       logToConsole(`Error submitting batch: ${err.message || err}`, 'error');
+      setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatch') || btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
       if (msg) {
         msg.className = 'msg error';
         msg.style.color = '#f56565';
@@ -12154,6 +12176,8 @@ function initFlowKitUploaderListeners() {
   });
   
   updateProjectStats();
+  setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatch'), false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+  setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatchPO'), false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
 }
 
 async function loadFlowKitProjects() {
@@ -13222,10 +13246,19 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
             if (statusChanged) renderScannedPairs();
           }
 
-          if (statusRes.done) {
+          // Check if batch is completed
+          const allPairsFinished = flowPOScannedPairs.length > 0 &&
+            validPairs.every(vp => {
+              const pair = flowPOScannedPairs.find(p => p.scene_id === vp.scene_id || (vp.prompt_path && p.prompt_path === vp.prompt_path));
+              return pair && (pair.status === 'COMPLETED' || pair.status === 'FAILED');
+            });
+          const isBatchDone = Boolean(statusRes.done || allPairsFinished);
+
+          if (isBatchDone) {
             clearInterval(flowBatchPORunningInterval);
             flowBatchPORunningInterval = null;
-            setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
+            const batchBtnPO = document.getElementById('btnProcessFlowKitBatchPO') || btn;
+            setFlowBatchButtonRunning(batchBtnPO, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
             if (msg) {
               if (statusRes.all_succeeded) {
                 msg.className = 'msg';
@@ -13239,13 +13272,20 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
                 msg.style.color = '#ef4444';
                 msg.textContent = failText;
                 playFlowAlertSound('error');
-                showBatchStatusSummaryModal(statusRes, flowPOScannedPairs);
+                try {
+                  showBatchStatusSummaryModal(statusRes, flowPOScannedPairs);
+                } catch (mErr) {
+                  console.error('Error showing PO batch summary modal:', mErr);
+                }
               }
             }
           }
-        } catch {}
+        } catch (pErr) {
+          console.error('Error during PO batch status polling:', pErr);
+        }
       }, 3000);
     } else {
+      setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatchPO') || btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
       logToConsole(`Batch submission failed: ${res?.error || 'Unknown error'}`, 'error');
       if (msg) {
         msg.className = 'msg error';
@@ -13256,6 +13296,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
   } catch (err) {
     console.error(err);
     logToConsole(`Error submitting batch: ${err.message || err}`, 'error');
+    setFlowBatchButtonRunning(document.getElementById('btnProcessFlowKitBatchPO') || btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
     if (msg) {
       msg.className = 'msg error';
       msg.style.color = '#f56565';

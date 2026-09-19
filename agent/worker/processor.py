@@ -521,7 +521,7 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
         is_permanent = True
     elif any(kw in error_lower for kw in ("billing", "credits", "quota", "paygate", "insufficient", "payment", "tier")):
         is_permanent = True
-    elif any(kw in error_lower for kw in ("safety", "unsafe", "content filter", "unsuitable")):
+    elif any(kw in error_lower for kw in ("safety", "unsafe", "content filter", "unsuitable", "failed: [5]", "media not found or cancelled")):
         is_permanent = True
     elif any(kw in error_lower for kw in ("invalid", "bad request", "unknown name", "invalid_argument")):
         is_permanent = True

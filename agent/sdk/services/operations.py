@@ -259,12 +259,12 @@ async def _poll_operations(
         return {"data": {"operations": synth_ops}}
 
     poll_interval = VIDEO_POLL_INTERVAL
-    elapsed = 0
+    start_time = time.monotonic()
     current_ops = operations
 
-    while elapsed < timeout:
+    while (time.monotonic() - start_time) < timeout:
         await asyncio.sleep(poll_interval)
-        elapsed += poll_interval
+        elapsed = int(time.monotonic() - start_time)
 
         status_result = await client.check_video_status(current_ops)
         if _is_error(status_result):

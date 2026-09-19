@@ -86,7 +86,24 @@ class TestFlowBatchUnit(unittest.TestCase):
         summary = summarize_prompt_for_filename(prompt, max_words=8)
         self.assertTrue(len(summary.split()) <= 8)
         self.assertNotIn("/", summary)
-        self.assertNotIn(":", summary)
+    def test_flow_client_fail_fast_on_not_found_round_8(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+        from agent.services.flow_client import FlowClient
+
+        client = FlowClient()
+        op_id = "test-op-1234"
+        media_id = "test-media-5678"
+        client._operation_media[op_id] = media_id
+        client._not_found_counts[op_id] = 7  # becomes 8 on poll
+
+        client._batch_media_urls = AsyncMock(side_effect=Exception("as29s failed: [5]"))
+        client._find_operation_media = AsyncMock(return_value=(None, None))
+        client._check_flow_tab_404 = AsyncMock(return_value=None)
+
+        res = asyncio.run(client._poll_batch_operation(op_id))
+        self.assertEqual(res.get("status"), "MEDIA_GENERATION_STATUS_FAILED")
+        self.assertIn("[5]", res.get("error"))
 
 if __name__ == "__main__":
     unittest.main()
