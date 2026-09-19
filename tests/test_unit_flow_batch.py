@@ -157,6 +157,45 @@ class TestFlowBatchUnit(unittest.TestCase):
         finally:
             save_gemini_api_key(original_key)
 
+    def test_create_mock_scene_image(self):
+        from agent.api.batch_uploader import create_mock_scene_image
+        
+        # Test portrait mock image
+        portrait_bytes = create_mock_scene_image("03", prompt="A knight on a mountain", error_reason="Safety Block", width=720, height=1280)
+        self.assertIsInstance(portrait_bytes, bytes)
+        self.assertTrue(len(portrait_bytes) > 1000)
+        self.assertEqual(portrait_bytes[:2], b"\xff\xd8")  # JPEG magic bytes
+
+        # Test landscape mock image
+        landscape_bytes = create_mock_scene_image("07", prompt="Landscape scene", error_reason="", width=1280, height=720)
+        self.assertIsInstance(landscape_bytes, bytes)
+        self.assertTrue(len(landscape_bytes) > 1000)
+        self.assertEqual(landscape_bytes[:2], b"\xff\xd8")
+
+    def test_missing_sequence_detection(self):
+        # Scenario 1: Gap in middle (1, 2, 4 -> 3 missing)
+        written_numbers = {1, 2, 4}
+        expected_map = {1: {}, 2: {}, 4: {}}
+        all_nums = set(range(min(written_numbers), max(written_numbers) + 1))
+        missing = sorted(list(all_nums - written_numbers))
+        self.assertEqual(missing, [3])
+
+        # Scenario 2: Gap at start and middle (2, 4 written, expected 1..4 -> 1, 3 missing)
+        written_numbers_2 = {2, 4}
+        expected_map_2 = {1: {}, 2: {}, 3: {}, 4: {}}
+        candidate_mins = [min(written_numbers_2), min(expected_map_2.keys())]
+        candidate_maxs = [max(written_numbers_2), max(expected_map_2.keys())]
+        min_n = 1 if (1 in candidate_mins or any(k <= 1 for k in candidate_mins)) else min(candidate_mins)
+        max_n = max(candidate_maxs)
+        missing_2 = sorted(list(set(range(min_n, max_n + 1)) - written_numbers_2))
+        self.assertEqual(missing_2, [1, 3])
+
+        # Scenario 3: Complete sequence (1, 2, 3 -> no missing)
+        written_numbers_3 = {1, 2, 3}
+        all_nums_3 = set(range(1, max(written_numbers_3) + 1))
+        missing_3 = sorted(list(all_nums_3 - written_numbers_3))
+        self.assertEqual(missing_3, [])
+
 if __name__ == "__main__":
     unittest.main()
 

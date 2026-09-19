@@ -5,6 +5,7 @@ import mimetypes
 import logging
 import httpx
 from typing import Optional, List
+from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -89,6 +90,138 @@ def clean_image_or_scene_name(val: str | None) -> str | None:
         return None
 
     return name
+
+
+def create_mock_scene_image(
+    scene_num_str: str,
+    prompt: str = "",
+    error_reason: str = "",
+    width: int = 720,
+    height: int = 1280
+) -> bytes:
+    """Generate a high-contrast mock JPEG image representing a missing/uncompleted scene.
+    Returns JPEG bytes directly from memory."""
+    from PIL import Image, ImageDraw, ImageFont
+    import io
+    import textwrap
+    
+    img = Image.new("RGB", (width, height), color=(18, 22, 34))
+    draw = ImageDraw.Draw(img)
+    
+    font_paths = [
+        "/System/Library/Fonts/ThonburiUI.ttc",
+        "/System/Library/Fonts/Thonburi.ttc",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    font_file = None
+    for p in font_paths:
+        if Path(p).exists():
+            font_file = p
+            break
+            
+    is_landscape = width > height
+    
+    if font_file:
+        try:
+            if is_landscape:
+                f_badge = ImageFont.truetype(font_file, 24)
+                f_num = ImageFont.truetype(font_file, 64)
+                f_title = ImageFont.truetype(font_file, 28)
+                f_sub = ImageFont.truetype(font_file, 20)
+                f_prompt = ImageFont.truetype(font_file, 18)
+            else:
+                f_badge = ImageFont.truetype(font_file, 28)
+                f_num = ImageFont.truetype(font_file, 80)
+                f_title = ImageFont.truetype(font_file, 34)
+                f_sub = ImageFont.truetype(font_file, 24)
+                f_prompt = ImageFont.truetype(font_file, 22)
+        except Exception:
+            f_badge = f_num = f_title = f_sub = f_prompt = ImageFont.load_default()
+    else:
+        f_badge = f_num = f_title = f_sub = f_prompt = ImageFont.load_default()
+        
+    border_color = (239, 68, 68)  # Red alert
+    border_inset = 20 if is_landscape else 24
+    draw.rectangle([(border_inset, border_inset), (width - border_inset, height - border_inset)], outline=border_color, width=4)
+    draw.rectangle([(border_inset + 6, border_inset + 6), (width - border_inset - 6, height - border_inset - 6)], outline=(40, 48, 70), width=2)
+    
+    if is_landscape:
+        badge_text = "⚠️  MISSING SCENE / ฉากที่ยังไม่สมบูรณ์"
+        draw.text((width // 2, 60), badge_text, fill=(248, 113, 113), font=f_badge, anchor="mm")
+        
+        scene_label = f"SCENE {scene_num_str}"
+        draw.text((width // 2, 130), scene_label, fill=(255, 255, 255), font=f_num, anchor="mm")
+        
+        sub_text = "วิดีโอนี้ยังไม่ได้สร้าง หรือสร้างไม่สำเร็จ"
+        draw.text((width // 2, 190), sub_text, fill=(209, 213, 219), font=f_title, anchor="mm")
+        
+        card_top = 240
+        card_bot = height - 70
+        draw.rounded_rectangle([(80, card_top), (width - 80, card_bot)], radius=12, fill=(28, 34, 52), outline=(55, 65, 81), width=2)
+        
+        cur_y = card_top + 20
+        if error_reason:
+            draw.text((110, cur_y), "📌 สถานะ / สาเหตุ:", fill=(251, 191, 36), font=f_sub)
+            cur_y += 28
+            err_lines = textwrap.wrap(error_reason, width=80)[:2]
+            for l in err_lines:
+                draw.text((110, cur_y), l, fill=(252, 165, 165), font=f_sub)
+                cur_y += 24
+            cur_y += 10
+            
+        draw.text((110, cur_y), "📝 พรอพต์ของฉาก (Scene Prompt):", fill=(147, 197, 253), font=f_sub)
+        cur_y += 28
+        
+        display_prompt = prompt.strip() if prompt else "(ไม่มีข้อมูลพรอพต์ / Prompt was not specified)"
+        prompt_lines = textwrap.wrap(display_prompt, width=85)[:5]
+        for pl in prompt_lines:
+            draw.text((110, cur_y), pl, fill=(229, 231, 235), font=f_prompt)
+            cur_y += 24
+            
+        footer_text = "Google Flow Batch Automation • Missing Scene Placeholder"
+        draw.text((width // 2, height - 35), footer_text, fill=(107, 114, 128), font=f_sub, anchor="mm")
+    else:
+        badge_text = "⚠️  MISSING SCENE / ฉากที่ยังไม่สมบูรณ์"
+        draw.text((width // 2, 140), badge_text, fill=(248, 113, 113), font=f_badge, anchor="mm")
+        
+        scene_label = f"SCENE {scene_num_str}"
+        draw.text((width // 2, 240), scene_label, fill=(255, 255, 255), font=f_num, anchor="mm")
+        
+        sub_text = "วิดีโอนี้ยังไม่ได้สร้าง หรือสร้างไม่สำเร็จ"
+        draw.text((width // 2, 320), sub_text, fill=(209, 213, 219), font=f_title, anchor="mm")
+        
+        card_top = 400
+        card_bot = min(card_top + 450, height - 160)
+        draw.rounded_rectangle([(60, card_top), (width - 60, card_bot)], radius=16, fill=(28, 34, 52), outline=(55, 65, 81), width=2)
+        
+        cur_y = card_top + 30
+        if error_reason:
+            draw.text((90, cur_y), "📌 สถานะ / สาเหตุ:", fill=(251, 191, 36), font=f_sub)
+            cur_y += 35
+            err_lines = textwrap.wrap(error_reason, width=38)[:3]
+            for l in err_lines:
+                draw.text((90, cur_y), l, fill=(252, 165, 165), font=f_sub)
+                cur_y += 30
+            cur_y += 15
+            
+        draw.text((90, cur_y), "📝 พรอพต์ของฉาก (Scene Prompt):", fill=(147, 197, 253), font=f_sub)
+        cur_y += 38
+        
+        display_prompt = prompt.strip() if prompt else "(ไม่มีข้อมูลพรอพต์ / Prompt was not specified)"
+        prompt_lines = textwrap.wrap(display_prompt, width=42)[:8]
+        for pl in prompt_lines:
+            draw.text((90, cur_y), pl, fill=(229, 231, 235), font=f_prompt)
+            cur_y += 30
+            
+        footer_text = "Google Flow Batch Automation • Missing Scene Placeholder"
+        draw.text((width // 2, height - 70), footer_text, fill=(107, 114, 128), font=f_sub, anchor="mm")
+        
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=88)
+    return buf.getvalue()
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/batch-uploader", tags=["batch-uploader"])
@@ -2066,6 +2199,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     if not scenes:
         raise HTTPException(status_code=404, detail="No scenes found for this project on Google Flow or in local database.")
         
+    local_scenes = []
     try:
         local_scenes = await crud.list_project_scenes(body.project_id)
         local_order_map = {}
@@ -2094,6 +2228,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         logger.info("Found %d local scenes for project %s to map display order and image names by media IDs", len(local_scenes), body.project_id[:12])
     except Exception as e:
         logger.warning("Failed to fetch local project scenes: %s. Falling back to default ordering.", e)
+        local_scenes = []
         local_order_map = {}
         local_image_name_map = {}
         local_prompt_map = {}
@@ -2325,6 +2460,10 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     zip_path = temp_dir / f"{project_slug}_videos.zip"
     video_added = False
     
+    written_arcnames = []
+    written_numbers = set()
+    pad_width = 2
+    
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for idx, (local_path, temp_path) in enumerate(download_results):
             meta = task_metadata[idx]
@@ -2407,7 +2546,21 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                         
                     zip_file.write(local_path, arcname=arcname)
                     video_added = True
+                    written_arcnames.append(arcname)
                     vid_debug["added_to_zip_as"] = arcname
+                    
+                    m_num = re.match(r"^(\d+)", arcname)
+                    if not m_num:
+                        m_num = re.search(r"(\d+)", arcname)
+                    if m_num:
+                        try:
+                            val = int(m_num.group(1))
+                            written_numbers.add(val)
+                            pad_width = max(pad_width, len(m_num.group(1)))
+                        except Exception:
+                            pass
+                    elif display_order > 0:
+                        written_numbers.add(display_order)
                     
                     if temp_path and temp_path.exists():
                         try:
@@ -2418,6 +2571,135 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     vid_debug["zip_error"] = str(ze)
             else:
                 vid_debug["zip_error"] = "No local file to write to zip"
+        
+        # Phase 3: Detect missing scene numbers and insert mock .jpg placeholders
+        expected_scene_map = {}
+        for s in (local_scenes or []):
+            s_order = s.get("display_order", 0)
+            img_stem = clean_image_or_scene_name(s.get("vertical_image_url") or s.get("horizontal_image_url"))
+            s_num = None
+            if img_stem:
+                m_s = re.search(r"(\d+)", img_stem)
+                if m_s:
+                    try:
+                        s_num = int(m_s.group(1))
+                    except Exception:
+                        pass
+            if s_num is None and s_order > 0:
+                s_num = s_order
+            if s_num:
+                expected_scene_map[s_num] = s
+
+        for s_idx, s in enumerate(scenes or []):
+            s_order = s.get("display_order", 0) or (s_idx + 1)
+            img_stem = clean_image_or_scene_name(s.get("vertical_image_url") or s.get("horizontal_image_url"))
+            s_num = None
+            if img_stem:
+                m_s = re.search(r"(\d+)", img_stem)
+                if m_s:
+                    try:
+                        s_num = int(m_s.group(1))
+                    except Exception:
+                        pass
+            if s_num is None and s_order > 0:
+                s_num = s_order
+            if s_num and s_num not in expected_scene_map:
+                expected_scene_map[s_num] = s
+
+        candidate_mins = []
+        if written_numbers:
+            candidate_mins.append(min(written_numbers))
+        if expected_scene_map:
+            candidate_mins.append(min(expected_scene_map.keys()))
+
+        candidate_maxs = []
+        if written_numbers:
+            candidate_maxs.append(max(written_numbers))
+        if expected_scene_map:
+            candidate_maxs.append(max(expected_scene_map.keys()))
+
+        if candidate_maxs:
+            min_num = 1 if (1 in candidate_mins or any(k <= 1 for k in candidate_mins)) else (min(candidate_mins) if candidate_mins else 1)
+            max_num = max(candidate_maxs)
+            
+            all_expected_numbers = set(range(min_num, max_num + 1))
+            missing_numbers = sorted(list(all_expected_numbers - written_numbers))
+            
+            if missing_numbers:
+                logger.info("Found %d missing scene numbers: %s. Generating mock JPEG placeholders...", len(missing_numbers), missing_numbers)
+                
+                default_is_horizontal = any(
+                    (s.get("orientation") in ("HORIZONTAL", "horizontal") or s.get("horizontal_video_url") or s.get("horizontal_image_url"))
+                    for s in (local_scenes or scenes or [])
+                )
+                
+                for missing_num in missing_numbers:
+                    missing_meta = expected_scene_map.get(missing_num)
+                    missing_prompt = ""
+                    missing_stem = None
+                    missing_err = ""
+                    
+                    if missing_meta:
+                        missing_prompt = (
+                            missing_meta.get("prompt") or
+                            missing_meta.get("video_prompt") or
+                            missing_meta.get("prompt_content") or
+                            ""
+                        )
+                        raw_img = missing_meta.get("vertical_image_url") or missing_meta.get("horizontal_image_url")
+                        missing_stem = clean_image_or_scene_name(raw_img)
+                        if missing_stem:
+                            if project_slug and missing_stem.startswith(f"{project_slug}_"):
+                                missing_stem = missing_stem[len(project_slug) + 1:]
+                            missing_stem = re.sub(r"^synced_project_[a-f0-9]+_", "", missing_stem, flags=re.IGNORECASE)
+                            missing_stem = re.sub(r"_(vertical|horizontal)$", "", missing_stem, flags=re.IGNORECASE)
+                            missing_stem = clean_image_or_scene_name(missing_stem)
+
+                    for sd in debug_details:
+                        if sd.get("display_order") == missing_num or (missing_meta and sd.get("scene_id") == missing_meta.get("id")):
+                            vids = sd.get("videos", {})
+                            for orient_key, v_info in vids.items():
+                                if v_info.get("get_media_error"):
+                                    missing_err = v_info["get_media_error"]
+                                elif v_info.get("http_download_error"):
+                                    missing_err = v_info["http_download_error"]
+                                elif v_info.get("skipped"):
+                                    missing_err = v_info["skipped"]
+                            break
+
+                    num_prefix = f"{missing_num:0{pad_width}d}"
+                    if missing_stem:
+                        mock_filename = f"{missing_stem}.jpg"
+                    elif missing_prompt:
+                        prompt_summary = summarize_prompt_for_filename(missing_prompt, max_words=15, max_length=90)
+                        if prompt_summary:
+                            mock_filename = f"{num_prefix} - {prompt_summary}.jpg"
+                        else:
+                            mock_filename = f"{num_prefix}.jpg"
+                    else:
+                        mock_filename = f"{num_prefix}.jpg"
+                        
+                    if mock_filename in zip_file.namelist():
+                        mock_filename = f"{num_prefix}_missing.jpg"
+
+                    is_h = default_is_horizontal
+                    if missing_meta and (missing_meta.get("orientation") in ("HORIZONTAL", "horizontal") or missing_meta.get("horizontal_image_url")):
+                        is_h = True
+                    w, h = (1280, 720) if is_h else (720, 1280)
+
+                    try:
+                        mock_bytes = create_mock_scene_image(
+                            scene_num_str=num_prefix,
+                            prompt=missing_prompt,
+                            error_reason=missing_err,
+                            width=w,
+                            height=h
+                        )
+                        zip_file.writestr(mock_filename, mock_bytes)
+                        video_added = True
+                        logger.info("Successfully added mock scene image to zip: %s", mock_filename)
+                    except Exception as me:
+                        logger.warning("Failed to generate mock scene image for %d: %s", missing_num, me)
                             
     if not video_added or not zip_path.exists() or zip_path.stat().st_size == 0:
         cleanup_temp_dir(temp_dir)
