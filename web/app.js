@@ -11527,6 +11527,121 @@ function renderFlowScannedGrid(...args) {
 }
 window.renderFlowScannedGrid = renderFlowScannedGrid;
 
+function showBatchStatusSummaryModal(statusRes, pairsArray) {
+  if (typeof Swal === 'undefined' || !statusRes) return;
+
+  const pairs = Array.isArray(pairsArray) ? pairsArray : [];
+  let items = Array.isArray(statusRes.items) && statusRes.items.length > 0
+    ? [...statusRes.items]
+    : pairs.map((p, i) => ({
+        scene_id: p.scene_id,
+        status: p.status || 'PENDING',
+        error_message: p.error_message || '',
+        order: p.order || i + 1,
+        image_name: p.image_name,
+        prompt_name: p.prompt_name,
+      }));
+
+  // Sort by scene order numerically
+  items.sort((a, b) => {
+    const pairA = pairs.find(p => p.scene_id === a.scene_id);
+    const pairB = pairs.find(p => p.scene_id === b.scene_id);
+    const orderA = (pairA && pairA.order) ? parseInt(pairA.order) : (a.order ? parseInt(a.order) : 999);
+    const orderB = (pairB && pairB.order) ? parseInt(pairB.order) : (b.order ? parseInt(b.order) : 999);
+    return orderA - orderB;
+  });
+
+  let rowsHtml = '';
+  items.forEach((item, idx) => {
+    const pair = pairs.find(p => p.scene_id === item.scene_id);
+    const orderNum = (pair && pair.order) ? pair.order : (item.order || idx + 1);
+    const sceneLabel = `ฉาก ${orderNum}`;
+    const subName = pair ? (pair.image_name || pair.prompt_name || '') : (item.image_name || item.prompt_name || '');
+    
+    let statusBadge = '';
+    let reasonText = '';
+    
+    if (item.status === 'COMPLETED') {
+      statusBadge = '<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 600; font-size: 0.82rem;">✅ สำเร็จ</span>';
+      reasonText = '<span style="color: #a7f3d0;">สร้างวิดีโอสำเร็จเรียบร้อย</span>';
+    } else if (item.status === 'FAILED') {
+      const err = item.error_message || 'ติดขัดการประมวลผล';
+      const isBlock = /safety|unsafe|content filter|policy|violat/i.test(err);
+      const isNotFound = /as29s failed: \[5\]|not found/i.test(err);
+      const isQuota = /quota|credit|billing|paygate|insufficient/i.test(err);
+      const isTimeout = /timeout/i.test(err);
+      
+      statusBadge = '<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: 600; font-size: 0.82rem;">❌ ล้มเหลว</span>';
+      
+      if (isBlock) {
+        reasonText = '<span style="color: #fca5a5; font-weight: 500;">🚫 ติดระบบความปลอดภัย (Safety Filter / Policy Block)</span>';
+      } else if (isNotFound) {
+        reasonText = '<span style="color: #fca5a5; font-weight: 500;">❌ งานถูกยกเลิกบน Flow (ตรวจพบลักษณะต้องห้ามในภาพ/พรอพต์ เช่น ทารก/ความเสี่ยง)</span>';
+      } else if (isQuota) {
+        reasonText = '<span style="color: #fca5a5; font-weight: 500;">💳 โควตาหรือเครดิตบัญชีไม่เพียงพอ</span>';
+      } else if (isTimeout) {
+        reasonText = '<span style="color: #fca5a5; font-weight: 500;">⏱️ หมดเวลารอผลจากระบบ (Timeout)</span>';
+      } else {
+        const safeErr = typeof escapeHtml === 'function' ? escapeHtml(err) : err;
+        reasonText = `<span style="color: #fca5a5;">${safeErr}</span>`;
+      }
+    } else {
+      statusBadge = '<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(156, 163, 175, 0.2); color: #9ca3af; font-size: 0.82rem;">⏳ ดำเนินการ</span>';
+      reasonText = '<span style="color: rgba(255,255,255,0.6);">กำลังประมวลผล</span>';
+    }
+
+    const rowBg = idx % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.05)';
+    rowsHtml += `
+      <tr style="background: ${rowBg}; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+        <td style="padding: 8px 12px; font-weight: 500; color: #f1f5f9;">
+          <div>${sceneLabel}</div>
+          ${subName ? `<div style="font-size: 0.75rem; color: rgba(255,255,255,0.45); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="${subName}">${subName}</div>` : ''}
+        </td>
+        <td style="padding: 8px 12px; text-align: center;">${statusBadge}</td>
+        <td style="padding: 8px 12px; line-height: 1.4;">${reasonText}</td>
+      </tr>
+    `;
+  });
+
+  const modalHtml = `
+    <div style="text-align: left; margin-bottom: 14px;">
+      <div style="font-size: 1.02rem; font-weight: 600; color: #f59e0b; margin-bottom: 6px; line-height: 1.5;">
+        ⚠️ ประมวลผลเสร็จสิ้น: สำเร็จ ${statusRes.completed} ฉาก, ติดบล็อก/ล้มเหลว ${statusRes.failed} ฉาก (ตรวจสอบรายละเอียดในคอนโซลด้านล่าง)
+      </div>
+      <div style="font-size: 0.84rem; color: rgba(255,255,255,0.65);">
+        ตารางสรุปผลการเจเนอเรทวิดีโอรายฉาก พร้อมสาเหตุที่พบ:
+      </div>
+    </div>
+    <div style="max-height: 360px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; margin-bottom: 6px;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+        <thead>
+          <tr style="background: rgba(255,255,255,0.08); border-bottom: 1px solid rgba(255,255,255,0.12); color: #cbd5e1;">
+            <th style="padding: 9px 12px; width: 28%;">ฉาก</th>
+            <th style="padding: 9px 12px; width: 22%; text-align: center;">สถานะ</th>
+            <th style="padding: 9px 12px; width: 50%;">สาเหตุ / รายละเอียด</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || '<tr><td colspan="3" style="text-align: center; padding: 16px; color: rgba(255,255,255,0.5);">ไม่พบรายการฉาก</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  Swal.fire({
+    icon: 'warning',
+    title: 'รายงานผลการสร้างวิดีโอรายฉาก',
+    html: modalHtml,
+    width: '720px',
+    background: 'rgba(18, 22, 45, 0.98)',
+    color: '#ffffff',
+    confirmButtonText: 'ตกลง (รับทราบ)',
+    confirmButtonColor: '#f59e0b',
+    allowOutsideClick: false,
+    showConfirmButton: true,
+  });
+}
+
 function initFlowKitUploaderListeners() {
   if (flowKitUploaderListenersInitialized) return;
   flowKitUploaderListenersInitialized = true;
@@ -11973,18 +12088,7 @@ function initFlowKitUploaderListeners() {
                     msg.style.color = '#ef4444';
                     msg.textContent = failText;
                     playFlowAlertSound('error');
-                    if (typeof Swal !== 'undefined') {
-                      Swal.fire({
-                        icon: 'warning',
-                        title: failText,
-                        background: 'rgba(18, 22, 45, 0.98)',
-                        color: '#ffffff',
-                        confirmButtonText: 'ตกลง',
-                        confirmButtonColor: '#f59e0b',
-                        allowOutsideClick: false,
-                        showConfirmButton: true
-                      });
-                    }
+                    showBatchStatusSummaryModal(statusRes, flowScannedPairs);
                   }
                 }
               }
@@ -13135,18 +13239,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
                 msg.style.color = '#ef4444';
                 msg.textContent = failText;
                 playFlowAlertSound('error');
-                if (typeof Swal !== 'undefined') {
-                  Swal.fire({
-                    icon: 'warning',
-                    title: failText,
-                    background: 'rgba(18, 22, 45, 0.98)',
-                    color: '#ffffff',
-                    confirmButtonText: 'ตกลง',
-                    confirmButtonColor: '#f59e0b',
-                    allowOutsideClick: false,
-                    showConfirmButton: true
-                  });
-                }
+                showBatchStatusSummaryModal(statusRes, flowPOScannedPairs);
               }
             }
           }
