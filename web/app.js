@@ -13329,7 +13329,7 @@ function renderSafetyResolutionSection() {
         ${reasonBadge}
       </td>
       <td style="padding: 10px 12px; vertical-align: top;">
-        <div style="font-size: 0.82rem; color: rgba(255,255,255,0.8); line-height: 1.4; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); white-space: pre-wrap;">${escapeHtml(pair.prompt_content || '')}</div>
+        <div style="font-size: 0.82rem; color: rgba(255,255,255,0.8); line-height: 1.4; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); white-space: pre-wrap;">${escapeHtml(pair.original_prompt || pair.prompt_content || '')}</div>
       </td>
       <td style="padding: 10px 12px; vertical-align: top;">
         <textarea 
@@ -13443,7 +13443,7 @@ async function initFlowGeminiKey() {
       } catch (_) {}
     }
 
-    const problemScenes = (flowScannedPairs || []).filter(p => p.status === 'FAILED');
+    const problemScenes = (flowScannedPairs || []).filter(p => (p.status || '').toUpperCase() === 'FAILED' || (p.status || '').toUpperCase() === 'ERROR');
     if (problemScenes.length === 0) {
       if (msg) {
         msg.style.display = 'block';
@@ -13472,21 +13472,28 @@ async function initFlowGeminiKey() {
       msg.style.display = 'block';
       msg.className = 'msg';
       msg.style.color = '#d8b4fe';
-      msg.textContent = `กำลังวิเคราะห์และปรับแก้ ${problemScenes.length} ฉากด้วย Gemini AI...`;
+      msg.textContent = `กำลังวิเคราะห์และปรับแก้ ${problemScenes.length} ฉากด้วย Gemini AI (gemini-3.6-flash)...`;
     }
 
     try {
       const payload = {
         gemini_api_key: apiKey,
-        items: problemScenes.map((p, idx) => ({
-          scene_id: p.scene_id || null,
-          order: p.order || p.index || idx + 1,
-          prompt: p.prompt_content || '',
-          error_message: p.error_message || '',
-          image_name: p.image_name || null,
-          image_path: p.image_path || null,
-          prompt_path: p.prompt_path || null
-        })),
+        model: 'gemini-3.6-flash',
+        items: problemScenes.map((p, idx) => {
+          const orderNum = p.order || p.index || idx + 1;
+          const ta = document.querySelector(`.fixed-prompt-textarea[data-order="${orderNum}"]`)
+            || (p.scene_id ? document.querySelector(`.fixed-prompt-textarea[data-scene-id="${p.scene_id}"]`) : null);
+          const currentPrompt = (ta && ta.value.trim()) || p.original_prompt || p.prompt_content || '';
+          return {
+            scene_id: p.scene_id || null,
+            order: orderNum,
+            prompt: currentPrompt,
+            error_message: p.error_message || '',
+            image_name: p.image_name || null,
+            image_path: p.image_path || null,
+            prompt_path: p.prompt_path || null
+          };
+        }),
         save_to_disk: true
       };
 
@@ -13498,33 +13505,56 @@ async function initFlowGeminiKey() {
       if (res && res.fixed_items) {
         let successCount = 0;
         res.fixed_items.forEach(item => {
-          const ta = document.querySelector(`.fixed-prompt-textarea[data-order="${item.order}"]`)
-            || (item.scene_id ? document.querySelector(`.fixed-prompt-textarea[data-scene-id="${item.scene_id}"]`) : null);
-          if (ta && item.fixed_prompt) {
-            ta.value = item.fixed_prompt;
-            ta.style.borderColor = '#10b981';
-            ta.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.4)';
-            setTimeout(() => {
-              ta.style.boxShadow = 'none';
-            }, 2500);
-          }
-
           const pair = flowScannedPairs.find(p => (p.order || p.index) === item.order || (item.scene_id && p.scene_id === item.scene_id));
           if (pair) {
-            pair.prompt_content = item.fixed_prompt;
-            pair.fixed_prompt = item.fixed_prompt;
-            if (item.status === 'SUCCESS') successCount++;
+            if (!pair.original_prompt) {
+              pair.original_prompt = pair.prompt_content;
+            }
+            if (item.status === 'SUCCESS' && item.fixed_prompt) {
+              pair.fixed_prompt = item.fixed_prompt;
+              pair.prompt_content = item.fixed_prompt;
+              successCount++;
+            }
           }
         });
+
+        // Re-render to display the updated prompts and preserved original prompts
         renderScannedPairs();
 
-        if (msg) {
-          msg.style.display = 'block';
-          msg.className = 'msg';
-          msg.style.color = '#10b981';
-          msg.textContent = `✨ ปรับแก้ Prompt สำเร็จเรียบร้อยแล้ว (${successCount}/${res.fixed_items.length} ฉาก) ตรวจสอบและกด "สั่งสร้างวิดีโอใหม่บน Flow" ได้ทันที`;
+        // Highlight updated textareas with an emerald glow
+        res.fixed_items.forEach(item => {
+          if (item.status === 'SUCCESS') {
+            const newTa = document.querySelector(`.fixed-prompt-textarea[data-order="${item.order}"]`)
+              || (item.scene_id ? document.querySelector(`.fixed-prompt-textarea[data-scene-id="${item.scene_id}"]`) : null);
+            if (newTa) {
+              newTa.style.borderColor = '#10b981';
+              newTa.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.5)';
+              setTimeout(() => {
+                newTa.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+                newTa.style.boxShadow = 'none';
+              }, 3500);
+            }
+          }
+        });
+
+        if (successCount === 0) {
+          const firstErr = res.fixed_items.find(i => i.status !== 'SUCCESS')?.status || 'ไม่สามารถปรับแก้ได้';
+          if (msg) {
+            msg.style.display = 'block';
+            msg.className = 'msg error';
+            msg.style.color = '#f87171';
+            msg.textContent = `❌ ไม่สามารถปรับแก้ Prompt ได้: ${firstErr}`;
+          }
+          playFlowAlertSound('error');
+        } else {
+          if (msg) {
+            msg.style.display = 'block';
+            msg.className = 'msg';
+            msg.style.color = '#10b981';
+            msg.textContent = `✨ ปรับแก้ Prompt สำเร็จเรียบร้อยแล้ว (${successCount}/${res.fixed_items.length} ฉาก) ตรวจสอบและกด "สั่งสร้างวิดีโอใหม่บน Flow" ได้ทันที`;
+          }
+          playFlowAlertSound('success');
         }
-        playFlowAlertSound('success');
       } else {
         throw new Error('ไม่ได้รับผลลัพธ์จาก Gemini AI');
       }

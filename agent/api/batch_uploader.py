@@ -2826,7 +2826,7 @@ class FixPromptItem(BaseModel):
 class FixPromptsRequest(BaseModel):
     gemini_api_key: Optional[str] = None
     items: List[FixPromptItem]
-    model: Optional[str] = "gemini-2.5-flash"
+    model: Optional[str] = "gemini-3.6-flash"
     save_to_disk: Optional[bool] = False
 
 
@@ -2939,12 +2939,14 @@ async def fix_prompts_with_gemini(body: FixPromptsRequest):
     if not body.items:
         return {"ok": True, "fixed_items": [], "count": 0}
 
-    model = body.model or "gemini-2.5-flash"
+    model = body.model or "gemini-3.6-flash"
 
     async def _rewrite_single(item: FixPromptItem):
         prompt = item.prompt.strip()
+        if not prompt:
+            return ""
         err_msg = item.error_message or "Violates safety policy or content guidelines"
-        models_to_try = [model, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
+        models_to_try = [model, "gemini-3.6-flash", "gemini-flash-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]
         seen = set()
         unique_models = [m for m in models_to_try if m and not (m in seen or seen.add(m))]
 
@@ -3007,6 +3009,10 @@ async def fix_prompts_with_gemini(body: FixPromptsRequest):
                     elif resp.status_code == 404:
                         logger.warning("Gemini model %s returned 404, trying fallback", target_model)
                         last_error = f"Model {target_model} not found (404)"
+                        continue
+                    elif resp.status_code in (500, 502, 503, 504, 429):
+                        logger.warning("Gemini model %s returned %d, trying fallback", target_model, resp.status_code)
+                        last_error = f"Gemini API {resp.status_code}: {resp.text[:200]}"
                         continue
                     else:
                         err_body = resp.text
