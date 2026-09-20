@@ -667,9 +667,10 @@ async def process_batch(body: ProcessRequest):
                     try:
                         with open(meta_path, "r", encoding="utf-8") as f:
                             meta = json.load(f)
-                            if file_name in meta:
+                            cached_pid = meta.get("_project_id")
+                            if (not cached_pid or cached_pid == body.project_id) and file_name in meta:
                                 media_id = meta[file_name]
-                                logger.info("Found cached mediaId for %s: %s (skipping upload)", file_name, media_id)
+                                logger.info("Found cached mediaId for %s in project %s: %s (skipping upload)", file_name, body.project_id, media_id)
                     except Exception as e:
                         logger.warning("Failed to read cached media_id mapping: %s", e)
 
@@ -707,10 +708,11 @@ async def process_batch(body: ProcessRequest):
                                 if os.path.isfile(meta_path):
                                     with open(meta_path, "r", encoding="utf-8") as f:
                                         meta = json.load(f)
+                                meta["_project_id"] = body.project_id
                                 meta[file_name] = media_id
                                 with open(meta_path, "w", encoding="utf-8") as f:
-                                    json.dump(meta, f, indent=2)
-                                logger.info("Cached mediaId for %s: %s (preventing duplicate uploads)", file_name, media_id)
+                                    json.dump(meta, f, indent=2, ensure_ascii=False)
+                                logger.info("Cached mediaId for %s: %s (project %s)", file_name, media_id, body.project_id)
                             except Exception as cache_err:
                                 logger.warning("Failed to cache media_id: %s", cache_err)
                         elif client.connected:

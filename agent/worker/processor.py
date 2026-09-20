@@ -465,6 +465,22 @@ async def _recover_entity_not_found(req: dict) -> bool:
         if new_mid:
             await crud.update_scene(scene["id"], **{f"{prefix}_image_media_id": new_mid})
             logger.info("Recovered scene %s: new %s_image_media_id=%s", scene["id"][:12], prefix, new_mid[:12])
+            try:
+                local_path = url.replace("file://", "") if url else ""
+                if os.path.isfile(local_path):
+                    pdir = os.path.dirname(local_path)
+                    fname = os.path.basename(local_path)
+                    mfile = os.path.join(pdir, "flow_media_ids.json")
+                    meta = {}
+                    if os.path.isfile(mfile):
+                        with open(mfile, "r", encoding="utf-8") as f:
+                            meta = json.load(f)
+                    meta["_project_id"] = pid
+                    meta[fname] = new_mid
+                    with open(mfile, "w", encoding="utf-8") as f:
+                        json.dump(meta, f, indent=2, ensure_ascii=False)
+            except Exception as fe:
+                logger.warning("Failed to update flow_media_ids.json during recovery: %s", fe)
             return True
 
     # Character-based requests: re-upload ref image
@@ -737,11 +753,11 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
         logger.error("Request %s FAILED permanently (quota/billing): %s", rid[:8], error_msg)
         return
 
-    # Auto-recover expired media by re-uploading ONLY if specifically image entity missing
-    if "not found" in error_lower and not any(kw in error_lower for kw in ("failed: [5]", "as29s", "media not found or cancelled")):
+    # Auto-recover expired media by re-uploading if start image entity or media is not found on Flow
+    if ("not found" in error_lower or any(kw in error_lower for kw in ("failed: [5]", "as29s", "media not found or cancelled"))):
         recovered = await _recover_entity_not_found(req)
         if recovered:
-            logger.info("Request %s: recovered expired media, retrying", rid[:8])
+            logger.info("Request %s: recovered expired media, retrying with fresh media ID", rid[:8])
             await crud.update_request(rid, status="PENDING", request_id=None, media_id=None, error_message=f"recovered: {error_msg}")
             return
 
