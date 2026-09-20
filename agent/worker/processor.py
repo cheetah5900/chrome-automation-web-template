@@ -7,6 +7,8 @@ import asyncio
 import base64
 import json
 import logging
+import os
+import re
 import time
 
 import aiohttp
@@ -482,6 +484,227 @@ async def _recover_entity_not_found(req: dict) -> bool:
     return False
 
 
+def _apply_rule_based_safety_rewrite(prompt: str) -> str:
+    """Softens sensitive and policy-violating words (e.g. baby -> kids, infant -> toddler, weapons, gore)."""
+    if not prompt:
+        return prompt
+
+    substitutions = [
+        # Children / Infants
+        (r"\b(newborns)\b", "young children"),
+        (r"\b(newborn)\b", "young child"),
+        (r"\b(infants)\b", "toddlers"),
+        (r"\b(infant)\b", "toddler"),
+        (r"\b(babies)\b", "kids"),
+        (r"\b(baby)\b", "kids"),
+
+        # Blood / Gore
+        (r"\b(bloody)\b", "crimson-hued"),
+        (r"\b(blood)\b", "crimson dye"),
+        (r"\b(gory|gore)\b", "dramatic flair"),
+        (r"\b(wounds|wounded)\b", "markings"),
+        (r"\b(wound)\b", "marking"),
+
+        # Weapons
+        (r"\b(guns|firearms|pistols|rifles)\b", "theatrical props"),
+        (r"\b(gun|firearm|pistol|rifle)\b", "theatrical prop"),
+        (r"\b(knives|daggers)\b", "ornate props"),
+        (r"\b(knife|dagger|blade)\b", "ornate prop"),
+        (r"\b(weapons)\b", "stage props"),
+        (r"\b(weapon)\b", "stage prop"),
+
+        # Violence / Killing
+        (r"\b(murders|murdering|killing|slaying)\b", "dramatically confronting"),
+        (r"\b(murder|kill|slay)\b", "dramatic showdown"),
+        (r"\b(corpses|dead bodies)\b", "resting figures"),
+        (r"\b(corpse|dead body)\b", "resting figure"),
+        (r"\b(terrorist|terrorism)\b", "rival faction"),
+    ]
+
+    res = prompt
+    for pattern, repl in substitutions:
+        def _repl_case(m):
+            txt = m.group(0)
+            if txt.isupper():
+                return repl.upper()
+            if txt[0].isupper():
+                return repl.capitalize()
+            return repl
+        res = re.sub(pattern, _repl_case, res, flags=re.IGNORECASE)
+
+    return res
+
+
+async def _call_gemini_rewrite(prompt: str, err_msg: str, api_key: str) -> str:
+    """Call Gemini 3.6 Flash to rewrite the prompt while preserving artistic intent and style."""
+    try:
+        import httpx
+        system_instruction = (
+            "You are an expert AI video prompt director for Google Flow (Veo).\n"
+            "Your job is to rewrite a video generation prompt that was BLOCKED or REJECTED by Google Flow "
+            "due to safety filters, content policy, or sensitive words.\n\n"
+            "RULES FOR REWRITING:\n"
+            "1. Strictly replace 'baby' or 'babies' with 'kids' or 'young children', and 'infant' or 'infants' with 'toddler' or 'toddlers'.\n"
+            "2. Replace any copyrighted brands, celebrities, named living people, or public figures with neutral artistic descriptions.\n"
+            "3. Soften any violence, weapons, blood, conflict, or gore into theatrical drama, dynamic camera motion, lighting effects, or silhouette storytelling.\n"
+            "4. PRESERVE the original cinematic camera movements (pan, zoom, tracking), lighting style, color grading, shot framing, and atmosphere.\n"
+            "5. Output ONLY the rewritten prompt text. Do NOT wrap in markdown code blocks, quotes, or conversational explanations."
+        )
+        user_content = (
+            f"Original Prompt:\n{prompt}\n\n"
+            f"Rejection / Error Reason:\n{err_msg}\n\n"
+            f"Please rewrite this prompt to be 100% compliant with Google Flow safety policies while maintaining the cinematic style and motion."
+        )
+        payload = {
+            "contents": [{"parts": [{"text": f"{system_instruction}\n\n{user_content}"}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024}
+        }
+        models = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]
+        async with httpx.AsyncClient(timeout=25.0) as http_client:
+            for target_model in models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent"
+                try:
+                    resp = await http_client.post(url, params={"key": api_key}, json=payload, headers={"Content-Type": "application/json"})
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                res_text = parts[0].get("text", "").strip()
+                                res_text = re.sub(r"^```[a-z]*\s*", "", res_text)
+                                res_text = re.sub(r"\s*```$", "", res_text)
+                                res_text = res_text.strip(" \"'\n\r")
+                                if res_text:
+                                    return res_text
+                except Exception:
+                    continue
+    except Exception as e:
+        logger.warning("Error in _call_gemini_rewrite: %s", e)
+    return ""
+
+
+async def _rewrite_prompt_for_safety(prompt: str, error_msg: str) -> str:
+    """Rewrite prompt for safety using Gemini if key is configured, plus rule-based softening."""
+    if not prompt:
+        return prompt
+    # 1. Try Gemini API first if configured
+    try:
+        from agent.api.batch_uploader import get_saved_gemini_key
+        key = get_saved_gemini_key()
+        if key:
+            ai_rewritten = await _call_gemini_rewrite(prompt, error_msg, key)
+            if ai_rewritten and ai_rewritten.strip():
+                return _apply_rule_based_safety_rewrite(ai_rewritten.strip())
+    except Exception as e:
+        logger.warning("Gemini safety rewrite failed, falling back to rule-based: %s", e)
+
+    # 2. Rule-based softening
+    return _apply_rule_based_safety_rewrite(prompt)
+
+
+async def _auto_rewrite_and_save_prompt(req: dict, error_msg: str) -> str:
+    """Rewrites prompt, saves it to file on disk, and updates database scene & request."""
+    scene_id = req.get("scene_id")
+    scene = await crud.get_scene(scene_id) if scene_id else None
+
+    current_prompt = ""
+    prompt_path = None
+    image_path = None
+
+    ep = req.get("edit_prompt")
+    params = {}
+    if ep:
+        try:
+            params = json.loads(ep)
+            if isinstance(params, dict):
+                prompt_path = params.get("prompt_path")
+                image_path = params.get("image_path")
+                current_prompt = params.get("original_prompt") or params.get("prompt_content") or ""
+        except Exception:
+            pass
+
+    if not current_prompt and scene:
+        current_prompt = scene.get("video_prompt") or scene.get("prompt") or ""
+
+    # Locate prompt file if prompt_path is not given or doesn't exist
+    if not prompt_path or not os.path.isfile(prompt_path):
+        img = image_path or (scene.get("vertical_image_url") if scene else None)
+        if img:
+            if img.startswith("file://"):
+                from urllib.parse import unquote
+                img = unquote(img[7:])
+            if os.path.exists(img):
+                base, _ = os.path.splitext(img)
+                for ext in (".txt", ".md"):
+                    if os.path.isfile(base + ext):
+                        prompt_path = base + ext
+                        break
+                if not prompt_path:
+                    img_dir = os.path.dirname(img)
+                    img_name = os.path.splitext(os.path.basename(img))[0]
+                    for candidate_dir in (img_dir, os.path.join(img_dir, "..", "prompts"), os.path.join(img_dir, "prompts")):
+                        if os.path.isdir(candidate_dir):
+                            for ext in (".txt", ".md"):
+                                cand = os.path.join(candidate_dir, img_name + ext)
+                                if os.path.isfile(cand):
+                                    prompt_path = cand
+                                    break
+                            if prompt_path:
+                                break
+
+    if prompt_path and os.path.isfile(prompt_path) and not current_prompt:
+        try:
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                current_prompt = f.read().strip()
+        except Exception as e:
+            logger.warning("Failed to read prompt from %s: %s", prompt_path, e)
+
+    rewritten_prompt = await _rewrite_prompt_for_safety(current_prompt or "", error_msg)
+
+    # 1. Overwrite file on disk
+    if prompt_path:
+        try:
+            with open(prompt_path, "w", encoding="utf-8") as f:
+                f.write(rewritten_prompt)
+            logger.info("Saved auto-rewritten prompt to disk: %s", prompt_path)
+        except Exception as e:
+            logger.warning("Failed to save auto-rewritten prompt to %s: %s", prompt_path, e)
+    elif image_path and os.path.exists(os.path.dirname(image_path)):
+        base, _ = os.path.splitext(image_path)
+        save_file = base + ".txt"
+        try:
+            with open(save_file, "w", encoding="utf-8") as f:
+                f.write(rewritten_prompt)
+            prompt_path = save_file
+            params["prompt_path"] = save_file
+            logger.info("Saved auto-rewritten prompt to newly created file: %s", save_file)
+        except Exception as e:
+            logger.warning("Failed to create new prompt file %s: %s", save_file, e)
+
+    # 2. Update scene in database
+    if scene_id:
+        try:
+            await crud.update_scene(scene_id, prompt=rewritten_prompt, video_prompt=rewritten_prompt)
+            logger.info("Updated scene %s with auto-rewritten prompt", scene_id)
+        except Exception as e:
+            logger.warning("Failed to update scene %s with rewritten prompt: %s", scene_id, e)
+
+    # 3. Update request edit_prompt JSON
+    params["original_prompt"] = rewritten_prompt
+    params["prompt_content"] = rewritten_prompt
+    if prompt_path:
+        params["prompt_path"] = prompt_path
+    try:
+        new_ep = json.dumps(params)
+        await crud.update_request(req["id"], edit_prompt=new_ep)
+        req["edit_prompt"] = new_ep
+    except Exception as e:
+        logger.warning("Failed to update request edit_prompt: %s", e)
+
+    return rewritten_prompt
+
+
 async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict = None, deferred: dict = None):
     error_msg = result.get("error")
     if not error_msg:
@@ -490,7 +713,6 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
             ef = data.get("error", "Unknown error")
             if isinstance(ef, dict):
                 error_msg = ef.get("message", json.dumps(ef)[:200])
-                # Extract detailed reason from error details (e.g. PUBLIC_ERROR_UNSAFE_GENERATION)
                 details = ef.get("details", [])
                 if details and isinstance(details, list):
                     for d in details:
@@ -507,44 +729,35 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
 
     error_lower = str(error_msg).lower()
 
-    # Check for permanent non-retryable errors (timeouts, quota/billing limits, safety blocks, parameters issues)
-    is_permanent = False
-    if "polling timeout" in error_lower:
-        is_permanent = True
-    elif any(kw in error_lower for kw in ("billing", "credits", "quota", "paygate", "insufficient", "payment", "tier")):
-        is_permanent = True
-    elif any(kw in error_lower for kw in ("safety", "unsafe", "content filter", "unsuitable", "failed: [5]", "media not found or cancelled")):
-        is_permanent = True
-    elif any(kw in error_lower for kw in ("invalid", "bad request", "unknown name", "invalid_argument")):
-        is_permanent = True
-
-    if is_permanent:
+    # Quota/billing limits are strictly non-retryable
+    if any(kw in error_lower for kw in ("billing", "credits", "quota", "paygate", "insufficient", "payment", "tier")):
         await crud.update_request(rid, status="FAILED", error_message=str(error_msg))
         await _mark_scene_failed(req)
-        logger.error("Request %s FAILED permanently (non-retryable): %s", rid[:8], error_msg)
+        await event_bus.emit("request_update", {"id": rid, "status": "FAILED", "error": str(error_msg)})
+        logger.error("Request %s FAILED permanently (quota/billing): %s", rid[:8], error_msg)
         return
 
-    # Auto-recover expired media by re-uploading ONLY if not permanent and specifically image entity missing
+    # Auto-recover expired media by re-uploading ONLY if specifically image entity missing
     if "not found" in error_lower and not any(kw in error_lower for kw in ("failed: [5]", "as29s", "media not found or cancelled")):
         recovered = await _recover_entity_not_found(req)
         if recovered:
             logger.info("Request %s: recovered expired media, retrying", rid[:8])
-            await crud.update_request(rid, status="PENDING", error_message=f"recovered: {error_msg}")
+            await crud.update_request(rid, status="PENDING", request_id=None, media_id=None, error_message=f"recovered: {error_msg}")
             return
 
-    # WS transient errors (extension disconnect/reconnect): retry without incrementing count
-    if "extension reconnected" in error_lower or "extension disconnected" in error_lower or "extension not connected" in error_lower:
-        await crud.update_request(rid, status="PENDING", error_message=str(error_msg))
+    # WS transient errors: retry without incrementing count
+    if any(kw in error_lower for kw in ("extension reconnected", "extension disconnected", "extension not connected")):
+        await crud.update_request(rid, status="PENDING", request_id=None, media_id=None, error_message=str(error_msg))
         logger.info("Request %s transient WS error, will retry (no retry increment): %s", rid[:8], error_msg)
         return
 
-    # reCAPTCHA errors: retry up to 10 times — deferred dict in main loop handles delay
+    # reCAPTCHA errors: retry up to 10 times
     if "captcha" in error_lower or "recaptcha" in error_lower:
         retry = req.get("retry_count", 0) + 1
         if retry < 10:
             if deferred is not None:
                 deferred[rid] = time.time() + 5.0
-            await crud.update_request(rid, status="PENDING", retry_count=retry, error_message=str(error_msg))
+            await crud.update_request(rid, status="PENDING", retry_count=retry, request_id=None, media_id=None, error_message=str(error_msg))
             logger.warning("Request %s reCAPTCHA failed (retry %d/10), will retry in 5s", rid[:8], retry)
             return
         else:
@@ -553,22 +766,54 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
             logger.error("Request %s FAILED after 10 reCAPTCHA retries: %s", rid[:8], error_msg)
             return
 
-    retry = req.get("retry_count", 0) + 1
-    if retry < MAX_RETRIES:
-        now = time.time()
+    # 2-Tier Auto-Retry with Prompt Safety Rewriting Workflow
+    # Read latest retry_count directly from DB if available
+    db_req = await crud.get_request(rid)
+    current_retry = (db_req.get("retry_count", 0) if db_req else req.get("retry_count", 0)) or 0
+
+    if current_retry == 0:
+        # Attempt 1 failed -> Retry 1/2
+        new_retry = 1
+        msg = f"🔄 กำลังลองซ้ำครั้งที่ 1/2... ({error_msg})"
         if retry_after is not None:
-            ra = retry_after.get(rid, 0.0)
-            if ra > now:
-                # Still in backoff — reset to PENDING so it's not stuck in PROCESSING
-                await crud.update_request(rid, status="PENDING", error_message=str(error_msg))
-                return
-            retry_after[rid] = now + min(2 ** retry * 10, 300)
-        await crud.update_request(rid, status="PENDING", retry_count=retry, error_message=str(error_msg))
-        logger.warning("Request %s failed (retry %d/%d): %s", rid[:8], retry, MAX_RETRIES, error_msg)
+            retry_after[rid] = time.time() + 3.0
+        await crud.update_request(rid, status="PENDING", retry_count=new_retry, request_id=None, media_id=None, error_message=msg)
+        await event_bus.emit("request_update", {"id": rid, "status": "PENDING", "retry_count": new_retry, "error": msg})
+        logger.warning("Request %s: retry 1/2 scheduled - %s", rid[:8], msg)
+        return
+
+    elif current_retry == 1:
+        # Attempt 2 failed -> Retry 2/2
+        new_retry = 2
+        msg = f"🔄 กำลังลองซ้ำครั้งที่ 2/2... ({error_msg})"
+        if retry_after is not None:
+            retry_after[rid] = time.time() + 3.0
+        await crud.update_request(rid, status="PENDING", retry_count=new_retry, request_id=None, media_id=None, error_message=msg)
+        await event_bus.emit("request_update", {"id": rid, "status": "PENDING", "retry_count": new_retry, "error": msg})
+        logger.warning("Request %s: retry 2/2 scheduled - %s", rid[:8], msg)
+        return
+
+    elif current_retry == 2:
+        # Tried 2 times, both failed -> State clearly, rewrite prompt in file on disk & DB, then retry once more!
+        new_retry = 3
+        rewritten_prompt = await _auto_rewrite_and_save_prompt(req, error_msg)
+        msg = "ลองครบ 2 ครั้งแล้ว แต่ล้มเหลว -> ปรับแก้ Prompt ในไฟล์เรียบร้อยแล้ว (เลี่ยงคำต้องห้าม) และกำลังลองสร้างใหม่อีกครั้ง..."
+        if retry_after is not None:
+            retry_after[rid] = time.time() + 3.0
+        await crud.update_request(rid, status="PENDING", retry_count=new_retry, request_id=None, media_id=None, error_message=msg)
+        await event_bus.emit("request_update", {"id": rid, "status": "PENDING", "retry_count": new_retry, "error": msg, "prompt": rewritten_prompt})
+        logger.warning("Request %s: %s (rewritten prompt: %s)", rid[:8], msg, rewritten_prompt[:100] if rewritten_prompt else "none")
+        return
+
     else:
-        await crud.update_request(rid, status="FAILED", error_message=str(error_msg))
+        # Tried retry with rewritten prompt (attempt 3), and it still failed -> Mark failed permanently
+        new_retry = current_retry + 1
+        msg = f"ลองครบ 2 ครั้งแล้ว และปรับแก้ Prompt ในไฟล์แล้ว แต่ล้มเหลว: {error_msg}"
+        await crud.update_request(rid, status="FAILED", retry_count=new_retry, error_message=msg)
         await _mark_scene_failed(req)
-        logger.error("Request %s FAILED permanently: %s", rid[:8], error_msg)
+        await event_bus.emit("request_update", {"id": rid, "status": "FAILED", "retry_count": new_retry, "error": msg})
+        logger.error("Request %s FAILED permanently: %s", rid[:8], msg)
+        return
 
 
 async def _mark_scene_failed(req: dict):

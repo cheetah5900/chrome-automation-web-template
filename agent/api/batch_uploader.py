@@ -420,6 +420,7 @@ class ScanRequest(BaseModel):
 
 class ProcessPair(BaseModel):
     image_path: Optional[str] = None
+    prompt_path: Optional[str] = None
     prompt_content: str
 
 
@@ -770,7 +771,10 @@ async def process_batch(body: ProcessRequest):
             params_dict = {
                 "video_model": body.video_model,
                 "duration_seconds": body.duration_seconds,
-                "output_count": body.output_count
+                "output_count": body.output_count,
+                "prompt_path": pair.prompt_path,
+                "image_path": pair.image_path,
+                "original_prompt": pair.prompt_content
             }
             db_req_data = {
                 "project_id": body.project_id,

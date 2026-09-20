@@ -131,6 +131,16 @@ async def batch_status(video_id: str = None, project_id: str = None,
     for r in rows:
         s = r.get("status", "PENDING")
         counts[s] = counts.get(s, 0) + 1
+        prompt_val = None
+        ep = r.get("edit_prompt")
+        if ep:
+            try:
+                import json as _json
+                ep_data = _json.loads(ep)
+                if isinstance(ep_data, dict):
+                    prompt_val = ep_data.get("original_prompt") or ep_data.get("prompt_content")
+            except Exception:
+                pass
         item_summary = {
             "id": r.get("id"),
             "scene_id": r.get("scene_id"),
@@ -138,6 +148,8 @@ async def batch_status(video_id: str = None, project_id: str = None,
             "error_message": r.get("error_message"),
             "media_id": r.get("media_id"),
             "output_url": r.get("output_url"),
+            "retry_count": r.get("retry_count", 0),
+            "prompt_content": prompt_val,
         }
         items.append(item_summary)
         if s == "FAILED":
