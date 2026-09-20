@@ -174,7 +174,7 @@ async def lifespan(app: FastAPI):
     logger.info("Flow Kit stopped")
 
 
-app = FastAPI(title="Flow Kit", version="1.13.10", lifespan=lifespan)
+app = FastAPI(title="Flow Kit", version="1.13.11", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
