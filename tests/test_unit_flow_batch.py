@@ -89,13 +89,13 @@ class TestFlowBatchUnit(unittest.TestCase):
     def test_flow_client_fail_fast_on_not_found_round_8(self):
         import asyncio
         from unittest.mock import AsyncMock
-        from agent.services.flow_client import FlowClient
+        from agent.services.flow_client import FlowClient, MAX_AS29S_NOT_FOUND_ROUNDS
 
         client = FlowClient()
         op_id = "test-op-1234"
         media_id = "test-media-5678"
         client._operation_media[op_id] = media_id
-        client._not_found_counts[op_id] = 7  # becomes 8 on poll
+        client._not_found_counts[op_id] = MAX_AS29S_NOT_FOUND_ROUNDS - 1  # becomes MAX_AS29S_NOT_FOUND_ROUNDS on poll
 
         client._batch_media_urls = AsyncMock(side_effect=Exception("as29s failed: [5]"))
         client._find_operation_media = AsyncMock(return_value=(None, None))

@@ -33,6 +33,7 @@ from agent.services import flow_batch as fb
 from agent.services.headers import random_headers
 
 logger = logging.getLogger(__name__)
+MAX_AS29S_NOT_FOUND_ROUNDS = 25  # ~250s polling window before concluding Google Flow cancelled media
 
 
 class FlowClient:
@@ -889,14 +890,14 @@ class FlowClient:
             self._not_found_counts[operation_id] = count
             logger.info("Operation %s media %s still rendering (round %d): %s",
                         operation_id[:8], media_id[:8], count, err_str)
-            if count >= 6:
+            if count >= 6 and (count % 3 == 0 or count >= MAX_AS29S_NOT_FOUND_ROUNDS - 2):
                 found_id, _ = await self._find_operation_media(operation_id)
                 if found_id and found_id != media_id:
                     self._operation_media[operation_id] = found_id
                     logger.info("Operation %s media re-resolved from listing: %s -> %s",
                                 operation_id[:8], media_id[:8], found_id[:8])
                     media_id = found_id
-            if count >= 8 and ("as29s failed: [5]" in err_str or "[5]" in err_str):
+            if count >= MAX_AS29S_NOT_FOUND_ROUNDS and ("as29s failed: [5]" in err_str or "[5]" in err_str):
                 tab_err = await self._check_flow_tab_404()
                 if tab_err:
                     return {
