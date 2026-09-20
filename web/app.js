@@ -11897,13 +11897,13 @@ function renderFlowLiveSceneRowsHtml(pairs) {
   }).join('');
 }
 
-function updateFlowLiveFloatingPill(isRunning, pairs = flowScannedPairs) {
+function updateFlowLiveFloatingPill(isRunning, pairs = null) {
   let pill = document.getElementById('btnFlowLiveFloatingPill');
   if (!isRunning) {
     if (pill) pill.style.display = 'none';
     return;
   }
-  const currentPairs = pairs || flowLiveCurrentPairs || flowScannedPairs || [];
+  const currentPairs = pairs || flowLiveCurrentPairs || (flowScannedPairs || []).filter(p => p.checked !== false);
   const total = currentPairs.length;
   const completed = currentPairs.filter(p => p.status === 'COMPLETED').length;
   const failed = currentPairs.filter(p => p.status === 'FAILED').length;
@@ -11914,7 +11914,7 @@ function updateFlowLiveFloatingPill(isRunning, pairs = flowScannedPairs) {
     pill.className = 'flow-live-floating-pill';
     document.body.appendChild(pill);
     pill.addEventListener('click', () => {
-      openFlowLiveStatusModal(flowLiveCurrentPairs || flowScannedPairs, flowLiveActiveVideoId);
+      openFlowLiveStatusModal(flowLiveCurrentPairs, flowLiveActiveVideoId);
     });
   }
 
@@ -11926,10 +11926,15 @@ function updateFlowLiveFloatingPill(isRunning, pairs = flowScannedPairs) {
   `;
 }
 
-function openFlowLiveStatusModal(initialPairs = flowScannedPairs, videoId = '') {
+function openFlowLiveStatusModal(initialPairs = null, videoId = '') {
   flowLiveModalOpen = true;
   flowLiveActiveVideoId = videoId || flowLiveActiveVideoId;
-  flowLiveCurrentPairs = initialPairs || flowScannedPairs;
+  if (initialPairs && Array.isArray(initialPairs) && initialPairs.length > 0) {
+    flowLiveCurrentPairs = initialPairs;
+  } else if (!flowLiveCurrentPairs || flowLiveCurrentPairs.length === 0) {
+    const checked = (flowScannedPairs || []).filter(p => p.checked !== false && (p.prompt_content || '').trim());
+    flowLiveCurrentPairs = checked.length > 0 ? checked : (flowScannedPairs || []);
+  }
   const pairs = flowLiveCurrentPairs;
   const total = pairs.length;
   const completed = pairs.filter(p => p.status === 'COMPLETED').length;
@@ -12047,19 +12052,20 @@ function openFlowLiveStatusModal(initialPairs = flowScannedPairs, videoId = '') 
   });
 }
 
-function updateFlowLiveStatusModal(statusRes, pairs) {
-  if (!pairs || pairs.length === 0) return;
-  flowLiveCurrentPairs = pairs;
-  const total = pairs.length;
-  const completed = pairs.filter(p => p.status === 'COMPLETED').length;
-  const failed = pairs.filter(p => p.status === 'FAILED').length;
-  const processing = pairs.filter(p => p.status === 'PROCESSING').length;
-  const pending = pairs.filter(p => p.status === 'PENDING' || p.status === 'QUEUED' || !p.status).length;
+function updateFlowLiveStatusModal(statusRes, pairs = null) {
+  const currentPairs = (pairs && pairs.length > 0) ? pairs : flowLiveCurrentPairs;
+  if (!currentPairs || currentPairs.length === 0) return;
+  flowLiveCurrentPairs = currentPairs;
+  const total = currentPairs.length;
+  const completed = currentPairs.filter(p => p.status === 'COMPLETED').length;
+  const failed = currentPairs.filter(p => p.status === 'FAILED').length;
+  const processing = currentPairs.filter(p => p.status === 'PROCESSING').length;
+  const pending = currentPairs.filter(p => p.status === 'PENDING' || p.status === 'QUEUED' || !p.status).length;
   const percent = total > 0 ? Math.round(((completed + failed) / total) * 100) : 0;
   
   const tbody = document.getElementById('flowLiveSceneTableBody');
   if (tbody) {
-    tbody.innerHTML = renderFlowLiveSceneRowsHtml(pairs);
+    tbody.innerHTML = renderFlowLiveSceneRowsHtml(currentPairs);
     
     const cp = document.getElementById('flowLiveCountProcessing');
     const cpen = document.getElementById('flowLiveCountPending');
@@ -12075,7 +12081,7 @@ function updateFlowLiveStatusModal(statusRes, pairs) {
     if (pText) pText.textContent = `${completed + failed}/${total} ฉาก (${percent}%)`;
     if (pBar) pBar.style.width = `${percent}%`;
     
-    const activePair = pairs.find(p => p.status === 'PROCESSING') || null;
+    const activePair = currentPairs.find(p => p.status === 'PROCESSING') || null;
     const activeLabel = activePair ? (activePair.image_name || activePair.prompt_name || `ฉาก ${activePair.order || ''}`) : '';
     const activeTitle = document.getElementById('flowLiveActiveTitle');
     const activeBadge = document.getElementById('flowLiveActiveBadge');
@@ -12093,7 +12099,7 @@ function updateFlowLiveStatusModal(statusRes, pairs) {
 
   const isRunning = Boolean(flowBatchRunningInterval || flowBatchPORunningInterval);
   if (!flowLiveModalOpen && isRunning) {
-    updateFlowLiveFloatingPill(true, pairs);
+    updateFlowLiveFloatingPill(true, currentPairs);
   }
 }
 
@@ -12505,7 +12511,7 @@ function initFlowKitUploaderListeners() {
         logToConsole(`Queued: ${queued.length} scenes, Failed: ${failed.length} scenes.`);
         
         res.results.forEach((r, idx) => {
-          const matchedPair = flowScannedPairs.find(p => p.image_path === r.image_path) || flowScannedPairs[idx];
+          const matchedPair = validPairs[idx] || (r.image_path ? flowScannedPairs.find(p => p.image_path === r.image_path) : null);
           if (matchedPair) {
             matchedPair.scene_id = r.scene_id;
             matchedPair.status = r.status === 'QUEUED' ? 'PENDING' : 'FAILED';
@@ -12529,8 +12535,8 @@ function initFlowKitUploaderListeners() {
         if (queued.length > 0) {
           setFlowBatchButtonRunning(btn, true, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
           
-          // Open central Live Batch Monitor modal immediately
-          openFlowLiveStatusModal(flowScannedPairs, res.video_id);
+          // Open central Live Batch Monitor modal for the submitted validPairs only
+          openFlowLiveStatusModal(validPairs, res.video_id);
 
           if (flowBatchRunningInterval) clearInterval(flowBatchRunningInterval);
           const loggedStatusKeys = new Set();
@@ -12574,15 +12580,12 @@ function initFlowKitUploaderListeners() {
                 }
               }
 
-              // Update Live Modal & Floating Pill in real time
-              updateFlowLiveStatusModal(statusRes, flowScannedPairs);
+              // Update Live Modal & Floating Pill for the submitted validPairs
+              updateFlowLiveStatusModal(statusRes, validPairs);
 
               // Check if batch is completed
-              const allPairsFinished = flowScannedPairs.length > 0 &&
-                validPairs.every(vp => {
-                  const pair = flowScannedPairs.find(p => p.scene_id === vp.scene_id || (vp.image_path && p.image_path === vp.image_path));
-                  return pair && (pair.status === 'COMPLETED' || pair.status === 'FAILED');
-                });
+              const allPairsFinished = validPairs.length > 0 &&
+                validPairs.every(vp => vp.status === 'COMPLETED' || vp.status === 'FAILED');
               const isBatchDone = Boolean(statusRes.done || allPairsFinished);
 
               if (isBatchDone) {
@@ -12609,7 +12612,7 @@ function initFlowKitUploaderListeners() {
                     playFlowAlertSound('error');
                   }
                 }
-                showFlowLiveCompletedModal(statusRes, flowScannedPairs);
+                showFlowLiveCompletedModal(statusRes, validPairs);
               }
             } catch (pErr) {
               console.error('Error during batch status polling:', pErr);
@@ -13650,8 +13653,8 @@ async function initFlowGeminiKey() {
             setFlowBatchButtonRunning(batchBtn, true, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
           }
 
-          // Open Live Batch Monitor modal immediately
-          openFlowLiveStatusModal(flowScannedPairs, res.video_id);
+          // Open Live Batch Monitor modal for problemScenes only
+          openFlowLiveStatusModal(problemScenes, res.video_id);
 
           const loggedStatusKeys = new Set();
           flowBatchRunningInterval = setInterval(async () => {
@@ -13693,8 +13696,8 @@ async function initFlowGeminiKey() {
                 }
               }
 
-              // Update Live Modal & Floating Pill in real time
-              updateFlowLiveStatusModal(statusRes, flowScannedPairs);
+              // Update Live Modal & Floating Pill for problemScenes
+              updateFlowLiveStatusModal(statusRes, problemScenes);
 
               const allFinished = problemScenes.every(p => p.status === 'COMPLETED' || p.status === 'FAILED');
               if (statusRes.done || allFinished) {
@@ -13712,7 +13715,7 @@ async function initFlowGeminiKey() {
                 } else {
                   playFlowAlertSound('error');
                 }
-                showFlowLiveCompletedModal(statusRes, flowScannedPairs);
+                showFlowLiveCompletedModal(statusRes, problemScenes);
               }
             } catch (pErr) {
               console.error('Error polling retry batch status:', pErr);
@@ -14227,7 +14230,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
       logToConsole(`Batch submitted successfully! Video Container ID: ${res.video_id}`, 'success');
       if (res.results && Array.isArray(res.results)) {
         res.results.forEach((r, idx) => {
-          const matchedPair = flowScannedPairs[idx];
+          const matchedPair = validPairs[idx] || flowScannedPairs[idx];
           if (matchedPair) {
             matchedPair.scene_id = r.scene_id;
             matchedPair.status = r.status === 'QUEUED' ? 'PENDING' : 'FAILED';
@@ -14243,8 +14246,8 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
       }
       setFlowBatchButtonRunning(btn, true, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
       
-      // Open Live Batch Monitor modal immediately
-      openFlowLiveStatusModal(flowScannedPairs, res.video_id);
+      // Open central Live Batch Monitor modal for validPairs only
+      openFlowLiveStatusModal(validPairs, res.video_id);
 
       if (flowBatchPORunningInterval) clearInterval(flowBatchPORunningInterval);
       const loggedStatusKeysPO = new Set();
@@ -14288,15 +14291,12 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
             }
           }
 
-          // Update Live Modal & Floating Pill in real time
-          updateFlowLiveStatusModal(statusRes, flowScannedPairs);
+          // Update Live Modal & Floating Pill for validPairs
+          updateFlowLiveStatusModal(statusRes, validPairs);
 
           // Check if batch is completed
-          const allPairsFinished = flowScannedPairs.length > 0 &&
-            validPairs.every(vp => {
-              const pair = flowScannedPairs.find(p => p.scene_id === vp.scene_id || (vp.prompt_path && p.prompt_path === vp.prompt_path));
-              return pair && (pair.status === 'COMPLETED' || pair.status === 'FAILED');
-            });
+          const allPairsFinished = validPairs.length > 0 &&
+            validPairs.every(vp => vp.status === 'COMPLETED' || vp.status === 'FAILED');
           const isBatchDone = Boolean(statusRes.done || allPairsFinished);
 
           if (isBatchDone) {
@@ -14323,7 +14323,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
                 playFlowAlertSound('error');
               }
             }
-            showFlowLiveCompletedModal(statusRes, flowScannedPairs);
+            showFlowLiveCompletedModal(statusRes, validPairs);
           }
         } catch (pErr) {
           console.error('Error during PO batch status polling:', pErr);
