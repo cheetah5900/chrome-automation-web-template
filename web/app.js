@@ -11847,9 +11847,38 @@ window.showFlowDesktopNotification = function(title, body) {
 };
 const showFlowDesktopNotification = window.showFlowDesktopNotification;
 
+let flowBatchRunningInterval = null;
+let flowBatchPORunningInterval = null;
 let flowLiveModalOpen = false;
 let flowLiveActiveVideoId = '';
 let flowLiveCurrentPairs = [];
+
+function setFlowBatchButtonRunning(btn, isRunning, defaultText = '🚀 Start Batch Upload', defaultBg = null) {
+  const targetBtn = btn || (defaultBg && defaultBg.includes('#10b981')
+    ? document.getElementById('btnProcessFlowKitBatch')
+    : document.getElementById('btnProcessFlowKitBatchPO'));
+  if (!targetBtn) return;
+  if (isRunning) {
+    targetBtn.dataset.state = 'running';
+    targetBtn.innerHTML = '🛑 Force Stop';
+    targetBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+    targetBtn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
+  } else {
+    targetBtn.dataset.state = 'idle';
+    targetBtn.innerHTML = defaultText || '🚀 Start Batch Upload';
+    targetBtn.style.background = defaultBg || (targetBtn.id === 'btnProcessFlowKitBatchPO' ? 'linear-gradient(135deg, #a855f7, #7e22ce)' : 'linear-gradient(135deg, #10b981, #059669)');
+    targetBtn.style.boxShadow = '';
+  }
+}
+window.setFlowBatchButtonRunning = setFlowBatchButtonRunning;
+
+function resetAllFlowBatchButtons() {
+  const btn1 = document.getElementById('btnProcessFlowKitBatch');
+  const btn2 = document.getElementById('btnProcessFlowKitBatchPO');
+  if (btn1) setFlowBatchButtonRunning(btn1, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+  if (btn2) setFlowBatchButtonRunning(btn2, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
+}
+window.resetAllFlowBatchButtons = resetAllFlowBatchButtons;
 
 function renderFlowLiveSceneRowsHtml(pairs) {
   if (!pairs || pairs.length === 0) {
@@ -12106,6 +12135,15 @@ function updateFlowLiveStatusModal(statusRes, pairs = null) {
 function showFlowLiveCompletedModal(statusRes, pairs) {
   flowLiveModalOpen = false;
   updateFlowLiveFloatingPill(false);
+  resetAllFlowBatchButtons();
+  if (flowBatchRunningInterval) {
+    clearInterval(flowBatchRunningInterval);
+    flowBatchRunningInterval = null;
+  }
+  if (flowBatchPORunningInterval) {
+    clearInterval(flowBatchPORunningInterval);
+    flowBatchPORunningInterval = null;
+  }
   const total = statusRes?.total || (pairs ? pairs.length : 0);
   const completed = statusRes?.completed || 0;
   const failed = statusRes?.failed || 0;
@@ -12358,26 +12396,6 @@ function initFlowKitUploaderListeners() {
   });
   document.getElementById('btnApplyFlowRange')?.addEventListener('click', applyFlowRangeSelection);
 
-  // Helper to toggle button state between Start and Force Stop
-  let flowBatchRunningInterval = null;
-  const setFlowBatchButtonRunning = (btn, isRunning, defaultText, defaultBg) => {
-    const targetBtn = btn || (defaultBg && defaultBg.includes('#10b981')
-      ? document.getElementById('btnProcessFlowKitBatch')
-      : document.getElementById('btnProcessFlowKitBatchPO'));
-    if (!targetBtn) return;
-    if (isRunning) {
-      targetBtn.dataset.state = 'running';
-      targetBtn.innerHTML = '🛑 Force Stop';
-      targetBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-      targetBtn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
-    } else {
-      targetBtn.dataset.state = 'idle';
-      targetBtn.innerHTML = defaultText;
-      targetBtn.style.background = defaultBg;
-      targetBtn.style.boxShadow = '';
-    }
-  };
-
   // 6. Process Batch Button
   document.getElementById('btnProcessFlowKitBatch')?.addEventListener('click', async () => {
     const btn = document.getElementById('btnProcessFlowKitBatch');
@@ -12586,13 +12604,18 @@ function initFlowKitUploaderListeners() {
               // Check if batch is completed
               const allPairsFinished = validPairs.length > 0 &&
                 validPairs.every(vp => vp.status === 'COMPLETED' || vp.status === 'FAILED');
-              const isBatchDone = Boolean(statusRes.done || allPairsFinished);
+              const isBatchDone = Boolean(
+                statusRes.done ||
+                allPairsFinished ||
+                (statusRes.total > 0 && (statusRes.completed + statusRes.failed) >= statusRes.total)
+              );
 
               if (isBatchDone) {
-                clearInterval(flowBatchRunningInterval);
-                flowBatchRunningInterval = null;
-                const batchBtn = document.getElementById('btnProcessFlowKitBatch') || btn;
-                setFlowBatchButtonRunning(batchBtn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+                if (flowBatchRunningInterval) {
+                  clearInterval(flowBatchRunningInterval);
+                  flowBatchRunningInterval = null;
+                }
+                resetAllFlowBatchButtons();
                 updateFlowLiveFloatingPill(false);
                 renderScannedPairs();
                 renderSafetyResolutionSection();
@@ -13700,12 +13723,17 @@ async function initFlowGeminiKey() {
               updateFlowLiveStatusModal(statusRes, problemScenes);
 
               const allFinished = problemScenes.every(p => p.status === 'COMPLETED' || p.status === 'FAILED');
-              if (statusRes.done || allFinished) {
-                clearInterval(flowBatchRunningInterval);
-                flowBatchRunningInterval = null;
-                if (batchBtn) {
-                  setFlowBatchButtonRunning(batchBtn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
+              const isBatchDone = Boolean(
+                statusRes.done ||
+                allFinished ||
+                (statusRes.total > 0 && (statusRes.completed + statusRes.failed) >= statusRes.total)
+              );
+              if (isBatchDone) {
+                if (flowBatchRunningInterval) {
+                  clearInterval(flowBatchRunningInterval);
+                  flowBatchRunningInterval = null;
                 }
+                resetAllFlowBatchButtons();
                 updateFlowLiveFloatingPill(false);
                 renderScannedPairs();
                 renderSafetyResolutionSection();
@@ -14100,8 +14128,6 @@ document.getElementById('btnScanFlowKitPO')?.addEventListener('click', async () 
   }
 });
 
-let flowBatchPORunningInterval = null;
-
 document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', async () => {
   const btn = document.getElementById('btnProcessFlowKitBatchPO');
   const msg = document.getElementById('flowKitPOMsg');
@@ -14297,13 +14323,18 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
           // Check if batch is completed
           const allPairsFinished = validPairs.length > 0 &&
             validPairs.every(vp => vp.status === 'COMPLETED' || vp.status === 'FAILED');
-          const isBatchDone = Boolean(statusRes.done || allPairsFinished);
+          const isBatchDone = Boolean(
+            statusRes.done ||
+            allPairsFinished ||
+            (statusRes.total > 0 && (statusRes.completed + statusRes.failed) >= statusRes.total)
+          );
 
           if (isBatchDone) {
-            clearInterval(flowBatchPORunningInterval);
-            flowBatchPORunningInterval = null;
-            const batchBtnPO = document.getElementById('btnProcessFlowKitBatchPO') || btn;
-            setFlowBatchButtonRunning(batchBtnPO, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
+            if (flowBatchPORunningInterval) {
+              clearInterval(flowBatchPORunningInterval);
+              flowBatchPORunningInterval = null;
+            }
+            resetAllFlowBatchButtons();
             updateFlowLiveFloatingPill(false);
             renderScannedPairs();
             renderSafetyResolutionSection();
