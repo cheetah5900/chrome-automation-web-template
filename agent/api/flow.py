@@ -263,6 +263,8 @@ async def cdp_upload_file(body: CdpUploadFileRequest):
 class CdpTypeTextRequest(BaseModel):
     text: str
     click_submit: bool = False
+    output_count: int = 1
+    aspect_ratio: Optional[str] = None
 
 
 @router.post("/cdp-type-text")
@@ -273,7 +275,9 @@ async def cdp_type_text(body: CdpTypeTextRequest):
     return await client._send("flow_cdp_type_text", {
         "text": body.text,
         "clickSubmit": body.click_submit,
-    }, timeout=30)
+        "outputCount": body.output_count,
+        "aspectRatio": body.aspect_ratio,
+    }, timeout=45)
 
 
 @router.post("/reload-extension")

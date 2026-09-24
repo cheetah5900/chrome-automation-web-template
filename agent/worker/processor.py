@@ -804,37 +804,14 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
         logger.warning("Request %s: retry 1/2 scheduled - %s", rid[:8], msg)
         return
 
-    elif current_retry == 1:
-        # Attempt 2 failed -> Retry 2/2
+    elif current_retry >= 1:
+        # Tried 2 times, both failed -> Mark failed permanently without modifying prompt
         new_retry = 2
-        msg = f"🔄 กำลังลองซ้ำครั้งที่ 2/2... ({error_msg})"
-        if retry_after is not None:
-            retry_after[rid] = time.time() + 3.0
-        await crud.update_request(rid, status="PENDING", retry_count=new_retry, request_id=None, media_id=None, error_message=msg)
-        await event_bus.emit("request_update", {"id": rid, "status": "PENDING", "retry_count": new_retry, "error": msg})
-        logger.warning("Request %s: retry 2/2 scheduled - %s", rid[:8], msg)
-        return
-
-    elif current_retry == 2:
-        # Tried 2 times, both failed -> State clearly, rewrite prompt in file on disk & DB, then retry once more!
-        new_retry = 3
-        rewritten_prompt = await _auto_rewrite_and_save_prompt(req, error_msg)
-        msg = "ลองครบ 2 ครั้งแล้ว แต่ล้มเหลว -> ปรับแก้ Prompt ในไฟล์เรียบร้อยแล้ว (เลี่ยงคำต้องห้าม) และกำลังลองสร้างใหม่อีกครั้ง..."
-        if retry_after is not None:
-            retry_after[rid] = time.time() + 3.0
-        await crud.update_request(rid, status="PENDING", retry_count=new_retry, request_id=None, media_id=None, error_message=msg)
-        await event_bus.emit("request_update", {"id": rid, "status": "PENDING", "retry_count": new_retry, "error": msg, "prompt": rewritten_prompt})
-        logger.warning("Request %s: %s (rewritten prompt: %s)", rid[:8], msg, rewritten_prompt[:100] if rewritten_prompt else "none")
-        return
-
-    else:
-        # Tried retry with rewritten prompt (attempt 3), and it still failed -> Mark failed permanently
-        new_retry = current_retry + 1
-        msg = f"ลองครบ 2 ครั้งแล้ว และปรับแก้ Prompt ในไฟล์แล้ว แต่ล้มเหลว: {error_msg}"
+        msg = f"ลองครบ 2 ครั้งแล้ว แต่ล้มเหลว: {error_msg}"
         await crud.update_request(rid, status="FAILED", retry_count=new_retry, error_message=msg)
         await _mark_scene_failed(req)
         await event_bus.emit("request_update", {"id": rid, "status": "FAILED", "retry_count": new_retry, "error": msg})
-        logger.error("Request %s FAILED permanently: %s", rid[:8], msg)
+        logger.error("Request %s FAILED permanently after 2 attempts (no auto-rewrite): %s", rid[:8], msg)
         return
 
 

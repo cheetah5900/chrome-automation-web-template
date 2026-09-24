@@ -6324,6 +6324,10 @@ function initVideoGenListeners() {
 
       writeConsoleLine('Force Stop: Requesting immediate cancellation...', 'warning', 'videoConsole');
 
+      try {
+        await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
+      } catch (_) {}
+
       const select = document.getElementById('profileSelect');
       const selected = (profileCache || []).find(x => x.name === select?.value);
       const port = selected ? Number(selected.debug_port || 9222) : 9222;
@@ -11881,6 +11885,68 @@ function resetAllFlowBatchButtons() {
 }
 window.resetAllFlowBatchButtons = resetAllFlowBatchButtons;
 
+async function triggerFlowKitForceStop(options = { showConfirm: true }) {
+  if (options && options.showConfirm) {
+    if (!confirm('คุณต้องการหยุดการทำงานทั้งหมด (Force Stop) ทันทีหรือไม่?')) {
+      return false;
+    }
+  }
+
+  // 1. Immediately close live status modal & hide floating pill
+  if (flowLiveModalOpen) {
+    flowLiveModalOpen = false;
+    Swal.close();
+  }
+  updateFlowLiveFloatingPill(false);
+
+  // 2. Clear running intervals
+  if (flowBatchRunningInterval) {
+    clearInterval(flowBatchRunningInterval);
+    flowBatchRunningInterval = null;
+  }
+  if (flowBatchPORunningInterval) {
+    clearInterval(flowBatchPORunningInterval);
+    flowBatchPORunningInterval = null;
+  }
+
+  // 3. Reset buttons
+  resetAllFlowBatchButtons();
+
+  // 4. Request backend cancellation
+  let cancelledCount = 0;
+  try {
+    const res = await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
+    cancelledCount = res?.cancelled_count || 0;
+    logToConsole(`🛑 Force Stop: ยกเลิกงานในคิวทั้งหมดแล้ว (${cancelledCount} งาน)`, 'error');
+  } catch (err) {
+    console.error(err);
+    logToConsole(`Error stopping batch: ${err.message || err}`, 'error');
+  }
+
+  // 5. Update status messages
+  const msg1 = document.getElementById('flowKitMsg');
+  if (msg1) {
+    msg1.style.display = 'block';
+    msg1.className = 'msg';
+    msg1.style.color = '#ef4444';
+    msg1.textContent = `🛑 สั่งหยุดการทำงานเรียบร้อยแล้ว (ยกเลิก ${cancelledCount} งาน)`;
+  }
+  const msg2 = document.getElementById('flowKitPOMsg');
+  if (msg2) {
+    msg2.style.display = 'block';
+    msg2.className = 'msg';
+    msg2.style.color = '#ef4444';
+    msg2.textContent = `🛑 สั่งหยุดการทำงานเรียบร้อยแล้ว (ยกเลิก ${cancelledCount} งาน)`;
+  }
+
+  // 6. Refresh project stats if available
+  if (typeof updateProjectStats === 'function') {
+    try { updateProjectStats(); } catch (e) {}
+  }
+  return true;
+}
+window.triggerFlowKitForceStop = triggerFlowKitForceStop;
+
 function renderFlowLiveSceneRowsHtml(pairs) {
   if (!pairs || pairs.length === 0) {
     return '<tr><td colspan="4" style="text-align: center; padding: 20px; color: #64748b;">ไม่มีรายการฉาก</td></tr>';
@@ -12103,9 +12169,8 @@ function openFlowLiveStatusModal(initialPairs = null, videoId = '') {
         Swal.close();
         updateFlowLiveFloatingPill(true, flowLiveCurrentPairs);
       });
-      document.getElementById('btnFlowLiveForceStop')?.addEventListener('click', () => {
-        const btn = document.getElementById('btnProcessFlowKitBatch') || document.getElementById('btnProcessFlowKitBatchPO');
-        if (btn) btn.click();
+      document.getElementById('btnFlowLiveForceStop')?.addEventListener('click', async () => {
+        await triggerFlowKitForceStop({ showConfirm: true });
       });
     }
   });
@@ -12453,32 +12518,7 @@ function initFlowKitUploaderListeners() {
     
     // If already running, clicking acts as Force Stop
     if (btn && btn.dataset.state === 'running') {
-      if (!confirm('คุณต้องการหยุดการทำงานทั้งหมด (Force Stop) ทันทีหรือไม่?')) {
-        return;
-      }
-      try {
-        const res = await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
-        logToConsole(`🛑 Force Stop: ยกเลิกงานในคิวทั้งหมดแล้ว (${res?.cancelled_count || 0} งาน)`, 'error');
-        if (msg) {
-          msg.className = 'msg';
-          msg.style.color = '#ef4444';
-          msg.textContent = `🛑 สั่งหยุดการทำงานเรียบร้อยแล้ว (ยกเลิก ${res?.cancelled_count || 0} งาน)`;
-        }
-      } catch (err) {
-        console.error(err);
-        logToConsole(`Error stopping batch: ${err.message || err}`, 'error');
-      }
-      setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #10b981, #059669)');
-      if (flowBatchRunningInterval) {
-        clearInterval(flowBatchRunningInterval);
-        flowBatchRunningInterval = null;
-      }
-      updateFlowLiveFloatingPill(false);
-      if (flowLiveModalOpen) {
-        flowLiveModalOpen = false;
-        Swal.close();
-      }
-      updateProjectStats();
+      await triggerFlowKitForceStop({ showConfirm: true });
       return;
     }
 
@@ -14256,32 +14296,7 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
 
   // Handle Force Stop if clicked while already running
   if (btn && btn.dataset.state === 'running') {
-    if (!confirm('คุณต้องการหยุดการทำงานทั้งหมด (Force Stop) ทันทีหรือไม่?')) {
-      return;
-    }
-    try {
-      const res = await jsonFetch('/api/requests/cancel-all', { method: 'POST' });
-      logToConsole(`🛑 Force Stop: ยกเลิกงานในคิวทั้งหมดแล้ว (${res?.cancelled_count || 0} งาน)`, 'error');
-      if (msg) {
-        msg.className = 'msg';
-        msg.style.color = '#ef4444';
-        msg.textContent = `🛑 สั่งหยุดการทำงานเรียบร้อยแล้ว (ยกเลิก ${res?.cancelled_count || 0} งาน)`;
-      }
-    } catch (err) {
-      console.error(err);
-      logToConsole(`Error stopping batch: ${err.message || err}`, 'error');
-    }
-    setFlowBatchButtonRunning(btn, false, '🚀 Start Batch Upload', 'linear-gradient(135deg, #a855f7, #7e22ce)');
-    if (flowBatchPORunningInterval) {
-      clearInterval(flowBatchPORunningInterval);
-      flowBatchPORunningInterval = null;
-    }
-    updateFlowLiveFloatingPill(false);
-    if (flowLiveModalOpen) {
-      flowLiveModalOpen = false;
-      Swal.close();
-    }
-    updateProjectStats();
+    await triggerFlowKitForceStop({ showConfirm: true });
     return;
   }
 

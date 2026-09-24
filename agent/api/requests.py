@@ -232,5 +232,12 @@ async def cancel_all_requests():
         controller._active_tasks.clear()
     except Exception as e:
         logger.warning("Failed to reset worker controller memory on cancel-all: %s", e)
-        
+
+    try:
+        from agent.services.flow_client import get_flow_client
+        get_flow_client().cancel_all_pending()
+        logger.info("Cancelled all pending requests in FlowClient")
+    except Exception as e:
+        logger.warning("Failed to cancel pending requests on flow client: %s", e)
+
     return {"ok": True, "cancelled_count": count}

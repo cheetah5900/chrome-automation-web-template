@@ -1505,9 +1505,64 @@ function connectToAgent() {
           return;
         }
         const tab = tabs[0];
-        const { text, clickSubmit = false } = msg.params || {};
+        const { text, clickSubmit = false, outputCount = 1, aspectRatio = null } = msg.params || {};
 
         try {
+          // Configure output count and aspect ratio in settings if needed
+          if (outputCount > 1 || aspectRatio) {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: async (targetCount, targetAspect) => {
+                try {
+                  const settingsBtn = document.querySelector('button.settings-trigger-button, button[aria-label="Settings trigger"], button[aria-label="ทริกเกอร์การตั้งค่า"], button[aria-label*="Settings"], button[aria-label*="การตั้งค่า"]');
+                  if (!settingsBtn) return;
+                  settingsBtn.click();
+                  await new Promise(r => setTimeout(r, 400));
+
+                  const overlay = document.querySelector('.cdk-overlay-container') || document;
+                  
+                  // 1. Output count (e.g. 1 vs 2 outputs)
+                  if (targetCount) {
+                    const countStr = String(targetCount);
+                    const countToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
+                      const t = el.innerText?.trim();
+                      const aria = el.getAttribute('aria-label') || '';
+                      return t === countStr || aria.includes(`${countStr} output`) || aria.includes(`${countStr} เอาต์พุต`);
+                    });
+                    if (countToggles.length > 0) {
+                      countToggles[0].click();
+                      await new Promise(r => setTimeout(r, 200));
+                    }
+                  }
+
+                  // 2. Aspect ratio (9:16 vs 16:9)
+                  if (targetAspect) {
+                    const isVertical = targetAspect.includes('PORTRAIT') || targetAspect.includes('9:16') || targetAspect.includes('VERTICAL');
+                    const aspectStr = isVertical ? '9:16' : '16:9';
+                    const aspectToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
+                      const t = el.innerText?.trim();
+                      return t && t.includes(aspectStr);
+                    });
+                    if (aspectToggles.length > 0) {
+                      aspectToggles[0].click();
+                      await new Promise(r => setTimeout(r, 200));
+                    }
+                  }
+
+                  // Close settings overlay
+                  const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                  if (backdrop) backdrop.click();
+                  else settingsBtn.click();
+                  await new Promise(r => setTimeout(r, 300));
+                } catch (e) {
+                  console.warn('[flow_cdp_type_text] settings adjust error:', e);
+                }
+              },
+              args: [outputCount, aspectRatio]
+            });
+            await sleep(300);
+          }
+
           // Focus pm
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },

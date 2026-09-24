@@ -34,7 +34,7 @@ from agent.services import flow_batch as fb
 from agent.services.headers import random_headers
 
 logger = logging.getLogger(__name__)
-MAX_AS29S_NOT_FOUND_ROUNDS = 25  # ~250s polling window before concluding Google Flow cancelled media
+MAX_AS29S_NOT_FOUND_ROUNDS = 60  # ~600s polling window before concluding Google Flow timed out
 
 
 class FlowClient:
@@ -121,6 +121,24 @@ class FlowClient:
             len(disconnected_pending),
             len(self._extensions),
         )
+
+    def cancel_all_pending(self):
+        """Immediately reject all in-flight WebSocket requests and clear caches."""
+        cancelled = 0
+        for req_id, future in list(self._pending.items()):
+            if future is not None and not future.done():
+                future.set_exception(asyncio.CancelledError("Operation cancelled by user"))
+                cancelled += 1
+        self._pending.clear()
+        self._pending_ws.clear()
+        self._operation_projects.clear()
+        self._operation_media.clear()
+        self._operation_scenes.clear()
+        self._operation_polls.clear()
+        self._operation_prompts.clear()
+        self._operation_video_urls.clear()
+        self._not_found_counts.clear()
+        logger.info("FlowClient cancelled %d in-flight pending WebSocket requests", cancelled)
 
     def _extension_candidates(self, require_token: bool):
         """Return usable extensions in preferred routing order."""
@@ -727,7 +745,7 @@ class FlowClient:
                 if "_i2v_" in model_key:
                     model_key = model_key.replace("_i2v_", "_t2v_")
                 model = fb.resolve_video_model(model_key)
-                freq = fb.text_video_request(prompt, pid, aspect=aspect_ratio, model=model)
+                freq = fb.text_video_request(prompt, pid, aspect=aspect_ratio, model=model, output_count=output_count)
                 payload = await self._batch_payload(
                     fb.RPC_GEN_VIDEO_TEXT, freq, fb.CAPTCHA_VIDEO, timeout=120)
                 submitted = fb.read_text_video_submit(payload)
@@ -746,9 +764,14 @@ class FlowClient:
             except Exception as e:
                 logger.warning("Batch RPC YhhmEf failed (%s), falling back to Web Auto browser typing in active Flow tab...", e)
                 try:
-                    ui_res = await self._send("flow_cdp_type_text", {"text": prompt, "clickSubmit": True}, timeout=45)
+                    ui_res = await self._send("flow_cdp_type_text", {
+                        "text": prompt,
+                        "clickSubmit": True,
+                        "outputCount": output_count,
+                        "aspectRatio": aspect_ratio,
+                    }, timeout=45)
                     if ui_res.get("result", {}).get("clicked"):
-                        logger.info("Successfully dispatched Prompt-Only video via Web Auto browser bridge!")
+                        logger.info("Successfully dispatched Prompt-Only video via Web Auto browser bridge! (output_count=%s)", output_count)
                         op_id = f"ui_t2v_{uuid.uuid4().hex[:12]}"
                         self._remember_operation(op_id, pid, scene_id=scene_id, prompt=prompt)
                         return {
@@ -917,12 +940,12 @@ class FlowClient:
                         "status": "MEDIA_GENERATION_STATUS_FAILED",
                         "error": f"Google Safety Filter Blocked: {complaint}",
                     }
-                if complaint and count >= 6:
-                    logger.warning("Operation %s failed on Google Flow: %s", operation_id[:20], complaint)
+                if count >= MAX_AS29S_NOT_FOUND_ROUNDS:
+                    logger.warning("Operation %s media not found after %d rounds: marking failed", operation_id[:20], count)
                     return {
                         "operation": {"name": operation_id},
                         "status": "MEDIA_GENERATION_STATUS_FAILED",
-                        "error": f"Google Flow generation failed: {complaint}",
+                        "error": f"Google Flow generation timed out after {count * 10}s: {complaint or 'media not resolved'}",
                     }
                 return _as_pending_operation(operation_id, error=complaint)
             self._operation_media[operation_id] = media_id

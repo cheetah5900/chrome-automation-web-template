@@ -264,7 +264,11 @@ async def _poll_operations(
     current_ops = operations
 
     while (time.monotonic() - start_time) < timeout:
-        await asyncio.sleep(poll_interval)
+        try:
+            await asyncio.sleep(poll_interval)
+        except asyncio.CancelledError:
+            logger.info("Polling cancelled by user during sleep")
+            return {"error": "Cancelled by user"}
         elapsed = int(time.monotonic() - start_time)
 
         status_result = await client.check_video_status(current_ops)

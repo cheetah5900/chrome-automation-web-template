@@ -384,19 +384,23 @@ def video_request(prompt: str, project_id: str, source_media_id: str,
 
 def text_video_request(prompt: str, project_id: str,
                        aspect: Any = VIDEO_ASPECT_LANDSCAPE,
-                       model: str = "abra_t2v_4s") -> str:
+                       model: str = "abra_t2v_4s",
+                       output_count: int = 1) -> str:
     """Build the migrated text-to-video submit (YhhmEf)."""
-    request = [
-        [None, None, [[[prompt]]]],
-        model,
-        resolve_video_aspect(aspect),
-        None,
-        [None, None, None, None, _client_uuid(), _client_uuid()],
-    ]
+    count = max(1, min(int(output_count or 1), 4))
+    requests = []
+    for _ in range(count):
+        requests.append([
+            [None, None, [[[prompt]]]],
+            model,
+            resolve_video_aspect(aspect),
+            None,
+            [None, None, None, None, _client_uuid(), _client_uuid()],
+        ])
     return build_envelope(RPC_GEN_VIDEO_TEXT, [
-        [request],
+        requests,
         _context(project_id),
-        [_client_uuid(), 1],
+        [_client_uuid(), count],
     ])
 
 
