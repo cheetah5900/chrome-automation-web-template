@@ -424,7 +424,7 @@ function connectToAgent() {
               func: async (targetOrient) => {
                 try {
                   const isVertical = targetOrient === 'VERTICAL';
-                  const settingsBtn = document.querySelector('button[aria-label="Settings trigger"]');
+                  const settingsBtn = document.querySelector('button.settings-trigger-button, button[aria-label="Settings trigger"], button[aria-label="ทริกเกอร์การตั้งค่า"]');
                   if (!settingsBtn) return;
                   const currentText = settingsBtn.innerText || '';
                   const needsChange = isVertical ? !currentText.includes('crop_9_16') && !currentText.includes('9:16')
@@ -782,7 +782,7 @@ function connectToAgent() {
             target: { tabId: tab.id },
             func: async () => {
               for (let attempt = 0; attempt < 15; attempt++) {
-                const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
                 const pm = document.querySelector('.ProseMirror');
                 if (submitBtn && !submitBtn.disabled && !submitBtn.classList.contains('mat-mdc-button-disabled')) {
                   submitBtn.click();
@@ -790,7 +790,7 @@ function connectToAgent() {
                 }
                 await new Promise(r => setTimeout(r, 400));
               }
-              const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+              const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
               const pm = document.querySelector('.ProseMirror');
               return {
                 error: 'Submit button is disabled after waiting 6s. Check prompt or image attachment.',
@@ -1177,7 +1177,7 @@ function connectToAgent() {
                   document.execCommand('insertText', false, textToType);
                 }
                 await new Promise(r => setTimeout(r, 400));
-                const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
                 return {
                   pmText: pm ? pm.innerText?.trim() : '',
                   submitEnabled: submitBtn ? (!submitBtn.disabled && !submitBtn.classList.contains('mat-mdc-button-disabled')) : false
@@ -1212,7 +1212,7 @@ function connectToAgent() {
             const clickRes = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               func: async () => {
-                const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
                 if (submitBtn && !submitBtn.disabled && !submitBtn.classList.contains('mat-mdc-button-disabled')) {
                   submitBtn.click();
                   return { clicked: true };
@@ -1476,7 +1476,7 @@ function connectToAgent() {
                 aria: el.getAttribute('aria-label'),
                 src: el.src || el.querySelector('img')?.src
               }));
-              const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+              const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
               const pm = document.querySelector('.ProseMirror');
               return {
                 chips,
@@ -1535,7 +1535,7 @@ function connectToAgent() {
           const checkRes = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: (shouldClick) => {
-              const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+              const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
               const pm = document.querySelector('.ProseMirror');
               const isEnabled = submitBtn ? !submitBtn.disabled : false;
               let clicked = false;
@@ -1734,7 +1734,7 @@ function connectToAgent() {
               target: { tabId: tab.id },
               func: async () => {
                 try {
-                  const settingsBtn = document.querySelector('button[aria-label="Settings trigger"]');
+                  const settingsBtn = document.querySelector('button.settings-trigger-button, button[aria-label="Settings trigger"], button[aria-label="ทริกเกอร์การตั้งค่า"]');
                   if (!settingsBtn) return { error: 'Settings trigger button not found' };
                   settingsBtn.click();
                   await new Promise(r => setTimeout(r, 600));
@@ -1758,10 +1758,10 @@ function connectToAgent() {
               target: { tabId: tab.id },
               func: () => {
                 try {
-                  const videoBtn = document.getElementById('mat-button-toggle-6-button') || Array.from(document.querySelectorAll('button')).find(b => b.innerText?.includes('Video'));
+                  const videoBtn = document.getElementById('mat-button-toggle-6-button') || Array.from(document.querySelectorAll('button')).find(b => b.innerText?.includes('Video') || b.innerText?.includes('วิดีโอ'));
                   if (!videoBtn) return { error: 'video mode btn not found' };
                   videoBtn.click();
-                  const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                  const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
                   return {
                     success: true,
                     submitBtnDisabled: submitBtn ? submitBtn.disabled : 'not found',
@@ -1778,7 +1778,7 @@ function connectToAgent() {
               target: { tabId: tab.id },
               func: () => {
                 try {
-                  const submitBtn = document.querySelector('button[aria-label="Start generation"]');
+                  const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
                   if (!submitBtn) return { error: 'Submit button not found' };
                   submitBtn.click();
                   return { success: true };
@@ -2003,7 +2003,7 @@ function connectToAgent() {
                   })) : [];
 
                   // 3. Open settings trigger and check modes
-                  const settingsBtn = document.querySelector('button[aria-label="Settings trigger"]');
+                  const settingsBtn = document.querySelector('button.settings-trigger-button, button[aria-label="Settings trigger"], button[aria-label="ทริกเกอร์การตั้งค่า"]');
                   let settingsToggles = [];
                   if (settingsBtn) {
                     settingsBtn.click();
@@ -2747,8 +2747,9 @@ async function runBatchRpc(cmd) {
       const prefix = (window.location.pathname.match(/^\/u\/\d+/) || [''])[0];
       const url =
         `${prefix}/_/AiSandboxAngularFrontend/data/batchexecute?rpcids=${encodeURIComponent(rpcid)}` +
+        `&source-path=${encodeURIComponent(window.location.pathname)}` +
         `&f.sid=${encodeURIComponent(sid || '')}&bl=${encodeURIComponent(bl || '')}` +
-        `&hl=en-AU&_reqid=${reqid}&rt=c`;
+        `&_reqid=${reqid}&rt=c`;
       const resp = await fetch(url, {
         method: 'POST',
         credentials: 'include',

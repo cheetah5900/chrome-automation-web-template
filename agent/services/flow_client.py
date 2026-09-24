@@ -736,6 +736,23 @@ class FlowClient:
                     }
                 }
             except Exception as e:
+                logger.warning("Batch RPC YhhmEf failed (%s), falling back to Web Auto browser typing in active Flow tab...", e)
+                try:
+                    ui_res = await self._send("flow_cdp_type_text", {"text": prompt, "clickSubmit": True}, timeout=45)
+                    if ui_res.get("result", {}).get("clicked"):
+                        logger.info("Successfully dispatched Prompt-Only video via Web Auto browser bridge!")
+                        op_id = f"ui_t2v_{uuid.uuid4().hex[:12]}"
+                        self._remember_operation(op_id, pid)
+                        return {
+                            "status": 200,
+                            "data": {
+                                "operations": [_as_pending_operation(op_id)],
+                                "media": [],
+                                "workflow_id": op_id,
+                            }
+                        }
+                except Exception as ui_e:
+                    logger.error("Web Auto browser fallback also failed: %s", ui_e)
                 return _batch_error(e)
 
         # 3. Standard Image-to-Video mode
@@ -987,6 +1004,21 @@ class FlowClient:
         Asks the extension for a window around the operation id.
         """
         target_id = operation_id
+        if target_id.startswith("ui_t2v_"):
+            result = await self.batch_rpc(
+                fb.RPC_PROJECT_MEDIA, fb.project_media_request(project_id),
+                timeout=120,
+            )
+            if result.get("error"):
+                raise fb.FlowBatchError(f"{fb.RPC_PROJECT_MEDIA}: {result['error']}")
+            raw = result.get("data") or ""
+            all_ids = re.findall(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', raw, re.IGNORECASE)
+            candidates = [m for m in all_ids if m.lower() != project_id.lower()]
+            if candidates:
+                logger.info("Listing lookup for synthetic op %s: resolved newest media_id=%s", operation_id[:8], candidates[0])
+                return candidates[0]
+            return None
+
         result = await self.batch_rpc(
             fb.RPC_PROJECT_MEDIA, fb.project_media_request(project_id),
             match=target_id, timeout=120,
