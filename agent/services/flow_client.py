@@ -33,6 +33,7 @@ from agent.services import flow_batch as fb
 from agent.services.headers import random_headers
 
 logger = logging.getLogger(__name__)
+MAX_AS29S_NOT_FOUND_ROUNDS = 25  # ~250s polling window before concluding Google Flow cancelled media
 
 
 class FlowClient:
@@ -50,7 +51,9 @@ class FlowClient:
         # `_operation_polls` counts rounds, to keep the listing off most of them.
         self._operation_projects: dict[str, str] = {}
         self._operation_media: dict[str, str] = {}
+        self._operation_scenes: dict[str, str] = {}
         self._operation_polls: dict[str, int] = {}
+        self._not_found_counts: dict[str, int] = {}
         # WS stats
         self._ws_connect_count = 0
         self._ws_disconnect_count = 0
@@ -253,7 +256,10 @@ class FlowClient:
             # Respond to keepalive
             target_ws = websocket or self._extension_ws
             if target_ws:
-                await target_ws.send(json.dumps({"type": "pong"}))
+                try:
+                    await target_ws.send(json.dumps({"type": "pong"}))
+                except Exception:
+                    pass
             return
 
         # Response to a pending request
@@ -557,10 +563,10 @@ class FlowClient:
         legacy = VIDEO_MODELS.get(tier, {}).get(gen_type, {}).get(aspect_ratio)
         return fb.resolve_video_model(legacy)
 
-    def _remember_operation(self, operation_id: str, project_id: str):
-        """Which project an operation belongs to — the listing lookup needs it.
+    def _remember_operation(self, operation_id: str, project_id: str, scene_id: str = None):
+        """Which project and scene an operation belongs to — the listing lookup needs it.
 
-        A poll record usually carries the project id, but old operations decay
+        A poll record usually carries the project id and scene id, but old operations decay
         to a bare id, so keep our own note. Bounded: this is a cache, and the
         pinned project is always a workable fallback.
         """
@@ -569,8 +575,11 @@ class FlowClient:
         if len(self._operation_projects) > 512:
             self._operation_projects.clear()
             self._operation_media.clear()
+            self._operation_scenes.clear()
             self._operation_polls.clear()
         self._operation_projects[operation_id] = project_id
+        if scene_id:
+            self._operation_scenes[operation_id] = scene_id
 
     # ─── High-level API Methods ──────────────────────────────
 
@@ -663,6 +672,9 @@ class FlowClient:
                               custom_model_key: str = None,
                               image_path: str = None) -> dict:
         """Submit a video generation (i2v, auto-uploaded image, or text-to-video t2v)."""
+        from agent.services.prompt_sanitizer import sanitize_lakorn_prompt
+        prompt = sanitize_lakorn_prompt(prompt)
+
         if not USE_BATCH_RPC:
             return await self._legacy_generate_video(
                 start_image_media_id, prompt, project_id, scene_id,
@@ -704,7 +716,10 @@ class FlowClient:
         if not start_image_media_id:
             try:
                 model_key = custom_model_key or f"abra_t2v_{duration_seconds or 4}s"
-                freq = fb.text_video_request(prompt, pid, aspect=aspect_ratio, model=model_key)
+                if "_i2v_" in model_key:
+                    model_key = model_key.replace("_i2v_", "_t2v_")
+                model = fb.resolve_video_model(model_key)
+                freq = fb.text_video_request(prompt, pid, aspect=aspect_ratio, model=model)
                 payload = await self._batch_payload(
                     fb.RPC_GEN_VIDEO_TEXT, freq, fb.CAPTCHA_VIDEO, timeout=120)
                 submitted = fb.read_text_video_submit(payload)
@@ -721,6 +736,23 @@ class FlowClient:
                     }
                 }
             except Exception as e:
+                logger.warning("Batch RPC YhhmEf failed (%s), falling back to Web Auto browser typing in active Flow tab...", e)
+                try:
+                    ui_res = await self._send("flow_cdp_type_text", {"text": prompt, "clickSubmit": True}, timeout=45)
+                    if ui_res.get("result", {}).get("clicked"):
+                        logger.info("Successfully dispatched Prompt-Only video via Web Auto browser bridge!")
+                        op_id = f"ui_t2v_{uuid.uuid4().hex[:12]}"
+                        self._remember_operation(op_id, pid)
+                        return {
+                            "status": 200,
+                            "data": {
+                                "operations": [_as_pending_operation(op_id)],
+                                "media": [],
+                                "workflow_id": op_id,
+                            }
+                        }
+                except Exception as ui_e:
+                    logger.error("Web Auto browser fallback also failed: %s", ui_e)
                 return _batch_error(e)
 
         # 3. Standard Image-to-Video mode
@@ -736,8 +768,21 @@ class FlowClient:
         except Exception as e:
             return _batch_error(e)
 
-        self._remember_operation(operation.operation_id, pid)
-        return {"status": 200, "data": {"operations": [_as_pending_operation(operation.operation_id)]}}
+        scene_uuid = operation.scene_id if hasattr(operation, "scene_id") else None
+        self._remember_operation(operation.operation_id, pid, scene_uuid)
+
+        media_id = getattr(operation, "media_id", None)
+        if media_id:
+            self._operation_media[operation.operation_id] = media_id
+
+        res_data = {
+            "operations": [_as_pending_operation(operation.operation_id, media_id=media_id)],
+        }
+        if media_id:
+            res_data["media"] = [{"name": media_id}]
+            res_data["workflow_id"] = operation.operation_id
+
+        return {"status": 200, "data": res_data}
 
 
     async def generate_video_from_references(self, reference_media_ids: list[str],
@@ -805,6 +850,13 @@ class FlowClient:
                 out.append({"operation": {}, "status": "MEDIA_GENERATION_STATUS_FAILED",
                             "error": "operation carried no name"})
                 continue
+            entry_pid = entry.get("project_id") or entry.get("projectId") or (entry.get("operation") or {}).get("project_id")
+            entry_scene = entry.get("scene_id") or entry.get("sceneId") or (entry.get("operation") or {}).get("scene_id")
+            if entry_pid:
+                self._remember_operation(op_id, entry_pid, entry_scene)
+            entry_mid = entry.get("media_id") or (entry.get("operation") or {}).get("metadata", {}).get("video", {}).get("mediaId")
+            if entry_mid and op_id not in self._operation_media:
+                self._operation_media[op_id] = entry_mid
             try:
                 out.append(await self._poll_batch_operation(op_id))
             except Exception as e:
@@ -819,19 +871,69 @@ class FlowClient:
 
         if not media_id:
             media_id, complaint = await self._find_operation_media(operation_id)
+            logger.info("Poll batch op %s: media_id=%s, complaint=%s", operation_id[:8], media_id, complaint)
             if not media_id:
+                count = self._not_found_counts.get(operation_id, 0) + 1
+                self._not_found_counts[operation_id] = count
+                if complaint and any(k in complaint.lower() for k in ("unsafe", "safety", "policy", "violat", "filter", "content")):
+                    logger.warning("Operation %s rejected by safety filter: %s", operation_id[:20], complaint)
+                    return {
+                        "operation": {"name": operation_id},
+                        "status": "MEDIA_GENERATION_STATUS_FAILED",
+                        "error": f"Google Safety Filter Blocked: {complaint}",
+                    }
+                if complaint and count >= 6:
+                    logger.warning("Operation %s failed on Google Flow: %s", operation_id[:20], complaint)
+                    return {
+                        "operation": {"name": operation_id},
+                        "status": "MEDIA_GENERATION_STATUS_FAILED",
+                        "error": f"Google Flow generation failed: {complaint}",
+                    }
                 return _as_pending_operation(operation_id, error=complaint)
             self._operation_media[operation_id] = media_id
 
+        logger.info("Poll batch op %s checking media URLs for %s", operation_id[:8], media_id)
         try:
             urls = await self._batch_media_urls(media_id)
+            logger.info("Poll batch op %s media URLs: video=%s, image=%s", operation_id[:8], bool(urls.video), bool(urls.image))
+            self._not_found_counts.pop(operation_id, None)
         except Exception as e:
-            self._operation_media.pop(operation_id, None)
-            raise
+            err_str = str(e)
+            logger.warning("Operation %s media %s check failed: %s", operation_id[:8], media_id[:8], err_str)
+            if any(k in err_str.lower() for k in ("unsafe", "safety", "policy", "violat", "filter", "content")):
+                return {
+                    "operation": {"name": operation_id},
+                    "status": "MEDIA_GENERATION_STATUS_FAILED",
+                    "error": f"Google Safety Filter Blocked: {err_str}",
+                }
+            count = self._not_found_counts.get(operation_id, 0) + 1
+            self._not_found_counts[operation_id] = count
+            logger.info("Operation %s media %s still rendering (round %d): %s",
+                        operation_id[:8], media_id[:8], count, err_str)
+            if count >= 6 and (count % 3 == 0 or count >= MAX_AS29S_NOT_FOUND_ROUNDS - 2):
+                found_id, _ = await self._find_operation_media(operation_id)
+                if found_id and found_id != media_id:
+                    self._operation_media[operation_id] = found_id
+                    logger.info("Operation %s media re-resolved from listing: %s -> %s",
+                                operation_id[:8], media_id[:8], found_id[:8])
+                    media_id = found_id
+            if count >= MAX_AS29S_NOT_FOUND_ROUNDS and ("as29s failed: [5]" in err_str or "[5]" in err_str):
+                tab_err = await self._check_flow_tab_404()
+                if tab_err:
+                    return {
+                        "operation": {"name": operation_id},
+                        "status": "MEDIA_GENERATION_STATUS_FAILED",
+                        "error": tab_err,
+                    }
+                logger.warning("Operation %s media %s not found on Google Flow after %d rounds (as29s [5]): marking failed",
+                               operation_id[:8], media_id[:8], count)
+                return {
+                    "operation": {"name": operation_id},
+                    "status": "MEDIA_GENERATION_STATUS_FAILED",
+                    "error": f"Google Flow generation failed: media not found or cancelled ({err_str})",
+                }
+            return _as_pending_operation(operation_id, error=err_str, media_id=media_id)
         if not urls.video:
-            # The id landed but the clip is still being written or was an image ref;
-            # clear cache so next cycle re-checks listing if needed
-            self._operation_media.pop(operation_id, None)
             return _as_pending_operation(operation_id, error=complaint, media_id=media_id)
 
         # The media id stays cached once verified with video URL
@@ -842,6 +944,19 @@ class FlowClient:
             },
             "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
         }
+
+    async def _check_flow_tab_404(self) -> str | None:
+        """Check if any active Flow tab is stuck on a 404 page."""
+        try:
+            tabs_res = await self._send("query_tabs", {}, timeout=5)
+            tabs_list = tabs_res.get("result", []) if isinstance(tabs_res, dict) else []
+            for t in tabs_list:
+                url = t.get("url", "") or t.get("pendingUrl", "")
+                if "/404" in url and ("flow.google.com" in url or "labs.google" in url):
+                    return f"Google Flow tab is at 404 (Project not found: {url}). Please open a valid project in Google Flow."
+        except Exception:
+            pass
+        return None
 
     async def _find_operation_media(self, operation_id: str) -> tuple[str | None, str | None]:
         """Ask the operation how it is going, then the listing where its media is.
@@ -855,6 +970,7 @@ class FlowClient:
         self._operation_polls[operation_id] = rounds
 
         project_id = self._operation_projects.get(operation_id) or FLOW_PROJECT_ID
+        scene_id = self._operation_scenes.get(operation_id)
         complaint = None
         worth_looking = False
         try:
@@ -864,13 +980,15 @@ class FlowClient:
             )
             complaint = operation.error
             project_id = operation.project_id or project_id
+            if hasattr(operation, "scene_id") and operation.scene_id:
+                scene_id = operation.scene_id
             if project_id:
-                self._remember_operation(operation_id, project_id)
-            worth_looking = operation.done or operation.complained or (rounds >= 20 and rounds % 3 == 0)
+                self._remember_operation(operation_id, project_id, scene_id)
+            worth_looking = operation.done or operation.complained or (rounds >= 5) or (operation_id in self._not_found_counts)
+            logger.info("_find_op_media: op=%s done=%s comp=%s rounds=%d worth=%s proj=%s",
+                        operation_id[:8], operation.done, complaint, rounds, worth_looking, project_id)
         except Exception as e:
-            # An operation that has decayed to a bare id still shows up in the
-            # listing, so a failed poll is a reason to look there, not to stop.
-            logger.debug("Operation %s poll unreadable (%s), trying the listing",
+            logger.info("Operation %s poll unreadable (%s), trying the listing",
                          operation_id[:20], e)
             worth_looking = True
 
@@ -878,31 +996,45 @@ class FlowClient:
             return None, complaint
         if not project_id:
             return None, "no project id for the listing lookup"
-        return await self._media_id_for(operation_id, project_id), complaint
+        return await self._media_id_for(operation_id, project_id, scene_id=scene_id), complaint
 
-    async def _media_id_for(self, operation_id: str, project_id: str) -> str | None:
+    async def _media_id_for(self, operation_id: str, project_id: str, scene_id: str = None) -> str | None:
         """Find an operation's media id in the project listing.
 
-        Asks the extension for an 800-byte window around the operation id
-        rather than the whole listing — that payload is past 17 MB and grows
-        with every generation, so anything that ships it whole gets truncated
-        and loses roughly half of all lookups.
+        Asks the extension for a window around the operation id.
         """
+        target_id = operation_id
+        if target_id.startswith("ui_t2v_"):
+            result = await self.batch_rpc(
+                fb.RPC_PROJECT_MEDIA, fb.project_media_request(project_id),
+                timeout=120,
+            )
+            if result.get("error"):
+                raise fb.FlowBatchError(f"{fb.RPC_PROJECT_MEDIA}: {result['error']}")
+            raw = result.get("data") or ""
+            all_ids = re.findall(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', raw, re.IGNORECASE)
+            candidates = [m for m in all_ids if m.lower() != project_id.lower()]
+            if candidates:
+                logger.info("Listing lookup for synthetic op %s: resolved newest media_id=%s", operation_id[:8], candidates[0])
+                return candidates[0]
+            return None
+
         result = await self.batch_rpc(
             fb.RPC_PROJECT_MEDIA, fb.project_media_request(project_id),
-            match=operation_id, timeout=120,
+            match=target_id, timeout=120,
         )
         if result.get("error"):
             raise fb.FlowBatchError(f"{fb.RPC_PROJECT_MEDIA}: {result['error']}")
         raw = result.get("data") or ""
-        media_id = fb.find_media_id_in_text(raw, operation_id)
+        media_id = fb.find_media_id_in_text(raw, target_id)
         if not media_id and raw.lstrip().startswith(")]}"):
-            # an extension that cannot filter hands back the whole envelope
             try:
                 media_id = fb.find_media_id(
-                    fb.first_payload(raw, fb.RPC_PROJECT_MEDIA), operation_id)
+                    fb.first_payload(raw, fb.RPC_PROJECT_MEDIA), target_id)
             except (fb.FlowBatchError, fb.RpcError, json.JSONDecodeError):
                 media_id = None
+        logger.info("Listing lookup for op %s: media_id=%s (raw_len=%d)",
+                    operation_id[:8], media_id, len(raw))
         return media_id
 
     async def _batch_media_urls(self, media_id: str) -> "fb.MediaUrls":

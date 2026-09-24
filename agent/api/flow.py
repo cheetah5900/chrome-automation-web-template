@@ -31,13 +31,15 @@ class GenerateImageBatchRequest(BaseModel):
 
 
 class GenerateVideoRequest(BaseModel):
-    start_image_media_id: str
+    start_image_media_id: Optional[str] = None
     prompt: str
     project_id: str
     scene_id: str
     aspect_ratio: str = "VIDEO_ASPECT_RATIO_PORTRAIT"
     end_image_media_id: Optional[str] = None
     user_paygate_tier: str = "PAYGATE_TIER_ONE"
+    custom_model_key: Optional[str] = None
+    image_path: Optional[str] = None
 
 
 class GenerateVideoRefsRequest(BaseModel):

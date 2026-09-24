@@ -1,12 +1,16 @@
 import os
+import json
 import base64
 import mimetypes
 import logging
+import httpx
 from typing import Optional, List
+from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from agent.services.flow_client import get_flow_client
+from agent.services.prompt_sanitizer import sanitize_lakorn_prompt
 from agent.db import crud
 from agent.sdk.persistence.sqlite_repository import SQLiteRepository
 
@@ -87,6 +91,138 @@ def clean_image_or_scene_name(val: str | None) -> str | None:
 
     return name
 
+
+def create_mock_scene_image(
+    scene_num_str: str,
+    prompt: str = "",
+    error_reason: str = "",
+    width: int = 720,
+    height: int = 1280
+) -> bytes:
+    """Generate a high-contrast mock JPEG image representing a missing/uncompleted scene.
+    Returns JPEG bytes directly from memory."""
+    from PIL import Image, ImageDraw, ImageFont
+    import io
+    import textwrap
+    
+    img = Image.new("RGB", (width, height), color=(18, 22, 34))
+    draw = ImageDraw.Draw(img)
+    
+    font_paths = [
+        "/System/Library/Fonts/ThonburiUI.ttc",
+        "/System/Library/Fonts/Thonburi.ttc",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    font_file = None
+    for p in font_paths:
+        if Path(p).exists():
+            font_file = p
+            break
+            
+    is_landscape = width > height
+    
+    if font_file:
+        try:
+            if is_landscape:
+                f_badge = ImageFont.truetype(font_file, 24)
+                f_num = ImageFont.truetype(font_file, 64)
+                f_title = ImageFont.truetype(font_file, 28)
+                f_sub = ImageFont.truetype(font_file, 20)
+                f_prompt = ImageFont.truetype(font_file, 18)
+            else:
+                f_badge = ImageFont.truetype(font_file, 28)
+                f_num = ImageFont.truetype(font_file, 80)
+                f_title = ImageFont.truetype(font_file, 34)
+                f_sub = ImageFont.truetype(font_file, 24)
+                f_prompt = ImageFont.truetype(font_file, 22)
+        except Exception:
+            f_badge = f_num = f_title = f_sub = f_prompt = ImageFont.load_default()
+    else:
+        f_badge = f_num = f_title = f_sub = f_prompt = ImageFont.load_default()
+        
+    border_color = (239, 68, 68)  # Red alert
+    border_inset = 20 if is_landscape else 24
+    draw.rectangle([(border_inset, border_inset), (width - border_inset, height - border_inset)], outline=border_color, width=4)
+    draw.rectangle([(border_inset + 6, border_inset + 6), (width - border_inset - 6, height - border_inset - 6)], outline=(40, 48, 70), width=2)
+    
+    if is_landscape:
+        badge_text = "⚠️  MISSING SCENE / ฉากที่ยังไม่สมบูรณ์"
+        draw.text((width // 2, 60), badge_text, fill=(248, 113, 113), font=f_badge, anchor="mm")
+        
+        scene_label = f"SCENE {scene_num_str}"
+        draw.text((width // 2, 130), scene_label, fill=(255, 255, 255), font=f_num, anchor="mm")
+        
+        sub_text = "วิดีโอนี้ยังไม่ได้สร้าง หรือสร้างไม่สำเร็จ"
+        draw.text((width // 2, 190), sub_text, fill=(209, 213, 219), font=f_title, anchor="mm")
+        
+        card_top = 240
+        card_bot = height - 70
+        draw.rounded_rectangle([(80, card_top), (width - 80, card_bot)], radius=12, fill=(28, 34, 52), outline=(55, 65, 81), width=2)
+        
+        cur_y = card_top + 20
+        if error_reason:
+            draw.text((110, cur_y), "📌 สถานะ / สาเหตุ:", fill=(251, 191, 36), font=f_sub)
+            cur_y += 28
+            err_lines = textwrap.wrap(error_reason, width=80)[:2]
+            for l in err_lines:
+                draw.text((110, cur_y), l, fill=(252, 165, 165), font=f_sub)
+                cur_y += 24
+            cur_y += 10
+            
+        draw.text((110, cur_y), "📝 พรอพต์ของฉาก (Scene Prompt):", fill=(147, 197, 253), font=f_sub)
+        cur_y += 28
+        
+        display_prompt = prompt.strip() if prompt else "(ไม่มีข้อมูลพรอพต์ / Prompt was not specified)"
+        prompt_lines = textwrap.wrap(display_prompt, width=85)[:5]
+        for pl in prompt_lines:
+            draw.text((110, cur_y), pl, fill=(229, 231, 235), font=f_prompt)
+            cur_y += 24
+            
+        footer_text = "Google Flow Batch Automation • Missing Scene Placeholder"
+        draw.text((width // 2, height - 35), footer_text, fill=(107, 114, 128), font=f_sub, anchor="mm")
+    else:
+        badge_text = "⚠️  MISSING SCENE / ฉากที่ยังไม่สมบูรณ์"
+        draw.text((width // 2, 140), badge_text, fill=(248, 113, 113), font=f_badge, anchor="mm")
+        
+        scene_label = f"SCENE {scene_num_str}"
+        draw.text((width // 2, 240), scene_label, fill=(255, 255, 255), font=f_num, anchor="mm")
+        
+        sub_text = "วิดีโอนี้ยังไม่ได้สร้าง หรือสร้างไม่สำเร็จ"
+        draw.text((width // 2, 320), sub_text, fill=(209, 213, 219), font=f_title, anchor="mm")
+        
+        card_top = 400
+        card_bot = min(card_top + 450, height - 160)
+        draw.rounded_rectangle([(60, card_top), (width - 60, card_bot)], radius=16, fill=(28, 34, 52), outline=(55, 65, 81), width=2)
+        
+        cur_y = card_top + 30
+        if error_reason:
+            draw.text((90, cur_y), "📌 สถานะ / สาเหตุ:", fill=(251, 191, 36), font=f_sub)
+            cur_y += 35
+            err_lines = textwrap.wrap(error_reason, width=38)[:3]
+            for l in err_lines:
+                draw.text((90, cur_y), l, fill=(252, 165, 165), font=f_sub)
+                cur_y += 30
+            cur_y += 15
+            
+        draw.text((90, cur_y), "📝 พรอพต์ของฉาก (Scene Prompt):", fill=(147, 197, 253), font=f_sub)
+        cur_y += 38
+        
+        display_prompt = prompt.strip() if prompt else "(ไม่มีข้อมูลพรอพต์ / Prompt was not specified)"
+        prompt_lines = textwrap.wrap(display_prompt, width=42)[:8]
+        for pl in prompt_lines:
+            draw.text((90, cur_y), pl, fill=(229, 231, 235), font=f_prompt)
+            cur_y += 30
+            
+        footer_text = "Google Flow Batch Automation • Missing Scene Placeholder"
+        draw.text((width // 2, height - 70), footer_text, fill=(107, 114, 128), font=f_sub, anchor="mm")
+        
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=88)
+    return buf.getvalue()
+
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/batch-uploader", tags=["batch-uploader"])
 _repo = SQLiteRepository()
@@ -122,10 +258,11 @@ async def get_flow_projects():
     client = get_flow_client()
 
     # 1. Discover projects and names from open browser tabs via extension
+    open_tab_pids = set()
     discovered_projects = {}
     if client.connected:
         try:
-            tabs_res = await client._send("query_tabs", {}, timeout=5)
+            tabs_res = await client._send("query_tabs", {}, timeout=10)
             tabs_list = tabs_res.get("result", []) if isinstance(tabs_res, dict) else []
             for t in tabs_list:
                 url = t.get("url", "") or t.get("pendingUrl", "")
@@ -133,6 +270,7 @@ async def get_flow_projects():
                 match = re.search(r'/project/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', url, re.IGNORECASE)
                 if match:
                     pid = match.group(1).lower()
+                    open_tab_pids.add(pid)
                     clean_name = title.replace("Google Flow - ", "").replace("Google Flow", "").strip()
                     if clean_name:
                         discovered_projects[pid] = clean_name
@@ -234,6 +372,9 @@ async def get_flow_projects():
                 "material": "3d_pixar"
             })
 
+    # Prioritize active open browser projects at the top of the list
+    formatted.sort(key=lambda p: (0 if p["id"].lower() in open_tab_pids else 1, p["name"].lower()))
+
     return {"projects": formatted, "source": "local"}
 
 
@@ -242,42 +383,6 @@ async def get_flow_tier():
     client = get_flow_client()
     tier = getattr(client, "user_paygate_tier", "PAYGATE_TIER_TWO")
     return {"tier": tier}
-
-
-@router.get("/test-get-project/{project_id}")
-async def test_get_project_endpoint(project_id: str):
-    client = get_flow_client()
-    if not client.connected:
-        return {"error": "Extension not connected"}
-    import urllib.parse
-    import json
-    input_params = {"json": {"projectId": project_id, "toolName": "PINHOLE"}}
-    encoded_input = urllib.parse.quote(json.dumps(input_params))
-    url = f"https://labs.google/fx/api/trpc/project.getProject?input={encoded_input}"
-    res = await client._send("trpc_request", {
-        "url": url,
-        "method": "GET",
-        "headers": {"accept": "*/*"}
-    }, timeout=30)
-    return res
-
-
-@router.get("/test-get-initial-data/{project_id}")
-async def test_get_initial_data_endpoint(project_id: str):
-    client = get_flow_client()
-    if not client.connected:
-        return {"error": "Extension not connected"}
-    import urllib.parse
-    import json
-    input_params = {"json": {"projectId": project_id}}
-    encoded_input = urllib.parse.quote(json.dumps(input_params))
-    url = f"https://labs.google/fx/api/trpc/flow.projectInitialData?input={encoded_input}"
-    res = await client._send("trpc_request", {
-        "url": url,
-        "method": "GET",
-        "headers": {"accept": "*/*"}
-    }, timeout=30)
-    return res
 
 
 class CreateFlowProjectRequest(BaseModel):
@@ -315,6 +420,7 @@ class ScanRequest(BaseModel):
 
 class ProcessPair(BaseModel):
     image_path: Optional[str] = None
+    prompt_path: Optional[str] = None
     prompt_content: str
 
 
@@ -561,9 +667,10 @@ async def process_batch(body: ProcessRequest):
                     try:
                         with open(meta_path, "r", encoding="utf-8") as f:
                             meta = json.load(f)
-                            if file_name in meta:
+                            cached_pid = meta.get("_project_id")
+                            if (not cached_pid or cached_pid == body.project_id) and file_name in meta:
                                 media_id = meta[file_name]
-                                logger.info("Found cached mediaId for %s: %s (skipping upload)", file_name, media_id)
+                                logger.info("Found cached mediaId for %s in project %s: %s (skipping upload)", file_name, body.project_id, media_id)
                     except Exception as e:
                         logger.warning("Failed to read cached media_id mapping: %s", e)
 
@@ -594,17 +701,30 @@ async def process_batch(body: ProcessRequest):
                             continue
                     else:
                         media_id = upload_res.get("_mediaId")
-                        if not media_id:
-                            if client.connected:
-                                media_id = f"browser_asset_{file_name}"
-                            else:
-                                logger.error("No media_id returned for %s: %s", file_name, upload_res)
-                                results.append({
-                                    "image_path": pair.image_path,
-                                    "status": "FAILED",
-                                    "error": "No media_id returned from upload"
-                                })
-                                continue
+                        if media_id:
+                            # Cache media_id in flow_media_ids.json so the same image is never re-uploaded
+                            try:
+                                meta = {}
+                                if os.path.isfile(meta_path):
+                                    with open(meta_path, "r", encoding="utf-8") as f:
+                                        meta = json.load(f)
+                                meta["_project_id"] = body.project_id
+                                meta[file_name] = media_id
+                                with open(meta_path, "w", encoding="utf-8") as f:
+                                    json.dump(meta, f, indent=2, ensure_ascii=False)
+                                logger.info("Cached mediaId for %s: %s (project %s)", file_name, media_id, body.project_id)
+                            except Exception as cache_err:
+                                logger.warning("Failed to cache media_id: %s", cache_err)
+                        elif client.connected:
+                            media_id = f"browser_asset_{file_name}"
+                        else:
+                            logger.error("No media_id returned for %s: %s", file_name, upload_res)
+                            results.append({
+                                "image_path": pair.image_path,
+                                "status": "FAILED",
+                                "error": "No media_id returned from upload"
+                            })
+                            continue
 
             # 2. Create scene
             prompt_summary = pair.prompt_content[:100] if pair.prompt_content else f"Batch Scene {next_order}"
@@ -619,12 +739,13 @@ async def process_batch(body: ProcessRequest):
                     if not prompt_summary.startswith(prefix):
                         prompt_summary = f"{prefix} {prompt_summary}"
 
+            clean_video_prompt = sanitize_lakorn_prompt(pair.prompt_content) if pair.prompt_content else ""
             logger.info("Creating scene for display_order %d", next_order)
             sdk_scene = await _repo.create_scene(
                 video_id=video_id,
                 display_order=next_order,
                 prompt=prompt_summary,
-                video_prompt=pair.prompt_content,
+                video_prompt=clean_video_prompt,
                 chain_type="CONTINUATION" if next_order > 0 else "ROOT",
                 source="user"
             )
@@ -652,7 +773,10 @@ async def process_batch(body: ProcessRequest):
             params_dict = {
                 "video_model": body.video_model,
                 "duration_seconds": body.duration_seconds,
-                "output_count": body.output_count
+                "output_count": body.output_count,
+                "prompt_path": pair.prompt_path,
+                "image_path": pair.image_path,
+                "original_prompt": pair.prompt_content
             }
             db_req_data = {
                 "project_id": body.project_id,
@@ -2081,6 +2205,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     if not scenes:
         raise HTTPException(status_code=404, detail="No scenes found for this project on Google Flow or in local database.")
         
+    local_scenes = []
     try:
         local_scenes = await crud.list_project_scenes(body.project_id)
         local_order_map = {}
@@ -2109,6 +2234,7 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
         logger.info("Found %d local scenes for project %s to map display order and image names by media IDs", len(local_scenes), body.project_id[:12])
     except Exception as e:
         logger.warning("Failed to fetch local project scenes: %s. Falling back to default ordering.", e)
+        local_scenes = []
         local_order_map = {}
         local_image_name_map = {}
         local_prompt_map = {}
@@ -2340,6 +2466,10 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
     zip_path = temp_dir / f"{project_slug}_videos.zip"
     video_added = False
     
+    written_arcnames = []
+    written_numbers = set()
+    pad_width = 2
+    
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for idx, (local_path, temp_path) in enumerate(download_results):
             meta = task_metadata[idx]
@@ -2422,7 +2552,21 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                         
                     zip_file.write(local_path, arcname=arcname)
                     video_added = True
+                    written_arcnames.append(arcname)
                     vid_debug["added_to_zip_as"] = arcname
+                    
+                    m_num = re.match(r"^(\d+)", arcname)
+                    if not m_num:
+                        m_num = re.search(r"(\d+)", arcname)
+                    if m_num:
+                        try:
+                            val = int(m_num.group(1))
+                            written_numbers.add(val)
+                            pad_width = max(pad_width, len(m_num.group(1)))
+                        except Exception:
+                            pass
+                    elif display_order > 0:
+                        written_numbers.add(display_order)
                     
                     if temp_path and temp_path.exists():
                         try:
@@ -2433,6 +2577,135 @@ async def download_all_project_videos(body: DownloadProjectVideosRequest, backgr
                     vid_debug["zip_error"] = str(ze)
             else:
                 vid_debug["zip_error"] = "No local file to write to zip"
+        
+        # Phase 3: Detect missing scene numbers and insert mock .jpg placeholders
+        expected_scene_map = {}
+        for s in (local_scenes or []):
+            s_order = s.get("display_order", 0)
+            img_stem = clean_image_or_scene_name(s.get("vertical_image_url") or s.get("horizontal_image_url"))
+            s_num = None
+            if img_stem:
+                m_s = re.search(r"(\d+)", img_stem)
+                if m_s:
+                    try:
+                        s_num = int(m_s.group(1))
+                    except Exception:
+                        pass
+            if s_num is None and s_order > 0:
+                s_num = s_order
+            if s_num:
+                expected_scene_map[s_num] = s
+
+        for s_idx, s in enumerate(scenes or []):
+            s_order = s.get("display_order", 0) or (s_idx + 1)
+            img_stem = clean_image_or_scene_name(s.get("vertical_image_url") or s.get("horizontal_image_url"))
+            s_num = None
+            if img_stem:
+                m_s = re.search(r"(\d+)", img_stem)
+                if m_s:
+                    try:
+                        s_num = int(m_s.group(1))
+                    except Exception:
+                        pass
+            if s_num is None and s_order > 0:
+                s_num = s_order
+            if s_num and s_num not in expected_scene_map:
+                expected_scene_map[s_num] = s
+
+        candidate_mins = []
+        if written_numbers:
+            candidate_mins.append(min(written_numbers))
+        if expected_scene_map:
+            candidate_mins.append(min(expected_scene_map.keys()))
+
+        candidate_maxs = []
+        if written_numbers:
+            candidate_maxs.append(max(written_numbers))
+        if expected_scene_map:
+            candidate_maxs.append(max(expected_scene_map.keys()))
+
+        if candidate_maxs:
+            min_num = 1 if (1 in candidate_mins or any(k <= 1 for k in candidate_mins)) else (min(candidate_mins) if candidate_mins else 1)
+            max_num = max(candidate_maxs)
+            
+            all_expected_numbers = set(range(min_num, max_num + 1))
+            missing_numbers = sorted(list(all_expected_numbers - written_numbers))
+            
+            if missing_numbers:
+                logger.info("Found %d missing scene numbers: %s. Generating mock JPEG placeholders...", len(missing_numbers), missing_numbers)
+                
+                default_is_horizontal = any(
+                    (s.get("orientation") in ("HORIZONTAL", "horizontal") or s.get("horizontal_video_url") or s.get("horizontal_image_url"))
+                    for s in (local_scenes or scenes or [])
+                )
+                
+                for missing_num in missing_numbers:
+                    missing_meta = expected_scene_map.get(missing_num)
+                    missing_prompt = ""
+                    missing_stem = None
+                    missing_err = ""
+                    
+                    if missing_meta:
+                        missing_prompt = (
+                            missing_meta.get("prompt") or
+                            missing_meta.get("video_prompt") or
+                            missing_meta.get("prompt_content") or
+                            ""
+                        )
+                        raw_img = missing_meta.get("vertical_image_url") or missing_meta.get("horizontal_image_url")
+                        missing_stem = clean_image_or_scene_name(raw_img)
+                        if missing_stem:
+                            if project_slug and missing_stem.startswith(f"{project_slug}_"):
+                                missing_stem = missing_stem[len(project_slug) + 1:]
+                            missing_stem = re.sub(r"^synced_project_[a-f0-9]+_", "", missing_stem, flags=re.IGNORECASE)
+                            missing_stem = re.sub(r"_(vertical|horizontal)$", "", missing_stem, flags=re.IGNORECASE)
+                            missing_stem = clean_image_or_scene_name(missing_stem)
+
+                    for sd in debug_details:
+                        if sd.get("display_order") == missing_num or (missing_meta and sd.get("scene_id") == missing_meta.get("id")):
+                            vids = sd.get("videos", {})
+                            for orient_key, v_info in vids.items():
+                                if v_info.get("get_media_error"):
+                                    missing_err = v_info["get_media_error"]
+                                elif v_info.get("http_download_error"):
+                                    missing_err = v_info["http_download_error"]
+                                elif v_info.get("skipped"):
+                                    missing_err = v_info["skipped"]
+                            break
+
+                    num_prefix = f"{missing_num:0{pad_width}d}"
+                    if missing_stem:
+                        mock_filename = f"{missing_stem}.jpg"
+                    elif missing_prompt:
+                        prompt_summary = summarize_prompt_for_filename(missing_prompt, max_words=15, max_length=90)
+                        if prompt_summary:
+                            mock_filename = f"{num_prefix} - {prompt_summary}.jpg"
+                        else:
+                            mock_filename = f"{num_prefix}.jpg"
+                    else:
+                        mock_filename = f"{num_prefix}.jpg"
+                        
+                    if mock_filename in zip_file.namelist():
+                        mock_filename = f"{num_prefix}_missing.jpg"
+
+                    is_h = default_is_horizontal
+                    if missing_meta and (missing_meta.get("orientation") in ("HORIZONTAL", "horizontal") or missing_meta.get("horizontal_image_url")):
+                        is_h = True
+                    w, h = (1280, 720) if is_h else (720, 1280)
+
+                    try:
+                        mock_bytes = create_mock_scene_image(
+                            scene_num_str=num_prefix,
+                            prompt=missing_prompt,
+                            error_reason=missing_err,
+                            width=w,
+                            height=h
+                        )
+                        zip_file.writestr(mock_filename, mock_bytes)
+                        video_added = True
+                        logger.info("Successfully added mock scene image to zip: %s", mock_filename)
+                    except Exception as me:
+                        logger.warning("Failed to generate mock scene image for %d: %s", missing_num, me)
                             
     if not video_added or not zip_path.exists() or zip_path.stat().st_size == 0:
         cleanup_temp_dir(temp_dir)
@@ -2542,4 +2815,262 @@ async def generate_pending_scenes(body: GeneratePendingRequest):
                 
     logger.info("Queued %d pending scenes for generation in project %s", queued_count, body.project_id)
     return {"status": "SUCCESS", "queued_count": queued_count, "queued_scenes": queued_scenes}
+
+
+# ─── Gemini AI Safety Resolution & Key Management ──────────────────────
+
+class FixPromptItem(BaseModel):
+    scene_id: Optional[str] = None
+    order: Optional[int] = None
+    prompt: str
+    error_message: Optional[str] = None
+    image_name: Optional[str] = None
+    image_path: Optional[str] = None
+    prompt_path: Optional[str] = None
+
+
+class FixPromptsRequest(BaseModel):
+    gemini_api_key: Optional[str] = None
+    items: List[FixPromptItem]
+    model: Optional[str] = "gemini-3.6-flash"
+    save_to_disk: Optional[bool] = False
+
+
+class SaveGeminiKeyRequest(BaseModel):
+    api_key: str
+
+
+def get_saved_gemini_key() -> str:
+    """Read saved Gemini API key from settings.json, config.json, or environment."""
+    # 1. settings.json
+    try:
+        from app.main import SETTINGS_FILE
+        settings_path = SETTINGS_FILE
+    except Exception:
+        settings_path = os.path.join(os.getcwd(), "runtime", "settings.json")
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+                k = str(data.get("gemini_api_key", "")).strip()
+                if k:
+                    return k
+        except Exception:
+            pass
+
+    # 2. config.json
+    try:
+        from app.main import CONFIG_FILE
+        config_path = CONFIG_FILE
+    except Exception:
+        config_path = os.path.join(os.getcwd(), "runtime", "config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+                k = str(data.get("gemini_api_key", "")).strip()
+                if k:
+                    return k
+        except Exception:
+            pass
+
+    # 3. Environment
+    return os.environ.get("GEMINI_API_KEY", "").strip()
+
+
+def save_gemini_api_key(key: str) -> None:
+    """Save Gemini API key to runtime/settings.json and runtime/config.json."""
+    key = (key or "").strip()
+    # settings.json
+    try:
+        from app.main import SETTINGS_FILE
+        settings_path = SETTINGS_FILE
+    except Exception:
+        settings_path = os.path.join(os.getcwd(), "runtime", "settings.json")
+    try:
+        s_data = {}
+        if os.path.exists(settings_path):
+            with open(settings_path, "r", encoding="utf-8") as f:
+                s_data = json.load(f) or {}
+        s_data["gemini_api_key"] = key
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(s_data, f, indent=2)
+    except Exception as err:
+        logger.warning("Failed to save gemini_api_key to settings.json: %s", err)
+
+    # config.json
+    try:
+        from app.main import CONFIG_FILE
+        config_path = CONFIG_FILE
+    except Exception:
+        config_path = os.path.join(os.getcwd(), "runtime", "config.json")
+    try:
+        c_data = {}
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                c_data = json.load(f) or {}
+        c_data["gemini_api_key"] = key
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(c_data, f, indent=2)
+    except Exception as err:
+        logger.warning("Failed to save gemini_api_key to config.json: %s", err)
+
+
+@router.post("/save-gemini-key")
+async def save_gemini_key_api(body: SaveGeminiKeyRequest):
+    save_gemini_api_key(body.api_key)
+    return {"ok": True, "message": "บันทึก Gemini API Key เรียบร้อยแล้ว"}
+
+
+@router.get("/get-gemini-key")
+async def get_gemini_key_api():
+    key = get_saved_gemini_key()
+    has_key = bool(key)
+    masked = (key[:6] + "..." + key[-4:]) if len(key) > 10 else ("***" if key else "")
+    return {"has_key": has_key, "masked_key": masked, "raw_key": key}
+
+
+@router.post("/fix-prompts-gemini")
+async def fix_prompts_with_gemini(body: FixPromptsRequest):
+    key = (body.gemini_api_key or "").strip()
+    if not key:
+        key = get_saved_gemini_key()
+    if not key:
+        raise HTTPException(400, "ไม่พบ Gemini API Key กรุณาระบุหรือบันทึก API Key ก่อนดำเนินการ")
+
+    # Persist key if provided in request
+    if body.gemini_api_key and body.gemini_api_key.strip():
+        save_gemini_api_key(body.gemini_api_key.strip())
+
+    if not body.items:
+        return {"ok": True, "fixed_items": [], "count": 0}
+
+    model = body.model or "gemini-3.6-flash"
+
+    async def _rewrite_single(item: FixPromptItem):
+        prompt = item.prompt.strip()
+        if not prompt:
+            return ""
+        err_msg = item.error_message or "Violates safety policy or content guidelines"
+        models_to_try = [model, "gemini-3.6-flash", "gemini-flash-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]
+        seen = set()
+        unique_models = [m for m in models_to_try if m and not (m in seen or seen.add(m))]
+
+        system_instruction = (
+            "You are an expert AI video prompt director for Google Flow (Veo).\n"
+            "Your job is to rewrite a video generation prompt that was BLOCKED or REJECTED by Google Flow "
+            "due to safety filters, content policy, or third-party / copyright restrictions.\n\n"
+            "RULES FOR REWRITING:\n"
+            "1. Strictly remove or replace any copyrighted brands, celebrities, named living people, trademarks, or public figures with neutral artistic archetype descriptions (e.g., 'a young Thai female artist in elegant contemporary silk attire').\n"
+            "2. If the block is related to infants or babies, replace with a stylized artistic prop or symbolic object (e.g. 'a glowing celestial crystal figurine cradled in silk', 'a radiant golden amulet', 'a handcrafted wooden doll').\n"
+            "3. Soften any violence, weapons, conflict, or gore into theatrical drama, dynamic camera motion, wind effects, expressive lighting, or silhouette storytelling.\n"
+            "4. PRESERVE the original cinematic camera movements (tracking, pan, slow zoom), lighting style, color grading, shot type (close-up, wide-angle), and atmosphere.\n"
+            "5. Output ONLY the rewritten English prompt text. Do not wrap in markdown quotes, and do not include explanations, greetings, or conversational remarks."
+        )
+
+        user_content = (
+            f"Original Prompt:\n{prompt}\n\n"
+            f"Rejection / Error Reason:\n{err_msg}\n\n"
+            f"Please rewrite this prompt to be 100% compliant with Google Flow safety policies while maintaining the cinematic style and motion."
+        )
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": f"{system_instruction}\n\n{user_content}"}
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 1024
+            }
+        }
+
+        last_error = None
+        async with httpx.AsyncClient(timeout=35.0) as http_client:
+            for target_model in unique_models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent"
+                try:
+                    resp = await http_client.post(
+                        url,
+                        params={"key": key},
+                        json=payload,
+                        headers={"Content-Type": "application/json"}
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                res_text = parts[0].get("text", "").strip()
+                                res_text = re.sub(r'^```[a-z]*\s*', '', res_text)
+                                res_text = re.sub(r'\s*```$', '', res_text)
+                                res_text = res_text.strip(' "\'\n\r')
+                                if res_text:
+                                    return res_text
+                        return prompt
+                    elif resp.status_code == 404:
+                        logger.warning("Gemini model %s returned 404, trying fallback", target_model)
+                        last_error = f"Model {target_model} not found (404)"
+                        continue
+                    elif resp.status_code in (500, 502, 503, 504, 429):
+                        logger.warning("Gemini model %s returned %d, trying fallback", target_model, resp.status_code)
+                        last_error = f"Gemini API {resp.status_code}: {resp.text[:200]}"
+                        continue
+                    else:
+                        err_body = resp.text
+                        logger.error("Gemini API call failed (%d): %s", resp.status_code, err_body)
+                        last_error = f"Gemini API Error {resp.status_code}: {err_body}"
+                        if resp.status_code in (400, 401, 403):
+                            raise HTTPException(resp.status_code, last_error)
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    logger.exception("Exception calling Gemini API with model %s", target_model)
+                    last_error = str(e)
+                    continue
+
+        raise HTTPException(500, last_error or "Failed to generate fixed prompt from Gemini")
+
+    # Execute all rewrites concurrently
+    results = await asyncio.gather(*[_rewrite_single(item) for item in body.items], return_exceptions=True)
+
+    fixed_items = []
+    for item, res in zip(body.items, results):
+        if isinstance(res, Exception):
+            logger.error("Failed to rewrite prompt for item %s: %s", item.order, res)
+            fixed_text = item.prompt
+            status = f"FAILED: {str(res)}"
+        else:
+            fixed_text = res
+            status = "SUCCESS"
+            if body.save_to_disk and item.prompt_path and os.path.isfile(item.prompt_path):
+                try:
+                    with open(item.prompt_path, "w", encoding="utf-8") as f:
+                        f.write(fixed_text)
+                    logger.info("Saved fixed prompt to disk: %s", item.prompt_path)
+                except Exception as disk_err:
+                    logger.warning("Failed to save fixed prompt to %s: %s", item.prompt_path, disk_err)
+
+        fixed_items.append({
+            "scene_id": item.scene_id,
+            "order": item.order,
+            "original_prompt": item.prompt,
+            "fixed_prompt": fixed_text,
+            "error_message": item.error_message,
+            "image_name": item.image_name,
+            "image_path": item.image_path,
+            "prompt_path": item.prompt_path,
+            "status": status
+        })
+
+    return {
+        "ok": True,
+        "count": len(fixed_items),
+        "fixed_items": fixed_items
+    }
+
 

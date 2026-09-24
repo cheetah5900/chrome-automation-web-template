@@ -59,16 +59,18 @@ async def ws_handler(websocket):
         async for raw in websocket:
             try:
                 data = json.loads(raw)
-                await client.handle_message(data)
+                await client.handle_message(data, websocket=websocket)
             except json.JSONDecodeError:
                 logger.warning("Invalid JSON from extension")
+            except websockets.ConnectionClosed:
+                break
             except Exception as e:
                 logger.exception("Error handling extension message: %s", e)
     except websockets.ConnectionClosed:
         pass
     finally:
         keepalive_task.cancel()
-        client.clear_extension()
+        client.clear_extension(websocket)
         logger.info("Extension disconnected")
 
 
@@ -172,7 +174,7 @@ async def lifespan(app: FastAPI):
     logger.info("Flow Kit stopped")
 
 
-app = FastAPI(title="Flow Kit", version="1.13.8", lifespan=lifespan)
+app = FastAPI(title="Flow Kit", version="1.13.11", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

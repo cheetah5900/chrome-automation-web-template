@@ -16,12 +16,12 @@ async def run():
             localStorage.setItem('flowVideoPresets', JSON.stringify({
                 'ละคร': {
                     'project_id': '21a1632e-9926-46fa-954c-240d71d78f41',
-                    'video_model': 'veo_3_1_i2v_s_fast_portrait',
+                    'video_model': 'veo_3_1_i2v_lite_low_priority',
                     'orientation': 'VERTICAL',
                     'output_count': '1',
                     'upscale_resolution': 'NONE',
                     'lakorn_path': '/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย',
-                    'lakorn_ton': '18',
+                    'lakorn_ton': '19',
                     'lakorn_ep': '1'
                 }
             }));
@@ -49,21 +49,54 @@ async def run():
         }""")
         await asyncio.sleep(2)
 
-        print("Step 3: Selecting 'ละคร' preset...")
+        print("Step 3: Configuring Video Gen parameters (Project, Vertical 9:16, lite_low_priority, Count 1)...")
         await page.evaluate("""() => {
-            const sel = document.getElementById('flowVideoPresetSelect');
-            if (sel) sel.value = 'ละคร';
-            if (typeof applyFlowVideoPreset === 'function') applyFlowVideoPreset('ละคร');
+            const proj = document.getElementById('cfg_flow_project_dropdown');
+            if (proj) {
+                proj.value = '21a1632e-9926-46fa-954c-240d71d78f41';
+                proj.dispatchEvent(new Event('change'));
+            }
+            const orient = document.getElementById('cfg_flow_orientation');
+            if (orient) {
+                orient.value = 'VERTICAL';
+                orient.dispatchEvent(new Event('change'));
+            }
+            const count = document.getElementById('cfg_flow_output_count');
+            if (count) {
+                count.value = '1';
+                count.dispatchEvent(new Event('input'));
+            }
+            const modelDd = document.getElementById('cfg_flow_video_model');
+            if (modelDd) {
+                modelDd.value = 'lite_low_priority';
+                modelDd.dispatchEvent(new Event('change'));
+            }
+            const pathInputs = {
+                'cfg_flow_lakorn_path': '/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย',
+                'cfg_flow_lakorn_ton': '19',
+                'cfg_flow_lakorn_ep': '1'
+            };
+            for (const [id, val] of Object.entries(pathInputs)) {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.value = val;
+                    el.dispatchEvent(new Event('input'));
+                }
+            }
             if (typeof calculateFlowKitPaths === 'function') calculateFlowKitPaths();
         }""")
         await asyncio.sleep(1)
 
         proj_val = await page.locator("#cfg_flow_project_dropdown").input_value()
         model_val = await page.locator("#cfg_flow_video_model").input_value()
+        orient_val = await page.locator("#cfg_flow_orientation").input_value()
+        count_val = await page.locator("#cfg_flow_output_count").input_value()
         sb_path = await page.locator("#lbl_resolved_storyboard_path").inner_text()
         pr_path = await page.locator("#lbl_resolved_prompt_path").inner_text()
         print(f"Project ID: {proj_val}")
         print(f"Video Model: {model_val}")
+        print(f"Orientation: {orient_val}")
+        print(f"Output Count: {count_val}")
         print(f"Storyboard Path: {sb_path}")
         print(f"Prompt Path: {pr_path}")
 
@@ -115,8 +148,8 @@ async def run():
         print("=== E2E PHASE 4: MONITORING GENERATION STATUS ===", flush=True)
         print(f"Monitoring scene {scene_id}...", flush=True)
         import urllib.request
-        for poll_i in range(15):
-            await asyncio.sleep(2)
+        for poll_i in range(80):
+            await asyncio.sleep(3)
             try:
                 with urllib.request.urlopen("http://127.0.0.1:6969/api/requests?limit=5") as resp:
                     req_data = json.loads(resp.read().decode())
@@ -125,11 +158,14 @@ async def run():
                         cur_status = matched.get("status")
                         err = matched.get("error_message")
                         req_ident = matched.get("id", "")[:8]
-                        print(f"  [Poll {poll_i+1}/15] Request {req_ident} status: {cur_status} (err: {err})", flush=True)
+                        media_id = matched.get("media_id")
+                        output_url = matched.get("output_url")
+                        print(f"  [Poll {poll_i+1}/80] Request {req_ident} status: {cur_status} (media: {media_id}, err: {err})", flush=True)
                         if cur_status in ("COMPLETED", "FAILED"):
+                            print(f"Final status reached: {cur_status}, output_url: {output_url}", flush=True)
                             break
             except Exception as pe:
-                print(f"  [Poll {poll_i+1}/15] Poll err: {pe}", flush=True)
+                print(f"  [Poll {poll_i+1}/80] Poll err: {pe}", flush=True)
 
         # Read video console output
         console_lines = await page.locator("#videoConsole .console-line").all_inner_texts()

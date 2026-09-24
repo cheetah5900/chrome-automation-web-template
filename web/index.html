@@ -758,54 +758,6 @@
                 🚀 Start Batch Upload
               </button>
             </div>
-
-            <!-- Step-by-Step Debug Controls Panel -->
-            <div id="flowKitDebugPanel" style="margin-top: 16px; padding: 16px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(234, 179, 8, 0.35); display: flex; flex-direction: column; gap: 12px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span style="font-weight: bold; font-size: 0.95rem; color: #facc15;">
-                    🐞 Step-by-Step Flow Debugger
-                  </span>
-                  <span style="font-size: 0.75rem; color: rgba(255,255,255,0.5);">(ทดสอบคำสั่งทีละขั้นตอนบน Google Flow)</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span id="flowDebugCurrentSceneLabel" style="font-size: 0.78rem; color: #93c5fd; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); padding: 3px 8px; border-radius: 6px;">
-                    Target: Scene 06
-                  </span>
-                  <button id="btnDebugResetSteps" class="secondary" style="padding: 3px 8px; font-size: 0.75rem; border-radius: 6px; margin: 0; background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); color: #ccc;">
-                    🔄 Reset
-                  </button>
-                </div>
-              </div>
-
-              <!-- 5 Step Action Buttons Grid -->
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
-                <button id="btnDebugStep1" class="secondary" style="padding: 10px 8px; font-size: 0.8rem; font-weight: 500; border-radius: 8px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); color: #60a5fa; cursor: pointer; text-align: center; transition: all 0.2s;">
-                  1️⃣ 📤 Upload Image
-                </button>
-                <button id="btnDebugStep2" class="secondary" style="padding: 10px 8px; font-size: 0.8rem; font-weight: 500; border-radius: 8px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; cursor: pointer; text-align: center; transition: all 0.2s;">
-                  2️⃣ 🔍 Check Preview
-                </button>
-                <button id="btnDebugStep3" class="secondary" style="padding: 10px 8px; font-size: 0.8rem; font-weight: 500; border-radius: 8px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.35); color: #c084fc; cursor: pointer; text-align: center; transition: all 0.2s;">
-                  3️⃣ 📎 Attach Chip
-                </button>
-                <button id="btnDebugStep4" class="secondary" style="padding: 10px 8px; font-size: 0.8rem; font-weight: 500; border-radius: 8px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); color: #fbbf24; cursor: pointer; text-align: center; transition: all 0.2s;">
-                  4️⃣ ✍️ Type Prompt
-                </button>
-                <button id="btnDebugStep5" class="secondary" style="padding: 10px 8px; font-size: 0.8rem; font-weight: 500; border-radius: 8px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); color: #f87171; cursor: pointer; text-align: center; transition: all 0.2s;">
-                  5️⃣ 🎬 Generate
-                </button>
-                <button id="btnDebugStepNext" class="primary" style="padding: 10px 8px; font-size: 0.82rem; font-weight: bold; border-radius: 8px; background: linear-gradient(135deg, #eab308, #ca8a04); border: none; color: #111; cursor: pointer; text-align: center; box-shadow: 0 2px 8px rgba(234, 179, 8, 0.25);">
-                  ▶️ Run Next Step
-                </button>
-              </div>
-
-              <!-- Real-time Step Feedback Display -->
-              <div id="flowDebugFeedback" style="padding: 10px 14px; border-radius: 8px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.08); font-size: 0.8rem; color: #93c5fd; min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 10px; overflow: hidden;">
-                <span id="flowDebugStatusText" style="flex: 1; word-break: break-all;">พร้อมทดสอบ: คลิกปุ่มขั้นตอนที่ต้องการ หรือคลิก ▶️ Run Next Step เพื่อเริ่ม</span>
-                <span id="flowDebugBadge" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.08); color: #aaa; white-space: nowrap;">Ready</span>
-              </div>
-            </div>
             
             <p id="flowKitMsg" style="margin-top: 12px; font-size: 0.85rem; display: none;" class="msg"></p>
           </section>
@@ -956,8 +908,68 @@
             </div>
           </section>
 
+          <!-- Safety & Policy Resolution Card -->
+          <section id="flow_safety_resolver_card" class="card border-purple" style="padding: 20px; margin-bottom: 20px; border-color: rgba(168, 85, 247, 0.4); background: rgba(30, 16, 50, 0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+              <h2 class="section-title" style="font-size: 1.15rem; margin-bottom: 0; color: #d8b4fe; display: flex; align-items: center; gap: 8px;">
+                <span>🛡️ รายการฉากที่ติดปัญหาความปลอดภัย & ปรับแก้ Prompt ด้วย AI (Gemini)</span>
+              </h2>
+              <span id="safetyProblemCountBadge" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 12px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: bold;">
+                0 ฉากที่ติดปัญหา
+              </span>
+            </div>
+            
+            <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-bottom: 16px; line-height: 1.4;">
+              ฉากที่ล้มเหลวเนื่องจากติดระบบตรวจสอบความปลอดภัย (Safety Filter / Policy Block) หรือเนื้อหาบุคคลที่ 3 สามารถใช้ <strong>Gemini AI</strong> วิเคราะห์และปรับแก้ข้อความ Prompt ให้ถูกต้องตามกฎเกณฑ์โดยรักษาอารมณ์และมุมกล้องเดิมไว้ จากนั้นสั่งสร้างใหม่บน Google Flow ได้ทันที
+            </p>
 
+            <!-- Gemini API Key configuration bar -->
+            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 16px; background: rgba(0,0,0,0.3); padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(168, 85, 247, 0.25); flex-wrap: wrap;">
+              <label for="flowGeminiApiKey" style="font-size: 0.85rem; color: #d8b4fe; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                🔑 Gemini API Key:
+              </label>
+              <div style="display: flex; flex: 1; min-width: 250px; position: relative;">
+                <input id="flowGeminiApiKey" type="password" placeholder="วาง Google Gemini API Key ที่นี่ (AIzaSy...)" style="width: 100%; padding: 8px 36px 8px 12px; font-size: 0.85rem; border-radius: 8px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); color: #fff; margin: 0;" />
+                <button id="btnToggleFlowGeminiKeyVisibility" type="button" title="แสดง/ซ่อน Key" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; padding: 4px; font-size: 0.85rem;">👁️</button>
+              </div>
+              <button id="btnSaveFlowGeminiKey" class="secondary" style="padding: 8px 14px; font-size: 0.8rem; margin: 0; border-radius: 8px; background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.35); color: #d8b4fe; white-space: nowrap;">💾 บันทึก Key</button>
+              <button id="btnTestFlowGeminiKey" class="secondary" style="padding: 8px 14px; font-size: 0.8rem; margin: 0; border-radius: 8px; background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.35); color: #38bdf8; white-space: nowrap;">⚡ ทดสอบการเชื่อมต่อ</button>
+              <span id="flowGeminiKeyStatus" style="font-size: 0.8rem; margin-left: 4px;"></span>
+            </div>
 
+            <!-- Table of Problematic Scenes -->
+            <div style="overflow-x: auto; margin-bottom: 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+              <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+                <thead>
+                  <tr style="background: rgba(255,255,255,0.04); color: #d8b4fe; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <th style="padding: 10px 12px; width: 60px; text-align: center;">ลำดับ</th>
+                    <th style="padding: 10px 12px; width: 140px;">ชื่อฉาก / ไฟล์</th>
+                    <th style="padding: 10px 12px; width: 180px;">สาเหตุที่ติดปัญหา</th>
+                    <th style="padding: 10px 12px; width: 32%;">Prompt เดิม (Original)</th>
+                    <th style="padding: 10px 12px; width: 38%;">Prompt ที่ปรับแก้โดย AI (แก้ไขได้)</th>
+                  </tr>
+                </thead>
+                <tbody id="safetyProblemsTbody">
+                  <tr>
+                    <td colspan="5" style="padding: 24px 16px; text-align: center; color: rgba(255,255,255,0.5);">
+                      🎉 ขณะนี้ไม่มีฉากที่ติดปัญหาความปลอดภัยหรือบุคคลที่ 3 (เมื่อสั่งสร้างแล้วมีฉากที่ไม่ผ่าน ระบบจะรวบรวมมาแสดงที่นี่)
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Action Buttons Row -->
+            <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; align-items: center;">
+              <button id="btnFixAllPromptsGemini" class="secondary" style="padding: 10px 18px; font-size: 0.9rem; font-weight: 600; border-radius: 8px; background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(192, 132, 252, 0.3)); border: 1px solid #a855f7; color: #f3e8ff; cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 0;">
+                <span>✨ ให้ AI (Gemini) ปรับแก้ Prompt ทุกฉากที่ติดปัญหา</span>
+              </button>
+              <button id="btnRetryFixedScenesFlow" class="primary" style="padding: 10px 20px; font-size: 0.9rem; font-weight: bold; border-radius: 8px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 0; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
+                <span>🚀 สั่งสร้างวิดีโอใหม่บน Flow (Retry Fixed Scenes)</span>
+              </button>
+            </div>
+            <p id="safetyResolverMsg" class="msg" style="margin-top: 12px; font-size: 0.85rem; display: none;"></p>
+          </section>
 
           <section class="card border-yellow" style="padding: 20px;">
             <h2 class="section-title" style="font-size: 1.25rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #fef08a;">
@@ -2169,6 +2181,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=90"></script>
+  <script src="/web/app.js?v=92"></script>
 </body>
 </html>

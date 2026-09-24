@@ -12,6 +12,7 @@ import base64
 import json
 import logging
 import ssl
+import time
 from typing import TYPE_CHECKING, Optional
 
 
@@ -259,12 +260,12 @@ async def _poll_operations(
         return {"data": {"operations": synth_ops}}
 
     poll_interval = VIDEO_POLL_INTERVAL
-    elapsed = 0
+    start_time = time.monotonic()
     current_ops = operations
 
-    while elapsed < timeout:
+    while (time.monotonic() - start_time) < timeout:
         await asyncio.sleep(poll_interval)
-        elapsed += poll_interval
+        elapsed = int(time.monotonic() - start_time)
 
         status_result = await client.check_video_status(current_ops)
         if _is_error(status_result):
@@ -287,10 +288,11 @@ async def _poll_operations(
                 continue
             elif status == "MEDIA_GENERATION_STATUS_FAILED":
                 op_name = op.get('operation', {}).get('name', '?')
+                op_err = op.get("error") or f"Operation failed: {op_name}"
                 # Log full operation for debugging failure reason
                 import json as _json
-                logger.error("Operation FAILED: name=%s full=%s", op_name, _json.dumps(op)[:1000])
-                error_msg = f"Operation failed: {op_name}"
+                logger.error("Operation FAILED: name=%s err=%s full=%s", op_name, op_err, _json.dumps(op)[:1000])
+                error_msg = op_err
                 has_error = True
                 break
             else:
@@ -474,6 +476,7 @@ class OperationService:
                             custom_tier = params.get("video_model")
                     except Exception:
                         pass
+        is_t2v = not bool(image_media_id)
         custom_model_key = None
         if custom_tier:
             if custom_tier == "standard":
@@ -485,31 +488,68 @@ class OperationService:
                 logger.info("Downgrading model selection '%s' to 'lite_low_priority' due to PAYGATE_TIER_TWO account limits", custom_tier)
                 custom_tier = "lite_low_priority"
 
-            if custom_tier in ("lite_low_priority", "lite", "fast", "quality", "omni_flash"):
-                is_vertical = (orientation == "VERTICAL")
+            if is_t2v:
+                # Text-to-Video models
                 if custom_tier == "lite_low_priority":
-                    custom_model_key = "veo_3_1_i2v_lite_low_priority"
+                    custom_model_key = "veo_3_1_t2v_lite_low_priority"
                     tier = "PAYGATE_TIER_TWO"
                 elif custom_tier == "lite":
-                    custom_model_key = "veo_3_1_i2v_lite_portrait" if is_vertical else "veo_3_1_i2v_lite"
+                    custom_model_key = "veo_3_1_t2v_lite"
                     tier = "PAYGATE_TIER_TWO"
-                elif custom_tier == "fast":
-                    custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
-                    tier = "PAYGATE_TIER_ONE"
-                elif custom_tier == "quality":
-                    custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
+                elif custom_tier in ("fast", "quality"):
+                    custom_model_key = "veo_3_1_t2v_s_fast"
                     tier = "PAYGATE_TIER_ONE"
                 elif custom_tier == "omni_flash":
-                    custom_model_key = "abra_i2v_10s"
+                    custom_model_key = f"abra_t2v_{duration_seconds or 10}s"
                     tier = "PAYGATE_TIER_ONE"
-            elif "veo" in custom_tier:
-                custom_model_key = custom_tier
-                if "lite" in custom_tier or "relaxed" in custom_tier:
-                    tier = "PAYGATE_TIER_TWO"
+                elif "t2v" in custom_tier or "abra" in custom_tier:
+                    custom_model_key = custom_tier
+                    tier = "PAYGATE_TIER_TWO" if ("lite" in custom_tier or "relaxed" in custom_tier) else "PAYGATE_TIER_ONE"
+                elif "_i2v_" in custom_tier:
+                    custom_model_key = custom_tier.replace("_i2v_", "_t2v_")
+                    tier = "PAYGATE_TIER_TWO" if ("lite" in custom_tier or "relaxed" in custom_tier) else "PAYGATE_TIER_ONE"
                 else:
-                    tier = "PAYGATE_TIER_ONE"
+                    custom_model_key = "veo_3_1_t2v_lite_low_priority"
+                    tier = "PAYGATE_TIER_TWO"
             else:
-                tier = custom_tier
+                # Image-to-Video models
+                if custom_tier in ("lite_low_priority", "lite", "fast", "quality", "omni_flash"):
+                    is_vertical = (orientation == "VERTICAL")
+                    if custom_tier == "lite_low_priority":
+                        custom_model_key = "veo_3_1_i2v_lite_low_priority"
+                        tier = "PAYGATE_TIER_TWO"
+                    elif custom_tier == "lite":
+                        custom_model_key = "veo_3_1_i2v_lite_portrait" if is_vertical else "veo_3_1_i2v_lite"
+                        tier = "PAYGATE_TIER_TWO"
+                    elif custom_tier == "fast":
+                        custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
+                        tier = "PAYGATE_TIER_ONE"
+                    elif custom_tier == "quality":
+                        custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
+                        tier = "PAYGATE_TIER_ONE"
+                    elif custom_tier == "omni_flash":
+                        custom_model_key = "abra_i2v_10s"
+                        tier = "PAYGATE_TIER_ONE"
+                elif "veo" in custom_tier:
+                    custom_model_key = custom_tier
+                    if "lite" in custom_tier or "relaxed" in custom_tier:
+                        tier = "PAYGATE_TIER_TWO"
+                    else:
+                        tier = "PAYGATE_TIER_ONE"
+                else:
+                    tier = custom_tier
+
+        if not custom_model_key:
+            if is_t2v:
+                custom_model_key = "veo_3_1_t2v_lite_low_priority"
+                tier = "PAYGATE_TIER_TWO"
+            else:
+                is_vertical = (orientation == "VERTICAL")
+                if tier == "PAYGATE_TIER_ONE":
+                    custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
+                else:
+                    custom_model_key = "veo_3_1_i2v_lite"
+                    tier = "PAYGATE_TIER_TWO"
 
         # Heuristic: bare UUID = workflow name → skip shortcut. Slash/colon = old operation path.
         looks_like_workflow_uuid = bool(existing_op and len(existing_op) == 36 and existing_op.count("-") == 4)
@@ -545,6 +585,12 @@ class OperationService:
         op_name = operations[0].get("operation", {}).get("name", "")
         if request_id:
             await crud.update_request(request_id, request_id=op_name)
+
+        for op in operations:
+            if not op.get("project_id"):
+                op["project_id"] = pid
+            if not op.get("scene_id"):
+                op["scene_id"] = scene.get("id", "")
 
         status = operations[0].get("status", "")
         if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
@@ -964,54 +1010,10 @@ class OperationService:
 # ------------------------------------------------------------------
 
 async def _build_video_prompt(base_prompt: str, scene: dict, project_id: str | None) -> str:
-    """Enhance video prompt with Veo 3 audio instructions and negative prompt."""
-    parts = [base_prompt.strip()]
-
-    # Only append voice context when video_prompt contains dialogue (verb-based detection)
-    dialogue_verbs = ("says", "whispers", "shouts", "asks", "replies", "murmurs", "exclaims", "gasps", "laughs", "mutters")
-    prompt_lower = base_prompt.lower()
-    has_dialogue = any(verb in prompt_lower for verb in dialogue_verbs)
-    if project_id and has_dialogue:
-        char_names_raw = scene.get("character_names")
-        if isinstance(char_names_raw, str):
-            try:
-                char_names_raw = json.loads(char_names_raw)
-            except json.JSONDecodeError:
-                char_names_raw = []
-        if isinstance(char_names_raw, list) and char_names_raw:
-            project_chars = await crud.get_project_characters(project_id)
-            char_names_set = set(char_names_raw)
-            voices = []
-            for c in project_chars:
-                if _char_matches(c, char_names_set) and c.get("voice_description"):
-                    voices.append(f"{c['name']}: {c['voice_description']}")
-            if voices:
-                parts.append("Character voices: " + ". ".join(voices) + ".")
-
-    # Check project-level audio flags — Veo 3 Audio label format
-    allow_music = False
-    allow_voice = False
-    if project_id:
-        project = await crud.get_project(project_id)
-        if project:
-            if project.get("allow_music"):
-                allow_music = True
-            if project.get("allow_voice"):
-                allow_voice = True
-
-    if not allow_music:
-        # Only append if prompt doesn't already have Audio:/Music: labels
-        if "audio:" not in prompt_lower and "music:" not in prompt_lower:
-            if allow_voice:
-                parts.append("Audio: no background music. Keep character dialogue and natural ambient sounds.")
-            else:
-                parts.append("Audio: natural ambient sounds only, no background music, no narration, no voiceover.")
-
-    # Veo 3 negative prompt — always append unless already present
-    if "negative:" not in prompt_lower:
-        parts.append("Negative: subtitles, captions, watermark, text on screen, logo, blurry faces, distorted hands.")
-
-    return " ".join(parts)
+    """Enhance video prompt with sanitization and clean natural language."""
+    from agent.services.prompt_sanitizer import sanitize_lakorn_prompt
+    base_prompt = sanitize_lakorn_prompt(base_prompt)
+    return base_prompt.strip()
 
 
 async def _upload_character_image(client: FlowClient, char: dict, project_id: str) -> str | None:

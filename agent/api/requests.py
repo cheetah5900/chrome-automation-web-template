@@ -29,6 +29,8 @@ class BatchStatus(BaseModel):
     done: bool
     all_succeeded: bool
     orientation: Optional[str] = None
+    failures: list[dict] = []
+    items: list[dict] = []
 
 
 @router.post("", response_model=Request)
@@ -124,9 +126,47 @@ async def batch_status(video_id: str = None, project_id: str = None,
     if orientation:
         rows = [r for r in rows if r.get("orientation") == orientation]
     counts = {"PENDING": 0, "PROCESSING": 0, "COMPLETED": 0, "FAILED": 0}
+    failures = []
+    items = []
     for r in rows:
         s = r.get("status", "PENDING")
         counts[s] = counts.get(s, 0) + 1
+        prompt_val = None
+        ep = r.get("edit_prompt")
+        if ep:
+            try:
+                import json as _json
+                ep_data = _json.loads(ep)
+                if isinstance(ep_data, dict):
+                    prompt_val = ep_data.get("original_prompt") or ep_data.get("prompt_content")
+            except Exception:
+                pass
+        item_summary = {
+            "id": r.get("id"),
+            "scene_id": r.get("scene_id"),
+            "status": s,
+            "error_message": r.get("error_message"),
+            "media_id": r.get("media_id"),
+            "output_url": r.get("output_url"),
+            "retry_count": r.get("retry_count", 0),
+            "prompt_content": prompt_val,
+        }
+        items.append(item_summary)
+        if s == "FAILED":
+            err_text = r.get("error_message") or ""
+            err_type = "ERROR"
+            err_lower = err_text.lower()
+            if any(k in err_lower for k in ("safety", "unsafe", "content filter", "policy", "violat", "content")):
+                err_type = "SAFETY_FILTER"
+            elif any(k in err_lower for k in ("quota", "credit", "billing", "paygate", "insufficient", "payment")):
+                err_type = "QUOTA"
+            elif "timeout" in err_lower:
+                err_type = "TIMEOUT"
+            failures.append({
+                **item_summary,
+                "error_type": err_type,
+            })
+
     total = len(rows)
     return BatchStatus(
         total=total,
@@ -137,6 +177,8 @@ async def batch_status(video_id: str = None, project_id: str = None,
         failed=counts["FAILED"],
         done=(counts["PENDING"] == 0 and counts["PROCESSING"] == 0),
         all_succeeded=(counts["COMPLETED"] == total and total > 0),
+        failures=failures,
+        items=items,
     )
 
 

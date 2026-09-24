@@ -82,11 +82,16 @@ ASPECT_BY_NAME = {
 #: [tier][quality][aspect] and carried `…_portrait` / `…_fl` / `…_relaxed`
 #: variants; those are gone — aspect is its own slot now, and the suffixed
 #: names are rejected.
-VIDEO_MODEL = "veo_3_1_i2v_lite_low_priority"
+VIDEO_MODEL = "veo_3_1_i2v_s_fast_ultra"
 VIDEO_MODELS = {
     "veo_3_1_i2v_lite_low_priority",
     "veo_3_1_i2v_lite",
     "veo_3_1_i2v_s_fast_ultra",
+    "veo_3_1_t2v_lite_low_priority",
+    "veo_3_1_t2v_lite",
+    "veo_3_1_t2v_s_fast",
+    "abra_t2v_4s",
+    "abra_t2v_10s",
 }
 
 #: Video aspect, and note it does NOT share the image encoding: here 1 is
@@ -164,6 +169,8 @@ class Operation:
     project_id: Optional[str]
     status: Optional[str]
     error: Optional[str] = None
+    scene_id: Optional[str] = None
+    media_id: Optional[str] = None
 
     @property
     def done(self) -> bool:
@@ -206,6 +213,16 @@ def resolve_video_model(key: Optional[str]) -> str:
     if isinstance(key, str):
         if key in VIDEO_MODELS:
             return key
+        if "_t2v_" in key or "t2v" in key:
+            if "lite_low_priority" in key:
+                return "veo_3_1_t2v_lite_low_priority"
+            if "lite" in key:
+                return "veo_3_1_t2v_lite"
+            if "fast" in key or "quality" in key:
+                return "veo_3_1_t2v_s_fast"
+            if "abra" in key:
+                return key
+            return "veo_3_1_t2v_lite_low_priority"
         if "ultra" in key:
             return "veo_3_1_i2v_s_fast_ultra"
         if "lite_low_priority" in key:
@@ -351,10 +368,13 @@ def video_request(prompt: str, project_id: str, source_media_id: str,
                   crop: Optional[list] = None,
                   aspect: Any = VIDEO_ASPECT_LANDSCAPE,
                   model: str = VIDEO_MODEL) -> str:
+    aspect_val = resolve_video_aspect(aspect)
+    effective_crop = crop
+    if effective_crop is None and aspect_val == VIDEO_ASPECT_LANDSCAPE:
+        effective_crop = FULL_FRAME_CROP
     inner = [
-        [[[None, None, [[[prompt]]]], model, resolve_video_aspect(aspect), None,
-          [None, source_media_id, None, None, None,
-           FULL_FRAME_CROP if crop is None else crop],
+        [[[None, None, [[[prompt]]]], model, aspect_val, None,
+          [None, source_media_id, None, None, None, effective_crop],
           [None, None, None, None, _client_uuid(), _client_uuid()]]],
         _context(project_id),
         [_client_uuid(), 2],
@@ -456,37 +476,72 @@ def read_text_video_submit(payload: Any) -> dict:
     """Read YhhmEf's submitted media/workflow record."""
     records = payload[3] if isinstance(payload, list) and len(payload) > 3 else None
     record = records[0] if isinstance(records, list) and records else None
-    if not isinstance(record, list) or not record:
-        raise FlowBatchError("text-video submit carried no generation record")
-    media_id = record[0] if len(record) > 0 else None
-    project_id = record[1] if len(record) > 1 else None
-    workflow_id = record[2] if len(record) > 2 else None
-    status = record[3] if len(record) > 3 else None
-    if not isinstance(media_id, str) or not media_id:
-        raise FlowBatchError("text-video submit carried no media id")
-    return {
-        "media_id": media_id,
-        "project_id": project_id if isinstance(project_id, str) else None,
-        "workflow_id": workflow_id if isinstance(workflow_id, str) else media_id,
-        "status": status if isinstance(status, str) else None,
-    }
+    if isinstance(record, list) and record and len(record) > 0 and isinstance(record[0], str):
+        media_id = record[0]
+        project_id = record[1] if len(record) > 1 and isinstance(record[1], str) else None
+        workflow_id = record[2] if len(record) > 2 and isinstance(record[2], str) else media_id
+        status = record[3] if len(record) > 3 and isinstance(record[3], str) else None
+        return {
+            "media_id": media_id,
+            "project_id": project_id,
+            "workflow_id": workflow_id,
+            "status": status,
+        }
+    # Fallback to read_operation if payload[3] is not formatted as expected
+    try:
+        op = read_operation(payload)
+        return {
+            "media_id": op.media_id or op.operation_id,
+            "project_id": op.project_id,
+            "workflow_id": op.operation_id,
+            "status": op.status,
+        }
+    except Exception:
+        pass
+    raise FlowBatchError("text-video submit carried no generation record")
 
 
 def read_operation(payload: Any) -> Operation:
     """`[null, 50, [[opId, projectId, sceneId, status, …]]]`.
 
-    Note the third uuid is the **scene**, not the media. Reading it as a media
-    id is what made every `as29s` lookup answer NOT_FOUND.
+    Note the third uuid is the **scene**, not the media. In video submissions
+    (eb1hJf / YhhmEf), media_id is carried directly in payload[3][0][0] or record[3][4].
     """
     records = payload[2] if isinstance(payload, list) and len(payload) > 2 else None
     record = records[0] if isinstance(records, list) and records else None
     if not isinstance(record, list) or not record:
         raise FlowBatchError("operation payload carried no record")
+
+    media_id = None
+    project_id = record[1] if len(record) > 1 and isinstance(record[1], str) else None
+    if not project_id and len(record) > 4 and isinstance(record[4], str):
+        project_id = record[4]
+
+    status = record[3] if len(record) > 3 and isinstance(record[3], str) else None
+
+    # Check payload[3][0] (standard video submit record format)
+    if isinstance(payload, list) and len(payload) > 3 and isinstance(payload[3], list) and payload[3]:
+        r3 = payload[3][0]
+        if isinstance(r3, list) and len(r3) > 0 and isinstance(r3[0], str) and r3[0]:
+            media_id = r3[0]
+            if not project_id and len(r3) > 1 and isinstance(r3[1], str):
+                project_id = r3[1]
+            if not status and len(r3) > 3 and isinstance(r3[3], str):
+                status = r3[3]
+
+    # Fallback to record[3][4] if media_id still not found
+    if not media_id and len(record) > 3 and isinstance(record[3], list) and len(record[3]) > 4:
+        cand = record[3][4]
+        if isinstance(cand, str) and cand:
+            media_id = cand
+
     return Operation(
         operation_id=record[0],
-        project_id=record[1] if len(record) > 1 else None,
-        status=record[3] if len(record) > 3 else None,
+        project_id=project_id,
+        status=status,
         error=read_operation_error(record),
+        scene_id=record[2] if len(record) > 2 and isinstance(record[2], str) else None,
+        media_id=media_id,
     )
 
 
@@ -527,7 +582,7 @@ def find_media_id(payload: Any, operation_id: str) -> Optional[str]:
 #: The media slot in a listing entry, matched straight off the wire: a title,
 #: a timestamp pair, two nulls, then the media id. Escaped or not, both forms
 #: appear depending on whether the text has been through a JSON decode.
-_MEDIA_SLOT = re.compile(r'null,null,\\?"([0-9a-fA-F-]{36})\\?"')
+_MEDIA_SLOT = re.compile(r'(?:null,null|null),\\?"([0-9a-fA-F-]{36})\\?"')
 
 
 def find_media_id_in_text(text: str, operation_id: str) -> Optional[str]:
