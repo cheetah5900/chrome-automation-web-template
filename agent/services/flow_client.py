@@ -716,7 +716,10 @@ class FlowClient:
         if not start_image_media_id:
             try:
                 model_key = custom_model_key or f"abra_t2v_{duration_seconds or 4}s"
-                freq = fb.text_video_request(prompt, pid, aspect=aspect_ratio, model=model_key)
+                if "_i2v_" in model_key:
+                    model_key = model_key.replace("_i2v_", "_t2v_")
+                model = fb.resolve_video_model(model_key)
+                freq = fb.text_video_request(prompt, pid, aspect=aspect_ratio, model=model)
                 payload = await self._batch_payload(
                     fb.RPC_GEN_VIDEO_TEXT, freq, fb.CAPTCHA_VIDEO, timeout=120)
                 submitted = fb.read_text_video_submit(payload)

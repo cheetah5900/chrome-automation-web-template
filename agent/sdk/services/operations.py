@@ -476,6 +476,7 @@ class OperationService:
                             custom_tier = params.get("video_model")
                     except Exception:
                         pass
+        is_t2v = not bool(image_media_id)
         custom_model_key = None
         if custom_tier:
             if custom_tier == "standard":
@@ -487,39 +488,68 @@ class OperationService:
                 logger.info("Downgrading model selection '%s' to 'lite_low_priority' due to PAYGATE_TIER_TWO account limits", custom_tier)
                 custom_tier = "lite_low_priority"
 
-            if custom_tier in ("lite_low_priority", "lite", "fast", "quality", "omni_flash"):
-                is_vertical = (orientation == "VERTICAL")
+            if is_t2v:
+                # Text-to-Video models
                 if custom_tier == "lite_low_priority":
-                    custom_model_key = "veo_3_1_i2v_lite_low_priority"
+                    custom_model_key = "veo_3_1_t2v_lite_low_priority"
                     tier = "PAYGATE_TIER_TWO"
                 elif custom_tier == "lite":
-                    custom_model_key = "veo_3_1_i2v_lite_portrait" if is_vertical else "veo_3_1_i2v_lite"
+                    custom_model_key = "veo_3_1_t2v_lite"
                     tier = "PAYGATE_TIER_TWO"
-                elif custom_tier == "fast":
-                    custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
-                    tier = "PAYGATE_TIER_ONE"
-                elif custom_tier == "quality":
-                    custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
+                elif custom_tier in ("fast", "quality"):
+                    custom_model_key = "veo_3_1_t2v_s_fast"
                     tier = "PAYGATE_TIER_ONE"
                 elif custom_tier == "omni_flash":
-                    custom_model_key = "abra_i2v_10s"
+                    custom_model_key = f"abra_t2v_{duration_seconds or 10}s"
                     tier = "PAYGATE_TIER_ONE"
-            elif "veo" in custom_tier:
-                custom_model_key = custom_tier
-                if "lite" in custom_tier or "relaxed" in custom_tier:
-                    tier = "PAYGATE_TIER_TWO"
+                elif "t2v" in custom_tier or "abra" in custom_tier:
+                    custom_model_key = custom_tier
+                    tier = "PAYGATE_TIER_TWO" if ("lite" in custom_tier or "relaxed" in custom_tier) else "PAYGATE_TIER_ONE"
+                elif "_i2v_" in custom_tier:
+                    custom_model_key = custom_tier.replace("_i2v_", "_t2v_")
+                    tier = "PAYGATE_TIER_TWO" if ("lite" in custom_tier or "relaxed" in custom_tier) else "PAYGATE_TIER_ONE"
                 else:
-                    tier = "PAYGATE_TIER_ONE"
+                    custom_model_key = "veo_3_1_t2v_lite_low_priority"
+                    tier = "PAYGATE_TIER_TWO"
             else:
-                tier = custom_tier
+                # Image-to-Video models
+                if custom_tier in ("lite_low_priority", "lite", "fast", "quality", "omni_flash"):
+                    is_vertical = (orientation == "VERTICAL")
+                    if custom_tier == "lite_low_priority":
+                        custom_model_key = "veo_3_1_i2v_lite_low_priority"
+                        tier = "PAYGATE_TIER_TWO"
+                    elif custom_tier == "lite":
+                        custom_model_key = "veo_3_1_i2v_lite_portrait" if is_vertical else "veo_3_1_i2v_lite"
+                        tier = "PAYGATE_TIER_TWO"
+                    elif custom_tier == "fast":
+                        custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
+                        tier = "PAYGATE_TIER_ONE"
+                    elif custom_tier == "quality":
+                        custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
+                        tier = "PAYGATE_TIER_ONE"
+                    elif custom_tier == "omni_flash":
+                        custom_model_key = "abra_i2v_10s"
+                        tier = "PAYGATE_TIER_ONE"
+                elif "veo" in custom_tier:
+                    custom_model_key = custom_tier
+                    if "lite" in custom_tier or "relaxed" in custom_tier:
+                        tier = "PAYGATE_TIER_TWO"
+                    else:
+                        tier = "PAYGATE_TIER_ONE"
+                else:
+                    tier = custom_tier
 
         if not custom_model_key:
-            is_vertical = (orientation == "VERTICAL")
-            if tier == "PAYGATE_TIER_ONE":
-                custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
-            else:
-                custom_model_key = "veo_3_1_i2v_lite"
+            if is_t2v:
+                custom_model_key = "veo_3_1_t2v_lite_low_priority"
                 tier = "PAYGATE_TIER_TWO"
+            else:
+                is_vertical = (orientation == "VERTICAL")
+                if tier == "PAYGATE_TIER_ONE":
+                    custom_model_key = "veo_3_1_i2v_s_fast_portrait" if is_vertical else "veo_3_1_i2v_s_fast"
+                else:
+                    custom_model_key = "veo_3_1_i2v_lite"
+                    tier = "PAYGATE_TIER_TWO"
 
         # Heuristic: bare UUID = workflow name → skip shortcut. Slash/colon = old operation path.
         looks_like_workflow_uuid = bool(existing_op and len(existing_op) == 36 and existing_op.count("-") == 4)

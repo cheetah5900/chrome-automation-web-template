@@ -6350,7 +6350,8 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
     round_idx = payload.round_idx
     
     # ─── Flow Kit Mode Handler ──────────────────────────────────
-    if payload.video_gen_mode == "flow_kit":
+    if payload.video_gen_mode in ("flow_kit", "flow_kit_prompt_only"):
+        is_prompt_only = (payload.video_gen_mode == "flow_kit_prompt_only")
         try:
             from agent.db import crud
             from agent.services.flow_client import get_flow_client
@@ -6425,7 +6426,7 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             orientation = target_video.get("orientation") or "VERTICAL"
             image_media_id = target_scene.get("vertical_image_media_id") if orientation == "VERTICAL" else target_scene.get("horizontal_image_media_id")
             
-            if not image_media_id:
+            if not image_media_id and not is_prompt_only:
                 try:
                     import json
                     from pathlib import Path
@@ -6541,7 +6542,10 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
             orientation = target_video.get("orientation") or "VERTICAL"
             image_media_id = target_scene.get("vertical_image_media_id") if orientation == "VERTICAL" else target_scene.get("horizontal_image_media_id")
             
-            if not image_media_id:
+            if is_prompt_only:
+                req_type = "GENERATE_VIDEO"
+                log(f"[Flow Kit Queue] Prompt-Only Mode: Submitting GENERATE_VIDEO request for scene {round_idx} (text-to-video)...")
+            elif not image_media_id:
                 req_type = "GENERATE_IMAGE"
                 log(f"[Flow Kit Queue] Scene {round_idx} doesn't have image media ID. Submitting GENERATE_IMAGE request...")
             else:

@@ -5390,10 +5390,10 @@ function updateFlowVideoModelDropdowns(tier) {
     
     if (tier === 'PAYGATE_TIER_ONE') {
       const options = [
-        { value: 'fast', text: 'veo3 (Quality / Fast)' },
-        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
-        { value: 'lite', text: 'lite (Lite)' },
-        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' }
+        { value: 'veo_3_1_t2v_s_fast', text: 'veo_3_1_t2v_s_fast (Veo Fast / Quality)' },
+        { value: 'abra_t2v_10s', text: 'abra_t2v_10s (Omni Flash 10s)' },
+        { value: 'veo_3_1_t2v_lite', text: 'veo_3_1_t2v_lite (Lite)' },
+        { value: 'veo_3_1_t2v_lite_low_priority', text: 'veo_3_1_t2v_lite_low_priority (Lite Low Priority)' }
       ];
       options.forEach(o => {
         const opt = document.createElement('option');
@@ -5403,8 +5403,9 @@ function updateFlowVideoModelDropdowns(tier) {
       });
     } else {
       const options = [
-        { value: 'omni_flash', text: 'omni_flash (Omni Flash)' },
-        { value: 'lite_low_priority', text: 'lite_low_priority (Lite Low Priority)' }
+        { value: 'veo_3_1_t2v_lite_low_priority', text: 'veo_3_1_t2v_lite_low_priority (Lite Low Priority - แนะนำ)' },
+        { value: 'abra_t2v_10s', text: 'abra_t2v_10s (Omni Flash 10s)' },
+        { value: 'veo_3_1_t2v_lite', text: 'veo_3_1_t2v_lite (Lite)' }
       ];
       options.forEach(o => {
         const opt = document.createElement('option');

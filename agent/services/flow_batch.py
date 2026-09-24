@@ -87,6 +87,11 @@ VIDEO_MODELS = {
     "veo_3_1_i2v_lite_low_priority",
     "veo_3_1_i2v_lite",
     "veo_3_1_i2v_s_fast_ultra",
+    "veo_3_1_t2v_lite_low_priority",
+    "veo_3_1_t2v_lite",
+    "veo_3_1_t2v_s_fast",
+    "abra_t2v_4s",
+    "abra_t2v_10s",
 }
 
 #: Video aspect, and note it does NOT share the image encoding: here 1 is
@@ -208,6 +213,16 @@ def resolve_video_model(key: Optional[str]) -> str:
     if isinstance(key, str):
         if key in VIDEO_MODELS:
             return key
+        if "_t2v_" in key or "t2v" in key:
+            if "lite_low_priority" in key:
+                return "veo_3_1_t2v_lite_low_priority"
+            if "lite" in key:
+                return "veo_3_1_t2v_lite"
+            if "fast" in key or "quality" in key:
+                return "veo_3_1_t2v_s_fast"
+            if "abra" in key:
+                return key
+            return "veo_3_1_t2v_lite_low_priority"
         if "ultra" in key:
             return "veo_3_1_i2v_s_fast_ultra"
         if "lite_low_priority" in key:
@@ -461,20 +476,29 @@ def read_text_video_submit(payload: Any) -> dict:
     """Read YhhmEf's submitted media/workflow record."""
     records = payload[3] if isinstance(payload, list) and len(payload) > 3 else None
     record = records[0] if isinstance(records, list) and records else None
-    if not isinstance(record, list) or not record:
-        raise FlowBatchError("text-video submit carried no generation record")
-    media_id = record[0] if len(record) > 0 else None
-    project_id = record[1] if len(record) > 1 else None
-    workflow_id = record[2] if len(record) > 2 else None
-    status = record[3] if len(record) > 3 else None
-    if not isinstance(media_id, str) or not media_id:
-        raise FlowBatchError("text-video submit carried no media id")
-    return {
-        "media_id": media_id,
-        "project_id": project_id if isinstance(project_id, str) else None,
-        "workflow_id": workflow_id if isinstance(workflow_id, str) else media_id,
-        "status": status if isinstance(status, str) else None,
-    }
+    if isinstance(record, list) and record and len(record) > 0 and isinstance(record[0], str):
+        media_id = record[0]
+        project_id = record[1] if len(record) > 1 and isinstance(record[1], str) else None
+        workflow_id = record[2] if len(record) > 2 and isinstance(record[2], str) else media_id
+        status = record[3] if len(record) > 3 and isinstance(record[3], str) else None
+        return {
+            "media_id": media_id,
+            "project_id": project_id,
+            "workflow_id": workflow_id,
+            "status": status,
+        }
+    # Fallback to read_operation if payload[3] is not formatted as expected
+    try:
+        op = read_operation(payload)
+        return {
+            "media_id": op.media_id or op.operation_id,
+            "project_id": op.project_id,
+            "workflow_id": op.operation_id,
+            "status": op.status,
+        }
+    except Exception:
+        pass
+    raise FlowBatchError("text-video submit carried no generation record")
 
 
 def read_operation(payload: Any) -> Operation:
