@@ -196,6 +196,53 @@ class TestFlowBatchUnit(unittest.TestCase):
         missing_3 = sorted(list(all_nums_3 - written_numbers_3))
         self.assertEqual(missing_3, [])
 
+    def test_gemini_rewrite_payload_preserves_structure(self):
+        import asyncio
+        from unittest.mock import patch, MagicMock
+        from agent.worker.processor import _call_gemini_rewrite
+
+        captured_payloads = []
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": (
+                            "Duration: 10 seconds\n\n"
+                            "0s-3s — Raw handheld POV of performer.\n\n"
+                            "3s-7s — Acrobatic spin in center ring.\n\n"
+                            "Camera style: vertical 9:16."
+                        )
+                    }]
+                }
+            }]
+        }
+
+        async def mock_post(url, **kwargs):
+            captured_payloads.append(kwargs.get("json"))
+            return mock_resp
+
+        sample_prompt = (
+            "Duration: 10 seconds\n\n"
+            "0s-3s — Raw handheld phone POV with baby performer.\n\n"
+            "3s-7s — Acrobatic spin in center ring with weapons.\n\n"
+            "Camera style: vertical 9:16."
+        )
+
+        with patch("httpx.AsyncClient.post", side_effect=mock_post):
+            rewritten = asyncio.run(_call_gemini_rewrite(sample_prompt, "Safety policy blocked: baby, weapons", "test_key"))
+
+        self.assertIn("Duration: 10 seconds", rewritten)
+        self.assertIn("0s-3s —", rewritten)
+        self.assertIn("3s-7s —", rewritten)
+        self.assertIn("\n\n", rewritten)
+        self.assertGreater(len(captured_payloads), 0)
+        system_text = captured_payloads[0]["contents"][0]["parts"][0]["text"]
+        self.assertIn("100% STRUCTURAL PRESERVATION", system_text)
+        self.assertIn("timestamps", system_text.lower())
+        self.assertIn("line breaks", system_text.lower())
+
 if __name__ == "__main__":
     unittest.main()
 

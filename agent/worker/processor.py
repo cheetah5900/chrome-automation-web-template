@@ -558,22 +558,28 @@ async def _call_gemini_rewrite(prompt: str, err_msg: str, api_key: str) -> str:
         system_instruction = (
             "You are an expert AI video prompt director for Google Flow (Veo).\n"
             "Your job is to rewrite a video generation prompt that was BLOCKED or REJECTED by Google Flow "
-            "due to safety filters, content policy, or sensitive words.\n\n"
-            "RULES FOR REWRITING:\n"
-            "1. Strictly replace 'baby' or 'babies' with 'kids' or 'young children', and 'infant' or 'infants' with 'toddler' or 'toddlers'.\n"
-            "2. Replace any copyrighted brands, celebrities, named living people, or public figures with neutral artistic descriptions.\n"
+            "due to safety filters, content policy, sensitive words, or third-party / copyright restrictions.\n\n"
+            "CRITICAL MANDATORY RULE — 100% STRUCTURAL PRESERVATION:\n"
+            "1. You MUST keep the EXACT same section headers, line-by-line layout, and blank line breaks (\\n and \\n\\n) as the original prompt.\n"
+            "2. You MUST keep ALL timestamps, time intervals, and second markers exactly as written (e.g., '0-2s', '0s-2s', '0s-3s', '3s-7s', '7s-10s — ...'). Do NOT delete, combine, or rename any time markers.\n"
+            "3. You MUST keep ALL original section headers line-for-line (e.g., 'Duration:', 'Final format:', 'Shot type:', 'Concept:', 'Camera style:', 'Audio:', 'Safety and tone:', 'Negative:').\n"
+            "4. Only rewrite the specific sensitive words, brands, copyrighted characters, or policy-violating elements inside the descriptive sentences. Leave all other surrounding text, timing, and structural formatting completely untouched.\n\n"
+            "CONTENT REWRITING POLICIES:\n"
+            "1. Strictly replace any copyrighted brands, celebrities, named living people, trademarks, or public figures with neutral artistic archetype descriptions.\n"
+            "2. Strictly replace 'baby' or 'babies' with 'kids' or 'young performers', and 'infant' or 'infants' with 'toddler' or stylized props.\n"
             "3. Soften any violence, weapons, blood, conflict, or gore into theatrical drama, dynamic camera motion, lighting effects, or silhouette storytelling.\n"
             "4. PRESERVE the original cinematic camera movements (pan, zoom, tracking), lighting style, color grading, shot framing, and atmosphere.\n"
-            "5. Output ONLY the rewritten prompt text. Do NOT wrap in markdown code blocks, quotes, or conversational explanations."
+            "5. Output ONLY the rewritten prompt text. Do NOT wrap in markdown code blocks (` ``` `), quotes, or conversational explanations."
         )
         user_content = (
             f"Original Prompt:\n{prompt}\n\n"
             f"Rejection / Error Reason:\n{err_msg}\n\n"
-            f"Please rewrite this prompt to be 100% compliant with Google Flow safety policies while maintaining the cinematic style and motion."
+            f"Please rewrite this prompt to be 100% compliant with Google Flow safety policies while maintaining the cinematic style and motion.\n"
+            f"MANDATORY: You MUST preserve the EXACT 100% structure, all line breaks (\\n\\n), all section headers, and all timestamp ranges (e.g., 0-2s, 0s-3s) without flattening or combining paragraphs."
         )
         payload = {
             "contents": [{"parts": [{"text": f"{system_instruction}\n\n{user_content}"}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024}
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4096}
         }
         models = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]
         async with httpx.AsyncClient(timeout=25.0) as http_client:

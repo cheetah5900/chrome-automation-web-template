@@ -2960,18 +2960,24 @@ async def fix_prompts_with_gemini(body: FixPromptsRequest):
             "You are an expert AI video prompt director for Google Flow (Veo).\n"
             "Your job is to rewrite a video generation prompt that was BLOCKED or REJECTED by Google Flow "
             "due to safety filters, content policy, or third-party / copyright restrictions.\n\n"
-            "RULES FOR REWRITING:\n"
-            "1. Strictly remove or replace any copyrighted brands, celebrities, named living people, trademarks, or public figures with neutral artistic archetype descriptions (e.g., 'a young Thai female artist in elegant contemporary silk attire').\n"
-            "2. If the block is related to infants or babies, replace with a stylized artistic prop or symbolic object (e.g. 'a glowing celestial crystal figurine cradled in silk', 'a radiant golden amulet', 'a handcrafted wooden doll').\n"
+            "CRITICAL MANDATORY RULE — 100% STRUCTURAL PRESERVATION:\n"
+            "1. You MUST keep the EXACT same section headers, line-by-line layout, and blank line breaks (\\n and \\n\\n) as the original prompt.\n"
+            "2. You MUST keep ALL timestamps, time intervals, and second markers exactly as written (e.g., '0-2s', '0s-2s', '0s-3s', '3s-7s', '7s-10s — ...'). Do NOT delete, combine, or rename any time markers.\n"
+            "3. You MUST keep ALL original section headers line-for-line (e.g., 'Duration:', 'Final format:', 'Shot type:', 'Concept:', 'Camera style:', 'Audio:', 'Safety and tone:', 'Negative:').\n"
+            "4. Only rewrite the specific sensitive words, brands, copyrighted characters, or policy-violating elements inside the descriptive sentences. Leave all other surrounding text, timing, and structural formatting completely untouched.\n\n"
+            "CONTENT REWRITING POLICIES:\n"
+            "1. Strictly remove or replace any copyrighted brands, characters, franchises, celebrities, named living people, trademarks, or public figures with neutral artistic archetype descriptions (e.g., 'a young Thai female artist in elegant contemporary silk attire').\n"
+            "2. If the block is related to infants or babies, replace with 'kids', 'young performers', or a stylized artistic prop or symbolic object (e.g. 'a glowing celestial crystal figurine cradled in silk', 'a radiant golden amulet', 'a handcrafted wooden doll').\n"
             "3. Soften any violence, weapons, conflict, or gore into theatrical drama, dynamic camera motion, wind effects, expressive lighting, or silhouette storytelling.\n"
             "4. PRESERVE the original cinematic camera movements (tracking, pan, slow zoom), lighting style, color grading, shot type (close-up, wide-angle), and atmosphere.\n"
-            "5. Output ONLY the rewritten English prompt text. Do not wrap in markdown quotes, and do not include explanations, greetings, or conversational remarks."
+            "5. Output ONLY the rewritten English prompt text. Do not wrap in markdown code blocks (` ``` `), quotes, and do not include explanations, greetings, or conversational remarks."
         )
 
         user_content = (
             f"Original Prompt:\n{prompt}\n\n"
             f"Rejection / Error Reason:\n{err_msg}\n\n"
-            f"Please rewrite this prompt to be 100% compliant with Google Flow safety policies while maintaining the cinematic style and motion."
+            f"Please rewrite this prompt to be 100% compliant with Google Flow safety policies while maintaining the cinematic style and motion.\n"
+            f"MANDATORY: You MUST preserve the EXACT 100% structure, all line breaks (\\n\\n), all section headers, and all timestamp ranges (e.g., 0-2s, 0s-3s) without flattening or combining paragraphs."
         )
 
         payload = {
@@ -2983,8 +2989,8 @@ async def fix_prompts_with_gemini(body: FixPromptsRequest):
                 }
             ],
             "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 1024
+                "temperature": 0.2,
+                "maxOutputTokens": 4096
             }
         }
 
