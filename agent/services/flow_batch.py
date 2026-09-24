@@ -600,13 +600,99 @@ def find_media_id_in_text(text: str, operation_id: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def find_media_id_in_listing(raw_or_payload: Any, target_id: Optional[str] = None,
+                           prompt: Optional[str] = None,
+                           exclude_ids: Optional[set[str]] = None) -> Optional[str]:
+    """Find media_id in a project listing (Zzl0ze), supporting both real op IDs and prompt matching.
+
+    Entries look like:
+    [opId, null, null, [title, [created_sec, created_nano], is_active, null, mediaId, clientUuid, [done_sec, done_nano]], projectId]
+    """
+    exclude = set(k.lower() for k in (exclude_ids or set()))
+    entries = []
+    payload = raw_or_payload
+    if isinstance(raw_or_payload, str):
+        try:
+            s = raw_or_payload.strip()
+            if s.startswith(")]}'"):
+                s = s[4:].strip()
+            payload = json.loads(s)
+        except Exception:
+            payload = None
+
+    if payload is not None:
+        for node in _walk_lists(payload):
+            if len(node) >= 4 and isinstance(node[3], list) and len(node[3]) > 4:
+                op_id = node[0] if isinstance(node[0], str) else ""
+                detail = node[3]
+                mid = detail[4]
+                if isinstance(mid, str) and ((len(mid) == 36 and mid.count("-") == 4) or (len(mid) == 32 and all(c in "0123456789abcdefABCDEF" for c in mid))):
+                    if mid.lower() in exclude:
+                        continue
+                    if target_id and not target_id.startswith("ui_t2v_") and op_id == target_id:
+                        return mid
+                    title = detail[0] if isinstance(detail[0], str) else ""
+                    is_done = bool(len(detail) > 6 and detail[6])
+                    ts = 0
+                    if len(detail) > 1 and isinstance(detail[1], list) and detail[1]:
+                        ts = detail[1][0]
+                    entries.append({"op_id": op_id, "media_id": mid, "title": title, "is_done": is_done, "ts": ts})
+
+    if entries and prompt:
+        p_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', prompt).strip().lower()
+        p_words = set(w for w in p_clean.split() if len(w) > 3)
+        best_e = None
+        best_score = 0
+        for e in entries:
+            t_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', e["title"]).strip().lower()
+            t_words = set(w for w in t_clean.split() if len(w) > 3)
+            score = len(p_words & t_words)
+            if (p_clean[:20] and p_clean[:20] in t_clean) or (t_clean[:20] and t_clean[:20] in p_clean):
+                score += 5
+            elif (p_clean[:10] and p_clean[:10] in t_clean) or (t_clean[:10] and t_clean[:10] in p_clean):
+                score += 3
+            if e["is_done"]:
+                score += 2
+            if score > best_score:
+                best_score = score
+                best_e = e
+        if best_e and best_score >= 1:
+            return best_e["media_id"]
+
+    if entries:
+        done_entries = [e for e in entries if e["is_done"]]
+        if done_entries:
+            done_entries.sort(key=lambda x: x["ts"], reverse=True)
+            return done_entries[0]["media_id"]
+
+    # Strategy 2: Regex scanning on raw text (for unparsed or truncated streams)
+    if isinstance(raw_or_payload, str):
+        pat = re.compile(r'\[\"([^\"]*?)\",\s*\[\d+,\s*\d+\],\s*(?:true|false|null),\s*null,\s*\"([0-9a-f-]{36})\"')
+        matches = pat.findall(raw_or_payload)
+        if matches:
+            if prompt:
+                p_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', prompt).strip().lower()
+                for title, mid in matches:
+                    if mid.lower() in exclude:
+                        continue
+                    t_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', title).strip().lower()
+                    if (p_clean[:30] and p_clean[:30] in t_clean) or (t_clean[:30] and t_clean[:30] in p_clean):
+                        return mid
+            for title, mid in reversed(matches):
+                if mid.lower() not in exclude:
+                    return mid
+
+    return None
+
+
 def read_media_urls(payload: Any, media_id: str) -> MediaUrls:
     video = image = None
     for text in _walk_strings(payload):
         if not text.startswith("https://"):
             continue
-        if MEDIA_HOST + "/video/" in text and video is None:
+        if (MEDIA_HOST + "/video/" in text or "/video/" in text or ".mp4" in text) and video is None:
             video = text
-        elif MEDIA_HOST + "/image/" in text and image is None:
+        elif (MEDIA_HOST + "/image/" in text or "/image/" in text) and image is None:
             image = text
     return MediaUrls(media_id=media_id, video=video, image=image)
+

@@ -243,6 +243,98 @@ class TestFlowBatchUnit(unittest.TestCase):
         self.assertIn("timestamps", system_text.lower())
         self.assertIn("line breaks", system_text.lower())
 
+    def test_find_media_id_in_listing_comprehensive(self):
+        sample_payload = [
+            [
+                "11111111-2222-3333-4444-555555555555",
+                None,
+                None,
+                ["Close up shot of a cute golden retriever puppy running on grass", [1710000000, 0], True, None, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "client-uuid-1", [1710000050, 0]],
+                "99999999-9999-9999-9999-999999999999"
+            ],
+            [
+                "55555555-6666-7777-8888-999999999999",
+                None,
+                None,
+                ["A futuristic sports car driving at night through neon city", [1710000100, 0], True, None, "11111111-ffff-0000-1111-222222222222", "client-uuid-2", [1710000150, 0]],
+                "99999999-9999-9999-9999-999999999999"
+            ]
+        ]
+
+        # 1. Match by prompt
+        m1 = fb.find_media_id_in_listing(sample_payload, target_id="ui_t2v_abc123", prompt="golden retriever puppy running")
+        self.assertEqual(m1, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+
+        # 2. Match by exact op_id
+        m2 = fb.find_media_id_in_listing(sample_payload, target_id="55555555-6666-7777-8888-999999999999")
+        self.assertEqual(m2, "11111111-ffff-0000-1111-222222222222")
+
+        # 3. Exclude completed IDs
+        m3 = fb.find_media_id_in_listing(sample_payload, target_id="ui_t2v_xyz", exclude_ids={"11111111-ffff-0000-1111-222222222222"})
+        self.assertEqual(m3, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+
+        # 4. Thai prompt substring match
+        sample_thai = [
+            [
+                "22222222-3333-4444-5555-666666666666",
+                None,
+                None,
+                ["ฉากละครสัตว์กลางคืน มีเสือกระโดดลอดบ่วงไฟ แสงไฟสว่างวาบ", [1710000200, 0], True, None, "33333333-4444-5555-6666-777777777777", "client-uuid-3", [1710000250, 0]],
+                "99999999-9999-9999-9999-999999999999"
+            ]
+        ]
+        m_thai = fb.find_media_id_in_listing(sample_thai, prompt="ฉากละครสัตว์กลางคืน มีเสือกระโดดลอดบ่วงไฟ")
+        self.assertEqual(m_thai, "33333333-4444-5555-6666-777777777777")
+
+    def test_check_flow_tab_for_video_and_poll_batch(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+        from agent.services.flow_client import FlowClient
+
+        client = FlowClient()
+        dummy_ws = object()
+        client.set_extension(dummy_ws)
+        op_id = "ui_t2v_mock123"
+        prompt = "Aerial drone shot over lush tropical jungle"
+        client._remember_operation(op_id, "mock-proj", prompt=prompt)
+
+        # Mock inspect_tab returning active pending tile (still rendering)
+        client._send = AsyncMock(return_value={
+            "result": {
+                "result": {
+                    "results": [],
+                    "pendingTexts": ["Aerial drone shot over lush tropical jungle 45%"]
+                }
+            }
+        })
+        mid, vurl = asyncio.run(client._check_flow_tab_for_video(op_id))
+        self.assertIsNone(mid)
+        self.assertIsNone(vurl)
+
+        # Mock inspect_tab returning completed video element
+        expected_vurl = "https://flow-content.google/video/44444444-5555-6666-7777-888888888888?Expires=123"
+        client._send = AsyncMock(return_value={
+            "result": {
+                "result": {
+                    "results": [{
+                        "src": expected_vurl,
+                        "mediaId": "44444444-5555-6666-7777-888888888888",
+                        "text": "Aerial drone shot over lush tropical jungle"
+                    }],
+                    "pendingTexts": []
+                }
+            }
+        })
+        mid, vurl = asyncio.run(client._check_flow_tab_for_video(op_id))
+        self.assertEqual(mid, "44444444-5555-6666-7777-888888888888")
+        self.assertEqual(vurl, expected_vurl)
+
+        # Poll batch operation should immediately succeed via DOM inspection
+        poll_res = asyncio.run(client._poll_batch_operation(op_id))
+        self.assertEqual(poll_res.get("status"), "MEDIA_GENERATION_STATUS_SUCCESSFUL")
+        self.assertEqual(poll_res.get("operation", {}).get("metadata", {}).get("video", {}).get("fifeUrl"), expected_vurl)
+        self.assertEqual(client._operation_video_urls.get(op_id), expected_vurl)
+
 if __name__ == "__main__":
     unittest.main()
 

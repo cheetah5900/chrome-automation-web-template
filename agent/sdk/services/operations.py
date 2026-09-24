@@ -555,7 +555,13 @@ class OperationService:
         looks_like_workflow_uuid = bool(existing_op and len(existing_op) == 36 and existing_op.count("-") == 4)
         if existing_op and not looks_like_workflow_uuid:
             logger.info("Video gen already submitted (op=%s), re-polling", existing_op[:30])
-            operations = [{"operation": {"name": existing_op}, "status": "MEDIA_GENERATION_STATUS_PENDING"}]
+            operations = [{
+                "operation": {"name": existing_op},
+                "status": "MEDIA_GENERATION_STATUS_PENDING",
+                "project_id": pid,
+                "scene_id": scene.get("id", ""),
+                "prompt": prompt,
+            }]
             return await _poll_operations(self._client, operations)
         # else: workflow UUID — fall through and resubmit fresh
 
@@ -591,6 +597,8 @@ class OperationService:
                 op["project_id"] = pid
             if not op.get("scene_id"):
                 op["scene_id"] = scene.get("id", "")
+            if not op.get("prompt"):
+                op["prompt"] = prompt
 
         status = operations[0].get("status", "")
         if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
@@ -680,7 +688,13 @@ class OperationService:
 
         if existing_op:
             logger.info("R2V already submitted (op=%s), re-polling", existing_op[:30])
-            operations = [{"operation": {"name": existing_op}, "status": "MEDIA_GENERATION_STATUS_PENDING"}]
+            operations = [{
+                "operation": {"name": existing_op},
+                "status": "MEDIA_GENERATION_STATUS_PENDING",
+                "project_id": pid,
+                "scene_id": scene.get("id", ""),
+                "prompt": prompt,
+            }]
             return await _poll_operations(self._client, operations)
 
         submit_result = await self._client.generate_video_from_references(
@@ -702,6 +716,14 @@ class OperationService:
         op_name = operations[0].get("operation", {}).get("name", "")
         if request_id:
             await crud.update_request(request_id, request_id=op_name)
+
+        for op in operations:
+            if not op.get("project_id"):
+                op["project_id"] = pid
+            if not op.get("scene_id"):
+                op["scene_id"] = scene.get("id", "")
+            if not op.get("prompt"):
+                op["prompt"] = prompt
 
         status = operations[0].get("status", "")
         if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":

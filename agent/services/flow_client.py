@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from typing import Optional
@@ -53,6 +54,8 @@ class FlowClient:
         self._operation_media: dict[str, str] = {}
         self._operation_scenes: dict[str, str] = {}
         self._operation_polls: dict[str, int] = {}
+        self._operation_prompts: dict[str, str] = {}
+        self._operation_video_urls: dict[str, str] = {}
         self._not_found_counts: dict[str, int] = {}
         # WS stats
         self._ws_connect_count = 0
@@ -563,8 +566,8 @@ class FlowClient:
         legacy = VIDEO_MODELS.get(tier, {}).get(gen_type, {}).get(aspect_ratio)
         return fb.resolve_video_model(legacy)
 
-    def _remember_operation(self, operation_id: str, project_id: str, scene_id: str = None):
-        """Which project and scene an operation belongs to — the listing lookup needs it.
+    def _remember_operation(self, operation_id: str, project_id: str, scene_id: str = None, prompt: str = None):
+        """Which project, scene, and prompt an operation belongs to — the listing lookup needs it.
 
         A poll record usually carries the project id and scene id, but old operations decay
         to a bare id, so keep our own note. Bounded: this is a cache, and the
@@ -577,9 +580,14 @@ class FlowClient:
             self._operation_media.clear()
             self._operation_scenes.clear()
             self._operation_polls.clear()
-        self._operation_projects[operation_id] = project_id
+            self._operation_prompts.clear()
+            self._operation_video_urls.clear()
+        if project_id:
+            self._operation_projects[operation_id] = project_id
         if scene_id:
             self._operation_scenes[operation_id] = scene_id
+        if prompt:
+            self._operation_prompts[operation_id] = prompt
 
     # ─── High-level API Methods ──────────────────────────────
 
@@ -725,7 +733,7 @@ class FlowClient:
                 submitted = fb.read_text_video_submit(payload)
                 media_id = submitted["media_id"]
                 op_id = submitted.get("workflow_id") or media_id
-                self._remember_operation(op_id, pid)
+                self._remember_operation(op_id, pid, scene_id=scene_id, prompt=prompt)
                 self._operation_media[op_id] = media_id
                 return {
                     "status": 200,
@@ -742,7 +750,7 @@ class FlowClient:
                     if ui_res.get("result", {}).get("clicked"):
                         logger.info("Successfully dispatched Prompt-Only video via Web Auto browser bridge!")
                         op_id = f"ui_t2v_{uuid.uuid4().hex[:12]}"
-                        self._remember_operation(op_id, pid)
+                        self._remember_operation(op_id, pid, scene_id=scene_id, prompt=prompt)
                         return {
                             "status": 200,
                             "data": {
@@ -768,8 +776,8 @@ class FlowClient:
         except Exception as e:
             return _batch_error(e)
 
-        scene_uuid = operation.scene_id if hasattr(operation, "scene_id") else None
-        self._remember_operation(operation.operation_id, pid, scene_uuid)
+        scene_uuid = operation.scene_id if hasattr(operation, "scene_id") else scene_id
+        self._remember_operation(operation.operation_id, pid, scene_id=scene_uuid, prompt=prompt)
 
         media_id = getattr(operation, "media_id", None)
         if media_id:
@@ -852,8 +860,9 @@ class FlowClient:
                 continue
             entry_pid = entry.get("project_id") or entry.get("projectId") or (entry.get("operation") or {}).get("project_id")
             entry_scene = entry.get("scene_id") or entry.get("sceneId") or (entry.get("operation") or {}).get("scene_id")
-            if entry_pid:
-                self._remember_operation(op_id, entry_pid, entry_scene)
+            entry_prompt = entry.get("prompt") or (entry.get("operation") or {}).get("prompt")
+            if entry_pid or entry_scene or entry_prompt:
+                self._remember_operation(op_id, entry_pid, scene_id=entry_scene, prompt=entry_prompt)
             entry_mid = entry.get("media_id") or (entry.get("operation") or {}).get("metadata", {}).get("video", {}).get("mediaId")
             if entry_mid and op_id not in self._operation_media:
                 self._operation_media[op_id] = entry_mid
@@ -867,6 +876,32 @@ class FlowClient:
 
     async def _poll_batch_operation(self, operation_id: str) -> dict:
         media_id = self._operation_media.get(operation_id)
+        video_url = self._operation_video_urls.get(operation_id)
+        if video_url:
+            return {
+                "operation": {
+                    "name": operation_id,
+                    "metadata": {"video": {"mediaId": media_id or operation_id, "fifeUrl": video_url}},
+                },
+                "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
+            }
+
+        # 1. Fast Path: Check active Flow tab DOM for completed video (instant detection)
+        dom_mid, dom_vurl = await self._check_flow_tab_for_video(operation_id)
+        if dom_vurl:
+            actual_mid = dom_mid or media_id or operation_id
+            self._operation_media[operation_id] = actual_mid
+            self._operation_video_urls[operation_id] = dom_vurl
+            logger.info("Instantly resolved completed video via Flow tab DOM: op=%s mid=%s url=%s",
+                        operation_id[:8], actual_mid[:8], dom_vurl[:60])
+            return {
+                "operation": {
+                    "name": operation_id,
+                    "metadata": {"video": {"mediaId": actual_mid, "fifeUrl": dom_vurl}},
+                },
+                "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
+            }
+
         complaint = None
 
         if not media_id:
@@ -910,7 +945,22 @@ class FlowClient:
             self._not_found_counts[operation_id] = count
             logger.info("Operation %s media %s still rendering (round %d): %s",
                         operation_id[:8], media_id[:8], count, err_str)
-            if count >= 6 and (count % 3 == 0 or count >= MAX_AS29S_NOT_FOUND_ROUNDS - 2):
+
+            # Check DOM inspection as immediate recovery
+            retry_mid, retry_vurl = await self._check_flow_tab_for_video(operation_id)
+            if retry_vurl:
+                actual_mid = retry_mid or media_id
+                self._operation_media[operation_id] = actual_mid
+                self._operation_video_urls[operation_id] = retry_vurl
+                return {
+                    "operation": {
+                        "name": operation_id,
+                        "metadata": {"video": {"mediaId": actual_mid, "fifeUrl": retry_vurl}},
+                    },
+                    "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
+                }
+
+            if count >= 3 and (count % 2 == 0 or count >= MAX_AS29S_NOT_FOUND_ROUNDS - 2):
                 found_id, _ = await self._find_operation_media(operation_id)
                 if found_id and found_id != media_id:
                     self._operation_media[operation_id] = found_id
@@ -937,6 +987,7 @@ class FlowClient:
             return _as_pending_operation(operation_id, error=complaint, media_id=media_id)
 
         # The media id stays cached once verified with video URL
+        self._operation_video_urls[operation_id] = urls.video
         return {
             "operation": {
                 "name": operation_id,
@@ -944,6 +995,139 @@ class FlowClient:
             },
             "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
         }
+
+    async def _check_flow_tab_for_video(self, operation_id: str) -> tuple[str | None, str | None]:
+        """Inspect the active Google Flow tab DOM to see if video has finished rendering.
+
+        Returns (media_id, video_url) or (None, None).
+        """
+        if not self.connected:
+            return None, None
+        prompt = self._operation_prompts.get(operation_id, "")
+        try:
+            js_script = """(() => {
+                const results = [];
+                const seenUrls = new Set();
+                const pendingEls = Array.from(document.querySelectorAll("flow-pending-tile, [class*='pending-tile']"));
+                const pendingTexts = pendingEls.map(p => (p.innerText || "").trim());
+
+                const videoEls = Array.from(document.querySelectorAll("video"));
+                for (const v of videoEls) {
+                    let src = v.src || "";
+                    if (!src) {
+                        const s = v.querySelector("source");
+                        if (s) src = s.src || "";
+                    }
+                    if (!src || !src.startsWith("https://") || seenUrls.has(src)) continue;
+                    seenUrls.add(src);
+
+                    const card = v.closest("flow-grid-tile-container, flow-asset-tile, [class*='asset-card'], [class*='tile-row'], [class*='card'], [class*='tile']") || v.parentElement;
+                    let text = "";
+                    if (card) {
+                        text = card.getAttribute("aria-label") || card.getAttribute("title") || "";
+                        if (!text && card.innerText) {
+                            text = card.innerText.replace(/play_circle/g, '').trim().slice(0, 200);
+                        }
+                    }
+                    if (!text) {
+                        text = v.getAttribute("aria-label") || v.getAttribute("title") || "";
+                    }
+                    let mediaId = null;
+                    const match = src.match(/\\/video\\/([0-9a-f-]{36})/i) || src.match(/([0-9a-f-]{36})/i);
+                    if (match) mediaId = match[1];
+                    results.push({ src, mediaId, text });
+                }
+
+                if (!results.length) {
+                    const tiles = Array.from(document.querySelectorAll("flow-grid-tile-container, flow-asset-tile, [class*='asset-card'], [class*='tile-row']"));
+                    for (const tile of tiles) {
+                        const v = tile.querySelector("video");
+                        const videoSrc = v ? (v.src || (v.querySelector("source") ? v.querySelector("source").src : null)) : null;
+                        if (!videoSrc || !videoSrc.startsWith("https://") || seenUrls.has(videoSrc)) continue;
+                        seenUrls.add(videoSrc);
+
+                        const label = tile.getAttribute("aria-label") || tile.getAttribute("title") || "";
+                        const text = label || (tile.innerText ? tile.innerText.replace(/play_circle/g, '').trim().slice(0, 200) : "");
+
+                        let mediaId = null;
+                        const match = videoSrc.match(/\\/video\\/([0-9a-f-]{36})/i) || videoSrc.match(/([0-9a-f-]{36})/i);
+                        if (match) mediaId = match[1];
+
+                        results.push({ src: videoSrc, mediaId, text });
+                    }
+                }
+                return { results, pendingTexts };
+            })()"""
+            res = await self._send("inspect_tab", {"js": js_script}, timeout=6)
+            tab_data = res.get("result", {})
+            if isinstance(tab_data, dict) and "result" in tab_data:
+                raw_val = tab_data.get("result")
+            else:
+                raw_val = tab_data
+
+            if isinstance(raw_val, dict):
+                video_items = raw_val.get("results") or []
+                pending_texts = raw_val.get("pendingTexts") or []
+            elif isinstance(raw_val, list):
+                video_items = raw_val
+                pending_texts = []
+            else:
+                video_items = []
+                pending_texts = []
+
+            # If there is a pending tile whose text matches prompt, generation is definitely still running
+            if prompt and pending_texts:
+                p_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', prompt).strip().lower()
+                for pt in pending_texts:
+                    pt_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', pt).strip().lower()
+                    if (p_clean[:20] and p_clean[:20] in pt_clean) or (pt_clean[:20] and pt_clean[:20] in p_clean):
+                        logger.info("Operation %s still rendering in pending tile: %s", operation_id[:8], pt[:50])
+                        return None, None
+
+            if not video_items:
+                return None, None
+
+            exclude = set(k.lower() for k in self._operation_media.values() if k)
+            cur_mid = (self._operation_media.get(operation_id) or "").lower()
+
+            # 1. Match by prompt
+            if prompt:
+                p_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', prompt).strip().lower()
+                p_words = set(w for w in p_clean.split() if len(w) > 3)
+                best_item = None
+                best_score = 0
+                for item in video_items:
+                    mid = item.get("mediaId")
+                    if mid and mid.lower() in exclude and mid.lower() != cur_mid:
+                        continue
+                    t_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', item.get("text", "")).strip().lower()
+                    t_words = set(w for w in t_clean.split() if len(w) > 3)
+                    score = len(p_words & t_words)
+                    if (p_clean[:20] and p_clean[:20] in t_clean) or (t_clean[:20] and t_clean[:20] in p_clean):
+                        score += 5
+                    elif (p_clean[:10] and p_clean[:10] in t_clean) or (t_clean[:10] and t_clean[:10] in p_clean):
+                        score += 3
+                    if score > best_score:
+                        best_score = score
+                        best_item = item
+                if best_item and best_score >= 1:
+                    logger.info("DOM inspection matched completed video for op %s (score=%d): src=%s",
+                                operation_id[:8], best_score, best_item.get("src")[:60])
+                    return best_item.get("mediaId"), best_item.get("src")
+
+            # 2. If synthetic/prompt-only op and no pending tile, take newest video not in exclude
+            if operation_id.startswith("ui_t2v_") and not pending_texts:
+                for item in reversed(video_items):
+                    mid = item.get("mediaId")
+                    src = item.get("src")
+                    if src and (not mid or (mid.lower() not in exclude or mid.lower() == cur_mid)):
+                        logger.info("DOM inspection resolved newest video for synthetic op %s: src=%s",
+                                    operation_id[:8], src[:60])
+                        return mid, src
+
+        except Exception as e:
+            logger.debug("_check_flow_tab_for_video error: %s", e)
+        return None, None
 
     async def _check_flow_tab_404(self) -> str | None:
         """Check if any active Flow tab is stuck on a 404 page."""
@@ -1004,6 +1188,8 @@ class FlowClient:
         Asks the extension for a window around the operation id.
         """
         target_id = operation_id
+        prompt = self._operation_prompts.get(operation_id)
+        exclude_ids = set(self._operation_media.values())
         if target_id.startswith("ui_t2v_"):
             result = await self.batch_rpc(
                 fb.RPC_PROJECT_MEDIA, fb.project_media_request(project_id),
@@ -1012,11 +1198,13 @@ class FlowClient:
             if result.get("error"):
                 raise fb.FlowBatchError(f"{fb.RPC_PROJECT_MEDIA}: {result['error']}")
             raw = result.get("data") or ""
-            all_ids = re.findall(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', raw, re.IGNORECASE)
-            candidates = [m for m in all_ids if m.lower() != project_id.lower()]
-            if candidates:
-                logger.info("Listing lookup for synthetic op %s: resolved newest media_id=%s", operation_id[:8], candidates[0])
-                return candidates[0]
+            resolved_mid = fb.find_media_id_in_listing(
+                raw, target_id=None, prompt=prompt, exclude_ids=exclude_ids
+            )
+            if resolved_mid:
+                logger.info("Listing lookup for synthetic op %s: resolved media_id=%s (prompt='%s')",
+                            operation_id[:8], resolved_mid, (prompt or '')[:30])
+                return resolved_mid
             return None
 
         result = await self.batch_rpc(
@@ -1026,7 +1214,11 @@ class FlowClient:
         if result.get("error"):
             raise fb.FlowBatchError(f"{fb.RPC_PROJECT_MEDIA}: {result['error']}")
         raw = result.get("data") or ""
-        media_id = fb.find_media_id_in_text(raw, target_id)
+        media_id = fb.find_media_id_in_listing(
+            raw, target_id=target_id, prompt=prompt, exclude_ids=exclude_ids
+        )
+        if not media_id:
+            media_id = fb.find_media_id_in_text(raw, target_id)
         if not media_id and raw.lstrip().startswith(")]}"):
             try:
                 media_id = fb.find_media_id(
