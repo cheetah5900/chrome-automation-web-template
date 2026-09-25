@@ -360,6 +360,8 @@ class VideoGenStepPayload(BaseModel):
     video_model: str = ""
     output_count: int = 1
     upscale_resolution: str = "NONE"
+    sub_idx: int = 1
+    total_outputs: int = 1
 
 
 
@@ -6563,11 +6565,14 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                 params_dict = {
                     "video_model": vmodel,
                     "duration_seconds": 5,
-                    "output_count": payload.output_count
+                    "output_count": 1,
+                    "sub_idx": payload.sub_idx,
+                    "total_outputs": payload.total_outputs
                 }
                 edit_prompt_json = _json.dumps(params_dict)
 
-            if not active_req:
+            can_queue = (not active_req) or (payload.sub_idx > 1)
+            if can_queue:
                 new_req = await crud.create_request(
                     project_id=project_id,
                     video_id=video_id,
@@ -6576,7 +6581,7 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                     orientation=orientation,
                     edit_prompt=edit_prompt_json
                 )
-                log(f"[Flow Kit Queue] Submitted request: {new_req['id']}")
+                log(f"[Flow Kit Queue] Submitted request: {new_req['id']} (sub_idx={payload.sub_idx}/{payload.total_outputs})")
                 
                 # Check if we should also queue UPSCALE_VIDEO
                 if req_type == "GENERATE_VIDEO" and payload.upscale_resolution and payload.upscale_resolution != "NONE":

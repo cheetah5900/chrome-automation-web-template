@@ -768,27 +768,31 @@ async def process_batch(body: ProcessRequest):
                     }
                 await _repo.update("scene", sdk_scene.id, **update_data)
 
-            # 4. Queue GENERATE_VIDEO request
+            # 4. Queue GENERATE_VIDEO request(s) - submit count_to_queue times before moving to next scene
             import json as _json
-            params_dict = {
-                "video_model": body.video_model,
-                "duration_seconds": body.duration_seconds,
-                "output_count": body.output_count,
-                "prompt_path": pair.prompt_path,
-                "image_path": pair.image_path,
-                "original_prompt": pair.prompt_content
-            }
-            db_req_data = {
-                "project_id": body.project_id,
-                "video_id": video_id,
-                "scene_id": sdk_scene.id,
-                "req_type": "GENERATE_VIDEO",
-                "orientation": orientation,
-                "status": "PENDING",
-                "edit_prompt": _json.dumps(params_dict)
-            }
-            await crud.create_request(**db_req_data)
-            logger.info("Queued video request for scene %s", sdk_scene.id)
+            count_to_queue = max(1, min(int(body.output_count or 1), 4))
+            for sub_idx in range(count_to_queue):
+                params_dict = {
+                    "video_model": body.video_model,
+                    "duration_seconds": body.duration_seconds,
+                    "output_count": 1,
+                    "sub_idx": sub_idx + 1,
+                    "total_outputs": count_to_queue,
+                    "prompt_path": pair.prompt_path,
+                    "image_path": pair.image_path,
+                    "original_prompt": pair.prompt_content
+                }
+                db_req_data = {
+                    "project_id": body.project_id,
+                    "video_id": video_id,
+                    "scene_id": sdk_scene.id,
+                    "req_type": "GENERATE_VIDEO",
+                    "orientation": orientation,
+                    "status": "PENDING",
+                    "edit_prompt": _json.dumps(params_dict)
+                }
+                await crud.create_request(**db_req_data)
+                logger.info("Queued video request (output %d/%d) for scene %s", sub_idx + 1, count_to_queue, sdk_scene.id)
 
             # 4.5. Optionally queue UPSCALE_VIDEO request
             if body.upscale_resolution and body.upscale_resolution != "NONE":

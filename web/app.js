@@ -6224,22 +6224,6 @@ function initVideoGenListeners() {
             if (shouldStopVideoGeneration) break;
 
             const p = activePrompts[pIdx];
-            writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] กำลังส่งพรอพต์: "${p}"`, 'info', 'videoConsole');
-            
-            videoStatusesByRound[r][pIdx] = 'Generating...';
-            renderVideoPromptsForRound(r);
-
-            // Generate random cooldown based on user input (e.g. "10-30" or "60")
-            let randomCooldown = 30;
-            if (waitSecondsVal.includes('-')) {
-              const parts = waitSecondsVal.split('-');
-              const minW = parseInt(parts[0], 10) || 10;
-              const maxW = parseInt(parts[1], 10) || 30;
-              randomCooldown = Math.floor(Math.random() * (maxW - minW + 1)) + minW;
-            } else {
-              randomCooldown = parseInt(waitSecondsVal, 10) || 30;
-            }
-            writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] รอคอยรอบถัดไป: ${randomCooldown} วินาที`, 'info', 'videoConsole');
 
             const isAutoRetry = !!document.getElementById('cfg_auto_retry_mode')?.checked;
             let success = false;
@@ -6259,81 +6243,127 @@ function initVideoGenListeners() {
               upscaleResolutionVal = document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE';
             }
 
-            let stepResponse = null;
-            writeConsoleLine(`Executing action: /api/step/video-gen...`, 'system', 'videoConsole');
-            try {
-              stepResponse = await jsonFetch('/api/step/video-gen', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  prompt: p,
-                  round_idx: r,
-                  google_flow_path: googleFlowPathVal,
-                  google_flow_email: googleFlowEmailVal,
-                  google_flow_project_name: googleFlowProjectNameVal,
-                  video_input_selector: inputSelectorVal,
-                  video_settings_selector: settingsSelectorVal,
-                  video_submit_selector: submitSelectorVal,
-                  video_wait_seconds: randomCooldown,
-                  is_first_run: isFirstPrompt,
-                  auto_retry_mode: isAutoRetry,
-                  video_gen_mode: videoGenModeVal,
-                  video_model: videoModelVal,
-                  output_count: outputCountVal,
-                  upscale_resolution: upscaleResolutionVal
-                })
-              });
-              writeConsoleLine(`Action completed: /api/step/video-gen`, 'success', 'videoConsole');
-              success = true;
-            } catch (e) {
-              writeConsoleLine(`Action failed: ${e.message}`, 'error', 'videoConsole');
-              success = false;
-            }
+            const countToGen = (videoGenModeVal === 'flow_kit' || videoGenModeVal === 'flow_kit_prompt_only') ? outputCountVal : 1;
 
-            isFirstPrompt = false;
+            for (let outIdx = 0; outIdx < countToGen; outIdx++) {
+              if (shouldStopVideoGeneration) break;
 
-            if (!success) {
-              videoStatusesByRound[r][pIdx] = 'Failed';
+              const outLabel = countToGen > 1 ? ` (อันที่ ${outIdx + 1}/${countToGen})` : '';
+              writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] กำลังส่งพรอพต์${outLabel}: "${p}"`, 'info', 'videoConsole');
+              
+              videoStatusesByRound[r][pIdx] = countToGen > 1 ? `Generating (${outIdx + 1}/${countToGen})...` : 'Generating...';
               renderVideoPromptsForRound(r);
-              writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] ส่งไม่สำเร็จ บังคับหยุดการทำงาน`, 'error', 'videoConsole');
-              shouldStopVideoGeneration = true;
-              break;
-            }
 
-            videoStatusesByRound[r][pIdx] = isAutoRetry ? 'Retried / Cooldown' : 'Sent / Cooldown';
-            renderVideoPromptsForRound(r);
+              // Generate random cooldown based on user input (e.g. "10-30" or "60")
+              let randomCooldown = 30;
+              if (waitSecondsVal.includes('-')) {
+                const parts = waitSecondsVal.split('-');
+                const minW = parseInt(parts[0], 10) || 10;
+                const maxW = parseInt(parts[1], 10) || 30;
+                randomCooldown = Math.floor(Math.random() * (maxW - minW + 1)) + minW;
+              } else {
+                randomCooldown = parseInt(waitSecondsVal, 10) || 30;
+              }
 
-            // Asynchronously track Flow Kit request completion in background
-            if (stepResponse?.request_id && (videoGenModeVal === 'flow_kit' || videoGenModeVal === 'flow_kit_prompt_only')) {
-              const reqId = stepResponse.request_id;
-              const targetR = r;
-              const targetIdx = pIdx;
-              const checkBgStatus = async () => {
-                for (let poll = 0; poll < 120; poll++) {
-                  await new Promise(res => setTimeout(res, 5000));
-                  try {
-                    const st = await jsonFetch(`/api/requests/${reqId}`);
-                    if (!st) continue;
-                    if (st.status === 'COMPLETED') {
-                      videoStatusesByRound[targetR][targetIdx] = 'Completed';
-                      renderVideoPromptsForRound(targetR);
-                      writeConsoleLine(`[Round ${targetR} - ข้อความที่ ${targetIdx + 1}] ✅ ตรวจพบวิดีโอสร้างเสร็จเรียบร้อยแล้ว`, 'success', 'videoConsole');
-                      break;
-                    } else if (st.status === 'FAILED') {
-                      videoStatusesByRound[targetR][targetIdx] = 'Failed';
-                      renderVideoPromptsForRound(targetR);
-                      writeConsoleLine(`[Round ${targetR} - ข้อความที่ ${targetIdx + 1}] ❌ วิดีโอล้มเหลว: ${st.error_message || 'ไม่ทราบสาเหตุ'}`, 'error', 'videoConsole');
-                      break;
+              let stepResponse = null;
+              writeConsoleLine(`Executing action: /api/step/video-gen${outLabel}...`, 'system', 'videoConsole');
+              try {
+                stepResponse = await jsonFetch('/api/step/video-gen', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    prompt: p,
+                    round_idx: r,
+                    sub_idx: outIdx + 1,
+                    total_outputs: countToGen,
+                    google_flow_path: googleFlowPathVal,
+                    google_flow_email: googleFlowEmailVal,
+                    google_flow_project_name: googleFlowProjectNameVal,
+                    video_input_selector: inputSelectorVal,
+                    video_settings_selector: settingsSelectorVal,
+                    video_submit_selector: submitSelectorVal,
+                    video_wait_seconds: randomCooldown,
+                    is_first_run: isFirstPrompt,
+                    auto_retry_mode: isAutoRetry,
+                    video_gen_mode: videoGenModeVal,
+                    video_model: videoModelVal,
+                    output_count: 1,
+                    upscale_resolution: upscaleResolutionVal
+                  })
+                });
+                writeConsoleLine(`Action completed: /api/step/video-gen${outLabel}`, 'success', 'videoConsole');
+                success = true;
+              } catch (e) {
+                writeConsoleLine(`Action failed${outLabel}: ${e.message}`, 'error', 'videoConsole');
+                success = false;
+              }
+
+              isFirstPrompt = false;
+
+              if (!success) {
+                videoStatusesByRound[r][pIdx] = 'Failed';
+                renderVideoPromptsForRound(r);
+                writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] ส่งไม่สำเร็จ บังคับหยุดการทำงาน`, 'error', 'videoConsole');
+                shouldStopVideoGeneration = true;
+                break;
+              }
+
+              videoStatusesByRound[r][pIdx] = isAutoRetry ? 'Retried / Cooldown' : 'Sent / Cooldown';
+              renderVideoPromptsForRound(r);
+
+              // Asynchronously track Flow Kit request completion in background
+              if (stepResponse?.request_id && (videoGenModeVal === 'flow_kit' || videoGenModeVal === 'flow_kit_prompt_only')) {
+                const reqId = stepResponse.request_id;
+                const targetR = r;
+                const targetIdx = pIdx;
+                const checkBgStatus = async () => {
+                  for (let poll = 0; poll < 120; poll++) {
+                    await new Promise(res => setTimeout(res, 5000));
+                    try {
+                      const st = await jsonFetch(`/api/requests/${reqId}`);
+                      if (!st) continue;
+                      if (st.status === 'COMPLETED') {
+                        videoStatusesByRound[targetR][targetIdx] = 'Completed';
+                        renderVideoPromptsForRound(targetR);
+                        writeConsoleLine(`[Round ${targetR} - ข้อความที่ ${targetIdx + 1}${outLabel}] ✅ ตรวจพบวิดีโอสร้างเสร็จเรียบร้อยแล้ว`, 'success', 'videoConsole');
+                        break;
+                      } else if (st.status === 'FAILED') {
+                        videoStatusesByRound[targetR][targetIdx] = 'Failed';
+                        renderVideoPromptsForRound(targetR);
+                        writeConsoleLine(`[Round ${targetR} - ข้อความที่ ${targetIdx + 1}${outLabel}] ❌ วิดีโอล้มเหลว: ${st.error_message || 'ไม่ทราบสาเหตุ'}`, 'error', 'videoConsole');
+                        break;
+                      }
+                    } catch (pollErr) {
+                      // Ignore transient errors
                     }
-                  } catch (pollErr) {
-                    // Ignore transient errors
                   }
-                }
-              };
-              checkBgStatus();
-            }
+                };
+                checkBgStatus();
+              }
 
-            await runVideoCooldown(r, randomCooldown);
+              // Delay between multiple outputs for the SAME prompt
+              if (outIdx < countToGen - 1) {
+                writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] รอคอยระหว่างอันที่ ${outIdx + 1} กับ ${outIdx + 2}: ${randomCooldown} วินาที`, 'info', 'videoConsole');
+                await runVideoCooldown(r, randomCooldown);
+              }
+            } // end for outIdx
+
+            if (shouldStopVideoGeneration) break;
+
+            // Delay before moving to the next prompt in sequence
+            if (pIdx < activePrompts.length - 1) {
+              let nextCooldown = 30;
+              if (waitSecondsVal.includes('-')) {
+                const parts = waitSecondsVal.split('-');
+                const minW = parseInt(parts[0], 10) || 10;
+                const maxW = parseInt(parts[1], 10) || 30;
+                nextCooldown = Math.floor(Math.random() * (maxW - minW + 1)) + minW;
+              } else {
+                nextCooldown = parseInt(waitSecondsVal, 10) || 30;
+              }
+              writeConsoleLine(`[Round ${r} - ${pIdx + 1}/${activePrompts.length}] รอคอยก่อนไปลำดับถัดไป (${pIdx + 2}/${activePrompts.length}): ${nextCooldown} วินาที`, 'info', 'videoConsole');
+              await runVideoCooldown(r, nextCooldown);
+            }
           }
 
           if (shouldStopVideoGeneration) break;

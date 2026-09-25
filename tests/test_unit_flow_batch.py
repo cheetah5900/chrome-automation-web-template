@@ -447,6 +447,44 @@ class TestFlowBatchUnit(unittest.TestCase):
         self.assertEqual(res.get("operation", {}).get("metadata", {}).get("video", {}).get("fifeUrl"), expected_vurl)
         self.assertEqual(client._operation_video_urls.get(op_id), expected_vurl)
 
+    def test_flow_client_generate_video_sequential_multi_output(self):
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        from agent.services.flow_client import FlowClient
+
+        client = FlowClient()
+        dummy_ws = object()
+        client.set_extension(dummy_ws)
+
+        # Mock _batch_payload to return dummy RPC responses
+        call_count = 0
+        def fake_read_submit(payload):
+            nonlocal call_count
+            call_count += 1
+            return {
+                "media_id": f"media-uuid-{call_count}",
+                "workflow_id": f"workflow-uuid-{call_count}",
+                "status": "PENDING"
+            }
+
+        client._batch_payload = AsyncMock(return_value=["mock-payload"])
+
+        with patch("agent.services.flow_batch.read_text_video_submit", side_effect=fake_read_submit), \
+             patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            res = asyncio.run(client.generate_video(
+                prompt="Sunset over ocean waves",
+                project_id="11112222-3333-4444-5555-666677778888",
+                output_count=2
+            ))
+
+        self.assertEqual(res.get("status"), 200)
+        ops = res.get("data", {}).get("operations", [])
+        self.assertEqual(len(ops), 2, "Should return 2 operations for output_count=2")
+        self.assertEqual(client._batch_payload.call_count, 2, "Should submit 2 separate times to Google Flow")
+        mock_sleep.assert_called_once_with(2.0)
+        self.assertIn("workflow-uuid-1", client._operation_media)
+        self.assertIn("workflow-uuid-2", client._operation_media)
+
 if __name__ == "__main__":
     unittest.main()
 

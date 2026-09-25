@@ -688,8 +688,8 @@ class FlowClient:
             user_paygate_tier=user_paygate_tier, character_media_ids=refs,
         )
 
-    async def generate_video(self, start_image_media_id: Optional[str], prompt: str,
-                              project_id: str, scene_id: str,
+    async def generate_video(self, start_image_media_id: Optional[str] = None, prompt: str = "",
+                              project_id: str = "", scene_id: str = "",
                               aspect_ratio: str = "VIDEO_ASPECT_RATIO_PORTRAIT",
                               end_image_media_id: str = None,
                               user_paygate_tier: str = "PAYGATE_TIER_TWO",
@@ -745,20 +745,31 @@ class FlowClient:
                 if "_i2v_" in model_key:
                     model_key = model_key.replace("_i2v_", "_t2v_")
                 model = fb.resolve_video_model(model_key)
-                freq = fb.text_video_request(prompt, pid, aspect=aspect_ratio, model=model, output_count=output_count)
-                payload = await self._batch_payload(
-                    fb.RPC_GEN_VIDEO_TEXT, freq, fb.CAPTCHA_VIDEO, timeout=120)
-                submitted = fb.read_text_video_submit(payload)
-                media_id = submitted["media_id"]
-                op_id = submitted.get("workflow_id") or media_id
-                self._remember_operation(op_id, pid, scene_id=scene_id, prompt=prompt)
-                self._operation_media[op_id] = media_id
+                count = max(1, min(int(output_count or 1), 4))
+                operations_list = []
+                media_list = []
+                last_op_id = None
+                for sub_i in range(count):
+                    freq = fb.text_video_request(prompt, pid, aspect=aspect_ratio, model=model, output_count=1)
+                    payload = await self._batch_payload(
+                        fb.RPC_GEN_VIDEO_TEXT, freq, fb.CAPTCHA_VIDEO, timeout=120)
+                    submitted = fb.read_text_video_submit(payload)
+                    media_id = submitted["media_id"]
+                    op_id = submitted.get("workflow_id") or media_id
+                    self._remember_operation(op_id, pid, scene_id=scene_id, prompt=prompt)
+                    self._operation_media[op_id] = media_id
+                    operations_list.append(_as_pending_operation(op_id, media_id=media_id))
+                    media_list.append({"name": media_id})
+                    last_op_id = op_id
+                    if sub_i < count - 1:
+                        logger.info("Waiting 2.0s before submitting output %d/%d to Google Flow...", sub_i + 2, count)
+                        await asyncio.sleep(2.0)
                 return {
                     "status": 200,
                     "data": {
-                        "operations": [_as_pending_operation(op_id, media_id=media_id)],
-                        "media": [{"name": media_id}],
-                        "workflow_id": op_id,
+                        "operations": operations_list,
+                        "media": media_list,
+                        "workflow_id": last_op_id,
                     }
                 }
             except Exception as e:
@@ -789,30 +800,42 @@ class FlowClient:
         # 3. Standard Image-to-Video mode
         try:
             model = fb.resolve_video_model(custom_model_key) if custom_model_key else self._batch_video_model(user_paygate_tier, gen_type, aspect_ratio)
-            freq = fb.video_request(
-                prompt, pid, start_image_media_id, aspect=aspect_ratio,
-                model=model,
-                output_count=output_count,
-            )
-            payload = await self._batch_payload(
-                fb.RPC_GEN_VIDEO, freq, fb.CAPTCHA_VIDEO, timeout=120)
-            operation = fb.read_operation(payload)
+            count = max(1, min(int(output_count or 1), 4))
+            operations_list = []
+            media_list = []
+            last_op_id = None
+            for sub_i in range(count):
+                freq = fb.video_request(
+                    prompt, pid, start_image_media_id, aspect=aspect_ratio,
+                    model=model,
+                    output_count=1,
+                )
+                payload = await self._batch_payload(
+                    fb.RPC_GEN_VIDEO, freq, fb.CAPTCHA_VIDEO, timeout=120)
+                operation = fb.read_operation(payload)
+                scene_uuid = operation.scene_id if hasattr(operation, "scene_id") else scene_id
+                self._remember_operation(operation.operation_id, pid, scene_id=scene_uuid, prompt=prompt)
+
+                media_id = getattr(operation, "media_id", None)
+                if media_id:
+                    self._operation_media[operation.operation_id] = media_id
+                    media_list.append({"name": media_id})
+                operations_list.append(_as_pending_operation(operation.operation_id, media_id=media_id))
+                last_op_id = operation.operation_id
+                if sub_i < count - 1:
+                    logger.info("Waiting 2.0s before submitting output %d/%d to Google Flow...", sub_i + 2, count)
+                    await asyncio.sleep(2.0)
+
+            return {
+                "status": 200,
+                "data": {
+                    "operations": operations_list,
+                    "media": media_list,
+                    "workflow_id": last_op_id,
+                }
+            }
         except Exception as e:
             return _batch_error(e)
-
-        scene_uuid = operation.scene_id if hasattr(operation, "scene_id") else scene_id
-        self._remember_operation(operation.operation_id, pid, scene_id=scene_uuid, prompt=prompt)
-
-        media_id = getattr(operation, "media_id", None)
-        if media_id:
-            self._operation_media[operation.operation_id] = media_id
-
-        res_data = {
-            "operations": [_as_pending_operation(operation.operation_id, media_id=media_id)],
-        }
-        if media_id:
-            res_data["media"] = [{"name": media_id}]
-            res_data["workflow_id"] = operation.operation_id
 
         return {"status": 200, "data": res_data}
 
