@@ -11973,18 +11973,15 @@ function renderFlowLiveSceneRowsHtml(pairs) {
       } else if (retryCount === 2) {
         badgeHtml = '<span class="flow-pulse-badge" style="display: inline-block; padding: 3px 8px; border-radius: 6px; background: rgba(245, 158, 11, 0.25); color: #fbbf24; font-weight: 600; font-size: 0.75rem; border: 1px solid rgba(245, 158, 11, 0.5);">🔄 ลองซ้ำ 2/2</span>';
         detailHtml = '<span style="color: #fbbf24; font-weight: 600;">⚡ กำลังลองซ้ำครั้งที่ 2/2...</span>';
-      } else if (retryCount === 3) {
-        badgeHtml = '<span class="flow-pulse-badge" style="display: inline-block; padding: 3px 8px; border-radius: 6px; background: rgba(168, 85, 247, 0.25); color: #c084fc; font-weight: 600; font-size: 0.75rem; border: 1px solid rgba(168, 85, 247, 0.5);">✨ แก้ Prompt ลองใหม่</span>';
-        detailHtml = '<span style="color: #c084fc; font-weight: 600;">⚡ ปรับแก้ Prompt ในไฟล์แล้ว กำลังลองใหม่อีกครั้ง...</span>';
       } else {
         badgeHtml = '<span class="flow-pulse-badge" style="display: inline-block; padding: 3px 8px; border-radius: 6px; background: rgba(59, 130, 246, 0.3); color: #60a5fa; font-weight: 600; font-size: 0.75rem; border: 1px solid rgba(59, 130, 246, 0.5);">⏳ กำลังสร้าง</span>';
         detailHtml = '<span style="color: #93c5fd; font-weight: 600;">⚡ Google Flow กำลังเรนเดอร์วิดีโอ...</span>';
       }
     } else if (status === 'FAILED') {
       const isBlock = /safety|unsafe|content filter|policy|violat|third[- ]?party|copyright|person|celebrity/i.test(err);
-      if (retryCount >= 3 || err.includes('ลองครบ 2 ครั้งแล้ว')) {
-        badgeHtml = '<span style="display: inline-block; padding: 3px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.2); color: #f87171; font-weight: 600; font-size: 0.75rem; border: 1px solid rgba(239, 68, 68, 0.4);">❌ ล้มเหลว (ลองครบแล้ว)</span>';
-        detailHtml = `<span style="color: #fca5a5; word-break: break-all;" title="${escapeHtml(err)}">ลองครบ 2 ครั้ง และปรับแก้ Prompt ในไฟล์แล้ว แต่ยังล้มเหลว</span>`;
+      if (retryCount >= 2 || err.includes('ลองครบ 2 ครั้งแล้ว')) {
+        badgeHtml = '<span style="display: inline-block; padding: 3px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.2); color: #f87171; font-weight: 600; font-size: 0.75rem; border: 1px solid rgba(239, 68, 68, 0.4);">❌ ล้มเหลว (ลองครบ 2 ครั้ง)</span>';
+        detailHtml = `<span style="color: #fca5a5; word-break: break-all;" title="${escapeHtml(err)}">ลองครบ 2 ครั้งแล้ว ล้มเหลว: ${escapeHtml(err || 'สร้างไม่สำเร็จ')}</span>`;
       } else {
         badgeHtml = `<span style="display: inline-block; padding: 3px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.2); color: #f87171; font-weight: 600; font-size: 0.75rem; border: 1px solid rgba(239, 68, 68, 0.4);">${isBlock ? '🚫 ติดบล็อก' : '❌ ล้มเหลว'}</span>`;
         detailHtml = `<span style="color: #fca5a5; word-break: break-all;" title="${escapeHtml(err)}">${escapeHtml(err || 'สร้างไม่สำเร็จ')}</span>`;
@@ -11997,9 +11994,6 @@ function renderFlowLiveSceneRowsHtml(pairs) {
       } else if (retryCount === 2 || err.includes('ลองซ้ำครั้งที่ 2/2')) {
         badgeHtml = '<span style="display: inline-block; padding: 3px 8px; border-radius: 6px; background: rgba(245, 158, 11, 0.18); color: #fcd34d; font-size: 0.75rem; border: 1px solid rgba(245, 158, 11, 0.35);">🔄 คิวลองซ้ำ 2/2</span>';
         detailHtml = '<span style="color: #fcd34d;">รอคิวลองซ้ำครั้งที่ 2/2...</span>';
-      } else if (retryCount === 3 || err.includes('ลองครบ 2 ครั้งแล้ว')) {
-        badgeHtml = '<span style="display: inline-block; padding: 3px 8px; border-radius: 6px; background: rgba(168, 85, 247, 0.18); color: #e9d5ff; font-size: 0.75rem; border: 1px solid rgba(168, 85, 247, 0.35);">✨ แก้ Prompt แล้ว</span>';
-        detailHtml = '<span style="color: #e9d5ff;">ลองครบ 2 ครั้งแล้วแต่ล้มเหลว -> แก้ไข Prompt ในไฟล์แล้ว รอคิวลองใหม่...</span>';
       } else {
         badgeHtml = '<span style="display: inline-block; padding: 3px 8px; border-radius: 6px; background: rgba(148, 163, 184, 0.15); color: #94a3b8; font-size: 0.75rem; border: 1px solid rgba(148, 163, 184, 0.25);">🕒 รอคิว</span>';
         detailHtml = '<span style="color: #64748b;">อยู่ในคิวประมวลผล</span>';
@@ -12215,8 +12209,6 @@ function updateFlowLiveStatusModal(statusRes, pairs = null) {
           activeTitle.textContent = `กำลังสร้าง (กำลังลองซ้ำครั้งที่ 1/2): ${activeLabel}`;
         } else if (activePair.retry_count === 2) {
           activeTitle.textContent = `กำลังสร้าง (กำลังลองซ้ำครั้งที่ 2/2): ${activeLabel}`;
-        } else if (activePair.retry_count === 3) {
-          activeTitle.textContent = `กำลังสร้าง (แก้ Prompt แล้ว กำลังลองใหม่): ${activeLabel}`;
         } else {
           activeTitle.textContent = `กำลังสร้าง: ${activeLabel}`;
         }
@@ -12228,8 +12220,6 @@ function updateFlowLiveStatusModal(statusRes, pairs = null) {
       if (activePair) {
         if (activePair.retry_count === 1 || activePair.retry_count === 2) {
           activeBadge.innerHTML = `<span style="display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.5);">🔄 Retry ${activePair.retry_count}/2</span>`;
-        } else if (activePair.retry_count === 3) {
-          activeBadge.innerHTML = '<span style="display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(168, 85, 247, 0.25); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.5);">✨ Rewritten Retry</span>';
         } else {
           activeBadge.innerHTML = '<span style="display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(59, 130, 246, 0.25); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);">⏳ Processing</span>';
         }
@@ -12685,8 +12675,6 @@ function initFlowKitUploaderListeners() {
                           logToConsole(`🔄 กำลังลองซ้ำครั้งที่ 1/2: ${sceneTitle}...`, 'warning');
                         } else if (item.retry_count === 2) {
                           logToConsole(`🔄 กำลังลองซ้ำครั้งที่ 2/2: ${sceneTitle}...`, 'warning');
-                        } else if (item.retry_count === 3) {
-                          logToConsole(`✨ ปรับแก้ Prompt ในไฟล์แล้ว กำลังลองใหม่: ${sceneTitle}...`, 'info');
                         } else {
                           logToConsole(`⏳ กำลังสร้างวิดีโอ: ${sceneTitle}...`, 'info');
                         }
@@ -13857,8 +13845,6 @@ async function initFlowGeminiKey() {
                           logToConsole(`🔄 กำลังลองซ้ำครั้งที่ 1/2: ${sceneTitle}...`, 'warning');
                         } else if (item.retry_count === 2) {
                           logToConsole(`🔄 กำลังลองซ้ำครั้งที่ 2/2: ${sceneTitle}...`, 'warning');
-                        } else if (item.retry_count === 3) {
-                          logToConsole(`✨ ปรับแก้ Prompt ในไฟล์แล้ว กำลังลองใหม่: ${sceneTitle}...`, 'info');
                         } else {
                           logToConsole(`⏳ กำลังสร้างวิดีโอ (Retry): ${sceneTitle}...`, 'info');
                         }
@@ -14451,8 +14437,6 @@ document.getElementById('btnProcessFlowKitBatchPO')?.addEventListener('click', a
                       logToConsole(`🔄 กำลังลองซ้ำครั้งที่ 1/2: ${sceneTitle}...`, 'warning');
                     } else if (item.retry_count === 2) {
                       logToConsole(`🔄 กำลังลองซ้ำครั้งที่ 2/2: ${sceneTitle}...`, 'warning');
-                    } else if (item.retry_count === 3) {
-                      logToConsole(`✨ ปรับแก้ Prompt ในไฟล์แล้ว กำลังลองใหม่: ${sceneTitle}...`, 'info');
                     } else {
                       logToConsole(`⏳ กำลังสร้างวิดีโอ: ${sceneTitle}...`, 'info');
                     }

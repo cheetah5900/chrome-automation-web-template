@@ -71,10 +71,16 @@ class WorkerController:
         self._shutdown = asyncio.Event()
         self._active_ids: set[str] = set()
         self._active_tasks: dict[str, asyncio.Task] = {}
+        self._background_tasks: dict[str, asyncio.Task] = {}
         # Initialize with default cooldown as both min and max
         self._rate_limiter = APIRateLimiter(MAX_CONCURRENT_REQUESTS, API_COOLDOWN, API_COOLDOWN)
         self._deferred: dict[str, float] = {}  # rid -> defer_until timestamp
         self._retry_after: dict[str, float] = {}  # rid -> retry_after timestamp
+
+    def register_background_task(self, key: str, task: asyncio.Task):
+        """Track an async background watcher task and prune it upon completion."""
+        self._background_tasks[key] = task
+        task.add_done_callback(lambda _: self._background_tasks.pop(key, None))
 
     def update_cooldown(self, cooldown_min: float, cooldown_max: float):
         """Update worker API cooldown range dynamically."""
@@ -95,15 +101,16 @@ class WorkerController:
         await self._run_loop()
 
     async def cancel_all_active_tasks(self):
-        """Cancel all running tasks immediately."""
-        tasks = list(self._active_tasks.values())
-        if tasks:
-            logger.info("Worker: Cancelling %d active tasks...", len(tasks))
-            for t in tasks:
+        """Cancel all running and background tasks immediately."""
+        all_tasks = list(self._active_tasks.values()) + list(self._background_tasks.values())
+        if all_tasks:
+            logger.info("Worker: Cancelling %d active/background tasks...", len(all_tasks))
+            for t in all_tasks:
                 t.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await asyncio.gather(*all_tasks, return_exceptions=True)
         self._active_ids.clear()
         self._active_tasks.clear()
+        self._background_tasks.clear()
 
     def request_shutdown(self):
         """Signal the worker to stop after current tasks drain."""
@@ -337,6 +344,19 @@ async def _process_one(req: dict, deferred: dict = None, retry_after: dict = Non
         result = await _dispatch(req, orientation)
         if _is_error(result):
             await _handle_failure(rid, req, result, retry_after, deferred)
+        elif result.get("submitted"):
+            logger.info("Request %s dispatched to Flow; launching async background watcher", rid[:8])
+            bg_task = asyncio.create_task(_background_poll_video_result(
+                client=get_flow_client(),
+                operations=result.get("operations", []),
+                request_id=rid,
+                req=req,
+                orientation=orientation,
+                retry_after=retry_after,
+                deferred=deferred,
+            ))
+            get_worker_controller().register_background_task(rid, bg_task)
+            return
         else:
             gen_result = parse_result(result, req_type)
             await crud.update_request(rid, status="COMPLETED", media_id=gen_result.media_id, output_url=gen_result.url)
@@ -500,231 +520,59 @@ async def _recover_entity_not_found(req: dict) -> bool:
     return False
 
 
-def _apply_rule_based_safety_rewrite(prompt: str) -> str:
-    """Softens sensitive and policy-violating words (e.g. baby -> kids, infant -> toddler, weapons, gore)."""
-    if not prompt:
-        return prompt
-
-    substitutions = [
-        # Children / Infants
-        (r"\b(newborns)\b", "young children"),
-        (r"\b(newborn)\b", "young child"),
-        (r"\b(infants)\b", "toddlers"),
-        (r"\b(infant)\b", "toddler"),
-        (r"\b(babies)\b", "kids"),
-        (r"\b(baby)\b", "kids"),
-
-        # Blood / Gore
-        (r"\b(bloody)\b", "crimson-hued"),
-        (r"\b(blood)\b", "crimson dye"),
-        (r"\b(gory|gore)\b", "dramatic flair"),
-        (r"\b(wounds|wounded)\b", "markings"),
-        (r"\b(wound)\b", "marking"),
-
-        # Weapons
-        (r"\b(guns|firearms|pistols|rifles)\b", "theatrical props"),
-        (r"\b(gun|firearm|pistol|rifle)\b", "theatrical prop"),
-        (r"\b(knives|daggers)\b", "ornate props"),
-        (r"\b(knife|dagger|blade)\b", "ornate prop"),
-        (r"\b(weapons)\b", "stage props"),
-        (r"\b(weapon)\b", "stage prop"),
-
-        # Violence / Killing
-        (r"\b(murders|murdering|killing|slaying)\b", "dramatically confronting"),
-        (r"\b(murder|kill|slay)\b", "dramatic showdown"),
-        (r"\b(corpses|dead bodies)\b", "resting figures"),
-        (r"\b(corpse|dead body)\b", "resting figure"),
-        (r"\b(terrorist|terrorism)\b", "rival faction"),
-    ]
-
-    res = prompt
-    for pattern, repl in substitutions:
-        def _repl_case(m):
-            txt = m.group(0)
-            if txt.isupper():
-                return repl.upper()
-            if txt[0].isupper():
-                return repl.capitalize()
-            return repl
-        res = re.sub(pattern, _repl_case, res, flags=re.IGNORECASE)
-
-    return res
-
-
-async def _call_gemini_rewrite(prompt: str, err_msg: str, api_key: str) -> str:
-    """Call Gemini 3.6 Flash to rewrite the prompt while preserving artistic intent and style."""
+async def _background_poll_video_result(
+    client,
+    operations: list[dict],
+    request_id: str,
+    req: dict,
+    orientation: str,
+    retry_after: dict = None,
+    deferred: dict = None,
+):
+    """Background watcher task: monitors video rendering on Google Flow asynchronously.
+    Does not block other scenes from dispatching sequentially after the configured cooldown delay.
+    """
+    from agent.sdk.services.operations import _poll_operations
+    from agent.sdk.services.result_handler import parse_result, apply_scene_result
+    req_type = req.get("type", "GENERATE_VIDEO")
     try:
-        import httpx
-        system_instruction = (
-            "You are an expert AI video prompt director for Google Flow (Veo).\n"
-            "Your job is to rewrite a video generation prompt that was BLOCKED or REJECTED by Google Flow "
-            "due to safety filters, content policy, sensitive words, or third-party / copyright restrictions.\n\n"
-            "CRITICAL MANDATORY RULE — 100% STRUCTURAL PRESERVATION:\n"
-            "1. You MUST keep the EXACT same section headers, line-by-line layout, and blank line breaks (\\n and \\n\\n) as the original prompt.\n"
-            "2. You MUST keep ALL timestamps, time intervals, and second markers exactly as written (e.g., '0-2s', '0s-2s', '0s-3s', '3s-7s', '7s-10s — ...'). Do NOT delete, combine, or rename any time markers.\n"
-            "3. You MUST keep ALL original section headers line-for-line (e.g., 'Duration:', 'Final format:', 'Shot type:', 'Concept:', 'Camera style:', 'Audio:', 'Safety and tone:', 'Negative:').\n"
-            "4. Only rewrite the specific sensitive words, brands, copyrighted characters, or policy-violating elements inside the descriptive sentences. Leave all other surrounding text, timing, and structural formatting completely untouched.\n\n"
-            "CONTENT REWRITING POLICIES:\n"
-            "1. Strictly replace any copyrighted brands, celebrities, named living people, trademarks, or public figures with neutral artistic archetype descriptions.\n"
-            "2. Strictly replace 'baby' or 'babies' with 'kids' or 'young performers', and 'infant' or 'infants' with 'toddler' or stylized props.\n"
-            "3. Soften any violence, weapons, blood, conflict, or gore into theatrical drama, dynamic camera motion, lighting effects, or silhouette storytelling.\n"
-            "4. PRESERVE the original cinematic camera movements (pan, zoom, tracking), lighting style, color grading, shot framing, and atmosphere.\n"
-            "5. Output ONLY the rewritten prompt text. Do NOT wrap in markdown code blocks (` ``` `), quotes, or conversational explanations."
-        )
-        user_content = (
-            f"Original Prompt:\n{prompt}\n\n"
-            f"Rejection / Error Reason:\n{err_msg}\n\n"
-            f"Please rewrite this prompt to be 100% compliant with Google Flow safety policies while maintaining the cinematic style and motion.\n"
-            f"MANDATORY: You MUST preserve the EXACT 100% structure, all line breaks (\\n\\n), all section headers, and all timestamp ranges (e.g., 0-2s, 0s-3s) without flattening or combining paragraphs."
-        )
-        payload = {
-            "contents": [{"parts": [{"text": f"{system_instruction}\n\n{user_content}"}]}],
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4096}
-        }
-        models = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite"]
-        async with httpx.AsyncClient(timeout=25.0) as http_client:
-            for target_model in models:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent"
-                try:
-                    resp = await http_client.post(url, params={"key": api_key}, json=payload, headers={"Content-Type": "application/json"})
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        candidates = data.get("candidates", [])
-                        if candidates:
-                            parts = candidates[0].get("content", {}).get("parts", [])
-                            if parts:
-                                res_text = parts[0].get("text", "").strip()
-                                res_text = re.sub(r"^```[a-z]*\s*", "", res_text)
-                                res_text = re.sub(r"\s*```$", "", res_text)
-                                res_text = res_text.strip(" \"'\n\r")
-                                if res_text:
-                                    return res_text
-                except Exception:
-                    continue
-    except Exception as e:
-        logger.warning("Error in _call_gemini_rewrite: %s", e)
-    return ""
-
-
-async def _rewrite_prompt_for_safety(prompt: str, error_msg: str) -> str:
-    """Rewrite prompt for safety using Gemini if key is configured, plus rule-based softening."""
-    if not prompt:
-        return prompt
-    # 1. Try Gemini API first if configured
-    try:
-        from agent.api.batch_uploader import get_saved_gemini_key
-        key = get_saved_gemini_key()
-        if key:
-            ai_rewritten = await _call_gemini_rewrite(prompt, error_msg, key)
-            if ai_rewritten and ai_rewritten.strip():
-                return _apply_rule_based_safety_rewrite(ai_rewritten.strip())
-    except Exception as e:
-        logger.warning("Gemini safety rewrite failed, falling back to rule-based: %s", e)
-
-    # 2. Rule-based softening
-    return _apply_rule_based_safety_rewrite(prompt)
-
-
-async def _auto_rewrite_and_save_prompt(req: dict, error_msg: str) -> str:
-    """Rewrites prompt, saves it to file on disk, and updates database scene & request."""
-    scene_id = req.get("scene_id")
-    scene = await crud.get_scene(scene_id) if scene_id else None
-
-    current_prompt = ""
-    prompt_path = None
-    image_path = None
-
-    ep = req.get("edit_prompt")
-    params = {}
-    if ep:
+        logger.info("Background watcher started for request %s (%d ops)", request_id[:8], len(operations))
+        poll_res = await _poll_operations(client, operations)
+        if _is_error(poll_res):
+            logger.warning("Background poll for request %s failed: %s", request_id[:8], poll_res)
+            await _handle_failure(request_id, req, poll_res, retry_after, deferred)
+        else:
+            gen_result = parse_result(poll_res, req_type)
+            await crud.update_request(
+                request_id,
+                status="COMPLETED",
+                media_id=gen_result.media_id,
+                output_url=gen_result.url,
+            )
+            await apply_scene_result(req.get("scene_id"), req_type, orientation, gen_result)
+            await event_bus.emit("request_update", {
+                "id": request_id,
+                "status": "COMPLETED",
+                "media_id": gen_result.media_id,
+                "url": gen_result.url,
+            })
+            logger.info("Request %s COMPLETED via background poll: media=%s url=%s",
+                        request_id[:8], gen_result.media_id[:12] if gen_result.media_id else "?",
+                        (gen_result.url or "")[:40])
+    except asyncio.CancelledError:
+        logger.info("Background poll task for request %s was cancelled", request_id[:8])
         try:
-            params = json.loads(ep)
-            if isinstance(params, dict):
-                prompt_path = params.get("prompt_path")
-                image_path = params.get("image_path")
-                current_prompt = params.get("original_prompt") or params.get("prompt_content") or ""
+            db_req = await crud.get_request(request_id)
+            if db_req and db_req.get("status") in ("PENDING", "PROCESSING"):
+                await crud.update_request(request_id, status="FAILED", error_message="Cancelled by user")
         except Exception:
             pass
-
-    if not current_prompt and scene:
-        current_prompt = scene.get("video_prompt") or scene.get("prompt") or ""
-
-    # Locate prompt file if prompt_path is not given or doesn't exist
-    if not prompt_path or not os.path.isfile(prompt_path):
-        img = image_path or (scene.get("vertical_image_url") if scene else None)
-        if img:
-            if img.startswith("file://"):
-                from urllib.parse import unquote
-                img = unquote(img[7:])
-            if os.path.exists(img):
-                base, _ = os.path.splitext(img)
-                for ext in (".txt", ".md"):
-                    if os.path.isfile(base + ext):
-                        prompt_path = base + ext
-                        break
-                if not prompt_path:
-                    img_dir = os.path.dirname(img)
-                    img_name = os.path.splitext(os.path.basename(img))[0]
-                    for candidate_dir in (img_dir, os.path.join(img_dir, "..", "prompts"), os.path.join(img_dir, "prompts")):
-                        if os.path.isdir(candidate_dir):
-                            for ext in (".txt", ".md"):
-                                cand = os.path.join(candidate_dir, img_name + ext)
-                                if os.path.isfile(cand):
-                                    prompt_path = cand
-                                    break
-                            if prompt_path:
-                                break
-
-    if prompt_path and os.path.isfile(prompt_path) and not current_prompt:
-        try:
-            with open(prompt_path, "r", encoding="utf-8") as f:
-                current_prompt = f.read().strip()
-        except Exception as e:
-            logger.warning("Failed to read prompt from %s: %s", prompt_path, e)
-
-    rewritten_prompt = await _rewrite_prompt_for_safety(current_prompt or "", error_msg)
-
-    # 1. Overwrite file on disk
-    if prompt_path:
-        try:
-            with open(prompt_path, "w", encoding="utf-8") as f:
-                f.write(rewritten_prompt)
-            logger.info("Saved auto-rewritten prompt to disk: %s", prompt_path)
-        except Exception as e:
-            logger.warning("Failed to save auto-rewritten prompt to %s: %s", prompt_path, e)
-    elif image_path and os.path.exists(os.path.dirname(image_path)):
-        base, _ = os.path.splitext(image_path)
-        save_file = base + ".txt"
-        try:
-            with open(save_file, "w", encoding="utf-8") as f:
-                f.write(rewritten_prompt)
-            prompt_path = save_file
-            params["prompt_path"] = save_file
-            logger.info("Saved auto-rewritten prompt to newly created file: %s", save_file)
-        except Exception as e:
-            logger.warning("Failed to create new prompt file %s: %s", save_file, e)
-
-    # 2. Update scene in database
-    if scene_id:
-        try:
-            await crud.update_scene(scene_id, prompt=rewritten_prompt, video_prompt=rewritten_prompt)
-            logger.info("Updated scene %s with auto-rewritten prompt", scene_id)
-        except Exception as e:
-            logger.warning("Failed to update scene %s with rewritten prompt: %s", scene_id, e)
-
-    # 3. Update request edit_prompt JSON
-    params["original_prompt"] = rewritten_prompt
-    params["prompt_content"] = rewritten_prompt
-    if prompt_path:
-        params["prompt_path"] = prompt_path
-    try:
-        new_ep = json.dumps(params)
-        await crud.update_request(req["id"], edit_prompt=new_ep)
-        req["edit_prompt"] = new_ep
+        raise
     except Exception as e:
-        logger.warning("Failed to update request edit_prompt: %s", e)
-
-    return rewritten_prompt
+        logger.exception("Unexpected error in background poll for request %s: %s", request_id[:8], e)
+        await _handle_failure(request_id, req, {"error": str(e)}, retry_after, deferred)
+    finally:
+        get_worker_controller()._background_tasks.pop(request_id, None)
 
 
 async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict = None, deferred: dict = None):

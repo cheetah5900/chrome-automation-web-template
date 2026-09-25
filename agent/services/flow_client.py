@@ -741,7 +741,7 @@ class FlowClient:
         # 2. Text-to-Video mode (Prompt-Only)
         if not start_image_media_id:
             try:
-                model_key = custom_model_key or f"abra_t2v_{duration_seconds or 4}s"
+                model_key = custom_model_key or "veo_3_1_t2v_lite_low_priority"
                 if "_i2v_" in model_key:
                     model_key = model_key.replace("_i2v_", "_t2v_")
                 model = fb.resolve_video_model(model_key)
@@ -792,6 +792,7 @@ class FlowClient:
             freq = fb.video_request(
                 prompt, pid, start_image_media_id, aspect=aspect_ratio,
                 model=model,
+                output_count=output_count,
             )
             payload = await self._batch_payload(
                 fb.RPC_GEN_VIDEO, freq, fb.CAPTCHA_VIDEO, timeout=120)
@@ -911,7 +912,7 @@ class FlowClient:
 
         # 1. Fast Path: Check active Flow tab DOM for completed video (instant detection)
         dom_mid, dom_vurl = await self._check_flow_tab_for_video(operation_id)
-        if dom_vurl:
+        if dom_vurl and dom_vurl.startswith("https://") and not dom_vurl.startswith("https://flow.google.com") and "/video/" in dom_vurl:
             actual_mid = dom_mid or media_id or operation_id
             self._operation_media[operation_id] = actual_mid
             self._operation_video_urls[operation_id] = dom_vurl
@@ -924,6 +925,10 @@ class FlowClient:
                 },
                 "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
             }
+        elif dom_mid and not media_id:
+            media_id = dom_mid
+            self._operation_media[operation_id] = dom_mid
+            logger.info("Resolved media_id from Flow tab DOM for op %s: %s", operation_id[:8], dom_mid[:8])
 
         complaint = None
 
@@ -1031,61 +1036,67 @@ class FlowClient:
             js_script = """(() => {
                 const results = [];
                 const seenUrls = new Set();
-                const pendingEls = Array.from(document.querySelectorAll("flow-pending-tile, [class*='pending-tile']"));
-                const pendingTexts = pendingEls.map(p => (p.innerText || "").trim());
+                const pendingEls = Array.from(document.querySelectorAll("flow-pending-tile, [class*='pending-tile'], [class*='pending'], .loading-percentage"));
+                const pendingTexts = pendingEls.map(p => (p.innerText || "").trim()).filter(Boolean);
 
-                const videoEls = Array.from(document.querySelectorAll("video"));
-                for (const v of videoEls) {
-                    let src = v.src || "";
-                    if (!src) {
-                        const s = v.querySelector("source");
-                        if (s) src = s.src || "";
-                    }
-                    if (!src || !src.startsWith("https://") || seenUrls.has(src)) continue;
-                    seenUrls.add(src);
+                const tiles = Array.from(document.querySelectorAll("flow-grid-tile-container, flow-asset-tile, [class*='asset-card'], [class*='tile-row'], [class*='card'], [class*='tile']"));
+                for (const tile of tiles) {
+                    const isPending = tile.matches("flow-pending-tile, [class*='pending']") || !!tile.querySelector("flow-pending-tile, [class*='pending'], .loading-percentage");
+                    if (isPending) continue;
 
-                    const card = v.closest("flow-grid-tile-container, flow-asset-tile, [class*='asset-card'], [class*='tile-row'], [class*='card'], [class*='tile']") || v.parentElement;
-                    let text = "";
-                    if (card) {
-                        text = card.getAttribute("aria-label") || card.getAttribute("title") || "";
-                        if (!text && card.innerText) {
-                            text = card.innerText.replace(/play_circle/g, '').trim().slice(0, 200);
-                        }
+                    const v = tile.querySelector("video");
+                    let videoSrc = v ? (v.currentSrc || v.src || (v.querySelector("source") ? v.querySelector("source").src : null)) : null;
+
+                    const img = tile.querySelector("img");
+                    const imgSrc = img ? img.src : null;
+
+                    let text = tile.getAttribute("aria-label") || tile.getAttribute("title") || "";
+                    if (!text && tile.innerText) {
+                        text = tile.innerText.replace(/play_circle/g, '').trim().slice(0, 300);
                     }
-                    if (!text) {
-                        text = v.getAttribute("aria-label") || v.getAttribute("title") || "";
-                    }
+
                     let mediaId = null;
-                    const match = src.match(/\\/video\\/([0-9a-f-]{36})/i) || src.match(/([0-9a-f-]{36})/i);
+                    const testStr = (videoSrc || "") + " " + (imgSrc || "");
+                    const match = testStr.match(/\\/video\\/([0-9a-f-]{36})/i) || testStr.match(/\\/image\\/([0-9a-f-]{36})/i) || testStr.match(/([0-9a-f-]{36})/i);
                     if (match) mediaId = match[1];
-                    results.push({ src, mediaId, text });
+                    if (!mediaId && tile.dataset && tile.dataset.mediaId) mediaId = tile.dataset.mediaId;
+
+                    const src = videoSrc || imgSrc || "";
+                    if (src && seenUrls.has(src)) continue;
+                    if (src) seenUrls.add(src);
+
+                    if (src || mediaId) {
+                        results.push({ src: videoSrc || "", imgSrc: imgSrc || "", mediaId, text });
+                    }
                 }
 
                 if (!results.length) {
-                    const tiles = Array.from(document.querySelectorAll("flow-grid-tile-container, flow-asset-tile, [class*='asset-card'], [class*='tile-row']"));
-                    for (const tile of tiles) {
-                        const v = tile.querySelector("video");
-                        const videoSrc = v ? (v.src || (v.querySelector("source") ? v.querySelector("source").src : null)) : null;
-                        if (!videoSrc || !videoSrc.startsWith("https://") || seenUrls.has(videoSrc)) continue;
-                        seenUrls.add(videoSrc);
-
-                        const label = tile.getAttribute("aria-label") || tile.getAttribute("title") || "";
-                        const text = label || (tile.innerText ? tile.innerText.replace(/play_circle/g, '').trim().slice(0, 200) : "");
-
+                    const videoEls = Array.from(document.querySelectorAll("video"));
+                    for (const v of videoEls) {
+                        let src = v.currentSrc || v.src || (v.querySelector("source") ? v.querySelector("source").src : "");
+                        if (!src || seenUrls.has(src)) continue;
+                        seenUrls.add(src);
                         let mediaId = null;
-                        const match = videoSrc.match(/\\/video\\/([0-9a-f-]{36})/i) || videoSrc.match(/([0-9a-f-]{36})/i);
+                        const match = src.match(/\\/video\\/([0-9a-f-]{36})/i) || src.match(/([0-9a-f-]{36})/i);
                         if (match) mediaId = match[1];
-
-                        results.push({ src: videoSrc, mediaId, text });
+                        results.push({ src, imgSrc: "", mediaId, text: "" });
                     }
                 }
+
                 return { results, pendingTexts };
             })()"""
             res = await self._send("inspect_tab", {"js": js_script}, timeout=6)
             tab_data = res.get("result", {})
-            if isinstance(tab_data, dict) and "result" in tab_data:
-                raw_val = tab_data.get("result")
-            else:
+            raw_val = None
+            if isinstance(tab_data, dict):
+                inner_res = tab_data.get("res")
+                if isinstance(inner_res, dict):
+                    raw_val = inner_res.get("result")
+                if not raw_val:
+                    raw_val = tab_data.get("result")
+            if not raw_val and isinstance(res.get("res"), dict):
+                raw_val = res["res"].get("result")
+            if not raw_val:
                 raw_val = tab_data
 
             if isinstance(raw_val, dict):
@@ -1134,18 +1145,19 @@ class FlowClient:
                         best_score = score
                         best_item = item
                 if best_item and best_score >= 1:
-                    logger.info("DOM inspection matched completed video for op %s (score=%d): src=%s",
-                                operation_id[:8], best_score, best_item.get("src")[:60])
-                    return best_item.get("mediaId"), best_item.get("src")
+                    chosen_url = best_item.get("src") or best_item.get("imgSrc")
+                    logger.info("DOM inspection matched completed video for op %s (score=%d): mid=%s url=%s",
+                                operation_id[:8], best_score, best_item.get("mediaId"), (chosen_url or "")[:60])
+                    return best_item.get("mediaId"), chosen_url
 
             # 2. If synthetic/prompt-only op and no pending tile, take newest video not in exclude
             if operation_id.startswith("ui_t2v_") and not pending_texts:
                 for item in reversed(video_items):
                     mid = item.get("mediaId")
-                    src = item.get("src")
+                    src = item.get("src") or item.get("imgSrc")
                     if src and (not mid or (mid.lower() not in exclude or mid.lower() == cur_mid)):
-                        logger.info("DOM inspection resolved newest video for synthetic op %s: src=%s",
-                                    operation_id[:8], src[:60])
+                        logger.info("DOM inspection resolved newest video for synthetic op %s: mid=%s url=%s",
+                                    operation_id[:8], mid, (src or "")[:60])
                         return mid, src
 
         except Exception as e:

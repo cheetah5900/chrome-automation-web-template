@@ -199,7 +199,7 @@ class TestFlowBatchUnit(unittest.TestCase):
     def test_gemini_rewrite_payload_preserves_structure(self):
         import asyncio
         from unittest.mock import patch, MagicMock
-        from agent.worker.processor import _call_gemini_rewrite
+        from agent.api.batch_uploader import fix_prompts_with_gemini, FixPromptsRequest, FixPromptItem
 
         captured_payloads = []
         mock_resp = MagicMock()
@@ -231,7 +231,12 @@ class TestFlowBatchUnit(unittest.TestCase):
         )
 
         with patch("httpx.AsyncClient.post", side_effect=mock_post):
-            rewritten = asyncio.run(_call_gemini_rewrite(sample_prompt, "Safety policy blocked: baby, weapons", "test_key"))
+            req = FixPromptsRequest(
+                gemini_api_key="test_key",
+                items=[FixPromptItem(scene_num="01", prompt=sample_prompt, error_message="Safety policy blocked: baby, weapons")]
+            )
+            res = asyncio.run(fix_prompts_with_gemini(req))
+            rewritten = res["fixed_items"][0]["fixed_prompt"]
 
         self.assertIn("Duration: 10 seconds", rewritten)
         self.assertIn("0s-3s —", rewritten)
@@ -334,6 +339,52 @@ class TestFlowBatchUnit(unittest.TestCase):
         self.assertEqual(poll_res.get("status"), "MEDIA_GENERATION_STATUS_SUCCESSFUL")
         self.assertEqual(poll_res.get("operation", {}).get("metadata", {}).get("video", {}).get("fifeUrl"), expected_vurl)
         self.assertEqual(client._operation_video_urls.get(op_id), expected_vurl)
+
+    def test_video_request_output_count_support(self):
+        from agent.services.flow_batch import video_request, text_video_request, resolve_video_model
+        import json
+
+        # Check resolve_video_model resolves wire names
+        self.assertEqual(resolve_video_model("lite_low_priority"), "veo_3_1_i2v_lite_low_priority")
+        self.assertEqual(resolve_video_model("t2v_lite_low_priority"), "veo_3_1_t2v_lite_low_priority")
+        self.assertEqual(resolve_video_model("abra_t2v_4s"), "abra_t2v_4s")
+
+        # Check video_request with output_count = 2
+        raw_env = video_request("Cinematic test", "proj-123", "media-456", output_count=2)
+        parsed = json.loads(raw_env)
+        # inner payload is parsed[0][0][1] as JSON string
+        inner = json.loads(parsed[0][0][1])
+        requests = inner[0]
+        self.assertEqual(len(requests), 2, "video_request should replicate 2 items when output_count=2")
+        self.assertEqual(inner[2][1], 2, "video_request outer count should match output_count")
+
+        # Check text_video_request with output_count = 2
+        raw_t2v = text_video_request("Prompt only test", "proj-123", output_count=2)
+        parsed_t2v = json.loads(raw_t2v)
+        inner_t2v = json.loads(parsed_t2v[0][0][1])
+        self.assertEqual(len(inner_t2v[0]), 2, "text_video_request should replicate 2 items when output_count=2")
+        self.assertEqual(inner_t2v[2][1], 2)
+
+    def test_worker_controller_background_tasks_and_cancel(self):
+        import asyncio
+        from agent.worker.processor import WorkerController
+
+        controller = WorkerController()
+        self.assertEqual(len(controller._background_tasks), 0)
+
+        async def dummy_bg():
+            await asyncio.sleep(10)
+
+        loop = asyncio.new_event_loop()
+        task = loop.create_task(dummy_bg())
+        controller.register_background_task("req-123", task)
+        self.assertIn("req-123", controller._background_tasks)
+
+        # Cancel all active tasks should cleanly cancel background tasks
+        loop.run_until_complete(controller.cancel_all_active_tasks())
+        self.assertTrue(task.cancelled())
+        self.assertEqual(len(controller._background_tasks), 0)
+        loop.close()
 
 if __name__ == "__main__":
     unittest.main()

@@ -611,6 +611,16 @@ class OperationService:
         if status == "MEDIA_GENERATION_STATUS_FAILED":
             return {"error": "Video generation failed immediately"}
 
+        if request_id:
+            logger.info("Video gen submitted for request %s (op=%s). Returning submitted for async background polling",
+                        request_id[:8], op_name[:12])
+            return {
+                "status": 202,
+                "submitted": True,
+                "operations": operations,
+                "request_id": request_id,
+            }
+
         logger.info("Video gen submitted, polling %d operations...", len(operations))
         return await _poll_operations(self._client, operations)
 
@@ -735,6 +745,16 @@ class OperationService:
             return submit_result
         if status == "MEDIA_GENERATION_STATUS_FAILED":
             return {"error": "R2V failed immediately"}
+
+        if request_id:
+            logger.info("R2V submitted for request %s (op=%s). Returning submitted for async background polling",
+                        request_id[:8], op_name[:12])
+            return {
+                "status": 202,
+                "submitted": True,
+                "operations": operations,
+                "request_id": request_id,
+            }
 
         logger.info("R2V submitted with %d refs, polling %d operations...", len(ref_ids), len(operations))
         return await _poll_operations(self._client, operations)

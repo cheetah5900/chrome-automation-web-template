@@ -221,7 +221,7 @@ def resolve_video_model(key: Optional[str]) -> str:
             if "fast" in key or "quality" in key:
                 return "veo_3_1_t2v_s_fast"
             if "abra" in key:
-                return key
+                return "veo_3_1_t2v_lite_low_priority"
             return "veo_3_1_t2v_lite_low_priority"
         if "ultra" in key:
             return "veo_3_1_i2v_s_fast_ultra"
@@ -367,17 +367,24 @@ def image_request(prompt: str, project_id: str, count: int = 1,
 def video_request(prompt: str, project_id: str, source_media_id: str,
                   crop: Optional[list] = None,
                   aspect: Any = VIDEO_ASPECT_LANDSCAPE,
-                  model: str = VIDEO_MODEL) -> str:
+                  model: str = VIDEO_MODEL,
+                  output_count: int = 1) -> str:
+    count = max(1, min(int(output_count or 1), 4))
     aspect_val = resolve_video_aspect(aspect)
     effective_crop = crop
     if effective_crop is None and aspect_val == VIDEO_ASPECT_LANDSCAPE:
         effective_crop = FULL_FRAME_CROP
+    requests = []
+    for _ in range(count):
+        requests.append([
+            [None, None, [[[prompt]]]], model, aspect_val, None,
+            [None, source_media_id, None, None, None, effective_crop],
+            [None, None, None, None, _client_uuid(), _client_uuid()]
+        ])
     inner = [
-        [[[None, None, [[[prompt]]]], model, aspect_val, None,
-          [None, source_media_id, None, None, None, effective_crop],
-          [None, None, None, None, _client_uuid(), _client_uuid()]]],
+        requests,
         _context(project_id),
-        [_client_uuid(), 2],
+        [_client_uuid(), count],
     ]
     return build_envelope(RPC_GEN_VIDEO, inner)
 
@@ -633,14 +640,16 @@ def find_media_id_in_listing(raw_or_payload: Any, target_id: Optional[str] = Non
                 if isinstance(mid, str) and ((len(mid) == 36 and mid.count("-") == 4) or (len(mid) == 32 and all(c in "0123456789abcdefABCDEF" for c in mid))):
                     if mid.lower() in exclude:
                         continue
-                    if target_id and not target_id.startswith("ui_t2v_") and op_id == target_id:
-                        return mid
                     title = detail[0] if isinstance(detail[0], str) else ""
                     is_done = bool(len(detail) > 6 and detail[6])
                     ts = 0
                     if len(detail) > 1 and isinstance(detail[1], list) and detail[1]:
                         ts = detail[1][0]
                     entries.append({"op_id": op_id, "media_id": mid, "title": title, "is_done": is_done, "ts": ts})
+                    if target_id and not target_id.startswith("ui_t2v_") and op_id == target_id:
+                        if is_done:
+                            return mid
+                        return None
 
     if entries and prompt:
         p_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', prompt).strip().lower()
@@ -661,9 +670,12 @@ def find_media_id_in_listing(raw_or_payload: Any, target_id: Optional[str] = Non
                 best_score = score
                 best_e = e
         if best_e and best_score >= 1:
-            return best_e["media_id"]
+            if best_e["is_done"]:
+                return best_e["media_id"]
+            # Matched active entry but still rendering on Google Flow -> wait
+            return None
 
-    if entries:
+    if entries and (not prompt or (target_id and target_id.startswith("ui_t2v_"))):
         done_entries = [e for e in entries if e["is_done"]]
         if done_entries:
             done_entries.sort(key=lambda x: x["ts"], reverse=True)

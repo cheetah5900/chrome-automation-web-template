@@ -1530,7 +1530,8 @@ function connectToAgent() {
                       return t === countStr || aria.includes(`${countStr} output`) || aria.includes(`${countStr} เอาต์พุต`);
                     });
                     if (countToggles.length > 0) {
-                      countToggles[0].click();
+                      const btn = countToggles[0].querySelector('button') || countToggles[0];
+                      btn.click();
                       await new Promise(r => setTimeout(r, 200));
                     }
                   }
@@ -1544,7 +1545,8 @@ function connectToAgent() {
                       return t && t.includes(aspectStr);
                     });
                     if (aspectToggles.length > 0) {
-                      aspectToggles[0].click();
+                      const btn = aspectToggles[0].querySelector('button') || aspectToggles[0];
+                      btn.click();
                       await new Promise(r => setTimeout(r, 200));
                     }
                   }
