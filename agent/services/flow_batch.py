@@ -611,6 +611,55 @@ def find_media_id_in_text(text: str, operation_id: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def compute_prompt_match_score(prompt: str, candidate_text: str) -> float:
+    """Calculate multi-scale matching score supporting Thai (unsegmented), English, and symbols."""
+    if not prompt or not candidate_text:
+        return 0.0
+
+    # 1. Clean both: strip @mentions, quotes, newlines, and punctuation
+    clean_p = re.sub(r'@[a-zA-Z0-9_.-]+', ' ', prompt)
+    clean_p = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', clean_p).strip().lower()
+
+    clean_t = re.sub(r'@[a-zA-Z0-9_.-]+', ' ', candidate_text)
+    clean_t = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', clean_t).strip().lower()
+
+    if not clean_p or not clean_t:
+        return 0.0
+
+    score = 0.0
+
+    # 2. Direct containment
+    if clean_p in clean_t or clean_t in clean_p:
+        return 10.0
+
+    # 3. Substring sliding windows (essential for Thai, Chinese, and Asian scripts without spaces)
+    for chunk_len, chunk_weight in [(20, 6.0), (15, 5.0), (10, 4.0), (6, 2.0)]:
+        if len(clean_p) >= chunk_len:
+            step = max(1, chunk_len // 2)
+            matched_chunks = 0
+            for start in range(0, len(clean_p) - chunk_len + 1, step):
+                chunk = clean_p[start:start + chunk_len]
+                if chunk in clean_t:
+                    matched_chunks += 1
+            if matched_chunks > 0:
+                score += chunk_weight * min(matched_chunks, 3)
+                break
+
+    # 4. Token overlap for space-separated words (English/Latin tokens)
+    p_words = set(w for w in clean_p.split() if len(w) > 3)
+    t_words = set(w for w in clean_t.split() if len(w) > 3)
+    common_words = p_words & t_words
+    score += len(common_words) * 2.0
+
+    # 5. Scene digits / round number match
+    p_digits = re.findall(r'\b\d{1,3}\b', prompt)
+    t_digits = re.findall(r'\b\d{1,3}\b', candidate_text)
+    if p_digits and t_digits and (set(p_digits) & set(t_digits)):
+        score += 3.0
+
+    return score
+
+
 def find_media_id_in_listing(raw_or_payload: Any, target_id: Optional[str] = None,
                            prompt: Optional[str] = None,
                            exclude_ids: Optional[set[str]] = None) -> Optional[str]:
@@ -647,39 +696,28 @@ def find_media_id_in_listing(raw_or_payload: Any, target_id: Optional[str] = Non
                         ts = detail[1][0]
                     entries.append({"op_id": op_id, "media_id": mid, "title": title, "is_done": is_done, "ts": ts})
                     if target_id and not target_id.startswith("ui_t2v_") and op_id == target_id:
-                        if is_done:
-                            return mid
-                        return None
+                        return mid
 
     if entries and prompt:
-        p_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', prompt).strip().lower()
-        p_words = set(w for w in p_clean.split() if len(w) > 3)
         best_e = None
-        best_score = 0
+        best_score = 0.0
         for e in entries:
-            t_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', e["title"]).strip().lower()
-            t_words = set(w for w in t_clean.split() if len(w) > 3)
-            score = len(p_words & t_words)
-            if (p_clean[:20] and p_clean[:20] in t_clean) or (t_clean[:20] and t_clean[:20] in p_clean):
-                score += 5
-            elif (p_clean[:10] and p_clean[:10] in t_clean) or (t_clean[:10] and t_clean[:10] in p_clean):
-                score += 3
+            score = compute_prompt_match_score(prompt, e["title"])
             if e["is_done"]:
-                score += 2
+                score += 2.0
             if score > best_score:
                 best_score = score
                 best_e = e
-        if best_e and best_score >= 1:
-            if best_e["is_done"]:
-                return best_e["media_id"]
-            # Matched active entry but still rendering on Google Flow -> wait
-            return None
+        if best_e and best_score >= 1.0:
+            return best_e["media_id"]
 
     if entries and (not prompt or (target_id and target_id.startswith("ui_t2v_"))):
         done_entries = [e for e in entries if e["is_done"]]
         if done_entries:
             done_entries.sort(key=lambda x: x["ts"], reverse=True)
             return done_entries[0]["media_id"]
+        entries.sort(key=lambda x: x["ts"], reverse=True)
+        return entries[0]["media_id"]
 
     # Strategy 2: Regex scanning on raw text (for unparsed or truncated streams)
     if isinstance(raw_or_payload, str):
@@ -687,13 +725,17 @@ def find_media_id_in_listing(raw_or_payload: Any, target_id: Optional[str] = Non
         matches = pat.findall(raw_or_payload)
         if matches:
             if prompt:
-                p_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', prompt).strip().lower()
+                best_mid = None
+                best_score = 0.0
                 for title, mid in matches:
                     if mid.lower() in exclude:
                         continue
-                    t_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', title).strip().lower()
-                    if (p_clean[:30] and p_clean[:30] in t_clean) or (t_clean[:30] and t_clean[:30] in p_clean):
-                        return mid
+                    s = compute_prompt_match_score(prompt, title)
+                    if s > best_score:
+                        best_score = s
+                        best_mid = mid
+                if best_mid and best_score >= 1.0:
+                    return best_mid
             for title, mid in reversed(matches):
                 if mid.lower() not in exclude:
                     return mid

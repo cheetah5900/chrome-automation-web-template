@@ -912,7 +912,7 @@ class FlowClient:
 
         # 1. Fast Path: Check active Flow tab DOM for completed video (instant detection)
         dom_mid, dom_vurl = await self._check_flow_tab_for_video(operation_id)
-        if dom_vurl and dom_vurl.startswith("https://") and not dom_vurl.startswith("https://flow.google.com") and "/video/" in dom_vurl:
+        if dom_vurl and (dom_vurl.startswith("https://") or dom_vurl.startswith("blob:")) and not dom_vurl.startswith("https://flow.google.com") and ("/video/" in dom_vurl or ".mp4" in dom_vurl or "flow-content.google" in dom_vurl or "blob:" in dom_vurl or "storage.googleapis" in dom_vurl):
             actual_mid = dom_mid or media_id or operation_id
             self._operation_media[operation_id] = actual_mid
             self._operation_video_urls[operation_id] = dom_vurl
@@ -925,10 +925,24 @@ class FlowClient:
                 },
                 "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
             }
-        elif dom_mid and not media_id:
+        elif dom_mid:
             media_id = dom_mid
             self._operation_media[operation_id] = dom_mid
             logger.info("Resolved media_id from Flow tab DOM for op %s: %s", operation_id[:8], dom_mid[:8])
+            try:
+                urls = await self._batch_media_urls(dom_mid)
+                if urls.video:
+                    self._operation_video_urls[operation_id] = urls.video
+                    logger.info("Instantly resolved video URL from as29s for DOM media_id %s: %s", dom_mid[:8], urls.video[:60])
+                    return {
+                        "operation": {
+                            "name": operation_id,
+                            "metadata": {"video": {"mediaId": dom_mid, "fifeUrl": urls.video}},
+                        },
+                        "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
+                    }
+            except Exception as dom_err:
+                logger.debug("Immediate _batch_media_urls for dom_mid %s: %s", dom_mid[:8], dom_err)
 
         complaint = None
 
@@ -976,7 +990,7 @@ class FlowClient:
 
             # Check DOM inspection as immediate recovery
             retry_mid, retry_vurl = await self._check_flow_tab_for_video(operation_id)
-            if retry_vurl:
+            if retry_vurl and (retry_vurl.startswith("https://") or retry_vurl.startswith("blob:")) and not retry_vurl.startswith("https://flow.google.com") and ("/video/" in retry_vurl or ".mp4" in retry_vurl or "flow-content.google" in retry_vurl or "blob:" in retry_vurl or "storage.googleapis" in retry_vurl):
                 actual_mid = retry_mid or media_id
                 self._operation_media[operation_id] = actual_mid
                 self._operation_video_urls[operation_id] = retry_vurl
@@ -987,6 +1001,21 @@ class FlowClient:
                     },
                     "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
                 }
+            elif retry_mid and retry_mid != media_id:
+                try:
+                    retry_urls = await self._batch_media_urls(retry_mid)
+                    if retry_urls.video:
+                        self._operation_media[operation_id] = retry_mid
+                        self._operation_video_urls[operation_id] = retry_urls.video
+                        return {
+                            "operation": {
+                                "name": operation_id,
+                                "metadata": {"video": {"mediaId": retry_mid, "fifeUrl": retry_urls.video}},
+                            },
+                            "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
+                        }
+                except Exception:
+                    pass
 
             if count >= 3 and (count % 2 == 0 or count >= MAX_AS29S_NOT_FOUND_ROUNDS - 2):
                 found_id, _ = await self._find_operation_media(operation_id)
@@ -1035,14 +1064,33 @@ class FlowClient:
         try:
             js_script = """(() => {
                 const results = [];
-                const seenUrls = new Set();
+                const seenKeys = new Set();
                 const pendingEls = Array.from(document.querySelectorAll("flow-pending-tile, [class*='pending-tile'], [class*='pending'], .loading-percentage"));
-                const pendingTexts = pendingEls.map(p => (p.innerText || "").trim()).filter(Boolean);
+                const pendingTexts = pendingEls.map(p => (p.innerText || p.getAttribute('aria-label') || '').trim()).filter(Boolean);
 
-                const tiles = Array.from(document.querySelectorAll("flow-grid-tile-container, flow-asset-tile, [class*='asset-card'], [class*='tile-row'], [class*='card'], [class*='tile']"));
-                for (const tile of tiles) {
-                    const isPending = tile.matches("flow-pending-tile, [class*='pending']") || !!tile.querySelector("flow-pending-tile, [class*='pending'], .loading-percentage");
+                const tileSelectors = [
+                    "flow-grid-tile-container",
+                    "flow-asset-tile",
+                    "flow-feed-item",
+                    "[class*='asset-card']",
+                    "[class*='media-card']",
+                    "[class*='tile-row']",
+                    "[class*='asset-tile']",
+                    "[class*='card']",
+                    "[class*='tile']",
+                    "[role='listitem']"
+                ];
+                const candidateNodes = Array.from(document.querySelectorAll(tileSelectors.join(", ")));
+
+                for (const tile of candidateNodes) {
+                    const isPending = tile.matches("flow-pending-tile, [class*='pending']") ||
+                                      !!tile.querySelector("flow-pending-tile, [class*='pending'], .loading-percentage");
                     if (isPending) continue;
+
+                    // Trigger hover so Google Flow attaches the preview video element if lazy-loaded
+                    try {
+                        tile.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                    } catch(e) {}
 
                     const v = tile.querySelector("video");
                     let videoSrc = v ? (v.currentSrc || v.src || (v.querySelector("source") ? v.querySelector("source").src : null)) : null;
@@ -1052,21 +1100,35 @@ class FlowClient:
 
                     let text = tile.getAttribute("aria-label") || tile.getAttribute("title") || "";
                     if (!text && tile.innerText) {
-                        text = tile.innerText.replace(/play_circle/g, '').trim().slice(0, 300);
+                        text = tile.innerText.replace(/play_circle|more_vert|download|share/g, '').trim().slice(0, 500);
                     }
 
                     let mediaId = null;
-                    const testStr = (videoSrc || "") + " " + (imgSrc || "");
-                    const match = testStr.match(/\\/video\\/([0-9a-f-]{36})/i) || testStr.match(/\\/image\\/([0-9a-f-]{36})/i) || testStr.match(/([0-9a-f-]{36})/i);
-                    if (match) mediaId = match[1];
-                    if (!mediaId && tile.dataset && tile.dataset.mediaId) mediaId = tile.dataset.mediaId;
+                    const directMid = tile.dataset?.mediaId || tile.dataset?.id || tile.getAttribute("data-media-id") || tile.getAttribute("data-id") || tile.getAttribute("id");
+                    if (directMid && /[0-9a-f-]{32,36}/i.test(directMid)) {
+                        const m = directMid.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})/i);
+                        if (m) mediaId = m[1];
+                    }
 
-                    const src = videoSrc || imgSrc || "";
-                    if (src && seenUrls.has(src)) continue;
-                    if (src) seenUrls.add(src);
+                    if (!mediaId) {
+                        const html = tile.outerHTML || "";
+                        const m = html.match(/(?:media[_-]?id|video[_-]?id|data-id)=["']?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})/i) ||
+                                  html.match(/\\/video\\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i) ||
+                                  html.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+                        if (m) mediaId = m[1];
+                    }
 
-                    if (src || mediaId) {
-                        results.push({ src: videoSrc || "", imgSrc: imgSrc || "", mediaId, text });
+                    const primaryKey = mediaId || videoSrc || imgSrc;
+                    if (!primaryKey || seenKeys.has(primaryKey)) continue;
+                    seenKeys.add(primaryKey);
+
+                    if (mediaId || videoSrc || imgSrc) {
+                        results.push({
+                            src: videoSrc || "",
+                            imgSrc: imgSrc || "",
+                            mediaId: mediaId || null,
+                            text: text || ""
+                        });
                     }
                 }
 
@@ -1074,10 +1136,10 @@ class FlowClient:
                     const videoEls = Array.from(document.querySelectorAll("video"));
                     for (const v of videoEls) {
                         let src = v.currentSrc || v.src || (v.querySelector("source") ? v.querySelector("source").src : "");
-                        if (!src || seenUrls.has(src)) continue;
-                        seenUrls.add(src);
+                        if (!src || seenKeys.has(src)) continue;
+                        seenKeys.add(src);
                         let mediaId = null;
-                        const match = src.match(/\\/video\\/([0-9a-f-]{36})/i) || src.match(/([0-9a-f-]{36})/i);
+                        const match = src.match(/\\/video\\/([0-9a-f-]{36})/i) || src.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
                         if (match) mediaId = match[1];
                         results.push({ src, imgSrc: "", mediaId, text: "" });
                     }
@@ -1111,11 +1173,11 @@ class FlowClient:
 
             # If there is a pending tile whose text matches prompt, generation is definitely still running
             if prompt and pending_texts:
-                p_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', prompt).strip().lower()
                 for pt in pending_texts:
-                    pt_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', pt).strip().lower()
-                    if (p_clean[:20] and p_clean[:20] in pt_clean) or (pt_clean[:20] and pt_clean[:20] in p_clean):
-                        logger.info("Operation %s still rendering in pending tile: %s", operation_id[:8], pt[:50])
+                    match_score = fb.compute_prompt_match_score(prompt, pt)
+                    if match_score >= 3.0:
+                        logger.info("Operation %s still rendering in pending tile (score=%.1f): %s",
+                                    operation_id[:8], match_score, pt[:50])
                         return None, None
 
             if not video_items:
@@ -1124,41 +1186,32 @@ class FlowClient:
             exclude = set(k.lower() for k in self._operation_media.values() if k)
             cur_mid = (self._operation_media.get(operation_id) or "").lower()
 
-            # 1. Match by prompt
+            # 1. Match by prompt using multi-scale Thai/English scoring
             if prompt:
-                p_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', prompt).strip().lower()
-                p_words = set(w for w in p_clean.split() if len(w) > 3)
                 best_item = None
-                best_score = 0
+                best_score = 0.0
                 for item in video_items:
                     mid = item.get("mediaId")
                     if mid and mid.lower() in exclude and mid.lower() != cur_mid:
                         continue
-                    t_clean = re.sub(r'[\s\n.,:;—\-_/()]+', ' ', item.get("text", "")).strip().lower()
-                    t_words = set(w for w in t_clean.split() if len(w) > 3)
-                    score = len(p_words & t_words)
-                    if (p_clean[:20] and p_clean[:20] in t_clean) or (t_clean[:20] and t_clean[:20] in p_clean):
-                        score += 5
-                    elif (p_clean[:10] and p_clean[:10] in t_clean) or (t_clean[:10] and t_clean[:10] in p_clean):
-                        score += 3
+                    score = fb.compute_prompt_match_score(prompt, item.get("text", ""))
                     if score > best_score:
                         best_score = score
                         best_item = item
-                if best_item and best_score >= 1:
+                if best_item and best_score >= 1.0:
                     chosen_url = best_item.get("src") or best_item.get("imgSrc")
-                    logger.info("DOM inspection matched completed video for op %s (score=%d): mid=%s url=%s",
+                    logger.info("DOM inspection matched completed video for op %s (score=%.1f): mid=%s url=%s",
                                 operation_id[:8], best_score, best_item.get("mediaId"), (chosen_url or "")[:60])
                     return best_item.get("mediaId"), chosen_url
 
-            # 2. If synthetic/prompt-only op and no pending tile, take newest video not in exclude
-            if operation_id.startswith("ui_t2v_") and not pending_texts:
-                for item in reversed(video_items):
-                    mid = item.get("mediaId")
-                    src = item.get("src") or item.get("imgSrc")
-                    if src and (not mid or (mid.lower() not in exclude or mid.lower() == cur_mid)):
-                        logger.info("DOM inspection resolved newest video for synthetic op %s: mid=%s url=%s",
-                                    operation_id[:8], mid, (src or "")[:60])
-                        return mid, src
+            # 2. If no pending tile matches this prompt, take newest video not in exclude
+            for item in reversed(video_items):
+                mid = item.get("mediaId")
+                src = item.get("src") or item.get("imgSrc")
+                if src and (not mid or (mid.lower() not in exclude or mid.lower() == cur_mid)):
+                    logger.info("DOM inspection resolved newest video for op %s: mid=%s url=%s",
+                                operation_id[:8], mid, (src or "")[:60])
+                    return mid, src
 
         except Exception as e:
             logger.debug("_check_flow_tab_for_video error: %s", e)

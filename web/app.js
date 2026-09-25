@@ -6259,23 +6259,36 @@ function initVideoGenListeners() {
               upscaleResolutionVal = document.getElementById('cfg_flow_upscale_auto')?.value || 'NONE';
             }
 
-            success = await executeStep('/api/step/video-gen', {
-              prompt: p,
-              round_idx: r,
-              google_flow_path: googleFlowPathVal,
-              google_flow_email: googleFlowEmailVal,
-              google_flow_project_name: googleFlowProjectNameVal,
-              video_input_selector: inputSelectorVal,
-              video_settings_selector: settingsSelectorVal,
-              video_submit_selector: submitSelectorVal,
-              video_wait_seconds: randomCooldown,
-              is_first_run: isFirstPrompt,
-              auto_retry_mode: isAutoRetry,
-              video_gen_mode: videoGenModeVal,
-              video_model: videoModelVal,
-              output_count: outputCountVal,
-              upscale_resolution: upscaleResolutionVal
-            }, null, 'videoConsole');
+            let stepResponse = null;
+            writeConsoleLine(`Executing action: /api/step/video-gen...`, 'system', 'videoConsole');
+            try {
+              stepResponse = await jsonFetch('/api/step/video-gen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  prompt: p,
+                  round_idx: r,
+                  google_flow_path: googleFlowPathVal,
+                  google_flow_email: googleFlowEmailVal,
+                  google_flow_project_name: googleFlowProjectNameVal,
+                  video_input_selector: inputSelectorVal,
+                  video_settings_selector: settingsSelectorVal,
+                  video_submit_selector: submitSelectorVal,
+                  video_wait_seconds: randomCooldown,
+                  is_first_run: isFirstPrompt,
+                  auto_retry_mode: isAutoRetry,
+                  video_gen_mode: videoGenModeVal,
+                  video_model: videoModelVal,
+                  output_count: outputCountVal,
+                  upscale_resolution: upscaleResolutionVal
+                })
+              });
+              writeConsoleLine(`Action completed: /api/step/video-gen`, 'success', 'videoConsole');
+              success = true;
+            } catch (e) {
+              writeConsoleLine(`Action failed: ${e.message}`, 'error', 'videoConsole');
+              success = false;
+            }
 
             isFirstPrompt = false;
 
@@ -6289,6 +6302,36 @@ function initVideoGenListeners() {
 
             videoStatusesByRound[r][pIdx] = isAutoRetry ? 'Retried / Cooldown' : 'Sent / Cooldown';
             renderVideoPromptsForRound(r);
+
+            // Asynchronously track Flow Kit request completion in background
+            if (stepResponse?.request_id && (videoGenModeVal === 'flow_kit' || videoGenModeVal === 'flow_kit_prompt_only')) {
+              const reqId = stepResponse.request_id;
+              const targetR = r;
+              const targetIdx = pIdx;
+              const checkBgStatus = async () => {
+                for (let poll = 0; poll < 120; poll++) {
+                  await new Promise(res => setTimeout(res, 5000));
+                  try {
+                    const st = await jsonFetch(`/api/requests/${reqId}`);
+                    if (!st) continue;
+                    if (st.status === 'COMPLETED') {
+                      videoStatusesByRound[targetR][targetIdx] = 'Completed';
+                      renderVideoPromptsForRound(targetR);
+                      writeConsoleLine(`[Round ${targetR} - ข้อความที่ ${targetIdx + 1}] ✅ ตรวจพบวิดีโอสร้างเสร็จเรียบร้อยแล้ว`, 'success', 'videoConsole');
+                      break;
+                    } else if (st.status === 'FAILED') {
+                      videoStatusesByRound[targetR][targetIdx] = 'Failed';
+                      renderVideoPromptsForRound(targetR);
+                      writeConsoleLine(`[Round ${targetR} - ข้อความที่ ${targetIdx + 1}] ❌ วิดีโอล้มเหลว: ${st.error_message || 'ไม่ทราบสาเหตุ'}`, 'error', 'videoConsole');
+                      break;
+                    }
+                  } catch (pollErr) {
+                    // Ignore transient errors
+                  }
+                }
+              };
+              checkBgStatus();
+            }
 
             await runVideoCooldown(r, randomCooldown);
           }

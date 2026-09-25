@@ -386,6 +386,67 @@ class TestFlowBatchUnit(unittest.TestCase):
         self.assertEqual(len(controller._background_tasks), 0)
         loop.close()
 
+    def test_compute_prompt_match_score(self):
+        from agent.services.flow_batch import compute_prompt_match_score
+
+        # 1. Thai prompt matching without spaces
+        p_thai = "ฉากในห้องนอนพระเอกกำลังคุยกับนางเอกด้วยอารมณ์ตึงเครียด"
+        t_thai = "@01.png ฉากในห้องนอนพระเอกกำลังคุยกับนางเอก..."
+        score_thai = compute_prompt_match_score(p_thai, t_thai)
+        self.assertGreaterEqual(score_thai, 4.0, "Thai prompt with mention should match accurately")
+
+        # 2. English prompt matching
+        p_en = "Cinematic aerial shot of an ancient temple at sunset"
+        t_en = "@02.png Ancient temple at sunset with dramatic cinematic lighting"
+        score_en = compute_prompt_match_score(p_en, t_en)
+        self.assertGreaterEqual(score_en, 4.0, "English prompt should match word tokens and mentions")
+
+        # 3. Unrelated prompts should have zero score
+        p_other = "A futuristic spaceship flying through hyperdrive"
+        self.assertEqual(compute_prompt_match_score(p_thai, p_other), 0.0)
+
+    def test_find_media_id_in_listing_exact_match_without_detail6(self):
+        # Google Flow often has null detail[6] while rendering or completed
+        sample_payload = [
+            [
+                "op-exact-12345",
+                None,
+                None,
+                ["Title of the video", [1710000000, 0], False, None, "11112222-3333-4444-5555-666677778888", "uuid-1", None],
+                "proj-999"
+            ]
+        ]
+        # Should resolve mid directly when op_id matches target_id
+        mid = fb.find_media_id_in_listing(sample_payload, target_id="op-exact-12345")
+        self.assertEqual(mid, "11112222-3333-4444-5555-666677778888")
+
+    def test_poll_batch_operation_instant_as29s_from_dom_mid(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+        from agent.services.flow_client import FlowClient
+        from agent.services.flow_batch import MediaUrls
+
+        client = FlowClient()
+        dummy_ws = object()
+        client.set_extension(dummy_ws)
+        op_id = "op-test-dom-as29s"
+        client._remember_operation(op_id, "mock-proj", prompt="Lush forest drone view")
+
+        # Mock DOM returning mediaId (e.g. from outerHTML or data attribute), but video element not yet mounted
+        client._check_flow_tab_for_video = AsyncMock(return_value=("dom-media-id-999", None))
+        # Mock _batch_media_urls immediately returning ready video URL
+        expected_vurl = "https://flow-content.google/video/dom-media-id-999?Expires=999"
+        client._batch_media_urls = AsyncMock(return_value=MediaUrls(
+            media_id="dom-media-id-999",
+            video=expected_vurl,
+            image="https://flow-content.google/image/dom-media-id-999"
+        ))
+
+        res = asyncio.run(client._poll_batch_operation(op_id))
+        self.assertEqual(res.get("status"), "MEDIA_GENERATION_STATUS_SUCCESSFUL")
+        self.assertEqual(res.get("operation", {}).get("metadata", {}).get("video", {}).get("fifeUrl"), expected_vurl)
+        self.assertEqual(client._operation_video_urls.get(op_id), expected_vurl)
+
 if __name__ == "__main__":
     unittest.main()
 

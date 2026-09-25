@@ -1657,19 +1657,43 @@ function connectToAgent() {
           const evalCode = msg.params?.eval;
           let scriptResult;
           if (msg.params?.js) {
-            const dbgTarget = { tabId: tab.id };
-            await chrome.debugger.attach(dbgTarget, '1.3');
             try {
-              const evalRes = await chrome.debugger.sendCommand(dbgTarget, 'Runtime.evaluate', {
-                expression: msg.params.js,
-                returnByValue: true,
-                awaitPromise: true
+              const execRes = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                world: 'MAIN',
+                func: (code) => {
+                  try {
+                    return eval(code);
+                  } catch (e) {
+                    return { __evalError: e.message };
+                  }
+                },
+                args: [msg.params.js]
               });
-              scriptResult = { success: true, result: evalRes?.result?.value, exception: evalRes?.exceptionDetails, rawResult: evalRes?.result };
-            } catch (cdpErr) {
-              scriptResult = { success: false, error: cdpErr.message };
-            } finally {
-              try { await chrome.debugger.detach(dbgTarget); } catch {}
+              const val = execRes[0]?.result;
+              if (val && typeof val === 'object' && val.__evalError) {
+                scriptResult = { success: false, error: val.__evalError };
+              } else {
+                scriptResult = { success: true, result: val };
+              }
+            } catch (scriptErr) {
+              // Fallback to CDP debugger if scripting is restricted on this tab
+              try {
+                const dbgTarget = { tabId: tab.id };
+                await chrome.debugger.attach(dbgTarget, '1.3');
+                try {
+                  const evalRes = await chrome.debugger.sendCommand(dbgTarget, 'Runtime.evaluate', {
+                    expression: msg.params.js,
+                    returnByValue: true,
+                    awaitPromise: true
+                  });
+                  scriptResult = { success: true, result: evalRes?.result?.value, exception: evalRes?.exceptionDetails, rawResult: evalRes?.result };
+                } finally {
+                  try { await chrome.debugger.detach(dbgTarget); } catch {}
+                }
+              } catch (cdpErr) {
+                scriptResult = { success: false, error: `${scriptErr.message}; CDP: ${cdpErr.message}` };
+              }
             }
           } else if (evalCode === 'dom_summary') {
             const res = await chrome.scripting.executeScript({

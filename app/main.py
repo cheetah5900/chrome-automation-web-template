@@ -103,7 +103,7 @@ _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openro
 _ensure_json(PROMPTS_FILE, {"prompts": [""]})
 _ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2": "", "reference_image_3": "", "reference_image_4": "", "reference_image_5": "", "reference_image_6": "", "reference_image_7": "", "reference_images_dir": ""})
 
-app = FastAPI(title="Chrome Automation Template", version="1.13.13")
+app = FastAPI(title="Chrome Automation Template", version="1.13.14")
 last_submit_time = 0.0
 
 import time
@@ -6595,7 +6595,14 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                         )
                         log(f"[Flow Kit Queue] Submitted UPSCALE_VIDEO request for resolution: {payload.upscale_resolution}")
                 
-                return {"ok": True, "message": f"ส่งคำขอไปยังคิว Flow Kit สำเร็จ (ประเภท: {req_type})", "status": "PENDING"}
+                return {
+                    "ok": True,
+                    "message": f"ส่งคำขอไปยังคิว Flow Kit สำเร็จ (ประเภท: {req_type})",
+                    "status": "PENDING",
+                    "request_id": new_req["id"],
+                    "video_id": video_id,
+                    "scene_id": scene_id,
+                }
             else:
                 log(f"[Flow Kit Queue] Request already active: {active_req[0]['id']}")
                 
@@ -6616,7 +6623,14 @@ async def step_video_gen(payload: VideoGenStepPayload) -> dict[str, Any]:
                         )
                         log(f"[Flow Kit Queue] Submitted UPSCALE_VIDEO request for resolution: {payload.upscale_resolution}")
                         
-                return {"ok": True, "message": f"คำขอนี้กำลังทำงานอยู่แล้วในคิว Flow Kit (ประเภท: {req_type})", "status": active_req[0]['status']}
+                return {
+                    "ok": True,
+                    "message": f"คำขอนี้กำลังทำงานอยู่แล้วในคิว Flow Kit (ประเภท: {req_type})",
+                    "status": active_req[0]['status'],
+                    "request_id": active_req[0]['id'],
+                    "video_id": video_id,
+                    "scene_id": scene_id,
+                }
 
         except Exception as flow_err:
             log(f"[Flow Kit Error] {flow_err}")
