@@ -1300,9 +1300,7 @@
 
       <!-- VIEW 5: SEEDANCE GEN -->
       <div id="seedanceGenView" class="tab-view hidden">
-        <div class="layout-grid workflow-grid" style="grid-template-columns: 7fr 3fr;">
-          <!-- Left Column: Settings, Batch Scanner & Scanned Prompts List -->
-          <div style="display: flex; flex-direction: column; gap: 20px;">
+        <div style="display: flex; flex-direction: column; gap: 20px;">
             <!-- Configuration & Batch Scanner Card -->
             <section class="card">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
@@ -1570,16 +1568,11 @@
                 </div>
               </div>
             </section>
-          </div>
 
-          <!-- Right Column: Status, Run Controls & Console -->
-          <div style="display: flex; flex-direction: column; gap: 20px;">
-            <section class="card" style="height: 100%; display: flex; flex-direction: column;">
-              <h2 class="section-title">🚀 Seedance Execution</h2>
-              <p class="section-subtitle">สถานะและบันทึกการส่งคำสั่งไปยัง CapCut Dreamina (9222)</p>
-
+            <!-- Card 5: Console & Execution Log (Bottom Full Width) -->
+            <section class="card" style="margin-top: 0;">
               <!-- Progress Bar -->
-              <div id="seedanceProgressContainer" class="hidden" style="margin-bottom: 16px;">
+              <div id="seedanceProgressContainer" class="hidden" style="margin-bottom: 14px;">
                 <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; color: rgba(255,255,255,0.7);">
                   <span>ความคืบหน้า</span>
                   <span id="seedanceProgressText">0% (0/0)</span>
@@ -1589,16 +1582,15 @@
                 </div>
               </div>
 
-              <!-- Console Box -->
+              <!-- Console Header & Box -->
               <div class="console-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <h3 style="margin: 0; font-size: 0.95rem; color: #8da6ff;">📟 Console Logs</h3>
+                <h3 style="margin: 0; font-size: 0.95rem; color: #8da6ff;">📟 Console Logs (บันทึกการส่งคำสั่ง)</h3>
                 <button id="clearSeedanceConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem; border-radius: 8px;">Clear</button>
               </div>
-              <div id="seedanceConsole" class="console-box" style="flex-grow: 1; min-height: 280px; max-height: 500px; overflow-y: auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; font-family: monospace; font-size: 0.82rem;">
+              <div id="seedanceConsole" class="console-box" style="min-height: 200px; max-height: 450px; overflow-y: auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; font-family: monospace; font-size: 0.82rem;">
                 <div class="console-line system">พร้อมสำหรับการใช้งาน Seedance Video Gen (CapCut Dreamina)</div>
               </div>
             </section>
-          </div>
         </div>
       </div>
 
@@ -2478,6 +2470,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=98"></script>
+  <script src="/web/app.js?v=99"></script>
 </body>
 </html>
