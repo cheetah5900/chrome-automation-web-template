@@ -9546,6 +9546,8 @@ function updateSeedanceRunButtonUI() {
   }
   window.updateSeedanceRunButtonUI = updateSeedanceRunButtonUI;
 
+  window.seedanceExpandedFolders = window.seedanceExpandedFolders || new Set();
+
   function renderSeedanceQueue() {
     const container = document.getElementById('seedanceQueueList');
     const badge = document.getElementById('seedancePromptCountBadge');
@@ -9594,138 +9596,210 @@ function updateSeedanceRunButtonUI() {
     container.innerHTML = '';
     const isAuto = document.getElementById('chkSeedanceClickSubmit') ? document.getElementById('chkSeedanceClickSubmit').checked : true;
 
+    // Group items by folder into compact chips like #seedanceSubfoldersSummary
+    const folderMap = new Map();
     seedanceBatchQueue.forEach((item, index) => {
-      const isCurrentStep = !isAuto && seedanceStepIndex === index;
-      const isCompletedStep = !isAuto && seedanceStepIndex > index;
-      const promptLen = (item.prompt_text || '').length;
-      const isOver4000 = promptLen > 4000;
-
-      const card = document.createElement('div');
-      card.className = 'seedance-queue-card';
-      card.id = `seedance-card-${index}`;
-      if (item.num !== undefined && item.num !== null) {
-        card.setAttribute('data-num', item.num);
+      const fKey = item.subfolder_name || (item.num !== undefined && item.num !== null ? String(item.num) : `${index + 1}`);
+      if (!folderMap.has(fKey)) {
+        folderMap.set(fKey, {
+          folderName: fKey,
+          num: item.num,
+          items: []
+        });
       }
-      if (isCurrentStep) {
-        card.style.background = 'rgba(139, 92, 246, 0.15)';
-        card.style.border = '1px solid #c084fc';
-        card.style.boxShadow = '0 0 12px rgba(168, 85, 247, 0.3)';
-      } else if (isCompletedStep) {
-        card.style.background = 'rgba(16, 185, 129, 0.08)';
-        card.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      folderMap.get(fKey).items.push({ item, index });
+    });
+    const folderGroups = Array.from(folderMap.values());
+
+    // Summary header line: e.g. 📁 3 โฟลเดอร์ | 📝 รวม 6 ไฟล์ animation prompt | ✓ เลือกแล้ว 6 รายการ
+    const headerSummary = document.createElement('div');
+    headerSummary.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap; gap: 8px;';
+    headerSummary.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.84rem;">
+        <span style="font-weight: 600; color: #a5b4fc;">📁 ${folderGroups.length} โฟลเดอร์</span>
+        <span style="color: rgba(255,255,255,0.3);">|</span>
+        <span style="font-weight: 600; color: #38bdf8;">📝 รวม ${seedanceBatchQueue.length} ไฟล์ animation prompt</span>
+        <span style="color: rgba(255,255,255,0.3);">|</span>
+        <span style="font-weight: 600; color: #34d399;">✓ เลือกแล้ว ${validCount} รายการ</span>
+      </div>
+    `;
+    container.appendChild(headerSummary);
+
+    // Compact flex-wrap chips container
+    const chipsContainer = document.createElement('div');
+    chipsContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; max-height: 480px; overflow-y: auto; padding: 2px 0; align-items: flex-start;';
+
+    folderGroups.forEach((group) => {
+      const hasCurrentStep = group.items.some(x => !isAuto && seedanceStepIndex === x.index);
+      const hasCompletedStep = group.items.every(x => !isAuto && seedanceStepIndex > x.index);
+      const isOver4000 = group.items.some(x => (x.item.prompt_text || '').length > 4000);
+      const hasLocalVideo = group.items.some(x => x.item.local_video_exists);
+      const allChecked = group.items.every(x => x.item.checked !== false);
+      const someChecked = group.items.some(x => x.item.checked !== false);
+
+      const chipWrapper = document.createElement('div');
+      chipWrapper.style.cssText = 'display: inline-flex; flex-direction: column; gap: 4px;';
+      if (group.num !== undefined && group.num !== null) {
+        chipWrapper.setAttribute('data-num', group.num);
+      }
+      chipWrapper.id = `seedance-folder-chip-${group.folderName}`;
+
+      const chip = document.createElement('div');
+      chip.className = 'seedance-queue-chip';
+      // Assign seedance-card-${index} to the primary item for backward compatibility
+      chip.id = `seedance-card-${group.items[0].index}`;
+      chip.setAttribute('data-folder', group.folderName);
+
+      let chipBg = allChecked ? 'rgba(99, 102, 241, 0.15)' : (someChecked ? 'rgba(99, 102, 241, 0.08)' : 'rgba(0, 0, 0, 0.25)');
+      let chipBorder = allChecked ? '1px solid rgba(129, 140, 248, 0.35)' : (someChecked ? '1px dashed rgba(129, 140, 248, 0.45)' : '1px solid rgba(255, 255, 255, 0.1)');
+      let chipShadow = 'none';
+
+      if (hasCurrentStep) {
+        chipBg = 'rgba(139, 92, 246, 0.25)';
+        chipBorder = '1px solid #c084fc';
+        chipShadow = '0 0 10px rgba(168, 85, 247, 0.4)';
+      } else if (hasCompletedStep) {
+        chipBg = 'rgba(16, 185, 129, 0.1)';
+        chipBorder = '1px solid rgba(16, 185, 129, 0.4)';
       } else if (isOver4000) {
-        card.style.background = 'rgba(239, 68, 68, 0.08)';
-        card.style.border = '1px solid rgba(239, 68, 68, 0.45)';
-      } else {
-        card.style.background = item.checked ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.2)';
-        card.style.border = `1px solid ${item.has_prompt ? 'rgba(127, 92, 255, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`;
+        chipBg = 'rgba(239, 68, 68, 0.12)';
+        chipBorder = '1px solid rgba(239, 68, 68, 0.45)';
       }
-      card.style.borderRadius = '10px';
-      card.style.padding = '12px 14px';
-      card.style.display = 'flex';
-      card.style.flexDirection = 'column';
-      card.style.gap = '8px';
-      card.style.transition = 'all 0.2s ease';
 
-      const header = document.createElement('div');
-      header.style.display = 'flex';
-      header.style.justifyContent = 'space-between';
-      header.style.alignItems = 'center';
-      header.style.flexWrap = 'wrap';
-      header.style.gap = '8px';
+      chip.style.cssText = `display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 6px; background: ${chipBg}; border: ${chipBorder}; box-shadow: ${chipShadow}; font-size: 0.8rem; cursor: pointer; user-select: none; transition: all 0.2s ease; opacity: ${allChecked || someChecked ? '1' : '0.55'};`;
 
-      const left = document.createElement('div');
-      left.style.display = 'flex';
-      left.style.alignItems = 'center';
-      left.style.gap = '10px';
-      left.style.flexWrap = 'wrap';
-
-      // Checkbox for user to select / unselect this specific prompt item
+      // Checkbox for the entire folder
       const chk = document.createElement('input');
       chk.type = 'checkbox';
-      chk.checked = item.checked !== false;
-      chk.style.cssText = 'width: 17px; height: 17px; cursor: pointer; accent-color: #7f5cff; margin: 0;';
-      chk.title = 'คลิกเพื่อเลือกหรือยกเลิกการสร้างรายการนี้';
+      chk.checked = allChecked;
+      chk.indeterminate = someChecked && !allChecked;
+      chk.style.cssText = 'width: 15px; height: 15px; cursor: pointer; accent-color: #7f5cff; margin: 0;';
+      chk.title = 'คลิกเพื่อเลือกหรือยกเลิกทั้งโฟลเดอร์นี้';
+      chk.addEventListener('click', (e) => e.stopPropagation());
       chk.addEventListener('change', (e) => {
-        item.checked = e.target.checked;
-        card.style.background = item.checked ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.2)';
-        card.style.opacity = item.checked ? '1' : '0.5';
-        const validCount = seedanceBatchQueue.filter(p => p.has_prompt && p.checked !== false).length;
-        if (badge) badge.textContent = `${validCount}/${seedanceBatchQueue.length} Prompts Ready`;
-        updateSeedanceRunButtonUI();
+        const checked = e.target.checked;
+        group.items.forEach(x => { x.item.checked = checked; });
+        renderSeedanceQueue();
       });
-      left.appendChild(chk);
+      chip.appendChild(chk);
 
-      const queueIndex = index + 1;
-      const totalPrompts = item.total_prompts || (item.prompt_files ? item.prompt_files.length : 1);
-      const subIdx = item.sub_index || 1;
-      const folderName = item.subfolder_name || (item.num !== undefined && item.num !== null ? String(item.num) : `${queueIndex}`);
-      const promptFileName = item.prompt_file || 'ไม่พบไฟล์ prompt';
-
-      // Group elements on the left side of the card header
-      const titleGroup = document.createElement('div');
-      titleGroup.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;';
-
-      // 1. Sequential Queue Badge: e.g. #1, #2, #3...
-      const queueBadge = document.createElement('span');
-      queueBadge.style.cssText = 'background: rgba(127, 92, 255, 0.22); border: 1px solid rgba(127, 92, 255, 0.45); color: #c4b5fd; font-weight: 700; font-size: 0.78rem; padding: 2px 7px; border-radius: 6px;';
-      queueBadge.textContent = `#${queueIndex}`;
-      titleGroup.appendChild(queueBadge);
-
-      // 2. Clear Folder Title: e.g. 📁 โฟลเดอร์ 1
-      const folderTitle = document.createElement('span');
-      folderTitle.style.cssText = `font-weight: 700; font-size: 0.92rem; color: ${isOver4000 ? '#ef4444' : (isCurrentStep ? '#f3e8ff' : '#8da6ff')}; display: inline-flex; align-items: center; gap: 4px;`;
-      folderTitle.innerHTML = `📁 โฟลเดอร์ <strong style="color: #fff;">${folderName}</strong>`;
-      titleGroup.appendChild(folderTitle);
-
-      // 3. Highlighted Prompt File Badge: e.g. 📝 animation_prompt_1.md
-      const promptFileBadge = document.createElement('span');
-      promptFileBadge.style.cssText = 'background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 600; font-size: 0.8rem; padding: 2px 9px; border-radius: 6px; font-family: monospace; display: inline-flex; align-items: center; gap: 4px;';
-      promptFileBadge.innerHTML = `📝 ${promptFileName}`;
-      titleGroup.appendChild(promptFileBadge);
-
-      // 4. Sub-item / Scene Sequence Badge: e.g. ช็อต 1/3
-      if (totalPrompts > 1) {
-        const subBadge = document.createElement('span');
-        subBadge.style.cssText = 'background: rgba(167, 139, 250, 0.15); border: 1px solid rgba(167, 139, 250, 0.35); color: #c4b5fd; font-weight: 600; font-size: 0.74rem; padding: 2px 7px; border-radius: 6px;';
-        subBadge.textContent = `ช็อต ${subIdx}/${totalPrompts}`;
-        titleGroup.appendChild(subBadge);
-      }
-
-      // 5. Existing Video Badge (if already rendered locally)
-      if (item.local_video_exists) {
-        const localVideoBadge = document.createElement('span');
-        localVideoBadge.style.cssText = 'background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; font-weight: 600; font-size: 0.74rem; padding: 2px 7px; border-radius: 6px;';
-        const sizeStr = item.local_video_size_mb ? ` (${item.local_video_size_mb} MB)` : '';
-        localVideoBadge.textContent = `🟢 มี MP4${sizeStr}`;
-        titleGroup.appendChild(localVideoBadge);
-      }
-
-      left.appendChild(titleGroup);
+      // Folder label and count: e.g. 📁 6: 2 files
+      const labelGroup = document.createElement('span');
+      labelGroup.style.cssText = 'display: inline-flex; align-items: center; gap: 5px;';
+      const countText = `${group.items.length} ${group.items.length === 1 ? 'file' : 'files'}`;
+      labelGroup.innerHTML = `
+        <span style="color: ${isOver4000 ? '#fca5a5' : '#c4b5fd'}; font-weight: 600;">📁 ${group.folderName}:</span>
+        <span style="color: #38bdf8; font-weight: 700;">${countText}</span>
+      `;
+      chip.appendChild(labelGroup);
 
       if (isOver4000) {
-        const overBadge = document.createElement('span');
-        overBadge.style.fontSize = '0.78rem';
-        overBadge.style.fontWeight = 'bold';
-        overBadge.style.color = '#fca5a5';
-        overBadge.style.background = 'rgba(239, 68, 68, 0.2)';
-        overBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
-        overBadge.style.padding = '2px 8px';
-        overBadge.style.borderRadius = '6px';
-        overBadge.textContent = `⚠️ เกิน 4,000 ตัวอักษร (${promptLen.toLocaleString()} ตัว)`;
-        left.appendChild(overBadge);
+        const overSpan = document.createElement('span');
+        overSpan.style.cssText = 'color: #ef4444; font-size: 0.72rem; font-weight: bold; background: rgba(239, 68, 68, 0.2); padding: 1px 4px; border-radius: 4px;';
+        overSpan.textContent = '⚠️ >4k';
+        chip.appendChild(overSpan);
+      }
+      if (hasLocalVideo) {
+        const vidSpan = document.createElement('span');
+        vidSpan.style.cssText = 'color: #34d399; font-size: 0.72rem; font-weight: 600;';
+        vidSpan.textContent = '🟢 MP4';
+        chip.appendChild(vidSpan);
       }
 
-      const right = document.createElement('div');
-      header.appendChild(left);
-      header.appendChild(right);
-      card.appendChild(header);
+      const isExpanded = window.seedanceExpandedFolders && window.seedanceExpandedFolders.has(group.folderName);
+      const arrowSpan = document.createElement('span');
+      arrowSpan.style.cssText = 'color: rgba(255,255,255,0.4); font-size: 0.7rem; margin-left: 1px;';
+      arrowSpan.textContent = isExpanded ? '▾' : '▸';
+      chip.appendChild(arrowSpan);
 
-      // (กล่องข้อความพรีวิว Prompt นำออกตามคำขอ: ไม่ต้องมีกล่องนี้)
+      // Tooltip listing all files in the folder
+      const tooltipLines = group.items.map(x => {
+        const it = x.item;
+        const shot = it.total_prompts > 1 ? ` (ช็อต ${it.sub_index || 1}/${it.total_prompts})` : '';
+        const chkMark = it.checked !== false ? '✓' : '✗';
+        return `[${chkMark}] #${x.index + 1} 📝 ${it.prompt_file}${shot}`;
+      }).join('\n');
+      chip.title = `📁 โฟลเดอร์ ${group.folderName} (${countText}):\n${tooltipLines}\n(คลิกชิปเพื่อขยาย/ย่อรายการไฟล์ย่อย)`;
 
-      container.appendChild(card);
+      // Click chip to toggle expansion of sub-item pills
+      chip.addEventListener('click', (e) => {
+        if (e.target.tagName && e.target.tagName.toLowerCase() === 'input') return;
+        window.seedanceExpandedFolders = window.seedanceExpandedFolders || new Set();
+        if (window.seedanceExpandedFolders.has(group.folderName)) {
+          window.seedanceExpandedFolders.delete(group.folderName);
+        } else {
+          window.seedanceExpandedFolders.add(group.folderName);
+        }
+        renderSeedanceQueue();
+      });
+      chipWrapper.appendChild(chip);
+
+      // Render expandable sub-items drawer if expanded
+      if (isExpanded) {
+        const drawer = document.createElement('div');
+        drawer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 5px; padding: 4px 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(127, 92, 255, 0.25); border-radius: 6px; margin-top: 2px;';
+        group.items.forEach(x => {
+          const it = x.item;
+          const subCard = document.createElement('div');
+          subCard.id = `seedance-card-${x.index}`;
+          subCard.className = 'seedance-queue-card';
+          const isSubCurrent = !isAuto && seedanceStepIndex === x.index;
+          const isSubCompleted = !isAuto && seedanceStepIndex > x.index;
+          const subOver4000 = (it.prompt_text || '').length > 4000;
+
+          let subBg = it.checked !== false ? 'rgba(56, 189, 248, 0.1)' : 'rgba(0, 0, 0, 0.3)';
+          let subBorder = it.checked !== false ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)';
+          if (isSubCurrent) {
+            subBg = 'rgba(139, 92, 246, 0.2)';
+            subBorder = '1px solid #c084fc';
+          } else if (isSubCompleted) {
+            subBg = 'rgba(16, 185, 129, 0.1)';
+            subBorder = '1px solid rgba(16, 185, 129, 0.4)';
+          } else if (subOver4000) {
+            subBg = 'rgba(239, 68, 68, 0.15)';
+            subBorder = '1px solid rgba(239, 68, 68, 0.4)';
+          }
+
+          subCard.style.cssText = `display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: 5px; background: ${subBg}; border: ${subBorder}; font-size: 0.74rem;`;
+
+          const subChk = document.createElement('input');
+          subChk.type = 'checkbox';
+          subChk.checked = it.checked !== false;
+          subChk.style.cssText = 'width: 13px; height: 13px; cursor: pointer; accent-color: #7f5cff; margin: 0;';
+          subChk.addEventListener('change', (e) => {
+            it.checked = e.target.checked;
+            renderSeedanceQueue();
+          });
+          subCard.appendChild(subChk);
+
+          const shotText = it.total_prompts > 1 ? ` (${it.sub_index}/${it.total_prompts})` : '';
+          const subContent = document.createElement('span');
+          subContent.style.cssText = 'display: inline-flex; align-items: center; gap: 4px;';
+          subContent.innerHTML = `
+            <span style="color: #c4b5fd; font-weight: 700;">#${x.index + 1}</span>
+            <span style="color: #38bdf8; font-family: monospace;">📝 ${it.prompt_file}</span>
+            <span style="color: #a78bfa;">${shotText}</span>
+          `;
+          subCard.appendChild(subContent);
+          drawer.appendChild(subCard);
+        });
+        chipWrapper.appendChild(drawer);
+      } else {
+        // When collapsed, provide fallback anchors so target IDs exist
+        group.items.forEach(x => {
+          if (x.index !== group.items[0].index) {
+            const hiddenAnchor = document.createElement('span');
+            hiddenAnchor.id = `seedance-card-${x.index}`;
+            hiddenAnchor.style.display = 'none';
+            chipWrapper.appendChild(hiddenAnchor);
+          }
+        });
+      }
+
+      chipsContainer.appendChild(chipWrapper);
     });
 
+    container.appendChild(chipsContainer);
     updateSeedanceRunButtonUI();
   }
   window.renderSeedanceQueue = renderSeedanceQueue;
@@ -10010,11 +10084,14 @@ function updateSeedanceRunButtonUI() {
 
       if (autoScroll) {
         setTimeout(() => {
+          const matchedItem = seedanceBatchQueue[matchedIndices[0]];
+          const folderChip = matchedItem ? document.getElementById(`seedance-folder-chip-${matchedItem.subfolder_name}`) : null;
           const targetCard = document.getElementById(`seedance-card-${matchedIndices[0]}`);
-          if (targetCard) {
-            targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            targetCard.classList.add('seedance-highlight-pulse');
-            setTimeout(() => targetCard.classList.remove('seedance-highlight-pulse'), 3000);
+          const pulseTarget = (folderChip && (!targetCard || targetCard.offsetParent === null)) ? folderChip : (targetCard || folderChip);
+          if (pulseTarget) {
+            pulseTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            pulseTarget.classList.add('seedance-highlight-pulse');
+            setTimeout(() => pulseTarget.classList.remove('seedance-highlight-pulse'), 3000);
           }
         }, 60);
       }
