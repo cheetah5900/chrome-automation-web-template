@@ -1512,6 +1512,27 @@
                   <span>🖼️ ล้างรูป</span>
                 </button>
               </div>
+
+              <!-- Dynamic Mode Explanation -->
+              <div id="seedanceModeDesc" style="font-size: 0.82rem; color: #34d399; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 8px 12px; line-height: 1.4; margin-top: 12px;">
+                ⚡ โหมดอัตโนมัติ: ระบบจะส่งข้อมูลตามคิวและกด Generate บนเว็บ Dreamina ให้อัตโนมัติทุกรายการ
+              </div>
+
+              <!-- Run Action Buttons -->
+              <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+                <button id="runSeedanceBatchBtn" class="primary has-tooltip" style="flex: 1; min-width: 180px; padding: 14px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); transition: all 0.2s ease;">
+                  <span class="btn-text">🚀 เริ่มรัน Seedance อัตโนมัติ</span>
+                  <div class="custom-tooltip" id="tooltip_runSeedanceBatchBtn"></div>
+                </button>
+                <button id="btnCheckSeedanceErrors" type="button" class="secondary has-tooltip" style="padding: 14px 16px; font-size: 0.9rem; font-weight: bold; border-radius: 12px; background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.35); color: #facc15; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                  <span>🔍 ตรวจสอบ Error</span>
+                  <div class="custom-tooltip" id="tooltip_btnCheckSeedanceErrors">สแกนตรวจสอบข้อผิดพลาดบน Dreamina เช่น วิดีโอติดเนื้อหาของบุคคลที่สาม</div>
+                </button>
+                <button id="btnSeedanceForceStop" class="secondary has-tooltip" style="padding: 14px 16px; font-size: 0.9rem; font-weight: bold; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #f87171; white-space: nowrap;">
+                  🛑 Force Stop
+                  <div class="custom-tooltip" id="tooltip_btnSeedanceForceStop"></div>
+                </button>
+              </div>
             </section>
 
             <!-- Standalone Search & Download Video Section -->
@@ -1556,31 +1577,6 @@
             <section class="card" style="height: 100%; display: flex; flex-direction: column;">
               <h2 class="section-title">🚀 Seedance Execution</h2>
               <p class="section-subtitle">สถานะและบันทึกการส่งคำสั่งไปยัง CapCut Dreamina (9222)</p>
-
-              <!-- Safety Options & Run Buttons -->
-              <div style="margin: 15px 0 16px 0; display: flex; flex-direction: column; gap: 12px;">
-                <!-- Dynamic Mode Explanation -->
-                <div id="seedanceModeDesc" style="font-size: 0.82rem; color: #34d399; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 8px 12px; line-height: 1.4;">
-                  ⚡ โหมดอัตโนมัติ: ระบบจะส่งข้อมูลตามคิวและกด Generate บนเว็บ Dreamina ให้อัตโนมัติทุกรายการ
-                </div>
-
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                  <button id="runSeedanceBatchBtn" class="primary has-tooltip" style="flex: 1; min-width: 180px; padding: 14px; font-size: 0.95rem; font-weight: bold; border-radius: 12px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); transition: all 0.2s ease;">
-                    <span class="btn-text">🚀 เริ่มรัน Seedance อัตโนมัติ</span>
-                    <div class="custom-tooltip" id="tooltip_runSeedanceBatchBtn"></div>
-                  </button>
-                  <button id="btnCheckSeedanceErrors" type="button" class="secondary has-tooltip" style="padding: 14px 16px; font-size: 0.9rem; font-weight: bold; border-radius: 12px; background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.35); color: #facc15; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                    <span>🔍 ตรวจสอบ Error</span>
-                    <div class="custom-tooltip" id="tooltip_btnCheckSeedanceErrors">สแกนตรวจสอบข้อผิดพลาดบน Dreamina เช่น วิดีโอติดเนื้อหาของบุคคลที่สาม</div>
-                  </button>
-                  <button id="btnSeedanceForceStop" class="secondary has-tooltip" style="padding: 14px 16px; font-size: 0.9rem; font-weight: bold; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #f87171; white-space: nowrap;">
-                    🛑 Force Stop
-                    <div class="custom-tooltip" id="tooltip_btnSeedanceForceStop"></div>
-                  </button>
-                </div>
-              </div>
-
-
 
               <!-- Progress Bar -->
               <div id="seedanceProgressContainer" class="hidden" style="margin-bottom: 16px;">
@@ -2482,6 +2478,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=97"></script>
+  <script src="/web/app.js?v=98"></script>
 </body>
 </html>
