@@ -1511,26 +1511,39 @@ def find_record_on_dreamina(
             }
         }
 
-        const BOILERPLATE_WORDS = new Set([
+        const STOPWORDS = new Set([
+            'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'aren',
+            'as', 'at', 'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by',
+            'can', 'could', 'did', 'do', 'does', 'doing', 'down', 'during', 'each', 'few', 'for', 'from',
+            'further', 'had', 'has', 'have', 'having', 'he', 'her', 'here', 'hers', 'herself', 'him',
+            'himself', 'his', 'how', 'i', 'if', 'in', 'into', 'is', 'isn', 'it', 'its', 'itself', 'just',
+            'me', 'more', 'most', 'my', 'myself', 'no', 'nor', 'not', 'now', 'of', 'off', 'on', 'once',
+            'only', 'or', 'other', 'our', 'ours', 'ourselves', 'out', 'over', 'own', 'same', 'she', 'should',
+            'so', 'some', 'such', 'than', 'that', 'the', 'their', 'theirs', 'them', 'themselves', 'then',
+            'there', 'these', 'they', 'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up',
+            'very', 'was', 'wasn', 'we', 'were', 'what', 'when', 'where', 'which', 'while', 'who', 'whom',
+            'why', 'with', 'would', 'you', 'your', 'yours', 'yourself', 'yourselves',
+            'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+            'first', 'second', 'third', 'seconds', 'minute', 'minutes', 'duration',
             'photorealistic', 'raw', 'eyewitness', 'footage', 'vertical', 'scene', 'featuring', 'separate',
             'groups', 'terrified', 'tiny', 'asian', 'human', 'civilians', 'varied', 'ages', 'facing',
             'believable', 'scale', 'contrast', 'against', 'real', 'hand', 'ultra', 'detailed', 'emotional',
             'expressions', 'across', 'children', 'adults', 'elderly', 'people', 'dry', 'deadpan', 'comic',
             'timing', 'inside', 'realistic', 'disaster', 'moment', 'warm', 'hopeful', 'cinematic', 'lighting',
             'shallow', 'depth', 'field', 'camera', 'shake', 'chaotic', 'micro', 'jitter', 'mimicking',
-            'person', 'holding', 'smartphone', 'documentary', 'style', 'one', 'continuous', 'shot', 'with',
-            'cuts', 'blood', 'gore', 'text', 'subtitles', 'watermarks', 'logos', 'readable', 'brand',
-            'names', 'use', 'fully', 'live', 'action', 'background', 'grounded', 'environmental', 'detail',
-            'natural', 'practical', 'atmosphere', 'textures', 'physically', 'plausible', 'throughout',
-            'entire', 'mimic', 'exactly', 'what', 'would', 'see', 'life', 'cgi', 'polish', 'claymation',
-            'render', 'look', 'miniature', 'figurine', 'model', 'toy', 'texture', 'everything', 'must',
-            'world', 'physical', 'frame', 'right', 'left', 'extreme', 'speed', 'motion', 'blur', 'seconds',
-            'inches', 'screaming', 'disbelief', 'background', 'slowly', 'briefly', 'seen', 'attach', 'product',
-            'image', 'reference', 'dialogue', 'audio', 'spoken', 'language', 'mouth', 'sync', 'clear', 'pacing',
-            'dramatic', 'contrast', 'between', 'sound', 'requirements', 'negative', 'constraints', 'words',
-            'letters', 'overlays', 'floating', 'cartoon', 'fantasy', 'browser', 'screen', 'smooth', 'plastic', 'skin',
-            'คนแคระ', 'dwarf', 'dwarfs', 'dwarves', 'preset', 'seedance', 'dreamina', 'aspect', 'ratio', 'resolution',
-            'fps', 'prompt', 'scene', 'shot', 'camera', 'action', 'timeline', 'timestamp', 'generate', 'video', 'seconds'
+            'person', 'holding', 'smartphone', 'documentary', 'style', 'shot', 'with', 'cuts', 'blood',
+            'gore', 'text', 'subtitles', 'watermarks', 'logos', 'readable', 'brand', 'names', 'use',
+            'fully', 'live', 'action', 'background', 'grounded', 'environmental', 'detail', 'natural',
+            'practical', 'atmosphere', 'textures', 'physically', 'plausible', 'throughout', 'entire',
+            'mimic', 'exactly', 'what', 'would', 'see', 'life', 'cgi', 'polish', 'claymation', 'render',
+            'look', 'miniature', 'figurine', 'model', 'toy', 'texture', 'everything', 'must', 'world',
+            'physical', 'frame', 'right', 'left', 'extreme', 'speed', 'motion', 'blur', 'inches',
+            'screaming', 'disbelief', 'slowly', 'briefly', 'seen', 'attach', 'product', 'image',
+            'reference', 'dialogue', 'audio', 'spoken', 'language', 'mouth', 'sync', 'clear', 'pacing',
+            'dramatic', 'between', 'sound', 'requirements', 'negative', 'constraints', 'words', 'letters',
+            'overlays', 'floating', 'cartoon', 'fantasy', 'browser', 'screen', 'smooth', 'plastic', 'skin',
+            'คนแคระ', 'dwarf', 'dwarfs', 'dwarves', 'preset', 'seedance', 'dreamina', 'aspect', 'ratio',
+            'resolution', 'fps', 'prompt', 'generate', 'video', 'continuity', 'available', 'identity'
         ]);
 
         function getDistinctiveWords(str) {
@@ -1538,7 +1551,7 @@ def find_record_on_dreamina(
             return str.toLowerCase()
                 .replace(/[^a-z0-9\u0E00-\u0E7F\s]/g, ' ')
                 .split(/\s+/)
-                .filter(w => w.length >= 3 && !BOILERPLATE_WORDS.has(w));
+                .filter(w => w.length >= 3 && !STOPWORDS.has(w));
         }
 
         const queryDistinctiveWords = getDistinctiveWords(fullPrompt);
@@ -1570,71 +1583,59 @@ def find_record_on_dreamina(
             let matchedDistinctiveCount = 0;
             let snippetMatched = false;
 
-            // 1. Exact phrase / snippet match from extract_prompt_search_snippets (Must be substantial >= 22 chars)
+            // 1. Exact phrase / snippet match from extract_prompt_search_snippets (Must be substantial >= 25 chars)
             if (snipList.length > 0) {
                 for (const snip of snipList) {
                     const normSnip = snip.replace(/\s+/g, ' ').trim().toLowerCase();
-                    if (normSnip && normSnip.length >= 22) {
+                    if (normSnip && normSnip.length >= 25) {
                         if (normTextLower.includes(normSnip)) {
-                            score += 180;
+                            score += 300;
                             snippetMatched = true;
-                            if (!matchType) matchType = 'snippet';
+                            matchType = 'snippet';
                             break;
                         }
                     }
                 }
             }
 
-            // 2. Full distinctive keyword overlap across entire prompt
-            if (queryDistinctiveSet.size > 0) {
-                const cardDistinctiveWords = getDistinctiveWords(normText);
-                const cardWordSet = new Set(cardDistinctiveWords);
-                for (const qw of queryDistinctiveSet) {
-                    if (cardWordSet.has(qw)) {
-                        matchedDistinctiveCount++;
-                    }
-                }
-                score += matchedDistinctiveCount * 18;
-                if (matchedDistinctiveCount >= 7 && !matchType) {
-                    matchType = 'keywords';
+            // 2. Distinctive non-stop word overlap across entire prompt
+            const cardDistinctiveWords = getDistinctiveWords(normText);
+            const cardWordSet = new Set(cardDistinctiveWords);
+            for (const qw of queryDistinctiveSet) {
+                if (cardWordSet.has(qw)) {
+                    matchedDistinctiveCount++;
                 }
             }
 
-            // 3. Exact full name match: only if name is descriptive (>= 5 chars and not purely digits)
-            const isDescriptiveName = name && name.length >= 5 && !/^\d+$/.test(name);
-            if (isDescriptiveName && (normTextLower.includes(name.toLowerCase()))) {
-                score += 80;
-                if (!matchType) matchType = 'name';
-            }
+            const unionSize = new Set([...queryDistinctiveSet, ...cardWordSet]).size;
+            const jaccard = unionSize > 0 ? (matchedDistinctiveCount / unionSize) : 0;
+            const overlapRatio = queryDistinctiveSet.size > 0 ? (matchedDistinctiveCount / queryDistinctiveSet.size) : 0;
 
-            // 4. Exact Sequence Number Header match:
-            if (num) {
-                const numStr = String(num).trim();
-                const headerRegex = new RegExp('(?:^|[\\n\\r\\s])' + numStr + '(?![\\d:])(?:\\s*[-.:_\\s]|\\s+[a-zA-Zก-๙])', 'i');
-                const wordRegex = new RegExp('(?:^|[^\\w\\d:])' + numStr + '(?![\\d:])', 'i');
-                if (headerRegex.test(normText) || headerRegex.test(text)) {
-                    score += 35;
-                    if (!matchType) matchType = 'num_header';
-                } else if (wordRegex.test(normText) || wordRegex.test(text)) {
-                    score += 15;
-                    if (!matchType) matchType = 'num';
-                }
-            }
+            // 3. Sequence number conflict check
+            const cardNumMatch = normText.match(/^(\d+)(?:\s|[-:])/);
+            const cardLeadingNum = cardNumMatch ? parseInt(cardNumMatch[1], 10) : null;
+            const targetNum = (num !== null && num !== undefined && String(num).trim() !== '') ? parseInt(num, 10) : null;
+            const numConflict = (cardLeadingNum !== null && targetNum !== null && !isNaN(cardLeadingNum) && !isNaN(targetNum) && cardLeadingNum !== targetNum);
 
             // Strict Confidence Validation:
-            // Match is ONLY valid if:
-            // EITHER (A): Substantial specific phrase (>= 22 chars) matches AND at least 3 distinctive words also match
-            // OR (B): Strong keyword overlap: at least 7 distinctive words match AND overlap ratio >= 25%
-            const overlapRatio = queryDistinctiveSet.size > 0 ? (matchedDistinctiveCount / queryDistinctiveSet.size) : 0;
-            const isConfident = (snippetMatched && (matchedDistinctiveCount >= 3 || queryDistinctiveSet.size < 5)) ||
-                                (matchedDistinctiveCount >= 7 && (overlapRatio >= 0.25 || matchedDistinctiveCount >= 10));
+            // MUST NOT conflict on leading sequence numbers (e.g. Card 139 vs Folder 10)
+            // AND EITHER:
+            // (A): Exact multi-word snippet matched (>= 25 chars) AND at least 4 distinctive words match
+            // (B): Strong keyword overlap: at least 15 distinctive non-stop words match AND Jaccard >= 0.25 AND overlap >= 0.35
+            const isConfident = !numConflict && (
+                (snippetMatched && (matchedDistinctiveCount >= 4 || queryDistinctiveSet.size < 5)) ||
+                (matchedDistinctiveCount >= 15 && jaccard >= 0.25 && overlapRatio >= 0.35)
+            );
 
-            if (isConfident && score > bestScore) {
-                bestScore = score;
-                bestCard = el;
-                bestMatchType = matchType;
-                bestText = text;
-                bestMatchedWords = matchedDistinctiveCount;
+            if (isConfident) {
+                score += matchedDistinctiveCount * 10;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestCard = el;
+                    bestMatchType = matchType || 'keywords';
+                    bestText = text;
+                    bestMatchedWords = matchedDistinctiveCount;
+                }
             }
         }
 
@@ -2169,8 +2170,9 @@ def download_seedance_videos(
             click_download=True
         )
 
-        video_src = match_res.get("videoSrc") if (match_res and match_res.get("found")) else None
-        if not video_src:
+        is_matched = bool(match_res and match_res.get("found"))
+        video_src = match_res.get("videoSrc") if is_matched else None
+        if is_matched and not video_src:
             video_src = item.get("web_video_src")
 
         btn_clicked = bool(match_res.get("buttonClicked")) if (match_res and match_res.get("found")) else False

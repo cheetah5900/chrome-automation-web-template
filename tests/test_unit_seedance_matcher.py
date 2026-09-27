@@ -82,5 +82,17 @@ Style requirements: dwarf fantasy, photorealistic vertical 9:16 seedance dreamin
         self.assertTrue(any("ช่างตีเหล็ก" in s for s in snippets), "Action snippet missing")
 
 
+    def test_strict_discrimination_unrelated_prompts(self):
+        # Folder 6 chemical spill prompt vs online toddler spoon card
+        folder_6_prompt = "Photorealistic raw eyewitness footage, vertical 9:16 miniature human disaster scene featuring two separate groups of terrified tiny Asian human civilians facing a catastrophic toxic chemical spill where a massive overturned tanker truck hemorrhages a surging luminous neon-green corrosive chemical tide... 0-2s: The toxic chemical wave surges forward in a fast-moving glowing green river..."
+        online_toddler_card = "139 Duration: 15 seconds Use attached character references for identity continuity if available: @img1 = toddler / small child @img2 = father @img3 = mother A toddler picks up a large spoon, points it at the TV like a remote control, and begins pressing the buttons on the spoon handle..."
+
+        snips_f6 = extract_prompt_search_snippets(folder_6_prompt)
+        # Ensure none of the folder 6 snippets exist in the toddler card
+        for snip in snips_f6:
+            if len(snip) >= 20:
+                self.assertNotIn(snip.lower(), online_toddler_card.lower(), f"Snippet falsely appeared in card: {snip}")
+
+
 if __name__ == '__main__':
     unittest.main()
