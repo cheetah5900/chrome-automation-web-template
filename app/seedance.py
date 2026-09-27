@@ -1511,51 +1511,17 @@ def find_record_on_dreamina(
             }
         }
 
-        const STOPWORDS = new Set([
-            'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'aren',
-            'as', 'at', 'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by',
-            'can', 'could', 'did', 'do', 'does', 'doing', 'down', 'during', 'each', 'few', 'for', 'from',
-            'further', 'had', 'has', 'have', 'having', 'he', 'her', 'here', 'hers', 'herself', 'him',
-            'himself', 'his', 'how', 'i', 'if', 'in', 'into', 'is', 'isn', 'it', 'its', 'itself', 'just',
-            'me', 'more', 'most', 'my', 'myself', 'no', 'nor', 'not', 'now', 'of', 'off', 'on', 'once',
-            'only', 'or', 'other', 'our', 'ours', 'ourselves', 'out', 'over', 'own', 'same', 'she', 'should',
-            'so', 'some', 'such', 'than', 'that', 'the', 'their', 'theirs', 'them', 'themselves', 'then',
-            'there', 'these', 'they', 'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up',
-            'very', 'was', 'wasn', 'we', 'were', 'what', 'when', 'where', 'which', 'while', 'who', 'whom',
-            'why', 'with', 'would', 'you', 'your', 'yours', 'yourself', 'yourselves',
-            'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-            'first', 'second', 'third', 'seconds', 'minute', 'minutes', 'duration',
-            'photorealistic', 'raw', 'eyewitness', 'footage', 'vertical', 'scene', 'featuring', 'separate',
-            'groups', 'terrified', 'tiny', 'asian', 'human', 'civilians', 'varied', 'ages', 'facing',
-            'believable', 'scale', 'contrast', 'against', 'real', 'hand', 'ultra', 'detailed', 'emotional',
-            'expressions', 'across', 'children', 'adults', 'elderly', 'people', 'dry', 'deadpan', 'comic',
-            'timing', 'inside', 'realistic', 'disaster', 'moment', 'warm', 'hopeful', 'cinematic', 'lighting',
-            'shallow', 'depth', 'field', 'camera', 'shake', 'chaotic', 'micro', 'jitter', 'mimicking',
-            'person', 'holding', 'smartphone', 'documentary', 'style', 'shot', 'with', 'cuts', 'blood',
-            'gore', 'text', 'subtitles', 'watermarks', 'logos', 'readable', 'brand', 'names', 'use',
-            'fully', 'live', 'action', 'background', 'grounded', 'environmental', 'detail', 'natural',
-            'practical', 'atmosphere', 'textures', 'physically', 'plausible', 'throughout', 'entire',
-            'mimic', 'exactly', 'what', 'would', 'see', 'life', 'cgi', 'polish', 'claymation', 'render',
-            'look', 'miniature', 'figurine', 'model', 'toy', 'texture', 'everything', 'must', 'world',
-            'physical', 'frame', 'right', 'left', 'extreme', 'speed', 'motion', 'blur', 'inches',
-            'screaming', 'disbelief', 'slowly', 'briefly', 'seen', 'attach', 'product', 'image',
-            'reference', 'dialogue', 'audio', 'spoken', 'language', 'mouth', 'sync', 'clear', 'pacing',
-            'dramatic', 'between', 'sound', 'requirements', 'negative', 'constraints', 'words', 'letters',
-            'overlays', 'floating', 'cartoon', 'fantasy', 'browser', 'screen', 'smooth', 'plastic', 'skin',
-            'คนแคระ', 'dwarf', 'dwarfs', 'dwarves', 'preset', 'seedance', 'dreamina', 'aspect', 'ratio',
-            'resolution', 'fps', 'prompt', 'generate', 'video', 'continuity', 'available', 'identity'
-        ]);
-
-        function getDistinctiveWords(str) {
-            if (!str) return [];
-            return str.toLowerCase()
-                .replace(/[^a-z0-9\u0E00-\u0E7F\s]/g, ' ')
-                .split(/\s+/)
-                .filter(w => w.length >= 3 && !STOPWORDS.has(w));
+        function norm(str) {
+            if (!str) return "";
+            return str.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+        }
+        function compact(str) {
+            if (!str) return "";
+            return str.replace(/[\r\n\t\s]+/g, "").toLowerCase();
         }
 
-        const queryDistinctiveWords = getDistinctiveWords(fullPrompt);
-        const queryDistinctiveSet = new Set(queryDistinctiveWords);
+        const normP = norm(fullPrompt);
+        const compP = compact(fullPrompt);
 
         let bestCard = null;
         let bestScore = 0;
@@ -1575,67 +1541,47 @@ def find_record_on_dreamina(
             }
             if (!text) continue;
 
-            const normText = text.replace(/\s+/g, ' ').trim();
-            const normTextLower = normText.toLowerCase();
+            const normC = norm(text);
+            const compC = compact(text);
 
-            let score = 0;
-            let matchType = '';
-            let matchedDistinctiveCount = 0;
-            let snippetMatched = false;
-
-            // 1. Exact phrase / snippet match from extract_prompt_search_snippets (Must be substantial >= 25 chars)
-            if (snipList.length > 0) {
-                for (const snip of snipList) {
-                    const normSnip = snip.replace(/\s+/g, ' ').trim().toLowerCase();
-                    if (normSnip && normSnip.length >= 25) {
-                        if (normTextLower.includes(normSnip)) {
-                            score += 300;
-                            snippetMatched = true;
-                            matchType = 'snippet';
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // 2. Distinctive non-stop word overlap across entire prompt
-            const cardDistinctiveWords = getDistinctiveWords(normText);
-            const cardWordSet = new Set(cardDistinctiveWords);
-            for (const qw of queryDistinctiveSet) {
-                if (cardWordSet.has(qw)) {
-                    matchedDistinctiveCount++;
-                }
-            }
-
-            const unionSize = new Set([...queryDistinctiveSet, ...cardWordSet]).size;
-            const jaccard = unionSize > 0 ? (matchedDistinctiveCount / unionSize) : 0;
-            const overlapRatio = queryDistinctiveSet.size > 0 ? (matchedDistinctiveCount / queryDistinctiveSet.size) : 0;
-
-            // 3. Sequence number conflict check
-            const cardNumMatch = normText.match(/^(\d+)(?:\s|[-:])/);
+            // Sequence number conflict check:
+            // If card starts with a leading sequence number (e.g. "139 Duration:..."), extract it
+            const cardNumMatch = normC.match(/^(\d+)(?:\\s|[-:])/);
             const cardLeadingNum = cardNumMatch ? parseInt(cardNumMatch[1], 10) : null;
             const targetNum = (num !== null && num !== undefined && String(num).trim() !== '') ? parseInt(num, 10) : null;
-            const numConflict = (cardLeadingNum !== null && targetNum !== null && !isNaN(cardLeadingNum) && !isNaN(targetNum) && cardLeadingNum !== targetNum);
+            if (cardLeadingNum !== null && targetNum !== null && !isNaN(cardLeadingNum) && !isNaN(targetNum) && cardLeadingNum !== targetNum) {
+                continue; // Sequence number conflict!
+            }
 
-            // Strict Confidence Validation:
-            // MUST NOT conflict on leading sequence numbers (e.g. Card 139 vs Folder 10)
-            // AND EITHER:
-            // (A): Exact multi-word snippet matched (>= 25 chars) AND at least 4 distinctive words match
-            // (B): Strong keyword overlap: at least 15 distinctive non-stop words match AND Jaccard >= 0.25 AND overlap >= 0.35
-            const isConfident = !numConflict && (
-                (snippetMatched && (matchedDistinctiveCount >= 4 || queryDistinctiveSet.size < 5)) ||
-                (matchedDistinctiveCount >= 15 && jaccard >= 0.25 && overlapRatio >= 0.35)
-            );
+            let isMatched = false;
+            let matchType = '';
+            let score = 0;
 
-            if (isConfident) {
-                score += matchedDistinctiveCount * 10;
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestCard = el;
-                    bestMatchType = matchType || 'keywords';
-                    bestText = text;
-                    bestMatchedWords = matchedDistinctiveCount;
-                }
+            // 1. Exact Full Prompt Match (all characters match, stripping newlines & whitespace)
+            if ((normP && normC.includes(normP)) || (compP && compC.includes(compP))) {
+                isMatched = true;
+                matchType = 'exact_full';
+                score = 1000;
+            }
+            // 2. Card text is completely inside prompt (in case Dreamina truncated long card >= 120 chars)
+            else if (compC.length >= 120 && compP.includes(compC)) {
+                isMatched = true;
+                matchType = 'exact_card_in_prompt';
+                score = 900;
+            }
+            // 3. Exact Substantial Prefix Match (first 180 characters match identically without newlines)
+            else if (compP.length >= 180 && compC.includes(compP.slice(0, 180))) {
+                isMatched = true;
+                matchType = 'exact_prefix';
+                score = 800;
+            }
+
+            if (isMatched && score > bestScore) {
+                bestScore = score;
+                bestCard = el;
+                bestMatchType = matchType;
+                bestText = text;
+                bestMatchedWords = compP.length;
             }
         }
 

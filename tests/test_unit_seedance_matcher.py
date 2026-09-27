@@ -93,6 +93,15 @@ Style requirements: dwarf fantasy, photorealistic vertical 9:16 seedance dreamin
             if len(snip) >= 20:
                 self.assertNotIn(snip.lower(), online_toddler_card.lower(), f"Snippet falsely appeared in card: {snip}")
 
+    def test_exact_character_match_without_newlines(self):
+        local_p = """Photorealistic raw eyewitness footage, vertical 9:16
+miniature building facade collapse scene
+featuring two separate groups of terrified tiny Asian human civilians..."""
+        card_p = "Photorealistic raw eyewitness footage, vertical 9:16 miniature building facade collapse scene featuring two separate groups of terrified tiny Asian human civilians..."
+        def compact(s):
+            return "".join(s.split()).lower()
+        self.assertEqual(compact(local_p), compact(card_p))
+
 
 if __name__ == '__main__':
     unittest.main()
