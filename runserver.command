@@ -6,6 +6,9 @@ echo "=================================================="
 echo " Starting Chrome Automation Web Cockpit..."
 echo "=================================================="
 
+# Cleanup background processes on exit
+trap 'kill $(jobs -p) 2>/dev/null' EXIT INT TERM
+
 # Kill any old processes holding port 6969, 9225, or 8100
 echo "Checking for old processes on port 6969..."
 PID_6969=$(lsof -t -i tcp:6969)
@@ -39,6 +42,15 @@ fi
 echo "Starting Flow Kit Agent server on port 8100..."
 python -m agent.main &
 
-# Run Uvicorn server on port 6969
-echo "Starting main Web Cockpit server on port 6969..."
-uvicorn app.main:app --port 6969 --reload
+# Run Uvicorn server on port 6969 with auto-reload on web and app changes
+echo "Starting main Web Cockpit server on port 6969 (Auto-reload enabled)..."
+uvicorn app.main:app --port 6969 --reload \
+    --reload-dir app \
+    --reload-dir web \
+    --reload-dir agent \
+    --reload-include "*.py" \
+    --reload-include "*.html" \
+    --reload-include "*.js" \
+    --reload-include "*.css" \
+    --reload-exclude "runtime/*" \
+    --reload-exclude "*.bak"
