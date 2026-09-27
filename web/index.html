@@ -1494,6 +1494,26 @@
               </div>
             </section>
 
+            <!-- Clear Mode Selection for Normal Run -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <label style="font-size: 0.92rem; font-weight: bold; color: #8da6ff; margin: 0;">🧹 โหมดการล้างข้อมูลหลังกดส่ง (Clear Mode)</label>
+                <span style="font-size: 0.78rem; color: rgba(255,255,255,0.5);">กำหนดพฤติกรรมการล้างข้อมูลบนเว็บ Dreamina หลังส่งคำสั่ง</span>
+              </div>
+              <input type="hidden" id="cfg_seedance_clear_mode" value="both" />
+              <div class="seedance-clear-toggle-group">
+                <button type="button" class="seedance-clear-toggle active" data-clear="both" title="ล้างทั้งข้อความ Prompt และรูปภาพอ้างอิงบนเว็บ Dreamina หลังกดส่งงานเรียบร้อยแล้ว">
+                  <span>🧹 ล้างทั้งคู่</span>
+                </button>
+                <button type="button" class="seedance-clear-toggle" data-clear="prompt" title="ล้างเฉพาะข้อความ Prompt บนเว็บ Dreamina หลังกดส่งงานเรียบร้อยแล้ว (คงรูปภาพอ้างอิงไว้)">
+                  <span>✍️ ล้าง Prompt</span>
+                </button>
+                <button type="button" class="seedance-clear-toggle" data-clear="image" title="ล้างเฉพาะรูปภาพอ้างอิงบนเว็บ Dreamina หลังกดส่งงานเรียบร้อยแล้ว (คงข้อความ Prompt ไว้)">
+                  <span>🖼️ ล้างรูป</span>
+                </button>
+              </div>
+            </section>
+
             <!-- Standalone Search & Download Video Section -->
             <section class="card" id="seedanceSearchDownloadSection">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
@@ -1539,25 +1559,6 @@
 
               <!-- Safety Options & Run Buttons -->
               <div style="margin: 15px 0 16px 0; display: flex; flex-direction: column; gap: 12px;">
-                <!-- Clear Mode Selection for Normal Run -->
-                <div style="background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 12px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <label style="font-size: 0.82rem; font-weight: bold; color: #8da6ff; margin: 0;">🧹 โหมดการล้างข้อมูลหลังกดส่ง (Clear Mode)</label>
-                  </div>
-                  <input type="hidden" id="cfg_seedance_clear_mode" value="both" />
-                  <div class="seedance-clear-toggle-group">
-                    <button type="button" class="seedance-clear-toggle active" data-clear="both" title="ล้างทั้งข้อความ Prompt และรูปภาพอ้างอิงบนเว็บ Dreamina หลังกดส่งงานเรียบร้อยแล้ว">
-                      <span>🧹 ล้างทั้งคู่</span>
-                    </button>
-                    <button type="button" class="seedance-clear-toggle" data-clear="prompt" title="ล้างเฉพาะข้อความ Prompt บนเว็บ Dreamina หลังกดส่งงานเรียบร้อยแล้ว (คงรูปภาพอ้างอิงไว้)">
-                      <span>✍️ ล้าง Prompt</span>
-                    </button>
-                    <button type="button" class="seedance-clear-toggle" data-clear="image" title="ล้างเฉพาะรูปภาพอ้างอิงบนเว็บ Dreamina หลังกดส่งงานเรียบร้อยแล้ว (คงข้อความ Prompt ไว้)">
-                      <span>🖼️ ล้างรูป</span>
-                    </button>
-                  </div>
-                </div>
-
                 <!-- Dynamic Mode Explanation -->
                 <div id="seedanceModeDesc" style="font-size: 0.82rem; color: #34d399; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 8px 12px; line-height: 1.4;">
                   ⚡ โหมดอัตโนมัติ: ระบบจะส่งข้อมูลตามคิวและกด Generate บนเว็บ Dreamina ให้อัตโนมัติทุกรายการ
