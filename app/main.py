@@ -103,7 +103,7 @@ _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openro
 _ensure_json(PROMPTS_FILE, {"prompts": [""]})
 _ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2": "", "reference_image_3": "", "reference_image_4": "", "reference_image_5": "", "reference_image_6": "", "reference_image_7": "", "reference_images_dir": ""})
 
-app = FastAPI(title="Chrome Automation Template", version="1.13.16")
+app = FastAPI(title="Chrome Automation Template", version="1.13.17")
 last_submit_time = 0.0
 
 import time
@@ -7412,12 +7412,18 @@ async def step_seedance(payload: SeedancePayload):
 # Seedance (Dreamina) Automation Endpoints
 # ==============================================================================
 
+class SeedanceSubfoldersSummaryRequest(BaseModel):
+    main_folder: str
+    subfolders_str: str = ""
+    prompt_files_str: str = ""
+
 class SeedanceScanRequest(BaseModel):
     main_folder: str
     subfolders_str: str = ""
     image_mode: str = "none"
     character_sheet_path: str = ""
     image_subfolder: str = "images"
+    prompt_files_str: str = ""
 
 class SeedanceRunRequest(BaseModel):
     items: list[dict[str, Any]]
@@ -7543,6 +7549,15 @@ async def api_seedance_browse_file():
         log(f"[Seedance Browse File Error] {e}")
         return {"ok": False, "path": None, "error": str(e)}
 
+@app.post("/api/seedance/subfolders-summary")
+def api_seedance_subfolders_summary(req: SeedanceSubfoldersSummaryRequest) -> dict[str, Any]:
+    from app.seedance import get_seedance_subfolders_summary
+    try:
+        return get_seedance_subfolders_summary(req.main_folder, req.subfolders_str, req.prompt_files_str)
+    except Exception as e:
+        log(f"[Seedance Subfolders Summary Error] {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.post("/api/seedance/scan")
 def api_seedance_scan(req: SeedanceScanRequest) -> dict[str, Any]:
     from app.seedance import scan_seedance_folders
@@ -7552,7 +7567,8 @@ def api_seedance_scan(req: SeedanceScanRequest) -> dict[str, Any]:
             req.subfolders_str,
             image_mode=req.image_mode,
             character_sheet_path=req.character_sheet_path,
-            image_subfolder=req.image_subfolder or "images"
+            image_subfolder=req.image_subfolder or "images",
+            prompt_files_str=req.prompt_files_str
         )
         return res
     except Exception as e:
@@ -7570,14 +7586,30 @@ def api_seedance_search_local(req: SeedanceScanRequest) -> dict[str, Any]:
             req.subfolders_str,
             image_mode=req.image_mode,
             character_sheet_path=req.character_sheet_path,
-            image_subfolder=req.image_subfolder or "images"
+            image_subfolder=req.image_subfolder or "images",
+            prompt_files_str=req.prompt_files_str
         )
         items = scan_res.get("items", [])
         for item in items:
             sub_path = item.get("subfolder_path", "")
             sub_name = item.get("subfolder_name", "")
-            local_mp4 = os.path.join(sub_path, f"{sub_name}.mp4") if (sub_path and os.path.isdir(sub_path)) else None
-            local_video_exists = bool(local_mp4 and os.path.isfile(local_mp4))
+            p_base = item.get("prompt_base_name")
+            total_p = item.get("total_prompts", 1)
+            sub_idx = item.get("sub_index", 1)
+
+            local_candidates = []
+            if p_base:
+                local_candidates.append(os.path.join(sub_path, f"{p_base}.mp4"))
+            if total_p > 1:
+                local_candidates.append(os.path.join(sub_path, f"{sub_name}_{sub_idx}.mp4"))
+                local_candidates.append(os.path.join(sub_path, f"{sub_name}-{sub_idx}.mp4"))
+                if sub_idx == 1:
+                    local_candidates.append(os.path.join(sub_path, f"{sub_name}.mp4"))
+            else:
+                local_candidates.append(os.path.join(sub_path, f"{sub_name}.mp4"))
+
+            local_mp4 = next((p for p in local_candidates if (p and os.path.isfile(p))), None)
+            local_video_exists = bool(local_mp4)
             local_video_size_mb = round(os.path.getsize(local_mp4) / (1024 * 1024), 1) if local_video_exists else 0
             item["local_found"] = True
             item["local_video_exists"] = local_video_exists
@@ -7587,8 +7619,13 @@ def api_seedance_search_local(req: SeedanceScanRequest) -> dict[str, Any]:
             item["web_has_video"] = False
             item["web_video_src"] = None
 
-        # Sort items numerically and assign sequential IDs (only items existing locally)
-        items.sort(key=lambda x: (x.get("num") is None, x.get("num") if x.get("num") is not None else 999999))
+        # Sort items numerically and maintain sub_index order
+        items.sort(key=lambda x: (
+            x.get("num") is None,
+            x.get("num") if x.get("num") is not None else 999999,
+            x.get("subfolder_name", ""),
+            x.get("sub_index", 1)
+        ))
         for idx, item in enumerate(items, 1):
             item["id"] = idx
 

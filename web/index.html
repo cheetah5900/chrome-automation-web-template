@@ -56,6 +56,7 @@
 
       if (tabId === 'tabImageGenBtn' && typeof loadImagePrompts === 'function') loadImagePrompts();
       if (tabId === 'tabVideoGenBtn' && typeof loadVideoPrompts === 'function') loadVideoPrompts();
+      if (tabId === 'tabSeedanceGenBtn' && typeof updateSeedanceSubfoldersSummary === 'function') updateSeedanceSubfoldersSummary();
       if ((tabId === 'tabWorkflowBtn' || tabId === 'tabVideoHelperBtn' || tabId === 'tabFacebookAutoPostBtn' || tabId === 'tabMetaAutoPostBtn' || tabId === 'tabShopeeAffiliateBtn') && typeof loadConfig === 'function') {
         loadConfig();
       }
@@ -1322,12 +1323,20 @@
                   </div>
                 </div>
 
-                <!-- Subfolders Input -->
-                <div class="form-group" style="margin-bottom: 18px;">
-                  <label for="cfg_seedance_subfolders" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
-                  <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ระบุตัวเลขหรือช่วง เช่น 1-10, 15, 20-25 (เว้นว่าง = ดึงทุกโฟลเดอร์ย่อย)</div>
-                  <input id="cfg_seedance_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
+                <!-- Subfolders & Prompt Files Filters -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 18px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_seedance_subfolders" style="font-weight: bold; color: #8da6ff;">📁 เลขโฟลเดอร์ (Sub folders)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1 หรือ 1-10 (เว้นว่าง = ทุกโฟลเดอร์)</div>
+                    <input id="cfg_seedance_subfolders" placeholder="เช่น 1 หรือ 1-5 หรือเว้นว่าง" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_seedance_prompt_files" style="font-weight: bold; color: #a78bfa;">📝 ลำดับไฟล์ Prompt (Prompt files)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 2-3 หรือ 1, 3 (เว้นว่าง = ทุกไฟล์ _1, _2, _3)</div>
+                    <input id="cfg_seedance_prompt_files" placeholder="เช่น 2-3 หรือเว้นว่าง" style="margin-bottom: 0; width: 100%;" />
+                  </div>
                 </div>
+                <div id="seedanceSubfoldersSummary" style="display: none; margin-top: -6px; margin-bottom: 18px; padding: 10px 14px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(141, 166, 255, 0.2); border-radius: 10px; font-size: 0.82rem; backdrop-filter: blur(8px);"></div>
 
                 <!-- Image Attachment Mode Selection -->
                 <div class="form-group" style="margin-bottom: 18px;">
@@ -1459,7 +1468,11 @@
             <section class="card">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
                 <h3 style="margin: 0; font-size: 1.15rem; color: #8da6ff;">📝 รายการ Prompt ที่สแกนพบ (Scanned Items)</h3>
-                <span id="seedanceOver4000Badge" style="display: none; font-size: 0.8rem; padding: 3px 10px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.45); color: #fca5a5; border-radius: 20px; font-weight: bold;"></span>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" id="btnSeedanceSelectAll" class="secondary" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; margin: 0; background: rgba(127, 92, 255, 0.15); border-color: rgba(127, 92, 255, 0.35); color: #c4b5fd;">✓ เลือกทั้งหมด</button>
+                  <button type="button" id="btnSeedanceDeselectAll" class="secondary" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; margin: 0; background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7);">✗ ยกเลิกทั้งหมด</button>
+                  <span id="seedanceOver4000Badge" style="display: none; font-size: 0.8rem; padding: 3px 10px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.45); color: #fca5a5; border-radius: 20px; font-weight: bold;"></span>
+                </div>
               </div>
 
               <!-- Queue Container -->
@@ -1476,13 +1489,16 @@
                 <h2 class="section-title" style="margin-bottom: 0;">🎯 ค้นหาและจับคู่วิดีโอ (Match & Download Video)</h2>
                 <span id="seedanceSearchCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; border-radius: 20px; font-weight: bold; display: none;">0 รายการ</span>
               </div>
-              <p class="section-subtitle">ค้นหา 2 ฝั่ง: ฝั่งซ้ายรวบรวมโฟลเดอร์และ Prompt ภายในเครื่อง (Local) ให้ครบก่อน จากนั้นจึงเริ่มค้นหาและจับคู่วิดีโอบนเว็บ Dreamina (Web) ทางฝั่งขวา</p>
+              <p class="section-subtitle">ค้นหา 2 ฝั่ง: ฝั่งซ้ายรวบรวมโฟลเดอร์และ Prompt ภายในเครื่อง (Local) รองรับโฟลเดอร์ที่มีหลายรายการย่อย จากนั้นเริ่มค้นหา จับคู่ และดาวน์โหลดคลิปวิดีโอบนเว็บ Dreamina (Web) ลงโฟลเดอร์โดยตรง</p>
 
               <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 12px;">
                 <!-- Input & Exactly 2 Action Buttons -->
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                  <div style="position: relative; flex-grow: 1; min-width: 220px;">
-                    <input id="seedanceSearchNumberInput" type="text" placeholder="พิมพ์เลข เช่น 211 หรือ 211, 212, 215-220" style="width: 100%; margin-bottom: 0; padding: 11px 14px; font-size: 0.92rem; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(127, 92, 255, 0.35); color: #fff; outline: none;" />
+                  <div style="position: relative; flex: 1 1 180px; min-width: 150px;">
+                    <input id="seedanceSearchNumberInput" type="text" placeholder="📁 เลขโฟลเดอร์ เช่น 1 หรือ 211" style="width: 100%; margin-bottom: 0; padding: 11px 14px; font-size: 0.92rem; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(127, 92, 255, 0.35); color: #fff; outline: none;" />
+                  </div>
+                  <div style="position: relative; flex: 1 1 180px; min-width: 150px;">
+                    <input id="seedanceSearchFileInput" type="text" placeholder="📝 เลขไฟล์ เช่น 2-3 (เว้นว่าง=ทุกไฟล์)" style="width: 100%; margin-bottom: 0; padding: 11px 14px; font-size: 0.92rem; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(167, 139, 250, 0.35); color: #fff; outline: none;" />
                   </div>
                   <button id="btnSeedanceSearchPrompts" type="button" class="secondary" style="padding: 11px 20px; font-size: 0.9rem; font-weight: bold; border-radius: 10px; margin: 0; white-space: nowrap; background: rgba(58, 160, 255, 0.2); border-color: rgba(58, 160, 255, 0.4); color: #8da6ff; cursor: pointer; display: flex; align-items: center; gap: 6px;" title="ค้นหาและจับคู่ Prompt ในเครื่องกับ Dreamina (ขณะรันสามารถกดปุ่มนี้เพื่อ Force Stop ได้ทันที)">
                     <span>🔍 ค้นหา</span>
@@ -2181,6 +2197,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=92"></script>
+  <script src="/web/app.js?v=93"></script>
 </body>
 </html>

@@ -9277,6 +9277,7 @@ async function saveSeedancePreset() {
   presets[trimmedName] = {
     main_folder: document.getElementById('cfg_seedance_main_folder')?.value || '',
     subfolders: document.getElementById('cfg_seedance_subfolders')?.value || '',
+    prompt_files: document.getElementById('cfg_seedance_prompt_files')?.value || '',
     image_mode: getSeedanceImageMode(),
     image_subfolder: imageSubfolderVal,
     clear_mode: getSeedanceClearMode(),
@@ -9360,6 +9361,7 @@ async function applySeedancePreset(silent = false) {
 
   if (document.getElementById('cfg_seedance_main_folder')) document.getElementById('cfg_seedance_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_seedance_subfolders')) document.getElementById('cfg_seedance_subfolders').value = preset.subfolders || '';
+  if (document.getElementById('cfg_seedance_prompt_files')) document.getElementById('cfg_seedance_prompt_files').value = preset.prompt_files || '';
   if (document.getElementById('cfg_seedance_image_subfolder')) {
     const subVal = (preset.image_subfolder !== undefined && preset.image_subfolder !== null && preset.image_subfolder !== '') ? preset.image_subfolder : 'images';
     document.getElementById('cfg_seedance_image_subfolder').value = subVal;
@@ -9388,10 +9390,12 @@ async function applySeedancePreset(silent = false) {
 
   if (preset.main_folder) localStorage.setItem('seedance_main_folder', preset.main_folder);
   if (preset.subfolders) localStorage.setItem('seedance_subfolders', preset.subfolders);
+  if (preset.prompt_files) localStorage.setItem('seedance_prompt_files', preset.prompt_files);
   localStorage.setItem('seedance_last_preset', currentName);
 
   updateSeedanceQuickBtnStyles();
   updateTooltips();
+  if (typeof updateSeedanceSubfoldersSummary === 'function') updateSeedanceSubfoldersSummary();
   if (!silent) {
     writeConsoleLine(`🎯 โหลด Preset "${currentName}" เรียบร้อยแล้ว`, 'info', 'seedanceConsole');
     if (typeof showToast === 'function') showToast(`โหลด Preset "${currentName}" เรียบร้อยแล้ว!`, 'success');
@@ -9634,19 +9638,70 @@ function updateSeedanceRunButtonUI() {
       left.style.display = 'flex';
       left.style.alignItems = 'center';
       left.style.gap = '10px';
+      left.style.flexWrap = 'wrap';
 
+      // Checkbox for user to select / unselect this specific prompt item
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = item.checked !== false;
+      chk.style.cssText = 'width: 17px; height: 17px; cursor: pointer; accent-color: #7f5cff; margin: 0;';
+      chk.title = 'คลิกเพื่อเลือกหรือยกเลิกการสร้างรายการนี้';
+      chk.addEventListener('change', (e) => {
+        item.checked = e.target.checked;
+        card.style.background = item.checked ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.2)';
+        card.style.opacity = item.checked ? '1' : '0.5';
+        const validCount = seedanceBatchQueue.filter(p => p.has_prompt && p.checked !== false).length;
+        if (badge) badge.textContent = `${validCount}/${seedanceBatchQueue.length} Prompts Ready`;
+        updateSeedanceRunButtonUI();
+      });
+      left.appendChild(chk);
+
+      const queueIndex = index + 1;
+      const totalPrompts = item.total_prompts || (item.prompt_files ? item.prompt_files.length : 1);
+      const subIdx = item.sub_index || 1;
+      const folderName = item.subfolder_name || (item.num !== undefined && item.num !== null ? String(item.num) : `${queueIndex}`);
+      const promptFileName = item.prompt_file || 'ไม่พบไฟล์ prompt';
+
+      // Group elements on the left side of the card header
+      const titleGroup = document.createElement('div');
+      titleGroup.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;';
+
+      // 1. Sequential Queue Badge: e.g. #1, #2, #3...
+      const queueBadge = document.createElement('span');
+      queueBadge.style.cssText = 'background: rgba(127, 92, 255, 0.22); border: 1px solid rgba(127, 92, 255, 0.45); color: #c4b5fd; font-weight: 700; font-size: 0.78rem; padding: 2px 7px; border-radius: 6px;';
+      queueBadge.textContent = `#${queueIndex}`;
+      titleGroup.appendChild(queueBadge);
+
+      // 2. Clear Folder Title: e.g. 📁 โฟลเดอร์ 1
       const folderTitle = document.createElement('span');
-      folderTitle.style.fontWeight = 'bold';
-      if (isOver4000) {
-        folderTitle.style.color = '#ef4444';
-      } else {
-        folderTitle.style.color = isCurrentStep ? '#f3e8ff' : '#c4b5fd';
-      }
-      folderTitle.style.fontSize = '0.95rem';
-      const numLabel = (item.num !== undefined && item.num !== null) ? `[#${item.num}] ` : `[#${index + 1}] `;
-      folderTitle.textContent = `${numLabel}${item.subfolder_name}`;
+      folderTitle.style.cssText = `font-weight: 700; font-size: 0.92rem; color: ${isOver4000 ? '#ef4444' : (isCurrentStep ? '#f3e8ff' : '#8da6ff')}; display: inline-flex; align-items: center; gap: 4px;`;
+      folderTitle.innerHTML = `📁 โฟลเดอร์ <strong style="color: #fff;">${folderName}</strong>`;
+      titleGroup.appendChild(folderTitle);
 
-      left.appendChild(folderTitle);
+      // 3. Highlighted Prompt File Badge: e.g. 📝 animation_prompt_1.md
+      const promptFileBadge = document.createElement('span');
+      promptFileBadge.style.cssText = 'background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 600; font-size: 0.8rem; padding: 2px 9px; border-radius: 6px; font-family: monospace; display: inline-flex; align-items: center; gap: 4px;';
+      promptFileBadge.innerHTML = `📝 ${promptFileName}`;
+      titleGroup.appendChild(promptFileBadge);
+
+      // 4. Sub-item / Scene Sequence Badge: e.g. ช็อต 1/3
+      if (totalPrompts > 1) {
+        const subBadge = document.createElement('span');
+        subBadge.style.cssText = 'background: rgba(167, 139, 250, 0.15); border: 1px solid rgba(167, 139, 250, 0.35); color: #c4b5fd; font-weight: 600; font-size: 0.74rem; padding: 2px 7px; border-radius: 6px;';
+        subBadge.textContent = `ช็อต ${subIdx}/${totalPrompts}`;
+        titleGroup.appendChild(subBadge);
+      }
+
+      // 5. Existing Video Badge (if already rendered locally)
+      if (item.local_video_exists) {
+        const localVideoBadge = document.createElement('span');
+        localVideoBadge.style.cssText = 'background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; font-weight: 600; font-size: 0.74rem; padding: 2px 7px; border-radius: 6px;';
+        const sizeStr = item.local_video_size_mb ? ` (${item.local_video_size_mb} MB)` : '';
+        localVideoBadge.textContent = `🟢 มี MP4${sizeStr}`;
+        titleGroup.appendChild(localVideoBadge);
+      }
+
+      left.appendChild(titleGroup);
 
       if (isOver4000) {
         const overBadge = document.createElement('span');
@@ -9662,7 +9717,6 @@ function updateSeedanceRunButtonUI() {
       }
 
       const right = document.createElement('div');
-      // ในกล่องนี้ไม่ต้องมีอะไรเลย ตามคำขอของผู้ใช้
       header.appendChild(left);
       header.appendChild(right);
       card.appendChild(header);
@@ -9676,9 +9730,116 @@ function updateSeedanceRunButtonUI() {
   }
   window.renderSeedanceQueue = renderSeedanceQueue;
 
+  let seedanceSummaryDebounceTimer = null;
+
+  async function updateSeedanceSubfoldersSummary() {
+    const container = document.getElementById('seedanceSubfoldersSummary');
+    if (!container) return;
+
+    const mainFolder = document.getElementById('cfg_seedance_main_folder')?.value.trim() || localStorage.getItem('seedance_main_folder') || '';
+    const subfoldersStr = document.getElementById('cfg_seedance_subfolders')?.value.trim() || '';
+    const promptFilesStr = document.getElementById('cfg_seedance_prompt_files')?.value.trim() || '';
+
+    if (!mainFolder) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    container.style.display = 'block';
+    container.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.6);">
+        <span class="spin">⏳</span> กำลังตรวจสอบจำนวนไฟล์ animation prompt...
+      </div>
+    `;
+
+    try {
+      const res = await jsonFetch('/api/seedance/subfolders-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          main_folder: mainFolder,
+          subfolders_str: subfoldersStr,
+          prompt_files_str: promptFilesStr
+        })
+      });
+
+      if (!res.ok || !res.folders) {
+        container.innerHTML = `
+          <div style="color: #f87171; display: flex; align-items: center; gap: 6px;">
+            <span>⚠️</span> ${res.error || 'ไม่สามารถตรวจสอบโฟลเดอร์ได้'}
+          </div>
+        `;
+        return;
+      }
+
+      if (res.folders.length === 0) {
+        const filterDesc = [subfoldersStr ? `โฟลเดอร์: ${subfoldersStr}` : '', promptFilesStr ? `ไฟล์: ${promptFilesStr}` : ''].filter(Boolean).join(', ') || 'ทั้งหมด';
+        container.innerHTML = `
+          <div style="color: rgba(255,255,255,0.5);">
+            ℹ️ ไม่พบโฟลเดอร์ย่อยหรือไฟล์ที่ตรงกับเงื่อนไขที่ระบุ (${filterDesc})
+          </div>
+        `;
+        return;
+      }
+
+      const chipsHtml = res.folders.map(f => {
+        const fileNames = f.prompt_files && f.prompt_files.length > 0
+          ? `ไฟล์ animation prompt:\n- ${f.prompt_files.join('\n- ')}`
+          : 'ไม่พบไฟล์ animation prompt (.md, .txt)';
+        const countText = `${f.prompt_file_count} ${f.prompt_file_count === 1 ? 'file' : 'files'}`;
+        if (f.prompt_file_count > 0) {
+          return `
+            <span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(129, 140, 248, 0.3); font-size: 0.78rem; cursor: default;" title="${fileNames}">
+              <span style="color: #c4b5fd; font-weight: 600;">📁 ${f.name}:</span>
+              <span style="color: #38bdf8; font-weight: 700;">${countText}</span>
+            </span>
+          `;
+        } else {
+          return `
+            <span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); font-size: 0.78rem; cursor: default;" title="${fileNames}">
+              <span style="color: #fca5a5; font-weight: 600;">📁 ${f.name}:</span>
+              <span style="color: #ef4444; font-weight: 700;">0 files</span>
+            </span>
+          `;
+        }
+      }).join('');
+
+      container.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <span style="font-weight: 600; color: #a5b4fc;">📁 ${res.total_folders} โฟลเดอร์</span>
+            <span style="color: rgba(255,255,255,0.3);">|</span>
+            <span style="font-weight: 600; color: #38bdf8;">📝 รวม ${res.total_prompt_files} ไฟล์ animation prompt</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; max-height: 140px; overflow-y: auto; padding: 2px 0;">
+          ${chipsHtml}
+        </div>
+      `;
+    } catch (err) {
+      console.warn('Failed to update seedance subfolders summary:', err);
+      container.innerHTML = `
+        <div style="color: #f87171; display: flex; align-items: center; gap: 6px;">
+          <span>⚠️</span> ไม่สามารถตรวจสอบโฟลเดอร์ได้: ${err.message}
+        </div>
+      `;
+    }
+  }
+  window.updateSeedanceSubfoldersSummary = updateSeedanceSubfoldersSummary;
+
+  function debouncedUpdateSeedanceSubfoldersSummary() {
+    if (seedanceSummaryDebounceTimer) clearTimeout(seedanceSummaryDebounceTimer);
+    seedanceSummaryDebounceTimer = setTimeout(() => {
+      updateSeedanceSubfoldersSummary();
+    }, 300);
+  }
+  window.debouncedUpdateSeedanceSubfoldersSummary = debouncedUpdateSeedanceSubfoldersSummary;
+
   async function scanSeedanceBatch() {
     const mainFolder = document.getElementById('cfg_seedance_main_folder')?.value.trim() || '';
     const subfoldersStr = document.getElementById('cfg_seedance_subfolders')?.value.trim() || '';
+    const promptFilesStr = document.getElementById('cfg_seedance_prompt_files')?.value.trim() || '';
     const imageMode = getSeedanceImageMode();
     const characterSheetPath = document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '';
     const imageSubfolder = document.getElementById('cfg_seedance_image_subfolder')?.value.trim() || 'images';
@@ -9701,7 +9862,8 @@ function updateSeedanceRunButtonUI() {
     }
 
     seedanceStepIndex = -1;
-    writeConsoleLine(`[Seedance Scanner] กำลังสแกนหาไฟล์ Prompt ใน "${mainFolder}" (ช่วงโฟลเดอร์: ${subfoldersStr || 'ทั้งหมด'}, Mode: ${imageMode}, โฟลเดอร์รูป: ${imageSubfolder})...`, 'system', 'seedanceConsole');
+    const filterDesc = [subfoldersStr ? `โฟลเดอร์: ${subfoldersStr}` : 'ทุกโฟลเดอร์', promptFilesStr ? `ไฟล์: ${promptFilesStr}` : 'ทุกไฟล์'].join(', ');
+    writeConsoleLine(`[Seedance Scanner] กำลังสแกนหาไฟล์ Prompt ใน "${mainFolder}" (${filterDesc}, Mode: ${imageMode}, โฟลเดอร์รูป: ${imageSubfolder})...`, 'system', 'seedanceConsole');
 
     try {
       const res = await jsonFetch('/api/seedance/scan', {
@@ -9710,6 +9872,7 @@ function updateSeedanceRunButtonUI() {
         body: JSON.stringify({
           main_folder: mainFolder,
           subfolders_str: subfoldersStr,
+          prompt_files_str: promptFilesStr,
           image_mode: imageMode,
           character_sheet_path: characterSheetPath,
           image_subfolder: imageSubfolder
@@ -9954,13 +10117,21 @@ function updateSeedanceRunButtonUI() {
     countBadge.style.display = 'inline-flex';
     countBadge.style.alignItems = 'center';
     countBadge.style.gap = '8px';
+
+    const items = seedanceSearchFoundItems || [];
+    const uniqueFolders = new Set(items.map(i => i.subfolder_name || i.name)).size;
+    const hasSubItems = items.length > uniqueFolders && uniqueFolders > 0;
+    const localLabel = hasSubItems
+      ? `💻 ในเครื่อง: ${uniqueFolders} โฟลเดอร์ (${items.length} รายการ)`
+      : `💻 ในเครื่อง: ${localCount} รายการ`;
+
     if (isSearchingWeb) {
-      countBadge.innerHTML = `<span style="color: #c4b5fd;">💻 ในเครื่อง: ${localCount} รายการ</span> <span style="color: rgba(255,255,255,0.3);">|</span> <span style="color: #93c5fd;">🌐 กำลังหาบนเว็บ... (พบ ${webCount})</span>`;
+      countBadge.innerHTML = `<span style="color: #c4b5fd;">${localLabel}</span> <span style="color: rgba(255,255,255,0.3);">|</span> <span style="color: #93c5fd;">🌐 กำลังหาบนเว็บ... (พบ ${webCount})</span>`;
       countBadge.style.background = 'rgba(59, 130, 246, 0.15)';
       countBadge.style.borderColor = 'rgba(59, 130, 246, 0.35)';
       countBadge.style.color = '#93c5fd';
     } else {
-      countBadge.innerHTML = `<span style="color: #c4b5fd;">💻 ในเครื่อง: ${localCount} รายการ</span> <span style="color: rgba(255,255,255,0.3);">|</span> <span style="color: #34d399;">🌐 บนเว็บ: ${webCount} คลิป</span>`;
+      countBadge.innerHTML = `<span style="color: #c4b5fd;">${localLabel}</span> <span style="color: rgba(255,255,255,0.3);">|</span> <span style="color: #34d399;">🌐 บนเว็บ: ${webCount} คลิป</span>`;
       countBadge.style.background = 'rgba(16, 185, 129, 0.15)';
       countBadge.style.borderColor = 'rgba(16, 185, 129, 0.35)';
       countBadge.style.color = '#34d399';
@@ -10048,12 +10219,18 @@ function updateSeedanceRunButtonUI() {
     container.style.flexDirection = 'column';
     container.style.gap = '8px';
 
+    const uniqueFolders = new Set(validItems.map(i => i.subfolder_name || i.name)).size;
+    const hasSubItems = validItems.length > uniqueFolders && uniqueFolders > 0;
+    const summaryLabel = hasSubItems
+      ? `📋 รายการที่ค้นพบ (${uniqueFolders} โฟลเดอร์, ${validItems.length} รายการย่อย)`
+      : `📋 รายการที่ค้นพบ (${validItems.length} รายการ)`;
+
     // Summary header bar
     const summaryBar = document.createElement('div');
     summaryBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 2px 4px;';
     summaryBar.innerHTML = `
       <span style="font-size: 0.82rem; font-weight: 600; color: rgba(255, 255, 255, 0.75);">
-        📋 รายการที่ค้นพบ (${validItems.length} รายการ)
+        ${summaryLabel}
       </span>
       <span id="seedanceWebReadyCountBadge" style="font-size: 0.76rem; padding: 2px 8px; border-radius: 12px; background: rgba(16, 185, 129, 0.2); color: #6ee7b7; font-weight: bold;">
         ${readyCount} พบคลิป
@@ -10068,13 +10245,13 @@ function updateSeedanceRunButtonUI() {
     const table = document.createElement('table');
     table.style.cssText = 'width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem;';
 
-    // Table Header with exactly: เลข | สถานะบน local | สถานะบน seedance
+    // Table Header with: เลข / รายการ | สถานะบน local | สถานะบน seedance
     const thead = document.createElement('thead');
     thead.innerHTML = `
       <tr style="position: sticky; top: 0; z-index: 2; background: #141721; border-bottom: 1px solid rgba(255, 255, 255, 0.12);">
-        <th style="padding: 10px 12px; color: #8da6ff; font-weight: 600; width: 32%;">เลข</th>
-        <th style="padding: 10px 12px; color: #c4b5fd; font-weight: 600; width: 34%;">สถานะบน local</th>
-        <th style="padding: 10px 12px; color: #6ee7b7; font-weight: 600; width: 34%;">สถานะบน seedance</th>
+        <th style="padding: 10px 12px; color: #8da6ff; font-weight: 600; width: 34%;">เลข / รายการ</th>
+        <th style="padding: 10px 12px; color: #c4b5fd; font-weight: 600; width: 33%;">สถานะบน local</th>
+        <th style="padding: 10px 12px; color: #6ee7b7; font-weight: 600; width: 33%;">สถานะบน seedance</th>
       </tr>
     `;
     table.appendChild(thead);
@@ -10087,27 +10264,44 @@ function updateSeedanceRunButtonUI() {
 
       const numText = item.num !== null && item.num !== undefined ? `#${item.num}` : '#';
       const nameText = item.subfolder_name || item.name || '-';
-      const shortName = nameText.length > 28 ? nameText.slice(0, 26) + '...' : nameText;
+      const totalPrompts = item.total_prompts || (item.prompt_files ? item.prompt_files.length : 1);
+      const subIdx = item.sub_index || 1;
+      const promptFileName = item.prompt_file || '';
 
-      // Col 1: เลข
+      // Col 1: เลขลำดับ, โฟลเดอร์, และชื่อไฟล์ Prompt
       const tdNum = document.createElement('td');
       tdNum.style.cssText = 'padding: 8px 12px; vertical-align: middle;';
+
+      const queueBadgeHtml = `<span style="background: rgba(127, 92, 255, 0.22); border: 1px solid rgba(127, 92, 255, 0.45); color: #c4b5fd; font-weight: bold; font-size: 0.78rem; padding: 2px 7px; border-radius: 6px;">#${idx + 1}</span>`;
+      const folderBadgeHtml = `<span style="color: #8da6ff; font-weight: 600; font-size: 0.84rem;">📁 โฟลเดอร์ <strong style="color: #fff;">${nameText}</strong></span>`;
+      const promptFileHtml = promptFileName
+        ? `<span style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 600; font-size: 0.78rem; padding: 2px 7px; border-radius: 5px; font-family: monospace;" title="${promptFileName}">📝 ${promptFileName}</span>`
+        : '';
+      const subBadgeHtml = totalPrompts > 1
+        ? `<span style="background: rgba(167, 139, 250, 0.15); border: 1px solid rgba(167, 139, 250, 0.35); color: #c4b5fd; font-weight: 600; font-size: 0.72rem; padding: 1px 6px; border-radius: 5px;" title="ไฟล์ย่อยที่ ${subIdx} จากทั้งหมด ${totalPrompts} ไฟล์">ช็อต ${subIdx}/${totalPrompts}</span>`
+        : '';
+
       tdNum.innerHTML = `
         <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-          <span style="background: rgba(127, 92, 255, 0.25); border: 1px solid rgba(127, 92, 255, 0.4); color: #c4b5fd; font-weight: bold; font-size: 0.8rem; padding: 2px 7px; border-radius: 6px;">${numText}</span>
-          <span style="color: #fff; font-size: 0.82rem; font-weight: 500;" title="${nameText}">${shortName}</span>
+          ${queueBadgeHtml}
+          ${folderBadgeHtml}
+          ${promptFileHtml}
+          ${subBadgeHtml}
         </div>
       `;
       row.appendChild(tdNum);
 
-      // Col 2: สถานะบน local (บอกแค่ว่า เจอ หรือ ไม่เจอ)
+      // Col 2: สถานะบน local (บอกว่าเจอ พร้อมสถานะไฟล์ .mp4)
       const tdLocal = document.createElement('td');
       tdLocal.style.cssText = 'padding: 8px 12px; vertical-align: middle;';
       const isFound = item.local_found !== false && (item.has_prompt || (item.subfolder_path && item.subfolder_path.length > 0));
-      if (isFound) {
-        tdLocal.innerHTML = `<span style="font-size: 0.78rem; color: #34d399; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 2px 9px; border-radius: 6px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;">🟢 เจอ</span>`;
+      if (item.local_video_exists) {
+        const sizeStr = item.local_video_size_mb ? ` • ${item.local_video_size_mb}MB` : '';
+        tdLocal.innerHTML = `<span style="font-size: 0.76rem; color: #34d399; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="มีไฟล์วิดีโอบนเครื่องแล้ว: ${item.local_video_path || ''}">🟢 มี MP4${sizeStr}</span>`;
+      } else if (isFound) {
+        tdLocal.innerHTML = `<span style="font-size: 0.76rem; color: #38bdf8; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">🟢 เจอ Prompt (รอ MP4)</span>`;
       } else {
-        tdLocal.innerHTML = `<span style="font-size: 0.78rem; color: #f87171; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 2px 9px; border-radius: 6px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;">🔴 ไม่เจอ</span>`;
+        tdLocal.innerHTML = `<span style="font-size: 0.76rem; color: #f87171; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 3px 8px; border-radius: 6px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;">🔴 ไม่เจอ</span>`;
       }
       row.appendChild(tdLocal);
 
@@ -10187,12 +10381,14 @@ function updateSeedanceRunButtonUI() {
     }
 
     const input = document.getElementById('seedanceSearchNumberInput');
+    const fileInput = document.getElementById('seedanceSearchFileInput');
     const query = (input?.value || '').trim();
+    const fileQuery = (fileInput?.value || '').trim();
     const statusText = document.getElementById('seedanceSearchStatusText');
     const mainFolder = document.getElementById('cfg_seedance_main_folder')?.value.trim() || localStorage.getItem('seedance_main_folder') || '';
 
-    if (!query) {
-      if (statusText) statusText.innerHTML = '<span style="color: #fbbf24;">⚠️ กรุณาพิมพ์หมายเลขโฟลเดอร์ เช่น <code>211</code> หรือ <code>211, 212</code></span>';
+    if (!query && !fileQuery) {
+      if (statusText) statusText.innerHTML = '<span style="color: #fbbf24;">⚠️ กรุณาพิมพ์หมายเลขโฟลเดอร์ เช่น <code>1</code> หรือ <code>211</code></span>';
       return;
     }
 
@@ -10220,7 +10416,8 @@ function updateSeedanceRunButtonUI() {
     if (statusText) {
       statusText.innerHTML = `<span style="color: #c4b5fd;">📂 [ขั้นตอน 1/2] กำลังรวบรวมข้อมูลโฟลเดอร์และ Prompt ภายในเครื่อง (ฝั่งซ้าย)...</span>`;
     }
-    writeConsoleLine(`[Seedance Matcher] 📂 [1/2] กำลังรวบรวมข้อมูลโฟลเดอร์ "${query}" ภายในเครื่อง...`, 'system', 'seedanceConsole');
+    const searchDesc = [query ? `โฟลเดอร์ "${query}"` : 'ทุกโฟลเดอร์', fileQuery ? `ไฟล์ "${fileQuery}"` : ''].filter(Boolean).join(', ');
+    writeConsoleLine(`[Seedance Matcher] 📂 [1/2] กำลังรวบรวมข้อมูล ${searchDesc} ภายในเครื่อง...`, 'system', 'seedanceConsole');
 
     try {
       const localRes = await jsonFetch('/api/seedance/search-local', {
@@ -10229,6 +10426,7 @@ function updateSeedanceRunButtonUI() {
         body: JSON.stringify({
           main_folder: mainFolder,
           subfolders_str: query,
+          prompt_files_str: fileQuery,
           image_mode: getSeedanceImageMode(),
           character_sheet_path: document.getElementById('cfg_seedance_character_sheet')?.value.trim() || '',
           image_subfolder: document.getElementById('cfg_seedance_image_subfolder')?.value.trim() || 'images'
@@ -10368,11 +10566,13 @@ function updateSeedanceRunButtonUI() {
     }
 
     const input = document.getElementById('seedanceSearchNumberInput');
+    const fileInput = document.getElementById('seedanceSearchFileInput');
     const query = (input?.value || '').trim();
+    const fileQuery = (fileInput?.value || '').trim();
     const statusText = document.getElementById('seedanceSearchStatusText');
 
     if (!seedanceSearchFoundItems || seedanceSearchFoundItems.length === 0) {
-      if (query) {
+      if (query || fileQuery) {
         await searchSeedancePromptsByNumber();
         if (!seedanceSearchFoundItems || seedanceSearchFoundItems.length === 0) {
           return;
@@ -10436,21 +10636,44 @@ function updateSeedanceRunButtonUI() {
         writeConsoleLine(`[Seedance Downloader] ✅ ดาวน์โหลดเสร็จสิ้น ${res.success_count}/${res.total} รายการ`, 'success', 'seedanceConsole');
         if (res.results) {
           res.results.forEach((r, idx) => {
-            const itemIdx = seedanceSearchFoundItems.findIndex(x => (x.num !== undefined && x.num === r.num) || x.subfolder_name === r.name);
+            const itemIdx = seedanceSearchFoundItems.findIndex(x => {
+              if (r.prompt_file && x.prompt_file) {
+                return x.prompt_file === r.prompt_file && ((x.num !== undefined && x.num === r.num) || x.subfolder_name === r.name);
+              }
+              if (r.sub_index && x.sub_index && ((x.num !== undefined && x.num === r.num) || x.subfolder_name === r.name)) {
+                return x.sub_index === r.sub_index;
+              }
+              return (x.num !== undefined && x.num === r.num) || x.subfolder_name === r.name;
+            });
             const targetIdx = itemIdx !== -1 ? itemIdx : idx;
             const el = document.getElementById(`seedance-item-dl-status-${targetIdx}`);
             if (el) {
               if (r.ok) {
-                el.innerHTML = `<span style="color: #34d399; font-weight: bold;">✅ บันทึกไฟล์สำเร็จ: <code>${r.saved_file || 'mp4'}</code></span>`;
+                const savedBase = r.saved_file ? r.saved_file.split('/').pop() : 'mp4';
+                el.innerHTML = `<span style="color: #34d399; font-weight: bold;">✅ บันทึกไฟล์สำเร็จ: <code>${savedBase}</code></span>`;
               } else {
                 el.innerHTML = `<span style="color: #f87171; font-weight: bold;">⚠️ ${r.detail || 'ไม่สำเร็จ'}</span>`;
               }
             }
+            if (itemIdx !== -1 && r.ok) {
+              seedanceSearchFoundItems[itemIdx].local_video_exists = true;
+              if (r.saved_file) {
+                seedanceSearchFoundItems[itemIdx].local_video_path = r.saved_file;
+                seedanceSearchFoundItems[itemIdx].local_video_name = r.saved_file.split('/').pop();
+              }
+              const row = document.getElementById(`seedance-row-${itemIdx}`);
+              if (row && row.children && row.children[1]) {
+                const tdLocal = row.children[1];
+                tdLocal.innerHTML = `<span style="font-size: 0.76rem; color: #34d399; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="มีไฟล์วิดีโอบนเครื่องแล้ว: ${r.saved_file || ''}">🟢 มี MP4</span>`;
+              }
+            }
             if (r.ok) {
-              const savedStr = r.saved_file ? ` (ไฟล์: ${r.saved_file})` : '';
-              writeConsoleLine(`  - ✅ [${r.num || '-'}] ${r.name}: ดาวน์โหลดสำเร็จ${savedStr}`, 'success', 'seedanceConsole');
+              const savedStr = r.saved_file ? ` (ไฟล์: ${r.saved_file.split('/').pop()})` : '';
+              const subStr = r.sub_index ? ` [${r.sub_index}]` : '';
+              writeConsoleLine(`  - ✅ [${r.num || '-'}] ${r.name}${subStr}: ดาวน์โหลดสำเร็จ${savedStr}`, 'success', 'seedanceConsole');
             } else {
-              writeConsoleLine(`  - ⚠️ [${r.num || '-'}] ${r.name}: ${r.detail || 'เกิดข้อผิดพลาด'}`, 'warning', 'seedanceConsole');
+              const subStr = r.sub_index ? ` [${r.sub_index}]` : '';
+              writeConsoleLine(`  - ⚠️ [${r.num || '-'}] ${r.name}${subStr}: ${r.detail || 'เกิดข้อผิดพลาด'}`, 'warning', 'seedanceConsole');
             }
           });
         }
@@ -11310,9 +11533,11 @@ function initSeedanceGenListeners() {
     }
     mainFolderInput.addEventListener('input', () => {
       localStorage.setItem('seedance_main_folder', mainFolderInput.value);
+      if (typeof debouncedUpdateSeedanceSubfoldersSummary === 'function') debouncedUpdateSeedanceSubfoldersSummary();
     });
     mainFolderInput.addEventListener('change', () => {
       localStorage.setItem('seedance_main_folder', mainFolderInput.value);
+      if (typeof debouncedUpdateSeedanceSubfoldersSummary === 'function') debouncedUpdateSeedanceSubfoldersSummary();
     });
   }
 
@@ -11334,6 +11559,19 @@ function initSeedanceGenListeners() {
     }
     subfoldersInput.addEventListener('input', () => {
       localStorage.setItem('seedance_subfolders', subfoldersInput.value);
+      if (typeof debouncedUpdateSeedanceSubfoldersSummary === 'function') debouncedUpdateSeedanceSubfoldersSummary();
+    });
+  }
+
+  const promptFilesInput = document.getElementById('cfg_seedance_prompt_files');
+  if (promptFilesInput) {
+    const savedPromptFiles = localStorage.getItem('seedance_prompt_files');
+    if (savedPromptFiles && !promptFilesInput.value) {
+      promptFilesInput.value = savedPromptFiles;
+    }
+    promptFilesInput.addEventListener('input', () => {
+      localStorage.setItem('seedance_prompt_files', promptFilesInput.value);
+      if (typeof debouncedUpdateSeedanceSubfoldersSummary === 'function') debouncedUpdateSeedanceSubfoldersSummary();
     });
   }
 
@@ -11485,7 +11723,31 @@ function initSeedanceGenListeners() {
   // Standalone Search & Download by Number (2 Buttons: Search & Download)
   const searchInput = document.getElementById('seedanceSearchNumberInput');
   if (searchInput) {
+    const savedSearchNum = localStorage.getItem('seedance_search_number');
+    if (savedSearchNum && !searchInput.value) {
+      searchInput.value = savedSearchNum;
+    }
+    searchInput.addEventListener('input', () => {
+      localStorage.setItem('seedance_search_number', searchInput.value);
+    });
     searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        searchSeedancePromptsByNumber();
+      }
+    });
+  }
+
+  const searchFileInput = document.getElementById('seedanceSearchFileInput');
+  if (searchFileInput) {
+    const savedSearchFile = localStorage.getItem('seedance_search_file');
+    if (savedSearchFile && !searchFileInput.value) {
+      searchFileInput.value = savedSearchFile;
+    }
+    searchFileInput.addEventListener('input', () => {
+      localStorage.setItem('seedance_search_file', searchFileInput.value);
+    });
+    searchFileInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         searchSeedancePromptsByNumber();
@@ -11530,10 +11792,28 @@ function initSeedanceGenListeners() {
     });
   }
 
+  const selectAllBtn = document.getElementById('btnSeedanceSelectAll');
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', () => {
+      seedanceBatchQueue.forEach(item => { item.checked = true; });
+      renderSeedanceQueue();
+    });
+  }
+
+  const deselectAllBtn = document.getElementById('btnSeedanceDeselectAll');
+  if (deselectAllBtn) {
+    deselectAllBtn.addEventListener('click', () => {
+      seedanceBatchQueue.forEach(item => { item.checked = false; });
+      renderSeedanceQueue();
+    });
+  }
 
   // Load Seedance presets and initialize button UI immediately
   loadSeedancePresets();
   updateSeedanceRunButtonUI();
+  setTimeout(() => {
+    if (typeof updateSeedanceSubfoldersSummary === 'function') updateSeedanceSubfoldersSummary();
+  }, 300);
 }
 window.initSeedanceGenListeners = initSeedanceGenListeners;
 

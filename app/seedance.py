@@ -42,21 +42,120 @@ def log(msg: str) -> None:
         pass
 
 def parse_range_string(range_str: str) -> list[int]:
-    """Parses range strings like '1-10, 15, 20-25' into a list of ints."""
+    """Parses range strings like '1-10, 15, 20-25', '_2, _3', '_2-_3' into a list of ints."""
     if not range_str or not range_str.strip():
         return []
     result = set()
     parts = [p.strip() for p in range_str.split(',') if p.strip()]
     for part in parts:
-        if '-' in part:
-            sub = part.split('-')
-            if len(sub) == 2 and sub[0].strip().isdigit() and sub[1].strip().isdigit():
-                start, end = int(sub[0].strip()), int(sub[1].strip())
+        clean_p = part.lstrip('_')
+        if '-' in clean_p:
+            sub = clean_p.split('-')
+            if len(sub) == 2 and sub[0].strip().lstrip('_').isdigit() and sub[1].strip().lstrip('_').isdigit():
+                start, end = int(sub[0].strip().lstrip('_')), int(sub[1].strip().lstrip('_'))
                 for num in range(min(start, end), max(start, end) + 1):
                     result.add(num)
-        elif part.isdigit():
-            result.add(int(part))
+        elif clean_p.isdigit():
+            result.add(int(clean_p))
     return sorted(list(result))
+
+def extract_prompt_file_index(filename: str, fallback_idx: int = 1) -> int:
+    """
+    Extracts file numerical index from filenames like:
+    'animation_prompt_1.md' -> 1
+    'animation_prompt_2.md' -> 2
+    '_3.md' -> 3
+    'prompt-4.txt' -> 4
+    """
+    if not filename:
+        return fallback_idx
+    m = re.search(r'(?:[_\-\s]|^)(\d+)(?:\.[^.]+)?$', filename)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            pass
+    m = re.search(r'(\d+)', filename)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            pass
+    return fallback_idx
+
+def parse_seedance_filter(subfolders_str: str = "", prompt_files_str: str = "") -> dict[str, Any]:
+    """
+    Parses subfolders/files filter strings.
+    Supports:
+      - subfolders_str: '1', '1-10', '1:2-3', '1_2-3', etc.
+      - prompt_files_str: '2-3', '2, 3', '_2, _3', etc.
+    Returns:
+      {
+        'folder_targets': set[int],
+        'folder_file_map': dict[int, set[int]],
+        'raw_numbers': list[int]
+      }
+    """
+    filter_str = subfolders_str or ""
+    folder_targets = set()
+    folder_file_map = {}
+    raw_numbers = set()
+
+    if filter_str and filter_str.strip():
+        parts = [p.strip() for p in filter_str.split(',') if p.strip()]
+        for part in parts:
+            # Check for folder:sub_files patterns e.g. 1:2-3, 1:2, 1_2-3, 1_2, 1.2-1.3, 1(2-3)
+            m = re.match(r'^(\d+)\s*[:/_\.\(]\s*([0-9\-_,\s\)]+)$', part)
+            if m:
+                f_num = int(m.group(1))
+                sub_str = m.group(2).rstrip(')')
+                sub_nums = set()
+                for s_part in sub_str.split(','):
+                    clean_s = s_part.strip().lstrip('_')
+                    if '-' in clean_s:
+                        s_sub = clean_s.split('-')
+                        if len(s_sub) == 2 and s_sub[0].strip().lstrip('_').isdigit() and s_sub[1].strip().lstrip('_').isdigit():
+                            st, en = int(s_sub[0].strip().lstrip('_')), int(s_sub[1].strip().lstrip('_'))
+                            for n in range(min(st, en), max(st, en) + 1):
+                                sub_nums.add(n)
+                    elif clean_s.isdigit():
+                        sub_nums.add(int(clean_s))
+                folder_targets.add(f_num)
+                if f_num not in folder_file_map:
+                    folder_file_map[f_num] = set()
+                folder_file_map[f_num].update(sub_nums)
+                raw_numbers.add(f_num)
+                continue
+
+            clean_part = part.lstrip('_')
+            if '-' in clean_part:
+                sub = clean_part.split('-')
+                if len(sub) == 2 and sub[0].strip().lstrip('_').isdigit() and sub[1].strip().lstrip('_').isdigit():
+                    start, end = int(sub[0].strip().lstrip('_')), int(sub[1].strip().lstrip('_'))
+                    for num in range(min(start, end), max(start, end) + 1):
+                        raw_numbers.add(num)
+                        folder_targets.add(num)
+            elif clean_part.isdigit():
+                num = int(clean_part)
+                raw_numbers.add(num)
+                folder_targets.add(num)
+
+    # Parse prompt_files_str if provided
+    if prompt_files_str and prompt_files_str.strip():
+        explicit_files = set(parse_range_string(prompt_files_str))
+        if explicit_files:
+            if folder_targets:
+                for f_num in folder_targets:
+                    if f_num not in folder_file_map:
+                        folder_file_map[f_num] = set()
+                    folder_file_map[f_num].update(explicit_files)
+            raw_numbers.update(explicit_files)
+
+    return {
+        "folder_targets": folder_targets,
+        "folder_file_map": folder_file_map,
+        "raw_numbers": sorted(list(raw_numbers))
+    }
 
 def extract_leading_number(folder_name: str) -> Optional[int]:
     """Extracts leading number from folder name like '01_intro' -> 1, '15' -> 15."""
@@ -532,73 +631,220 @@ def set_seedance_image(driver, image_path: str) -> bool:
         return False
     return set_seedance_images(driver, [image_path])
 
+def get_animation_prompt_files(folder_path: str) -> list[str]:
+    """
+    Returns list of animation prompt file names inside folder_path.
+    Matches files with 'prompt' in filename ending in .md, .txt, or .markdown.
+    If none matched, falls back to markdown files excluding captions.
+    """
+    if not folder_path or not os.path.isdir(folder_path):
+        return []
+    try:
+        entries = sorted(os.listdir(folder_path))
+    except Exception:
+        return []
+
+    prompt_files = [
+        f for f in entries
+        if not f.startswith('.')
+        and f.lower().endswith(('.md', '.txt', '.markdown'))
+        and 'prompt' in f.lower()
+    ]
+    if prompt_files:
+        return prompt_files
+
+    return [
+        f for f in entries
+        if not f.startswith('.')
+        and f.lower().endswith(('.md', '.txt', '.markdown'))
+        and not f.lower().startswith('caption')
+    ]
+
+def get_seedance_subfolders_summary(
+    main_folder: str,
+    subfolders_str: str = "",
+    prompt_files_str: str = ""
+) -> dict[str, Any]:
+    """
+    Scans subfolders in main_folder and counts animation prompt files in each subfolder.
+    Supports filtering by subfolder numbers and/or individual prompt file numbers (e.g. '2-3', '1:2-3', '1_2-3').
+    """
+    if not main_folder or not os.path.isdir(main_folder):
+        return {
+            "ok": False,
+            "error": f"ไม่พบโฟลเดอร์หลัก: {main_folder}",
+            "total_folders": 0,
+            "total_prompt_files": 0,
+            "folders": []
+        }
+
+    filter_data = parse_seedance_filter(subfolders_str, prompt_files_str)
+    folder_targets = filter_data["folder_targets"]
+    folder_file_map = filter_data["folder_file_map"]
+    raw_numbers = filter_data["raw_numbers"]
+
+    all_subdirs = []
+
+    try:
+        entries = sorted(os.listdir(main_folder))
+    except Exception as ex:
+        return {
+            "ok": False,
+            "error": f"ไม่สามารถเข้าถึงโฟลเดอร์: {ex}",
+            "total_folders": 0,
+            "total_prompt_files": 0,
+            "folders": []
+        }
+
+    for entry in entries:
+        full_path = os.path.join(main_folder, entry)
+        if os.path.isdir(full_path) and not entry.startswith('.'):
+            num = extract_leading_number(entry)
+            if folder_targets:
+                if num is not None and num in folder_targets:
+                    all_subdirs.append((num, entry, full_path))
+            else:
+                all_subdirs.append((num if num is not None else 999999, entry, full_path))
+
+    is_leaf = False
+    # If main_folder has no subdirectories, check if main_folder itself has prompt files
+    if not all_subdirs:
+        direct_files = get_animation_prompt_files(main_folder)
+        if direct_files:
+            base_name = os.path.basename(main_folder.rstrip(os.sep))
+            num = extract_leading_number(base_name)
+            all_subdirs.append((num if num is not None else 999999, base_name, main_folder))
+            is_leaf = True
+        else:
+            subdirs_present = [e for e in entries if os.path.isdir(os.path.join(main_folder, e)) and not e.startswith('.')]
+            if len(subdirs_present) == 1:
+                single_entry = subdirs_present[0]
+                num = extract_leading_number(single_entry)
+                all_subdirs.append((num if num is not None else 999999, single_entry, os.path.join(main_folder, single_entry)))
+                is_leaf = True
+
+    # Sort numerically by leading number then name
+    all_subdirs.sort(key=lambda x: (x[0] is None, x[0], x[1]))
+
+    folder_summaries = []
+    total_prompt_files = 0
+
+    for num, sub_name, sub_path in all_subdirs:
+        files = get_animation_prompt_files(sub_path)
+        allowed = folder_file_map.get(num) if num is not None else None
+        if allowed is None and is_leaf and raw_numbers:
+            allowed = set(raw_numbers)
+
+        if allowed is not None:
+            filtered_files = []
+            for p_pos, f in enumerate(files, 1):
+                f_idx = extract_prompt_file_index(f, fallback_idx=p_pos)
+                if f_idx in allowed:
+                    filtered_files.append(f)
+            files = filtered_files
+
+        count = len(files)
+        total_prompt_files += count
+        folder_summaries.append({
+            "name": sub_name,
+            "num": num if num != 999999 else None,
+            "path": sub_path,
+            "prompt_file_count": count,
+            "prompt_files": files
+        })
+
+    return {
+        "ok": True,
+        "main_folder": main_folder,
+        "subfolders_filter": subfolders_str,
+        "prompt_files_filter": prompt_files_str,
+        "total_folders": len(folder_summaries),
+        "total_prompt_files": total_prompt_files,
+        "folders": folder_summaries
+    }
+
 def scan_seedance_folders(
     main_folder: str,
     subfolders_str: str = "",
     image_mode: str = "none",
     character_sheet_path: str = "",
-    image_subfolder: str = "images"
+    image_subfolder: str = "images",
+    prompt_files_str: str = ""
 ) -> dict[str, Any]:
     """
     Scans main folder, filters subfolders by numbers/ranges,
     and locates markdown prompt files containing 'prompt' (case-insensitive) in filename.
     Also detects images based on image_mode: 'subfolder', 'character_sheet', or 'none'.
     In 'subfolder' mode, searches for images in the folder named image_subfolder (default: 'images').
+    Supports selecting specific prompt files via '2-3', '1:2-3', '1_2-3', or prompt_files_str.
     """
     if not main_folder or not os.path.isdir(main_folder):
         raise ValueError(f"ไม่พบโฟลเดอร์หลัก: {main_folder}")
 
-    target_numbers = parse_range_string(subfolders_str)
+    filter_data = parse_seedance_filter(subfolders_str, prompt_files_str)
+    folder_targets = filter_data["folder_targets"]
+    folder_file_map = filter_data["folder_file_map"]
+    raw_numbers = filter_data["raw_numbers"]
+
     all_subdirs = []
 
     for entry in sorted(os.listdir(main_folder)):
         full_path = os.path.join(main_folder, entry)
         if os.path.isdir(full_path) and not entry.startswith('.'):
             num = extract_leading_number(entry)
-            if target_numbers:
-                if num is not None and num in target_numbers:
+            if folder_targets:
+                if num is not None and num in folder_targets:
                     all_subdirs.append((num, entry, full_path))
             else:
                 all_subdirs.append((num if num is not None else 999999, entry, full_path))
+
+    is_leaf = False
+    # If main_folder has no subdirectories, check if main_folder itself has prompt files
+    if not all_subdirs:
+        direct_files = get_animation_prompt_files(main_folder)
+        if direct_files:
+            base_name = os.path.basename(main_folder.rstrip(os.sep))
+            num = extract_leading_number(base_name)
+            all_subdirs.append((num if num is not None else 999999, base_name, main_folder))
+            is_leaf = True
+        else:
+            subdirs_present = [e for e in sorted(os.listdir(main_folder)) if os.path.isdir(os.path.join(main_folder, e)) and not e.startswith('.')]
+            if len(subdirs_present) == 1:
+                single_entry = subdirs_present[0]
+                num = extract_leading_number(single_entry)
+                all_subdirs.append((num if num is not None else 999999, single_entry, os.path.join(main_folder, single_entry)))
+                is_leaf = True
 
     # Sort numerically by leading number then name
     all_subdirs.sort(key=lambda x: (x[0] is None, x[0], x[1]))
 
     items = []
+    global_id = 0
     for idx, (_, sub_name, sub_path) in enumerate(all_subdirs, 1):
         num = extract_leading_number(sub_name)
 
-        # 1. Find markdown file with 'prompt' in name
-        prompt_file = None
-        prompt_path = None
-        prompt_text = ""
-
-        for fname in sorted(os.listdir(sub_path)):
-            if fname.startswith('.'):
-                continue
-            fname_lower = fname.lower()
-            if (fname_lower.endswith('.md') or fname_lower.endswith('.txt') or fname_lower.endswith('.markdown')) and 'prompt' in fname_lower:
-                prompt_file = fname
-                prompt_path = os.path.join(sub_path, fname)
-                try:
-                    with open(prompt_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        prompt_text = f.read().strip()
-                except Exception as ex:
-                    log(f"[Seedance Scan] Warning: Cannot read {prompt_path}: {ex}")
-                break
-
-        # Fallback: any .md file if none matched 'prompt'
-        if not prompt_file:
+        # 1. Find animation prompt files
+        all_prompt_files = get_animation_prompt_files(sub_path)
+        if not all_prompt_files:
             for fname in sorted(os.listdir(sub_path)):
                 if fname.lower().endswith('.md') and not fname.startswith('.'):
-                    prompt_file = fname
-                    prompt_path = os.path.join(sub_path, fname)
-                    try:
-                        with open(prompt_path, 'r', encoding='utf-8', errors='ignore') as f:
-                            prompt_text = f.read().strip()
-                    except Exception:
-                        pass
+                    all_prompt_files = [fname]
                     break
+
+        total_in_folder = len(all_prompt_files) if all_prompt_files else 1
+
+        allowed = folder_file_map.get(num) if num is not None else None
+        if allowed is None and is_leaf and raw_numbers:
+            allowed = set(raw_numbers)
+
+        prompt_targets = []
+        if all_prompt_files:
+            for p_pos, pf in enumerate(all_prompt_files, 1):
+                f_idx = extract_prompt_file_index(pf, fallback_idx=p_pos)
+                if allowed is None or f_idx in allowed:
+                    prompt_targets.append((pf, f_idx))
+        else:
+            prompt_targets = [(None, 1)]
 
         # 2. Image Detection: Always scan subfolder images so UI or batch mode can access them
         subfolder_imgs = find_all_images_in_folder(sub_path, subfolder_name=image_subfolder)
@@ -628,44 +874,87 @@ def scan_seedance_folders(
                 has_image = True
         # If "none", image_files and image_paths remain empty
 
-        prompt_len = len(prompt_text)
-        is_over_4000 = prompt_len > 4000
+        for prompt_file, p_idx in prompt_targets:
+            global_id += 1
+            prompt_path = os.path.join(sub_path, prompt_file) if prompt_file else None
+            prompt_text = ""
 
-        items.append({
-            "id": idx,
-            "num": num,
-            "checked": True if (prompt_file and prompt_text) else False,
-            "subfolder_name": sub_name,
-            "subfolder_path": sub_path,
-            "prompt_file": prompt_file or "ไม่พบไฟล์ prompt (.md)",
-            "prompt_path": prompt_path or "",
-            "prompt_text": prompt_text,
-            "prompt_length": prompt_len,
-            "is_over_4000": is_over_4000,
-            "has_prompt": bool(prompt_file and prompt_text),
-            "image_mode": image_mode,
-            "image_subfolder": image_subfolder,
-            "image_file": image_file or "",
-            "image_path": image_path or "",
-            "image_files": image_files,
-            "image_paths": image_paths,
-            "subfolder_image_files": subfolder_image_files,
-            "subfolder_image_paths": subfolder_image_paths,
-            "has_image": has_image,
-            "status": "ready" if (prompt_file and prompt_text) else "warning"
-        })
+            if prompt_path and os.path.isfile(prompt_path):
+                try:
+                    with open(prompt_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        prompt_text = f.read().strip()
+                except Exception as ex:
+                    log(f"[Seedance Scan] Warning: Cannot read {prompt_path}: {ex}")
+
+            p_base = os.path.splitext(prompt_file)[0] if prompt_file else ""
+            prompt_len = len(prompt_text)
+            is_over_4000 = prompt_len > 4000
+
+            # Check if this specific video file already exists on disk
+            local_candidates = []
+            if p_base:
+                local_candidates.append(os.path.join(sub_path, f"{p_base}.mp4"))
+            if total_in_folder > 1:
+                local_candidates.append(os.path.join(sub_path, f"{sub_name}_{p_idx}.mp4"))
+                local_candidates.append(os.path.join(sub_path, f"{sub_name}-{p_idx}.mp4"))
+                if p_idx == 1:
+                    local_candidates.append(os.path.join(sub_path, f"{sub_name}.mp4"))
+            else:
+                local_candidates.append(os.path.join(sub_path, f"{sub_name}.mp4"))
+
+            local_mp4 = next((p for p in local_candidates if (p and os.path.isfile(p))), None)
+            local_video_exists = bool(local_mp4)
+            local_video_size_mb = round(os.path.getsize(local_mp4) / (1024 * 1024), 1) if local_video_exists else 0
+
+            display_sub_name = f"{sub_name} [{p_idx}/{total_in_folder}] {prompt_file}" if total_in_folder > 1 else sub_name
+
+            items.append({
+                "id": global_id,
+                "num": num,
+                "sub_index": p_idx,
+                "total_prompts": total_in_folder,
+                "checked": True if (prompt_file and prompt_text) else False,
+                "subfolder_name": sub_name,
+                "display_name": display_sub_name,
+                "subfolder_path": sub_path,
+                "prompt_file": prompt_file or "ไม่พบไฟล์ prompt (.md)",
+                "prompt_base_name": p_base,
+                "prompt_path": prompt_path or "",
+                "prompt_text": prompt_text,
+                "prompt_length": prompt_len,
+                "is_over_4000": is_over_4000,
+                "has_prompt": bool(prompt_file and prompt_text),
+                "prompt_files": all_prompt_files,
+                "prompt_file_count": len(all_prompt_files),
+                "local_video_exists": local_video_exists,
+                "local_video_path": local_mp4,
+                "local_video_size_mb": local_video_size_mb,
+                "image_mode": image_mode,
+                "image_subfolder": image_subfolder,
+                "image_file": image_file or "",
+                "image_path": image_path or "",
+                "image_files": image_files,
+                "image_paths": image_paths,
+                "subfolder_image_files": subfolder_image_files,
+                "subfolder_image_paths": subfolder_image_paths,
+                "has_image": has_image,
+                "status": "ready" if (prompt_file and prompt_text) else "warning"
+            })
+
 
     # Float items exceeding 4000 characters to the top, while maintaining numerical order within each group
     items.sort(key=lambda x: (
         not (len(x.get("prompt_text", "")) > 4000),
         x["num"] is None,
         x["num"] if x["num"] is not None else 999999,
-        x["subfolder_name"]
+        x["subfolder_name"],
+        x.get("sub_index", 1)
     ))
 
     return {
         "ok": True,
         "total": len(items),
+        "total_folders": len(all_subdirs),
         "valid_count": sum(1 for i in items if i["has_prompt"]),
         "over_4000_count": sum(1 for i in items if len(i.get("prompt_text", "")) > 4000),
         "items": items
@@ -1058,39 +1347,64 @@ def extract_prompt_search_snippets(prompt_text: str) -> list[str]:
         "vertical social-media composition",
         "no kids",
         "no children",
-        "adults only"
+        "adults only",
+        "photorealistic",
+        "raw eyewitness",
+        "eyewitness footage",
+        "one continuous shot",
+        "use a fully realistic",
+        "mimic exactly",
+        "everything must look",
+        "9:16"
     ]
 
     lines = [l.strip() for l in prompt_text.split("\n") if l.strip()]
     snippets = []
 
-    # 0. User-suggested prefix matching: collapse all newlines/spaces and take first 15-35 characters
-    # Bridges local files with newlines (\n\n) directly with Seedance's single-line rendering
-    norm_full = re.sub(r"\s+", " ", prompt_text).strip()
-    if len(norm_full) >= 6:
-        prefix_35 = norm_full[:35].strip()
-        if prefix_35 and not any(bp in prefix_35.lower() for bp in BOILERPLATE):
-            snippets.append(prefix_35)
-        elif prefix_35:
-            # If it starts with a number (e.g. "44 Attach the prod..."), keep the prefix
-            snippets.append(norm_full[:25].strip())
+    # 1. Distinctive disaster / crisis facing phrases (e.g. "facing a colossal dark green tsunami wall", "facing a violent brown flash flood torrent")
+    facing_matches = re.findall(r'facing\s+(?:a\s+)?([^,.\n]{15,70})', prompt_text, re.IGNORECASE)
+    for fm in facing_matches:
+        clean = fm.strip()
+        if clean[:80] not in snippets and not any(bp in clean.lower() for bp in BOILERPLATE):
+            snippets.append(clean[:80])
+        if len(snippets) >= 12:
+            break
 
-    # 1. First line (often contains sequence number or specific title e.g. "44 - น้ำอาบไหลช้า...")
-    if lines:
-        first_line = lines[0].strip()
-        if not any(bp in first_line.lower() for bp in BOILERPLATE) and len(first_line) >= 4:
-            if first_line[:80] not in snippets:
-                snippets.append(first_line[:80])
+    # 2. Distinctive scene phrases (e.g. "miniature coastal town tsunami scene", "miniature city flash flood scene")
+    scene_matches = re.findall(r'([^,.\n]{8,60}\s+scene)', prompt_text, re.IGNORECASE)
+    for sm in scene_matches:
+        clean = sm.strip()
+        if not any(bp in clean.lower() for bp in BOILERPLATE):
+            if clean[:80] not in snippets:
+                snippets.append(clean[:80])
+        if len(snippets) >= 12:
+            break
 
-    # 2. Extract dialogue quotes in quotes (Thai or English) e.g. "..." or “...”
+    # 3. Extract dialogue quotes in quotes (Thai or English) e.g. "..." or “...”
     quotes = re.findall(r'["“]([^\n"“”]{8,120})["”]', prompt_text)
     for q in quotes:
         clean_q = q.strip()
         if len(clean_q) >= 10 and not any(bp in clean_q.lower() for bp in BOILERPLATE):
             if clean_q[:80] not in snippets:
                 snippets.append(clean_q[:80])
+        if len(snippets) >= 12:
+            break
 
-    # 3. Action lines with timestamps (e.g. 0:00-0:02, 0s-3s, etc.)
+    # 4. Timeline action cues embedded in continuous text (e.g. 0-2s: ..., 2-2.5s: ..., 0:00-0:02 — ...)
+    time_matches = re.findall(
+        r'(?:\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?s|\d+:\d+\s*-\s*\d+:\d+)\s*[:—\-]\s*([^,\n.]{15,90})',
+        prompt_text,
+        re.IGNORECASE
+    )
+    for tm in time_matches:
+        clean = tm.strip()
+        if len(clean) >= 15 and not any(bp in clean.lower() for bp in BOILERPLATE):
+            if clean[:80] not in snippets:
+                snippets.append(clean[:80])
+        if len(snippets) >= 12:
+            break
+
+    # 5. Action lines with timestamps (e.g. 0:00-0:02, 0s-3s, etc.)
     scene_lines = [l for l in lines if any(k in l for k in ["0s-", "3s-", "6s-", "9s-", "12s-", "0:", "1:"])]
     for sl in scene_lines:
         clean = sl.replace('"', '').replace("'", '').strip()
@@ -1105,21 +1419,26 @@ def extract_prompt_search_snippets(prompt_text: str) -> list[str]:
                 snippets.append(distinctive[:80])
             elif clean[:80] not in snippets:
                 snippets.append(clean[:80])
+        if len(snippets) >= 12:
+            break
 
-    # 4. Other non-boilerplate lines
+    # 6. First line (if not boilerplate, often contains sequence number or specific title e.g. "44 - น้ำอาบไหลช้า...")
+    if lines:
+        first_line = lines[0].strip()
+        if not any(bp in first_line.lower() for bp in BOILERPLATE) and len(first_line) >= 6:
+            if first_line[:80] not in snippets:
+                snippets.append(first_line[:80])
+
+    # 7. Other non-boilerplate lines
     for l in lines:
         clean = l.replace('"', '').replace("'", '').strip()
         if len(clean) >= 20 and not any(bp in clean.lower() for bp in BOILERPLATE):
             if clean[:80] not in snippets:
                 snippets.append(clean[:80])
-        if len(snippets) >= 8:
+        if len(snippets) >= 12:
             break
 
-    # 5. Fallback to first line if nothing extracted
-    if not snippets and lines:
-        snippets.append(lines[0][:80])
-
-    return snippets[:8]
+    return snippets[:12]
 
 
 def find_record_on_dreamina(
@@ -1127,19 +1446,26 @@ def find_record_on_dreamina(
     num: Optional[Any] = None,
     name: str = "",
     prompt_snippet: Union[str, list[str]] = "",
-    scroll_to_found: bool = True
+    full_prompt: str = "",
+    scroll_to_found: bool = True,
+    click_download: bool = False
 ) -> dict[str, Any]:
     """
-    Searches for a record card on Dreamina virtual list matching num, name, or distinctive prompt snippets.
-    Checks current viewport first; if not found, scans through the viewport scroll positions.
+    Searches for a record card on Dreamina virtual list matching full prompt text, distinctive phrases, or num/name.
+    Compares distinctive keyword overlap across the entire prompt text, excluding generic boilerplate words.
+    Checks current viewport first; if not found with high confidence, scans through the viewport scroll positions.
     Returns:
       {
         "found": bool,
-        "match_type": str,
+        "score": int,
+        "matchType": str,
+        "matchedWords": int,
         "text": str,
-        "has_video": bool,
-        "video_src": str or None,
-        "is_generating": bool
+        "hasVideo": bool,
+        "videoSrc": str or None,
+        "isGenerating": bool,
+        "hasDlBtn": bool,
+        "buttonClicked": bool
       }
     """
     if not driver:
@@ -1147,17 +1473,24 @@ def find_record_on_dreamina(
 
     num_str = str(num) if num is not None else ""
     name = (name or "").strip()
+    full_prompt = (full_prompt or "").strip()
+
+    if not full_prompt and isinstance(prompt_snippet, str) and len(prompt_snippet) > 80:
+        full_prompt = prompt_snippet.strip()
+
     if isinstance(prompt_snippet, list):
         snippets_list = prompt_snippet
     elif prompt_snippet and len(prompt_snippet) > 80:
         snippets_list = extract_prompt_search_snippets(prompt_snippet)
     elif prompt_snippet:
         snippets_list = [prompt_snippet.strip().replace("\n", " ")[:80]]
+    elif full_prompt:
+        snippets_list = extract_prompt_search_snippets(full_prompt)
     else:
         snippets_list = []
 
     check_code = r"""
-    function checkTarget(num, name, snips) {
+    function checkTarget(num, name, snips, fullPrompt) {
         const snipList = Array.isArray(snips) ? snips : (snips ? [snips] : []);
         const rawItems = document.querySelectorAll('[class*="record-ej"], [class*="video-record"], .content-_w2B98 > div > div, [class*="record-item"]');
         const seen = new Set();
@@ -1171,52 +1504,108 @@ def find_record_on_dreamina(
             }
         }
 
+        const BOILERPLATE_WORDS = new Set([
+            'photorealistic', 'raw', 'eyewitness', 'footage', 'vertical', 'scene', 'featuring', 'separate',
+            'groups', 'terrified', 'tiny', 'asian', 'human', 'civilians', 'varied', 'ages', 'facing',
+            'believable', 'scale', 'contrast', 'against', 'real', 'hand', 'ultra', 'detailed', 'emotional',
+            'expressions', 'across', 'children', 'adults', 'elderly', 'people', 'dry', 'deadpan', 'comic',
+            'timing', 'inside', 'realistic', 'disaster', 'moment', 'warm', 'hopeful', 'cinematic', 'lighting',
+            'shallow', 'depth', 'field', 'camera', 'shake', 'chaotic', 'micro', 'jitter', 'mimicking',
+            'person', 'holding', 'smartphone', 'documentary', 'style', 'one', 'continuous', 'shot', 'with',
+            'cuts', 'blood', 'gore', 'text', 'subtitles', 'watermarks', 'logos', 'readable', 'brand',
+            'names', 'use', 'fully', 'live', 'action', 'background', 'grounded', 'environmental', 'detail',
+            'natural', 'practical', 'atmosphere', 'textures', 'physically', 'plausible', 'throughout',
+            'entire', 'mimic', 'exactly', 'what', 'would', 'see', 'life', 'cgi', 'polish', 'claymation',
+            'render', 'look', 'miniature', 'figurine', 'model', 'toy', 'texture', 'everything', 'must',
+            'world', 'physical', 'frame', 'right', 'left', 'extreme', 'speed', 'motion', 'blur', 'seconds',
+            'inches', 'screaming', 'disbelief', 'background', 'slowly', 'briefly', 'seen', 'attach', 'product',
+            'image', 'reference', 'dialogue', 'audio', 'spoken', 'language', 'mouth', 'sync', 'clear', 'pacing',
+            'dramatic', 'contrast', 'between', 'sound', 'requirements', 'negative', 'constraints', 'words',
+            'letters', 'overlays', 'floating', 'cartoon', 'fantasy', 'browser', 'screen', 'smooth', 'plastic', 'skin'
+        ]);
+
+        function getDistinctiveWords(str) {
+            if (!str) return [];
+            return str.toLowerCase()
+                .replace(/[^a-z0-9\u0E00-\u0E7F\s]/g, ' ')
+                .split(/\s+/)
+                .filter(w => w.length >= 3 && !BOILERPLATE_WORDS.has(w));
+        }
+
+        const queryDistinctiveWords = getDistinctiveWords(fullPrompt);
+        const queryDistinctiveSet = new Set(queryDistinctiveWords);
+
         let bestCard = null;
         let bestScore = 0;
         let bestMatchType = '';
         let bestText = '';
+        let bestMatchedWords = 0;
 
         for (let idx = 0; idx < uniqueCards.length; idx++) {
             const el = uniqueCards[idx];
-            const text = (el.innerText || el.textContent || '').trim();
+            let text = (el.innerText || el.textContent || '').trim();
+            const titledEls = el.querySelectorAll('[title]');
+            for (const te of titledEls) {
+                const tVal = te.getAttribute('title');
+                if (tVal && tVal.length > 20) {
+                    text += ' ' + tVal;
+                }
+            }
             if (!text) continue;
 
-            // Normalize card text by collapsing all whitespace/newlines into single spaces
             const normText = text.replace(/\s+/g, ' ').trim();
+            const normTextLower = normText.toLowerCase();
 
             let score = 0;
             let matchType = '';
+            let matchedDistinctiveCount = 0;
 
-            // 1. Exact full name match (highest confidence: 100)
-            if (name && (text.includes(name) || normText.includes(name))) {
-                score += 100;
-                matchType = 'name';
+            // 1. Exact phrase / snippet match from extract_prompt_search_snippets
+            if (snipList.length > 0) {
+                for (const snip of snipList) {
+                    const normSnip = snip.replace(/\s+/g, ' ').trim().toLowerCase();
+                    if (normSnip && normSnip.length >= 8) {
+                        if (normTextLower.includes(normSnip)) {
+                            score += 180;
+                            if (!matchType) matchType = 'snippet';
+                        }
+                    }
+                }
             }
 
-            // 2. Exact Sequence Number Header match:
+            // 2. Full distinctive keyword overlap across entire prompt
+            if (queryDistinctiveSet.size > 0) {
+                const cardDistinctiveWords = getDistinctiveWords(normText);
+                const cardWordSet = new Set(cardDistinctiveWords);
+                for (const qw of queryDistinctiveSet) {
+                    if (cardWordSet.has(qw)) {
+                        matchedDistinctiveCount++;
+                    }
+                }
+                score += matchedDistinctiveCount * 18;
+                if (matchedDistinctiveCount >= 5 && !matchType) {
+                    matchType = 'keywords';
+                }
+            }
+
+            // 3. Exact full name match: only if name is descriptive (>= 4 chars and not purely digits)
+            const isDescriptiveName = name && name.length >= 4 && !/^\d+$/.test(name);
+            if (isDescriptiveName && (normTextLower.includes(name.toLowerCase()))) {
+                score += 80;
+                if (!matchType) matchType = 'name';
+            }
+
+            // 4. Exact Sequence Number Header match:
             if (num) {
                 const numStr = String(num).trim();
                 const headerRegex = new RegExp('(?:^|[\\n\\r\\s])' + numStr + '(?![\\d:])(?:\\s*[-.:_\\s]|\\s+[a-zA-Zก-๙])', 'i');
                 const wordRegex = new RegExp('(?:^|[^\\w\\d:])' + numStr + '(?![\\d:])', 'i');
                 if (headerRegex.test(normText) || headerRegex.test(text)) {
-                    score += 80;
+                    score += 35;
                     if (!matchType) matchType = 'num_header';
                 } else if (wordRegex.test(normText) || wordRegex.test(text)) {
-                    score += 60;
+                    score += 15;
                     if (!matchType) matchType = 'num';
-                }
-            }
-
-            // 3. Normalized prefix & snippet match (bridges local newlines with single-line web cards)
-            if (snipList.length > 0) {
-                for (const snip of snipList) {
-                    const normSnip = snip.replace(/\s+/g, ' ').trim();
-                    if (normSnip && normSnip.length >= 6) {
-                        if (normText.startsWith(normSnip) || normText.includes(normSnip) || text.includes(snip)) {
-                            score += 40;
-                            if (!matchType) matchType = 'snippet';
-                        }
-                    }
                 }
             }
 
@@ -1225,20 +1614,30 @@ def find_record_on_dreamina(
                 bestCard = el;
                 bestMatchType = matchType;
                 bestText = text;
+                bestMatchedWords = matchedDistinctiveCount;
             }
         }
 
-        if (bestCard && bestScore >= 40) {
+        if (bestCard && bestScore >= 60) {
             const vid = bestCard.querySelector('video');
+            let videoSrc = null;
+            if (vid) {
+                videoSrc = vid.currentSrc || vid.src || vid.getAttribute('src');
+                if (!videoSrc) {
+                    const sourceEl = vid.querySelector('source');
+                    if (sourceEl) videoSrc = sourceEl.src || sourceEl.getAttribute('src');
+                }
+            }
             const isGen = !!bestCard.querySelector('[class*="generating"], [class*="progress"], [class*="loading"]');
             const dlBtn = bestCard.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
             return {
                 found: true,
                 score: bestScore,
                 matchType: bestMatchType,
+                matchedWords: bestMatchedWords,
                 text: bestText.slice(0, 150),
                 hasVideo: !!vid,
-                videoSrc: vid ? (vid.src || vid.currentSrc) : null,
+                videoSrc: videoSrc,
                 isGenerating: isGen,
                 hasDlBtn: !!dlBtn,
                 el: bestCard
@@ -1263,20 +1662,32 @@ def find_record_on_dreamina(
 
     try:
         res = driver.execute_script(check_code + r"""
-            const found = checkTarget(arguments[0], arguments[1], arguments[2]);
+            const found = checkTarget(arguments[0], arguments[1], arguments[2], arguments[3]);
             if (found) {
-                if (arguments[3] && found.el) {
+                if (arguments[4] && found.el) {
                     found.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                let clickedDl = false;
+                if (arguments[5] && found.el) {
+                    found.el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                    found.el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                    const dlBtn = found.el.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
+                    if (dlBtn) {
+                        dlBtn.click();
+                        clickedDl = true;
+                    }
                 }
                 return {
                     found: true,
                     score: found.score,
                     matchType: found.matchType,
+                    matchedWords: found.matchedWords,
                     text: found.text,
                     hasVideo: found.hasVideo,
                     videoSrc: found.videoSrc,
                     isGenerating: found.isGenerating,
-                    hasDlBtn: found.hasDlBtn
+                    hasDlBtn: found.hasDlBtn,
+                    buttonClicked: clickedDl
                 };
             }
             const vp = getScrollContainer();
@@ -1286,10 +1697,10 @@ def find_record_on_dreamina(
                 clientHeight: vp ? vp.clientHeight : 800,
                 currScroll: vp ? vp.scrollTop : 0
             };
-        """, num_str, name, snippets_list, scroll_to_found)
+        """, num_str, name, snippets_list, full_prompt, scroll_to_found, click_download)
 
         if isinstance(res, dict) and res.get("found"):
-            if res.get("score", 0) >= 80:
+            if res.get("score", 0) >= 280:
                 return res
 
         best_match = res if (isinstance(res, dict) and res.get("found")) else None
@@ -1318,20 +1729,32 @@ def find_record_on_dreamina(
             """, pos)
             time.sleep(0.18)
             match = driver.execute_script(check_code + r"""
-                const found = checkTarget(arguments[0], arguments[1], arguments[2]);
+                const found = checkTarget(arguments[0], arguments[1], arguments[2], arguments[3]);
                 if (found) {
-                    if (arguments[3] && found.el) {
+                    if (arguments[4] && found.el) {
                         found.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    let clickedDl = false;
+                    if (arguments[5] && found.el) {
+                        found.el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                        found.el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                        const dlBtn = found.el.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
+                        if (dlBtn) {
+                            dlBtn.click();
+                            clickedDl = true;
+                        }
                     }
                     return {
                         found: true,
                         score: found.score,
                         matchType: found.matchType,
+                        matchedWords: found.matchedWords,
                         text: found.text,
                         hasVideo: found.hasVideo,
                         videoSrc: found.videoSrc,
                         isGenerating: found.isGenerating,
-                        hasDlBtn: found.hasDlBtn
+                        hasDlBtn: found.hasDlBtn,
+                        buttonClicked: clickedDl
                     };
                 }
                 const vp = getScrollContainer();
@@ -1339,9 +1762,9 @@ def find_record_on_dreamina(
                     found: false,
                     newMaxScroll: vp ? vp.scrollHeight : 0
                 };
-            """, num_str, name, snippets_list, scroll_to_found)
+            """, num_str, name, snippets_list, full_prompt, scroll_to_found, click_download)
             if match and isinstance(match, dict) and match.get("found"):
-                if match.get("score", 0) >= 80:
+                if match.get("score", 0) >= 280:
                     return match
                 if not best_match or match.get("score", 0) > best_match.get("score", 0):
                     best_match = match
@@ -1351,7 +1774,7 @@ def find_record_on_dreamina(
 
             pos += step
 
-        if best_match:
+        if best_match and best_match.get("score", 0) >= 90:
             return best_match
 
     except Exception as ex:
@@ -1386,9 +1809,24 @@ def pair_seedance_items(driver, local_items: list[dict[str, Any]]) -> list[dict[
         prompt_text = item.get("prompt_text", "")
         prompt_snippets = extract_prompt_search_snippets(prompt_text)
 
-        # Check local mp4
-        local_mp4 = os.path.join(sub_path, f"{sub_name}.mp4") if (sub_path and os.path.isdir(sub_path)) else None
-        local_video_exists = bool(local_mp4 and os.path.isfile(local_mp4))
+        # Check local mp4 (support sub_name.mp4, prompt_base_name.mp4, and sub_name_index.mp4)
+        p_base = item.get("prompt_base_name")
+        total_p = item.get("total_prompts", 1)
+        sub_idx = item.get("sub_index", 1)
+
+        local_candidates = []
+        if p_base:
+            local_candidates.append(os.path.join(sub_path, f"{p_base}.mp4"))
+        if total_p > 1:
+            local_candidates.append(os.path.join(sub_path, f"{sub_name}_{sub_idx}.mp4"))
+            local_candidates.append(os.path.join(sub_path, f"{sub_name}-{sub_idx}.mp4"))
+            if sub_idx == 1:
+                local_candidates.append(os.path.join(sub_path, f"{sub_name}.mp4"))
+        else:
+            local_candidates.append(os.path.join(sub_path, f"{sub_name}.mp4"))
+
+        local_mp4 = next((p for p in local_candidates if (p and os.path.isfile(p))), None)
+        local_video_exists = bool(local_mp4)
         local_video_size_mb = round(os.path.getsize(local_mp4) / (1024 * 1024), 1) if local_video_exists else 0
 
         # Check Dreamina web
@@ -1400,7 +1838,14 @@ def pair_seedance_items(driver, local_items: list[dict[str, Any]]) -> list[dict[
 
         if driver:
             try:
-                web_res = find_record_on_dreamina(driver, num=num, name=sub_name, prompt_snippet=prompt_snippets, scroll_to_found=False)
+                web_res = find_record_on_dreamina(
+                    driver,
+                    num=num,
+                    name=sub_name,
+                    prompt_snippet=prompt_snippets,
+                    full_prompt=prompt_text,
+                    scroll_to_found=False
+                )
                 if web_res.get("found"):
                     web_matched = True
                     web_has_video = bool(web_res.get("hasVideo") and web_res.get("videoSrc"))
@@ -1684,14 +2129,22 @@ def download_seedance_videos(
                 "message": f"กำลังดาวน์โหลด [{idx+1}/{total}] {sub_name}..."
             })
 
-        # 1. Check if video_src is already paired from search
-        video_src = item.get("web_video_src")
-        match_res = None
+        # 1. Always find the exact matching card on Dreamina using full prompt text and distinctive snippets
+        match_res = find_record_on_dreamina(
+            driver,
+            num=num,
+            name=sub_name,
+            prompt_snippet=prompt_snippets,
+            full_prompt=prompt_text,
+            scroll_to_found=True,
+            click_download=True
+        )
 
+        video_src = match_res.get("videoSrc") if (match_res and match_res.get("found")) else None
         if not video_src:
-            match_res = find_record_on_dreamina(driver, num=num, name=sub_name, prompt_snippet=prompt_snippets, scroll_to_found=True)
-            if match_res.get("found"):
-                video_src = match_res.get("videoSrc")
+            video_src = item.get("web_video_src")
+
+        btn_clicked = bool(match_res.get("buttonClicked")) if (match_res and match_res.get("found")) else False
 
         if not video_src:
             err_msg = f"ไม่พบคลิปสำหรับ '{sub_name}' บนหน้า Dreamina ในขณะนี้"
@@ -1699,30 +2152,27 @@ def download_seedance_videos(
             results.append({
                 "num": num,
                 "name": sub_name,
+                "prompt_file": item.get("prompt_file"),
+                "sub_index": item.get("sub_index"),
                 "ok": False,
                 "detail": err_msg
             })
             continue
 
-        # Click download button on Dreamina if possible
-        btn_clicked = False
-        try:
-            btn_clicked = bool(driver.execute_script(r"""
-                const dlBtn = document.querySelector('.dreamina-download-enlarged, [class*="button-group-top"] span, [class*="download"]');
-                if (dlBtn) {
-                    dlBtn.click();
-                    return true;
-                }
-                return false;
-            """))
-        except Exception:
-            pass
-
         saved_file = None
         if video_src and save_to_subfolder:
             # Determine destination folder
             dest_dir = sub_path if (sub_path and os.path.isdir(sub_path)) else os.path.expanduser("~/Downloads")
-            dest_filename = f"{sub_name}.mp4"
+            p_base = item.get("prompt_base_name")
+            total_prompts = item.get("total_prompts", 1)
+            sub_index = item.get("sub_index", 1)
+
+            if p_base and total_prompts > 1:
+                dest_filename = f"{p_base}.mp4"
+            elif total_prompts > 1:
+                dest_filename = f"{sub_name}_{sub_index}.mp4"
+            else:
+                dest_filename = f"{sub_name}.mp4"
             dest_path = os.path.join(dest_dir, dest_filename)
 
             try:
@@ -1747,6 +2197,8 @@ def download_seedance_videos(
         results.append({
             "num": num,
             "name": sub_name,
+            "prompt_file": item.get("prompt_file"),
+            "sub_index": item.get("sub_index"),
             "ok": True,
             "button_clicked": btn_clicked,
             "video_src": video_src,
@@ -1937,14 +2389,16 @@ def run_seedance_batch(
                     if found_imgs:
                         item_img_paths = [tpl[1] for tpl in found_imgs]
                         log(f"[Seedance] 🔍 ค้นพบรูปภาพเพิ่มเติมใน '{sub_name}': {len(item_img_paths)} รูป")
-            log(f"[Seedance] 🎬 กำลังประมวลผล [{idx+1}/{total}] โฟลเดอร์: {sub_name} (Image Mode: {item_mode}, Clear: {clear_mode})...")
+            p_file = item.get("prompt_file") or ""
+            p_file_str = f" • ไฟล์: {p_file}" if p_file else ""
+            log(f"[Seedance] 🎬 กำลังประมวลผล [{idx+1}/{total}] โฟลเดอร์: {sub_name}{p_file_str} (Image Mode: {item_mode}, Clear: {clear_mode})...")
 
             if progress_callback:
                 progress_callback({
                     "current": idx,
                     "total": total,
                     "percent": int((idx / max(total, 1)) * 100),
-                    "message": f"[{idx+1}/{total}] กำลังตั้งค่าและวางข้อมูลสำหรับ {sub_name}..."
+                    "message": f"[{idx+1}/{total}] กำลังตั้งค่าและวางข้อมูลสำหรับ โฟลเดอร์ {sub_name}{p_file_str}..."
                 })
 
             # 1. Handle Image Attachment based on mode and clear_mode (แนบรูปก่อน)

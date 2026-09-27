@@ -48,6 +48,25 @@ class TestSeedanceMatcher(unittest.TestCase):
         self.assertTrue(any("ลองเปิดดูสิ" in s for s in snippets), "Dialogue 2 missing")
         self.assertTrue(any("โห! อันนี้มันคนละเรื่องเลย" in s for s in snippets), "Dialogue 3 missing")
 
+    def test_disaster_prompts_differentiation(self):
+        p1 = "Photorealistic raw eyewitness footage, vertical 9:16 miniature coastal town tsunami scene featuring two separate groups of terrified tiny Asian human civilians of varied ages facing a colossal dark green tsunami wall surging inland and swallowing miniature harbour buildings whole, believable scale contrast against a real human hand... 0-2s: the tsunami wall roars forward at full force inches from engulfing both groups..."
+        p2 = "Photorealistic raw eyewitness footage, vertical 9:16 miniature city flash flood scene featuring two separate groups of terrified tiny Asian human civilians of varied ages facing a violent brown flash flood torrent ripping through narrow downtown streets and hurling parked miniature cars like toys, believable scale contrast against a real human hand... 0-2s: the flash flood tears down the street at full force inches from sweeping both groups away..."
+
+        snips1 = extract_prompt_search_snippets(p1)
+        snips2 = extract_prompt_search_snippets(p2)
+
+        # Ensure no common generic prefix like "Photorealistic raw eyewitness" is extracted
+        for s in snips1 + snips2:
+            self.assertFalse(s.lower().startswith("photorealistic raw eyewitness"), f"Generic prefix leaked: {s}")
+
+        # Ensure distinctive disaster keywords are present
+        self.assertTrue(any("tsunami" in s.lower() for s in snips1), "Tsunami phrase missing from p1")
+        self.assertTrue(any("flash flood" in s.lower() for s in snips2), "Flash flood phrase missing from p2")
+
+        # Ensure p1 snippets do not match p2 and vice versa
+        self.assertFalse(any("flash flood" in s.lower() for s in snips1), "Cross-contamination: flash flood in p1")
+        self.assertFalse(any("tsunami" in s.lower() for s in snips2), "Cross-contamination: tsunami in p2")
+
 
 if __name__ == '__main__':
     unittest.main()
