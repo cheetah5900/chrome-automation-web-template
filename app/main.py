@@ -4164,7 +4164,10 @@ def _make_video_cover_impl(
 
 
 @app.get("/api/browse-directory")
+@app.post("/api/browse-directory")
 @app.get("/api/utils/browse-directory")
+@app.post("/api/utils/browse-directory")
+@app.post("/api/prompt-rewriter/browse-folder")
 def browse_directory() -> dict[str, Any]:
     import sys
     import subprocess
@@ -8047,6 +8050,68 @@ def api_seedance_check_errors(req: SeedanceCheckErrorsRequest = None) -> dict[st
     except Exception as e:
         log(f"[Seedance Check Errors Error]: {e}")
         return {"ok": False, "detail": str(e), "errors": []}
+
+# ==============================================================================
+# Prompt Rewriter Endpoints
+# ==============================================================================
+
+class PromptRewriterSummaryRequest(BaseModel):
+    main_folder: str
+    subfolders_str: str = ""
+    prompt_files_str: str = ""
+
+class PromptRewriterScanRequest(BaseModel):
+    main_folder: str
+    subfolders_str: str = ""
+    prompt_files_str: str = ""
+
+class PromptRewriterExecuteRequest(BaseModel):
+    items: list[dict[str, Any]]
+    rules: list[str] = []
+    custom_instruction: str = ""
+    provider: str = "gemini"
+    api_key: str = ""
+    model_name: str = ""
+    make_backup: bool = True
+
+class PromptRewriterRestoreRequest(BaseModel):
+    file_path: str
+
+@app.post("/api/prompt-rewriter/summary")
+def api_prompt_rewriter_summary(req: PromptRewriterSummaryRequest) -> dict[str, Any]:
+    from app.prompt_rewriter import get_prompt_rewriter_summary
+    return get_prompt_rewriter_summary(
+        req.main_folder.strip(),
+        subfolders_str=req.subfolders_str.strip(),
+        prompt_files_str=req.prompt_files_str.strip()
+    )
+
+@app.post("/api/prompt-rewriter/scan")
+def api_prompt_rewriter_scan(req: PromptRewriterScanRequest) -> dict[str, Any]:
+    from app.prompt_rewriter import scan_prompt_rewriter_items
+    return scan_prompt_rewriter_items(
+        req.main_folder.strip(),
+        subfolders_str=req.subfolders_str.strip(),
+        prompt_files_str=req.prompt_files_str.strip()
+    )
+
+@app.post("/api/prompt-rewriter/execute")
+def api_prompt_rewriter_execute(req: PromptRewriterExecuteRequest) -> dict[str, Any]:
+    from app.prompt_rewriter import execute_prompt_rewriter_batch
+    return execute_prompt_rewriter_batch(
+        items=req.items,
+        rules=req.rules,
+        custom_instruction=req.custom_instruction.strip(),
+        provider=req.provider,
+        api_key=req.api_key.strip(),
+        model_name=req.model_name.strip(),
+        make_backup=req.make_backup
+    )
+
+@app.post("/api/prompt-rewriter/restore")
+def api_prompt_rewriter_restore(req: PromptRewriterRestoreRequest) -> dict[str, Any]:
+    from app.prompt_rewriter import restore_prompt_backup
+    return restore_prompt_backup(req.file_path.strip())
 
 @app.get("/")
 def index():

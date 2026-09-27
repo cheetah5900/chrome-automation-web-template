@@ -15471,5 +15471,482 @@ ${userComment}
 }
 window.initVisualElementPicker = initVisualElementPicker;
 
+// ==============================================================================
+// PROMPT REWRITER MODULE
+// ==============================================================================
+function initPromptRewriterModule() {
+  let promptRewriterQueue = [];
+  let isRewriting = false;
+
+  const mainFolderInput = document.getElementById('cfg_rewriter_main_folder');
+  const browseFolderBtn = document.getElementById('browseRewriterMainFolderBtn');
+  const pasteFolderBtn = document.getElementById('pasteRewriterMainFolderBtn');
+  const subfoldersInput = document.getElementById('cfg_rewriter_subfolders');
+  const promptFilesInput = document.getElementById('cfg_rewriter_prompt_files');
+  const subfoldersSummary = document.getElementById('rewriterSubfoldersSummary');
+  const ruleViolence = document.getElementById('rewriterRuleViolence');
+  const ruleThirdParty = document.getElementById('rewriterRuleThirdParty');
+  const ruleAiCompliance = document.getElementById('rewriterRuleAiCompliance');
+  const customInstructionInput = document.getElementById('cfg_rewriter_custom_instruction');
+  const providerSelect = document.getElementById('cfg_rewriter_provider');
+  const apiKeyInput = document.getElementById('cfg_rewriter_api_key');
+  const backupCheckbox = document.getElementById('cfg_rewriter_make_backup');
+  const scanBtn = document.getElementById('btnScanPromptRewriter');
+  const selectAllBtn = document.getElementById('btnRewriterSelectAll');
+  const deselectAllBtn = document.getElementById('btnRewriterDeselectAll');
+  const queueList = document.getElementById('promptRewriterQueueList');
+  const promptCountBadge = document.getElementById('rewriterPromptCountBadge');
+  const queueCountBadge = document.getElementById('rewriterQueueCountBadge');
+  const executeBtn = document.getElementById('btnExecutePromptRewriter');
+  const progressContainer = document.getElementById('rewriterProgressContainer');
+  const progressLabel = document.getElementById('rewriterProgressLabel');
+  const progressPercent = document.getElementById('rewriterProgressPercent');
+  const progressBar = document.getElementById('rewriterProgressBar');
+  const diffContainer = document.getElementById('promptRewriterDiffContainer');
+  const consoleBox = document.getElementById('promptRewriterConsole');
+  const clearConsoleBtn = document.getElementById('clearRewriterConsoleBtn');
+
+  // Load saved state
+  try {
+    if (mainFolderInput && localStorage.getItem('cfg_rewriter_main_folder')) {
+      mainFolderInput.value = localStorage.getItem('cfg_rewriter_main_folder');
+    }
+    if (subfoldersInput && localStorage.getItem('cfg_rewriter_subfolders')) {
+      subfoldersInput.value = localStorage.getItem('cfg_rewriter_subfolders');
+    }
+    if (promptFilesInput && localStorage.getItem('cfg_rewriter_prompt_files')) {
+      promptFilesInput.value = localStorage.getItem('cfg_rewriter_prompt_files');
+    }
+    if (customInstructionInput && localStorage.getItem('cfg_rewriter_custom_instruction')) {
+      customInstructionInput.value = localStorage.getItem('cfg_rewriter_custom_instruction');
+    }
+    if (providerSelect && localStorage.getItem('cfg_rewriter_provider')) {
+      providerSelect.value = localStorage.getItem('cfg_rewriter_provider');
+    }
+    if (apiKeyInput && localStorage.getItem('cfg_rewriter_api_key')) {
+      apiKeyInput.value = localStorage.getItem('cfg_rewriter_api_key');
+    }
+  } catch (e) {}
+
+  function saveRewriterState() {
+    try {
+      if (mainFolderInput) localStorage.setItem('cfg_rewriter_main_folder', mainFolderInput.value.trim());
+      if (subfoldersInput) localStorage.setItem('cfg_rewriter_subfolders', subfoldersInput.value.trim());
+      if (promptFilesInput) localStorage.setItem('cfg_rewriter_prompt_files', promptFilesInput.value.trim());
+      if (customInstructionInput) localStorage.setItem('cfg_rewriter_custom_instruction', customInstructionInput.value.trim());
+      if (providerSelect) localStorage.setItem('cfg_rewriter_provider', providerSelect.value);
+      if (apiKeyInput) localStorage.setItem('cfg_rewriter_api_key', apiKeyInput.value.trim());
+    } catch (e) {}
+  }
+
+  function logRewriter(msg, type = 'info') {
+    if (!consoleBox) return;
+    const line = document.createElement('div');
+    line.className = `console-line ${type}`;
+    const timeStr = new Date().toLocaleTimeString();
+    line.textContent = `[${timeStr}] ${msg}`;
+    consoleBox.appendChild(line);
+    consoleBox.scrollTop = consoleBox.scrollHeight;
+  }
+
+  if (clearConsoleBtn) {
+    clearConsoleBtn.addEventListener('click', () => {
+      if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared. Ready.</div>';
+    });
+  }
+
+  // Browse folder handler
+  window.handleBrowseRewriterFolder = async function() {
+    const input = document.getElementById('cfg_rewriter_main_folder');
+    try {
+      let res = null;
+      try {
+        res = await jsonFetch('/api/batch-uploader/browse-folder', { method: 'POST' });
+      } catch (e) {
+        res = await jsonFetch('/api/browse-directory', { method: 'POST' });
+      }
+      if (res && res.path) {
+        if (input) {
+          input.value = res.path;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        saveRewriterState();
+        updatePromptRewriterSummary();
+        logRewriter(`📂 เลือกโฟลเดอร์: ${res.path}`, 'success');
+        if (typeof showToast === 'function') showToast('เลือกโฟลเดอร์สำเร็จ!', 'success');
+      }
+    } catch (err) {
+      logRewriter(`Browse folder error: ${err.message}`, 'error');
+    }
+  };
+
+  if (browseFolderBtn) {
+    browseFolderBtn.addEventListener('click', window.handleBrowseRewriterFolder);
+  }
+
+  // Paste folder handler
+  window.handlePasteRewriterFolder = async function() {
+    const input = document.getElementById('cfg_rewriter_main_folder');
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        const cleanPath = text.trim();
+        if (input) {
+          input.value = cleanPath;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        saveRewriterState();
+        updatePromptRewriterSummary();
+        logRewriter(`📋 วางโฟลเดอร์จาก Clipboard: ${cleanPath}`, 'success');
+        if (typeof showToast === 'function') showToast('วาง Path โฟลเดอร์สำเร็จ!', 'success');
+      } else {
+        alert('ไม่พบข้อความใน Clipboard (ใน Finder ให้เลือกโฟลเดอร์แล้วกด Cmd+Option+C เพื่อคัดลอก Path แล้วกดปุ่มนี้อีกครั้ง)');
+      }
+    } catch (err) {
+      alert('ไม่สามารถอ่าน Clipboard ได้ กรุณากดอนุญาตหรือวางด้วยตนเอง');
+    }
+  };
+
+  if (pasteFolderBtn) {
+    pasteFolderBtn.addEventListener('click', window.handlePasteRewriterFolder);
+  }
+
+  // Debounced summary update
+  let summaryTimer = null;
+  async function updatePromptRewriterSummary() {
+    if (!mainFolderInput || !subfoldersSummary) return;
+    const folder = mainFolderInput.value.trim();
+    if (!folder) {
+      subfoldersSummary.style.display = 'none';
+      return;
+    }
+    const sub = subfoldersInput ? subfoldersInput.value.trim() : '';
+    const pf = promptFilesInput ? promptFilesInput.value.trim() : '';
+
+    try {
+      const res = await jsonFetch('/api/prompt-rewriter/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          main_folder: folder,
+          subfolders_str: sub,
+          prompt_files_str: pf
+        })
+      });
+
+      if (res.ok && res.total_folders > 0) {
+        subfoldersSummary.style.display = 'block';
+        const folderTags = res.folders.map(f => {
+          let filesDetail = '';
+          if (f.prompt_files && f.prompt_files.length > 0) {
+            const shortFiles = f.prompt_files.map(fn => {
+              const m = fn.match(/_(\d+)\.md$/i) || fn.match(/(\d+)\.md$/i);
+              return m ? `_${m[1]}` : fn.replace(/\.md$/i, '');
+            }).join(', ');
+            filesDetail = ` <span style="color: #a78bfa; font-weight: normal;">(${shortFiles})</span>`;
+          }
+          return `<span style="display: inline-block; margin: 3px 5px 3px 0; padding: 2px 7px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.3); border-radius: 5px; color: #8da6ff;">[#${f.num || '-'}] <strong>${f.name}</strong>${filesDetail}</span>`;
+        }).join('');
+
+        subfoldersSummary.innerHTML = `
+          <div style="color: #8da6ff; font-weight: bold; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+            <span>📁 สรุปโฟลเดอร์และไฟล์ที่ตรงตามเงื่อนไข:</span>
+            <span style="color: #34d399; font-size: 0.85rem;">พบ ${res.total_folders} โฟลเดอร์ (${res.total_prompt_files} ไฟล์)</span>
+          </div>
+          <div style="line-height: 1.6;">${folderTags}</div>
+        `;
+      } else {
+        subfoldersSummary.style.display = 'none';
+      }
+    } catch (e) {
+      subfoldersSummary.style.display = 'none';
+    }
+  }
+  window.updatePromptRewriterSummary = updatePromptRewriterSummary;
+
+  if (mainFolderInput) mainFolderInput.addEventListener('input', () => { saveRewriterState(); clearTimeout(summaryTimer); summaryTimer = setTimeout(updatePromptRewriterSummary, 350); });
+  if (subfoldersInput) subfoldersInput.addEventListener('input', () => { saveRewriterState(); clearTimeout(summaryTimer); summaryTimer = setTimeout(updatePromptRewriterSummary, 350); });
+  if (promptFilesInput) promptFilesInput.addEventListener('input', () => { saveRewriterState(); clearTimeout(summaryTimer); summaryTimer = setTimeout(updatePromptRewriterSummary, 350); });
+  if (customInstructionInput) customInstructionInput.addEventListener('input', saveRewriterState);
+  if (providerSelect) providerSelect.addEventListener('change', saveRewriterState);
+  if (apiKeyInput) apiKeyInput.addEventListener('input', saveRewriterState);
+
+  // Scan Prompts
+  async function scanPromptRewriterBatch() {
+    const mainFolder = mainFolderInput ? mainFolderInput.value.trim() : '';
+    if (!mainFolder) {
+      alert('กรุณาระบุโฟลเดอร์หลักสำหรับดึงข้อมูลก่อน');
+      return;
+    }
+    const sub = subfoldersInput ? subfoldersInput.value.trim() : '';
+    const pf = promptFilesInput ? promptFilesInput.value.trim() : '';
+
+    if (scanBtn) {
+      scanBtn.disabled = true;
+      scanBtn.innerHTML = '<span>⏳ กำลังสแกน...</span>';
+    }
+    logRewriter(`🔍 เริ่มสแกนโฟลเดอร์: ${mainFolder} (Subfolders: ${sub || 'ทั้งหมด'}, Files: ${pf || 'ทั้งหมด'})...`, 'system');
+
+    try {
+      const res = await jsonFetch('/api/prompt-rewriter/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          main_folder: mainFolder,
+          subfolders_str: sub,
+          prompt_files_str: pf
+        })
+      });
+
+      if (res.ok) {
+        promptRewriterQueue = res.items || [];
+        renderRewriterQueue();
+        logRewriter(`✅ สแกนพบทั้งหมด ${promptRewriterQueue.length} ไฟล์ Prompt`, 'success');
+      } else {
+        logRewriter(`⚠️ สแกนไม่สำเร็จ: ${res.error || 'เกิดข้อผิดพลาด'}`, 'error');
+        alert(`เกิดข้อผิดพลาดในการสแกน: ${res.error}`);
+      }
+    } catch (err) {
+      logRewriter(`❌ เกิดข้อผิดพลาด: ${err.message}`, 'error');
+      alert(`ไม่สามารถเชื่อมต่อ Server: ${err.message}`);
+    } finally {
+      if (scanBtn) {
+        scanBtn.disabled = false;
+        scanBtn.innerHTML = '<span>🔍 สแกนหาไฟล์ Prompt</span>';
+      }
+    }
+  }
+
+  if (scanBtn) scanBtn.addEventListener('click', scanPromptRewriterBatch);
+
+  // Render Scanned Queue
+  function renderRewriterQueue() {
+    if (!queueList) return;
+    const total = promptRewriterQueue.length;
+    const checkedCount = promptRewriterQueue.filter(i => i.checked).length;
+
+    if (promptCountBadge) promptCountBadge.textContent = `${total} Prompts Ready`;
+    if (queueCountBadge) queueCountBadge.textContent = `${checkedCount}/${total} รายการ`;
+
+    if (total === 0) {
+      queueList.innerHTML = '<div style="padding: 24px; text-align: center; color: rgba(255,255,255,0.4); font-size: 0.9rem;">ไม่พบไฟล์ Prompt ในเงื่อนไขที่ระบุ</div>';
+      return;
+    }
+
+    queueList.innerHTML = promptRewriterQueue.map((item, idx) => {
+      const isChecked = item.checked ? 'checked' : '';
+      const snippet = item.prompt_text ? item.prompt_text.slice(0, 140).replace(/</g, '&lt;') : '<i style="color: rgba(255,255,255,0.4);">(ไม่มีข้อความ)</i>';
+      const bakBadge = item.has_backup ? '<span style="font-size: 0.72rem; padding: 1px 6px; background: rgba(52, 211, 153, 0.15); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 4px; color: #a7f3d0;">.bak มีแล้ว</span>' : '';
+
+      return `
+        <div class="seedance-queue-item" style="display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
+          <input type="checkbox" data-index="${idx}" class="rewriter-item-check" ${isChecked} style="margin-top: 4px; width: 18px; height: 18px; accent-color: #7f5cff; cursor: pointer;" />
+          <div style="flex-grow: 1; min-width: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
+              <div style="font-weight: bold; font-size: 0.88rem; color: #8da6ff; display: flex; align-items: center; gap: 6px;">
+                <span>[#${item.num || '-'}] โฟลเดอร์: ${item.subfolder_name}</span>
+                <span style="color: rgba(255,255,255,0.4);">•</span>
+                <span style="color: #a78bfa;">${item.prompt_file}</span>
+                ${bakBadge}
+              </div>
+              <span style="font-size: 0.75rem; color: rgba(255,255,255,0.4);">${item.prompt_text ? item.prompt_text.length : 0} chars</span>
+            </div>
+            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.65); line-height: 1.4; max-height: 48px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+              ${snippet}...
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    queueList.querySelectorAll('.rewriter-item-check').forEach(chk => {
+      chk.addEventListener('change', (e) => {
+        const idx = parseInt(e.target.getAttribute('data-index'), 10);
+        if (promptRewriterQueue[idx]) {
+          promptRewriterQueue[idx].checked = e.target.checked;
+          const cCount = promptRewriterQueue.filter(i => i.checked).length;
+          if (queueCountBadge) queueCountBadge.textContent = `${cCount}/${promptRewriterQueue.length} รายการ`;
+        }
+      });
+    });
+  }
+
+  // Select / Deselect All
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', () => {
+      promptRewriterQueue.forEach(item => item.checked = true);
+      renderRewriterQueue();
+    });
+  }
+  if (deselectAllBtn) {
+    deselectAllBtn.addEventListener('click', () => {
+      promptRewriterQueue.forEach(item => item.checked = false);
+      renderRewriterQueue();
+    });
+  }
+
+  // Execute Batch Rewrite
+  async function executePromptRewriterBatch() {
+    if (isRewriting) return;
+    const selectedItems = promptRewriterQueue.filter(i => i.checked);
+    if (selectedItems.length === 0) {
+      alert('กรุณาเลือกอย่างน้อย 1 รายการ Prompt ที่ต้องการปรับแก้');
+      return;
+    }
+
+    const rules = [];
+    if (ruleViolence && ruleViolence.checked) rules.push('violence');
+    if (ruleThirdParty && ruleThirdParty.checked) rules.push('third_party');
+    if (ruleAiCompliance && ruleAiCompliance.checked) rules.push('ai_compliance');
+
+    const customInst = customInstructionInput ? customInstructionInput.value.trim() : '';
+    const provider = providerSelect ? providerSelect.value : 'gemini';
+    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+    const makeBackup = backupCheckbox ? backupCheckbox.checked : true;
+
+    isRewriting = true;
+    if (executeBtn) {
+      executeBtn.disabled = true;
+      executeBtn.innerHTML = '<span>⏳ กำลังส่ง AI ปรับแก้ Prompt...</span>';
+    }
+    if (progressContainer) {
+      progressContainer.style.display = 'block';
+      if (progressLabel) progressLabel.textContent = `กำลังแก้ 0/${selectedItems.length}...`;
+      if (progressPercent) progressPercent.textContent = '0%';
+      if (progressBar) progressBar.style.width = '0%';
+    }
+
+    logRewriter(`🚀 เริ่มส่งคำสั่ง AI Rewriter (${provider}) สำหรับ ${selectedItems.length} ไฟล์ Prompt...`, 'system');
+
+    try {
+      const res = await jsonFetch('/api/prompt-rewriter/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: selectedItems,
+          rules: rules,
+          custom_instruction: customInst,
+          provider: provider,
+          api_key: apiKey,
+          make_backup: makeBackup
+        })
+      });
+
+      if (res.ok) {
+        logRewriter(`✨ ปรับแก้เสร็จสิ้นสำเร็จ ${res.success_count}/${res.total} รายการ!`, 'success');
+        if (progressPercent) progressPercent.textContent = '100%';
+        if (progressBar) progressBar.style.width = '100%';
+        if (progressLabel) progressLabel.textContent = `เสร็จสิ้น ${res.success_count}/${res.total} รายการ`;
+
+        renderRewriterDiffs(res.results || []);
+        // Refresh scanned queue to reflect new backups and texts
+        scanPromptRewriterBatch();
+      } else {
+        logRewriter(`⚠️ ปรับแก้ไม่สำเร็จ: ${res.error || 'เกิดข้อผิดพลาด'}`, 'error');
+        alert(`เกิดข้อผิดพลาด: ${res.error || 'ไม่สามารถปรับแก้ได้'}`);
+      }
+    } catch (err) {
+      logRewriter(`❌ ข้อผิดพลาดในการเชื่อมต่อ: ${err.message}`, 'error');
+      alert(`ข้อผิดพลาด: ${err.message}`);
+    } finally {
+      isRewriting = false;
+      if (executeBtn) {
+        executeBtn.disabled = false;
+        executeBtn.innerHTML = '<span>✨ เริ่มแก้ Prompt ทั้งหมดที่เลือก (Start Rewrite)</span>';
+      }
+    }
+  }
+
+  if (executeBtn) executeBtn.addEventListener('click', executePromptRewriterBatch);
+
+  // Render Diffs Before/After
+  function renderRewriterDiffs(results) {
+    if (!diffContainer) return;
+    if (!results || results.length === 0) {
+      diffContainer.innerHTML = '<div style="padding: 24px; text-align: center; color: rgba(255,255,255,0.4); font-size: 0.85rem;">ไม่มีข้อมูลการปรับแก้</div>';
+      return;
+    }
+
+    diffContainer.innerHTML = results.map(r => {
+      const statusBadge = r.ok
+        ? '<span style="color: #34d399; font-size: 0.78rem; font-weight: bold; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 8px; border-radius: 6px;">✅ บันทึกทับแล้ว</span>'
+        : `<span style="color: #f87171; font-size: 0.78rem; font-weight: bold; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); padding: 2px 8px; border-radius: 6px;">❌ ล้มเหลว: ${r.error || ''}</span>`;
+
+      const backupBtn = r.backup_created
+        ? `<button type="button" class="secondary btn-restore-prompt" data-path="${r.prompt_path}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px; margin: 0; color: #fbbf24; border-color: rgba(251, 191, 36, 0.35);">↩️ กู้คืนจาก .bak</button>`
+        : '';
+
+      const origText = (r.original_text || '').replace(/</g, '&lt;');
+      const newText = (r.rewritten_text || '').replace(/</g, '&lt;');
+
+      return `
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(141, 166, 255, 0.2); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px;">
+            <div style="font-weight: bold; font-size: 0.85rem; color: #8da6ff;">📄 ${r.prompt_file}</div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              ${statusBadge}
+              ${backupBtn}
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.8rem;">
+            <!-- Before -->
+            <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 6px; padding: 8px;">
+              <div style="color: #fca5a5; font-weight: bold; margin-bottom: 3px; font-size: 0.75rem;">❌ ข้อความเดิม (Before):</div>
+              <div style="color: rgba(255,255,255,0.7); max-height: 80px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.76rem;">${origText}</div>
+            </div>
+
+            <!-- After -->
+            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 8px;">
+              <div style="color: #6ee7b7; font-weight: bold; margin-bottom: 3px; font-size: 0.75rem;">✨ ข้อความที่แก้ใหม่ (After - ${r.model || r.provider}):</div>
+              <div style="color: #fff; max-height: 120px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.76rem;">${newText}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Bind restore buttons
+    diffContainer.querySelectorAll('.btn-restore-prompt').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const filePath = e.target.getAttribute('data-path');
+        if (!filePath) return;
+        if (!confirm('ต้องการกู้คืนไฟล์ต้นฉบับจากไฟล์สำรอง (.bak) ใช่หรือไม่?')) return;
+
+        try {
+          const res = await jsonFetch('/api/prompt-rewriter/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file_path: filePath })
+          });
+          if (res.ok) {
+            logRewriter(`↩️ กู้คืนไฟล์ต้นฉบับสำเร็จ: ${filePath}`, 'success');
+            alert('กู้คืนไฟล์ต้นฉบับสำเร็จ!');
+            scanPromptRewriterBatch();
+          } else {
+            alert(`กู้คืนไม่สำเร็จ: ${res.error}`);
+          }
+        } catch (err) {
+          alert(`เกิดข้อผิดพลาดในการกู้คืน: ${err.message}`);
+        }
+      });
+    });
+  }
+
+  // Initial summary load if folder is pre-filled
+  if (mainFolderInput && mainFolderInput.value.trim()) {
+    updatePromptRewriterSummary();
+  }
+}
+
+// Call on DOMContentLoaded or immediately
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPromptRewriterModule);
+} else {
+  initPromptRewriterModule();
+}
+
 
 

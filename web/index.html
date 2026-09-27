@@ -17,7 +17,8 @@
         'tabSeedanceGenBtn': 'seedanceGenView',
         'tabFacebookAutoPostBtn': 'facebookAutoPostView',
         'tabMetaAutoPostBtn': 'metaAutoPostView',
-        'tabShopeeAffiliateBtn': 'shopeeAffiliateView'
+        'tabShopeeAffiliateBtn': 'shopeeAffiliateView',
+        'tabPromptRewriterBtn': 'promptRewriterView'
       };
       const viewId = tabMapping[tabId];
       if (!viewId) return;
@@ -57,6 +58,7 @@
       if (tabId === 'tabImageGenBtn' && typeof loadImagePrompts === 'function') loadImagePrompts();
       if (tabId === 'tabVideoGenBtn' && typeof loadVideoPrompts === 'function') loadVideoPrompts();
       if (tabId === 'tabSeedanceGenBtn' && typeof updateSeedanceSubfoldersSummary === 'function') updateSeedanceSubfoldersSummary();
+      if (tabId === 'tabPromptRewriterBtn' && typeof updatePromptRewriterSummary === 'function') updatePromptRewriterSummary();
       if ((tabId === 'tabWorkflowBtn' || tabId === 'tabVideoHelperBtn' || tabId === 'tabFacebookAutoPostBtn' || tabId === 'tabMetaAutoPostBtn' || tabId === 'tabShopeeAffiliateBtn') && typeof loadConfig === 'function') {
         loadConfig();
       }
@@ -131,6 +133,10 @@
         <button id="tabShopeeAffiliateBtn" class="sidebar-nav-btn" onclick="switchNavigationTab('tabShopeeAffiliateBtn')">
           <span class="nav-icon">🛍️</span>
           <span class="nav-text">Shopee Affiliate</span>
+        </button>
+        <button id="tabPromptRewriterBtn" class="sidebar-nav-btn" onclick="switchNavigationTab('tabPromptRewriterBtn')">
+          <span class="nav-icon">✍️</span>
+          <span class="nav-text">Prompt Rewriter</span>
         </button>
       </nav>
       
@@ -2128,6 +2134,162 @@
           </div>
         </div>
       </div>
+
+      <!-- VIEW: PROMPT REWRITER -->
+      <div id="promptRewriterView" class="tab-view hidden">
+        <div class="layout-grid workflow-grid" style="grid-template-columns: 7fr 3fr;">
+          <!-- Left Column: Settings, Batch Scanner & Scanned Prompts List -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Configuration & Filter Card -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
+                <h2 class="section-title" style="margin-bottom: 0;">✍️ AI Prompt Rewriter (Safety & Compliance)</h2>
+                <span id="rewriterPromptCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(127, 92, 255, 0.15); border: 1px solid rgba(127, 92, 255, 0.25); color: #c4b5fd; border-radius: 20px; font-weight: bold;">0 Prompts Ready</span>
+              </div>
+              <p class="section-subtitle">สแกนไฟล์ Markdown Prompt จากโฟลเดอร์หลัก และตรวจแก้ข้อความที่มีความรุนแรง หรือเนื้อหาบุคคลที่ 3 อัตโนมัติ</p>
+
+              <div class="settings-form" style="margin-top: 15px;">
+                <!-- Main Target Folder -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_rewriter_main_folder" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์หลักสำหรับดึงข้อมูล (Main Target Folder)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์หลักที่มีโฟลเดอร์ย่อยบรรจุไฟล์ <code>*prompt*.md</code></div>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <input id="cfg_rewriter_main_folder" placeholder="เช่น /Users/litar/Downloads/animation_prompts_batch" style="margin-bottom: 0; flex-grow: 1;" />
+                    <button id="browseRewriterMainFolderBtn" type="button" class="secondary" onclick="handleBrowseRewriterFolder()" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                    <button id="pasteRewriterMainFolderBtn" type="button" class="secondary" onclick="handlePasteRewriterFolder()" title="วางโฟลเดอร์จาก Clipboard ทันที" style="padding: 10px 14px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: rgba(58, 160, 255, 0.12); border-color: rgba(58, 160, 255, 0.3); color: #8da6ff;">📋 วาง Path</button>
+                  </div>
+                </div>
+
+                <!-- Subfolders & Prompt Files Filters -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 18px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_rewriter_subfolders" style="font-weight: bold; color: #8da6ff;">📁 เลขโฟลเดอร์ (Sub folders)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1 หรือ 1-10 (เว้นว่าง = ทุกโฟลเดอร์)</div>
+                    <input id="cfg_rewriter_subfolders" placeholder="เช่น 1 หรือ 1-5 หรือเว้นว่าง" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_rewriter_prompt_files" style="font-weight: bold; color: #a78bfa;">📝 ลำดับไฟล์ Prompt (Prompt files)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 2-3 หรือ 1, 3 (เว้นว่าง = ทุกไฟล์ _1, _2, _3)</div>
+                    <input id="cfg_rewriter_prompt_files" placeholder="เช่น 2-3 หรือเว้นว่าง" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+                </div>
+                <div id="rewriterSubfoldersSummary" style="display: none; margin-top: -6px; margin-bottom: 18px; padding: 10px 14px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(141, 166, 255, 0.2); border-radius: 10px; font-size: 0.82rem; backdrop-filter: blur(8px);"></div>
+
+                <!-- Safety Rules Presets -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label style="font-weight: bold; color: #8da6ff; display: block; margin-bottom: 6px;">🛡️ นโยบายการแก้ไข Prompt (Safety & Compliance Focus)</label>
+                  <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin-bottom: 10px;">เลือกประเด็นที่ต้องการให้ AI ปรับแก้ในเนื้อหาของ Prompt</div>
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                      <input type="checkbox" id="rewriterRuleViolence" checked style="width: 18px; height: 18px; accent-color: #7f5cff;" />
+                      <span>🩸 <strong>ลดทอนความรุนแรง / เลือด / อุบัติเหตุรุนแรง</strong> (เปลี่ยนเหตุการณ์ร้ายแรงให้เป็นความระทึกแบบปลอดภัย / Slapstick Comedy)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                      <input type="checkbox" id="rewriterRuleThirdParty" checked style="width: 18px; height: 18px; accent-color: #7f5cff;" />
+                      <span>🚫 <strong>หลีกเลี่ยงลิขสิทธิ์ / บุคคลที่ 3 / แบรนด์</strong> (แทนที่ชื่อดารา คนจริง และตัวการ์ตูนมีลิขสิทธิ์ด้วยคำบรรยายทั่วไป)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                      <input type="checkbox" id="rewriterRuleAiCompliance" checked style="width: 18px; height: 18px; accent-color: #7f5cff;" />
+                      <span>🛡️ <strong>แก้ไขคำต้องห้ามตามมาตรฐาน AI Content Safety</strong> (ตัดคำ Trigger เช่น kill, suicide, corpses)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Custom Instruction -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_rewriter_custom_instruction" style="font-weight: bold; color: #a78bfa;">✍️ คำสั่งพิเศษเพิ่มเติม (Custom Additional Instruction)</label>
+                  <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ระบุข้อกำหนดเฉพาะที่ต้องการเพิ่มลงในคำสั่งแก้ไข (เว้นว่างได้)</div>
+                  <textarea id="cfg_rewriter_custom_instruction" rows="2" placeholder="เช่น เน้นท่าทางตื่นตระหนกแบบตลกขบขัน, ให้ทุกคนปลอดภัยลอยขึ้นไปบนที่สูง..." style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.15); color: #fff;"></textarea>
+                </div>
+
+                <!-- Provider, Model & API Key Settings -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_rewriter_provider" style="font-weight: bold; color: #8da6ff;">🤖 ผู้ให้บริการ AI (Provider)</label>
+                    <select id="cfg_rewriter_provider" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.25); color: white; border: 1px solid rgba(255,255,255,0.15); outline: none;">
+                      <option value="gemini" selected>Google Gemini (แนะนำ - gemini-2.5-flash)</option>
+                      <option value="openai">OpenAI (gpt-4o-mini)</option>
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="rule_based">Rule-Based Fallback (ไม่ใช้ API Key)</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_rewriter_api_key" style="font-weight: bold; color: #8da6ff;">🔑 API Key (บันทึกลงเครื่อง)</label>
+                    <input id="cfg_rewriter_api_key" type="password" placeholder="ใส่ Gemini / OpenAI API Key" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+                </div>
+
+                <!-- Backup Checkbox & Action Button -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 10px;">
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #34d399; cursor: pointer;">
+                    <input type="checkbox" id="cfg_rewriter_make_backup" checked style="width: 18px; height: 18px; accent-color: #10b981;" />
+                    <span>💾 สำรองไฟล์ต้นฉบับเป็น <code>.bak</code> ก่อนเขียนทับ (กู้คืนได้เสมอ)</span>
+                  </label>
+                  <button id="btnScanPromptRewriter" type="button" class="btn-primary" style="padding: 12px 24px; font-weight: bold; border-radius: 10px; display: flex; align-items: center; gap: 8px;">
+                    <span>🔍 สแกนหาไฟล์ Prompt</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Scanned Prompts Queue Card -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #8da6ff;">📝 รายการ Prompt ที่พร้อมแก้ไข (Scanned Queue)</h3>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" id="btnRewriterSelectAll" class="secondary" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; margin: 0; background: rgba(127, 92, 255, 0.15); border-color: rgba(127, 92, 255, 0.35); color: #c4b5fd;">✓ เลือกทั้งหมด</button>
+                  <button type="button" id="btnRewriterDeselectAll" class="secondary" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; margin: 0; background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7);">✗ ยกเลิกทั้งหมด</button>
+                  <span id="rewriterQueueCountBadge" style="font-size: 0.8rem; padding: 3px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.3); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 รายการ</span>
+                </div>
+              </div>
+
+              <!-- Queue Container -->
+              <div id="promptRewriterQueueList" style="display: flex; flex-direction: column; gap: 10px; max-height: 480px; overflow-y: auto; padding-right: 4px;">
+                <div style="padding: 24px; text-align: center; color: rgba(255,255,255,0.4); font-size: 0.9rem;">ยังไม่มีรายการ Prompt (กรุณาระบุโฟลเดอร์แล้วกด '🔍 สแกนหาไฟล์ Prompt')</div>
+              </div>
+
+              <!-- Execute Button Footer -->
+              <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: flex-end;">
+                <button id="btnExecutePromptRewriter" type="button" class="btn-primary" style="padding: 12px 28px; font-size: 0.95rem; font-weight: bold; border-radius: 10px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                  <span>✨ เริ่มแก้ Prompt ทั้งหมดที่เลือก (Start Rewrite)</span>
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <!-- Right Column: Live Diff, Review & Log Console -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <section class="card" style="display: flex; flex-direction: column; height: 100%;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <h2 class="section-title" style="margin-bottom: 0;">📋 ผลลัพธ์การปรับแก้ (Live Diff & Review)</h2>
+                <button id="clearRewriterConsoleBtn" class="secondary" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; margin: 0;">Clear</button>
+              </div>
+              <p class="section-subtitle">แสดงการเปรียบเทียบก่อน-หลังแก้ไข และสามารถสั่งกู้คืนไฟล์ได้ทันที</p>
+
+              <!-- Progress bar -->
+              <div id="rewriterProgressContainer" style="display: none; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px; color: #8da6ff;">
+                  <span id="rewriterProgressLabel">กำลังประมวลผล...</span>
+                  <span id="rewriterProgressPercent">0%</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                  <div id="rewriterProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #7f5cff, #38bdf8); transition: width 0.3s;"></div>
+                </div>
+              </div>
+
+              <!-- Diff Review Container -->
+              <div id="promptRewriterDiffContainer" style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; margin-bottom: 14px;">
+                <div style="padding: 24px; text-align: center; color: rgba(255,255,255,0.4); font-size: 0.85rem;">ยังไม่มีผลลัพธ์การแก้ไข</div>
+              </div>
+
+              <!-- Log Console -->
+              <div id="promptRewriterConsole" class="console-box" style="flex-grow: 1; min-height: 220px;">
+                <div class="console-line system">Ready for Prompt Rewriter operations...</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -2197,6 +2359,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=93"></script>
+  <script src="/web/app.js?v=94"></script>
 </body>
 </html>
