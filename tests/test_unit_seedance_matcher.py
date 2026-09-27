@@ -67,6 +67,20 @@ class TestSeedanceMatcher(unittest.TestCase):
         self.assertFalse(any("flash flood" in s.lower() for s in snips1), "Cross-contamination: flash flood in p1")
         self.assertFalse(any("tsunami" in s.lower() for s in snips2), "Cross-contamination: tsunami in p2")
 
+    def test_dwarf_preset_boilerplate_filtering(self):
+        prompt_dwarf = """Preset คนแคระ Dwarf Fantasy Animation Scene
+0-2s: คนแคระช่างตีเหล็กกำลังทุบค้อนลงบนดาบทองคำประกายไฟสว่างจ้า
+2-4s: คนแคระยกดาบขึ้นส่องดูความคมด้วยรอยยิ้มภาคภูมิใจ
+Style requirements: dwarf fantasy, photorealistic vertical 9:16 seedance dreamina video."""
+        snippets = extract_prompt_search_snippets(prompt_dwarf)
+        for s in snippets:
+            s_lower = s.lower()
+            self.assertNotEqual(s_lower, "คนแคระ", "Bare preset name leaked as snippet")
+            self.assertNotEqual(s_lower, "dwarf", "Bare preset name leaked as snippet")
+            self.assertFalse(s_lower.startswith("preset"), "Preset prefix leaked as snippet")
+        # Ensure meaningful action is extracted
+        self.assertTrue(any("ช่างตีเหล็ก" in s for s in snippets), "Action snippet missing")
+
 
 if __name__ == '__main__':
     unittest.main()

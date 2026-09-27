@@ -10141,6 +10141,8 @@ function updateSeedanceRunButtonUI() {
   function updateSeedanceWebItemStatus(idx, state, item = null) {
     const row = document.getElementById(`seedance-row-${idx}`);
     const badge = document.getElementById(`seedance-web-badge-${idx}`);
+    const matchInfo = document.getElementById(`seedance-web-match-info-${idx}`);
+    const promptBox = document.getElementById(`seedance-web-prompt-box-${idx}`);
     if (!badge) return;
 
     if (state === 'waiting') {
@@ -10148,12 +10150,16 @@ function updateSeedanceRunButtonUI() {
       badge.style.background = 'rgba(255, 255, 255, 0.08)';
       badge.style.color = 'rgba(255, 255, 255, 0.6)';
       badge.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+      if (matchInfo) matchInfo.textContent = '';
+      if (promptBox) promptBox.innerHTML = '<div style="font-size: 0.72rem; color: rgba(255, 255, 255, 0.4); padding: 4px 0;">(รอเริ่มค้นหาบนเว็บ)</div>';
       if (row) row.style.background = 'transparent';
     } else if (state === 'searching') {
       badge.textContent = '🔍 กำลังค้นหา...';
       badge.style.background = 'rgba(59, 130, 246, 0.2)';
       badge.style.color = '#93c5fd';
       badge.style.border = '1px solid rgba(59, 130, 246, 0.4)';
+      if (matchInfo) matchInfo.textContent = '';
+      if (promptBox) promptBox.innerHTML = '<div style="font-size: 0.72rem; color: #93c5fd; padding: 4px 0;">กำลังสแกนและเปรียบเทียบข้อความบนหน้าเว็บ Dreamina...</div>';
       if (row) row.style.background = 'rgba(59, 130, 246, 0.08)';
     } else if (state === 'done' && item) {
       if (item.web_status === 'skipped') {
@@ -10161,30 +10167,67 @@ function updateSeedanceRunButtonUI() {
         badge.style.background = 'rgba(255, 255, 255, 0.08)';
         badge.style.color = 'rgba(255, 255, 255, 0.5)';
         badge.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+        if (matchInfo) matchInfo.textContent = '';
+        if (promptBox) promptBox.innerHTML = '';
         if (row) row.style.background = 'transparent';
       } else if (item.web_status === 'ready' || item.web_has_video) {
         badge.textContent = '🟢 พบคลิป (พร้อมโหลด)';
         badge.style.background = 'rgba(16, 185, 129, 0.2)';
         badge.style.color = '#34d399';
         badge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+        if (matchInfo) {
+          const scoreText = item.web_score ? `Score: ${item.web_score}` : '';
+          const wordsText = item.web_matched_words ? `ตรงกัน ${item.web_matched_words} คำ` : '';
+          const typeText = item.web_match_type ? `(${item.web_match_type})` : '';
+          matchInfo.textContent = [scoreText, typeText, wordsText].filter(Boolean).join(' • ');
+        }
+        if (promptBox) {
+          const snippetHtml = typeof escapeHtml === 'function' ? escapeHtml(item.web_snippet || '') : (item.web_snippet || '');
+          promptBox.innerHTML = `
+            <div style="padding: 6px 10px; background: rgba(16, 185, 129, 0.08); border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 0.74rem;">
+              <div style="color: #6ee7b7; font-weight: bold; margin-bottom: 2px;">🌐 Prompt ที่พบบนเว็บ (Dreamina):</div>
+              <div style="color: rgba(255, 255, 255, 0.9); max-height: 72px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; line-height: 1.35; font-size: 0.72rem; word-break: break-word;">${snippetHtml || '(ไม่พบข้อความบรรยายในการ์ด)'}</div>
+            </div>
+          `;
+        }
         if (row) row.style.background = 'rgba(16, 185, 129, 0.06)';
       } else if (item.web_status === 'generating') {
         badge.textContent = '🟡 กำลังสร้างคลิป';
         badge.style.background = 'rgba(251, 191, 36, 0.2)';
         badge.style.color = '#fbbf24';
         badge.style.border = '1px solid rgba(251, 191, 36, 0.4)';
+        if (matchInfo) matchInfo.textContent = '';
+        if (promptBox && item.web_snippet) {
+          const snippetHtml = typeof escapeHtml === 'function' ? escapeHtml(item.web_snippet) : item.web_snippet;
+          promptBox.innerHTML = `
+            <div style="padding: 6px 10px; background: rgba(251, 191, 36, 0.08); border-radius: 6px; border: 1px solid rgba(251, 191, 36, 0.25); font-size: 0.74rem;">
+              <div style="color: #fbbf24; font-weight: bold; margin-bottom: 2px;">🌐 Prompt ที่พบบนเว็บ (กำลังสร้าง):</div>
+              <div style="color: rgba(255, 255, 255, 0.9); max-height: 72px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; line-height: 1.35; font-size: 0.72rem; word-break: break-word;">${snippetHtml}</div>
+            </div>
+          `;
+        }
         if (row) row.style.background = 'rgba(251, 191, 36, 0.06)';
       } else if (item.web_status === 'offline') {
         badge.textContent = '⚪ Chrome Offline';
         badge.style.background = 'rgba(255, 255, 255, 0.08)';
         badge.style.color = 'rgba(255, 255, 255, 0.6)';
         badge.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+        if (matchInfo) matchInfo.textContent = '';
+        if (promptBox) promptBox.innerHTML = '<div style="font-size: 0.72rem; color: rgba(255, 255, 255, 0.5); padding: 4px 0;">(เบราว์เซอร์ยังไม่ได้เชื่อมต่อ)</div>';
         if (row) row.style.background = 'transparent';
       } else {
         badge.textContent = '🔴 ยังไม่พบคลิป';
         badge.style.background = 'rgba(239, 68, 68, 0.15)';
         badge.style.color = '#f87171';
         badge.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        if (matchInfo) matchInfo.textContent = '';
+        if (promptBox) {
+          promptBox.innerHTML = `
+            <div style="padding: 6px 10px; background: rgba(239, 68, 68, 0.08); border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.25); font-size: 0.74rem; color: #fca5a5;">
+              ❌ ไม่พบข้อความที่ตรงกันบนหน้าเว็บ Dreamina (คะแนนไม่ถึงเกณฑ์)
+            </div>
+          `;
+        }
         if (row) row.style.background = 'transparent';
       }
     } else if (state === 'error') {
@@ -10192,6 +10235,8 @@ function updateSeedanceRunButtonUI() {
       badge.style.background = 'rgba(239, 68, 68, 0.15)';
       badge.style.color = '#f87171';
       badge.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      if (matchInfo) matchInfo.textContent = '';
+      if (promptBox) promptBox.innerHTML = '<div style="font-size: 0.72rem; color: #f87171; padding: 4px 0;">เกิดข้อผิดพลาดในการตรวจสอบหน้าเว็บ</div>';
       if (row) row.style.background = 'transparent';
     }
   }
@@ -10240,18 +10285,18 @@ function updateSeedanceRunButtonUI() {
 
     // Responsive Table Wrapper
     const tableWrapper = document.createElement('div');
-    tableWrapper.style.cssText = 'width: 100%; max-height: 480px; overflow-y: auto; overflow-x: auto; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(0, 0, 0, 0.2);';
+    tableWrapper.style.cssText = 'width: 100%; max-height: 520px; overflow-y: auto; overflow-x: auto; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(0, 0, 0, 0.2);';
 
     const table = document.createElement('table');
     table.style.cssText = 'width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem;';
 
-    // Table Header with: เลข / รายการ | สถานะบน local | สถานะบน seedance
+    // Table Header with: เลข / รายการ | สถานะและ Prompt บน local | สถานะและ Prompt บน seedance
     const thead = document.createElement('thead');
     thead.innerHTML = `
       <tr style="position: sticky; top: 0; z-index: 2; background: #141721; border-bottom: 1px solid rgba(255, 255, 255, 0.12);">
-        <th style="padding: 10px 12px; color: #8da6ff; font-weight: 600; width: 34%;">เลข / รายการ</th>
-        <th style="padding: 10px 12px; color: #c4b5fd; font-weight: 600; width: 33%;">สถานะบน local</th>
-        <th style="padding: 10px 12px; color: #6ee7b7; font-weight: 600; width: 33%;">สถานะบน seedance</th>
+        <th style="padding: 10px 12px; color: #8da6ff; font-weight: 600; width: 24%;">เลข / รายการ</th>
+        <th style="padding: 10px 12px; color: #c4b5fd; font-weight: 600; width: 38%;">สถานะ & Prompt ในเครื่อง (Local)</th>
+        <th style="padding: 10px 12px; color: #6ee7b7; font-weight: 600; width: 38%;">สถานะ & Prompt บนเว็บ (Seedance)</th>
       </tr>
     `;
     table.appendChild(thead);
@@ -10270,7 +10315,7 @@ function updateSeedanceRunButtonUI() {
 
       // Col 1: เลขลำดับ, โฟลเดอร์, และชื่อไฟล์ Prompt
       const tdNum = document.createElement('td');
-      tdNum.style.cssText = 'padding: 8px 12px; vertical-align: middle;';
+      tdNum.style.cssText = 'padding: 8px 12px; vertical-align: top;';
 
       const queueBadgeHtml = `<span style="background: rgba(127, 92, 255, 0.22); border: 1px solid rgba(127, 92, 255, 0.45); color: #c4b5fd; font-weight: bold; font-size: 0.78rem; padding: 2px 7px; border-radius: 6px;">#${idx + 1}</span>`;
       const folderBadgeHtml = `<span style="color: #8da6ff; font-weight: 600; font-size: 0.84rem;">📁 โฟลเดอร์ <strong style="color: #fff;">${nameText}</strong></span>`;
@@ -10282,35 +10327,64 @@ function updateSeedanceRunButtonUI() {
         : '';
 
       tdNum.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-          ${queueBadgeHtml}
-          ${folderBadgeHtml}
-          ${promptFileHtml}
-          ${subBadgeHtml}
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            ${queueBadgeHtml}
+            ${folderBadgeHtml}
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            ${promptFileHtml}
+            ${subBadgeHtml}
+          </div>
         </div>
       `;
       row.appendChild(tdNum);
 
-      // Col 2: สถานะบน local (บอกว่าเจอ พร้อมสถานะไฟล์ .mp4)
+      // Col 2: สถานะบน local พร้อม Prompt Box
       const tdLocal = document.createElement('td');
-      tdLocal.style.cssText = 'padding: 8px 12px; vertical-align: middle;';
+      tdLocal.style.cssText = 'padding: 8px 12px; vertical-align: top;';
       const isFound = item.local_found !== false && (item.has_prompt || (item.subfolder_path && item.subfolder_path.length > 0));
+      let localStatusHtml = '';
       if (item.local_video_exists) {
         const sizeStr = item.local_video_size_mb ? ` • ${item.local_video_size_mb}MB` : '';
-        tdLocal.innerHTML = `<span style="font-size: 0.76rem; color: #34d399; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="มีไฟล์วิดีโอบนเครื่องแล้ว: ${item.local_video_path || ''}">🟢 มี MP4${sizeStr}</span>`;
+        localStatusHtml = `<span style="font-size: 0.76rem; color: #34d399; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="มีไฟล์วิดีโอบนเครื่องแล้ว: ${item.local_video_path || ''}">🟢 มี MP4${sizeStr}</span>`;
       } else if (isFound) {
-        tdLocal.innerHTML = `<span style="font-size: 0.76rem; color: #38bdf8; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">🟢 เจอ Prompt (รอ MP4)</span>`;
+        localStatusHtml = `<span style="font-size: 0.76rem; color: #38bdf8; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">🟢 เจอ Prompt (รอ MP4)</span>`;
       } else {
-        tdLocal.innerHTML = `<span style="font-size: 0.76rem; color: #f87171; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 3px 8px; border-radius: 6px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;">🔴 ไม่เจอ</span>`;
+        localStatusHtml = `<span style="font-size: 0.76rem; color: #f87171; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 3px 8px; border-radius: 6px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;">🔴 ไม่เจอ</span>`;
       }
+
+      const promptSafe = typeof escapeHtml === 'function' ? escapeHtml(item.prompt_text || '') : (item.prompt_text || '');
+      const localPromptBoxHtml = isFound
+        ? `
+          <div style="margin-top: 6px; padding: 6px 10px; background: rgba(0, 0, 0, 0.35); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.74rem;">
+            <div style="color: #c4b5fd; font-weight: bold; margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center;">
+              <span>📄 Prompt ในเครื่อง (Local):</span>
+              <span style="font-size: 0.68rem; color: rgba(255, 255, 255, 0.4);">${item.prompt_length || (item.prompt_text ? item.prompt_text.length : 0)} อักษร</span>
+            </div>
+            <div style="color: rgba(255, 255, 255, 0.85); max-height: 72px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; line-height: 1.35; font-size: 0.72rem; word-break: break-word;">${promptSafe || '(ไม่มีข้อความในไฟล์)'}</div>
+          </div>
+        `
+        : '';
+
+      tdLocal.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <div>${localStatusHtml}</div>
+          ${localPromptBoxHtml}
+        </div>
+      `;
       row.appendChild(tdLocal);
 
-      // Col 3: สถานะบน seedance
+      // Col 3: สถานะบน seedance พร้อม Web Prompt Box
       const tdWeb = document.createElement('td');
-      tdWeb.style.cssText = 'padding: 8px 12px; vertical-align: middle;';
+      tdWeb.style.cssText = 'padding: 8px 12px; vertical-align: top;';
       tdWeb.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 3px;">
-          <span id="seedance-web-badge-${idx}" style="font-size: 0.74rem; padding: 2px 8px; border-radius: 6px; font-weight: bold; width: fit-content; display: inline-block;">...</span>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span id="seedance-web-badge-${idx}" style="font-size: 0.74rem; padding: 2px 8px; border-radius: 6px; font-weight: bold; width: fit-content; display: inline-block;">...</span>
+            <span id="seedance-web-match-info-${idx}" style="font-size: 0.7rem; color: rgba(255, 255, 255, 0.5);"></span>
+          </div>
+          <div id="seedance-web-prompt-box-${idx}" style="margin-top: 2px;"></div>
           <div id="seedance-item-dl-status-${idx}" style="font-size: 0.74rem; color: rgba(255, 255, 255, 0.5);"></div>
         </div>
       `;

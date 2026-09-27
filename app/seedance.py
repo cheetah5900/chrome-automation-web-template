@@ -1355,7 +1355,14 @@ def extract_prompt_search_snippets(prompt_text: str) -> list[str]:
         "use a fully realistic",
         "mimic exactly",
         "everything must look",
-        "9:16"
+        "9:16",
+        "preset คนแคระ",
+        "preset dwarf",
+        "preset dwarfs",
+        "preset dwarves",
+        "preset",
+        "seedance",
+        "dreamina"
     ]
 
     lines = [l.strip() for l in prompt_text.split("\n") if l.strip()]
@@ -1521,7 +1528,9 @@ def find_record_on_dreamina(
             'inches', 'screaming', 'disbelief', 'background', 'slowly', 'briefly', 'seen', 'attach', 'product',
             'image', 'reference', 'dialogue', 'audio', 'spoken', 'language', 'mouth', 'sync', 'clear', 'pacing',
             'dramatic', 'contrast', 'between', 'sound', 'requirements', 'negative', 'constraints', 'words',
-            'letters', 'overlays', 'floating', 'cartoon', 'fantasy', 'browser', 'screen', 'smooth', 'plastic', 'skin'
+            'letters', 'overlays', 'floating', 'cartoon', 'fantasy', 'browser', 'screen', 'smooth', 'plastic', 'skin',
+            'คนแคระ', 'dwarf', 'dwarfs', 'dwarves', 'preset', 'seedance', 'dreamina', 'aspect', 'ratio', 'resolution',
+            'fps', 'prompt', 'scene', 'shot', 'camera', 'action', 'timeline', 'timestamp', 'generate', 'video', 'seconds'
         ]);
 
         function getDistinctiveWords(str) {
@@ -1559,15 +1568,18 @@ def find_record_on_dreamina(
             let score = 0;
             let matchType = '';
             let matchedDistinctiveCount = 0;
+            let snippetMatched = false;
 
-            // 1. Exact phrase / snippet match from extract_prompt_search_snippets
+            // 1. Exact phrase / snippet match from extract_prompt_search_snippets (Must be substantial >= 22 chars)
             if (snipList.length > 0) {
                 for (const snip of snipList) {
                     const normSnip = snip.replace(/\s+/g, ' ').trim().toLowerCase();
-                    if (normSnip && normSnip.length >= 8) {
+                    if (normSnip && normSnip.length >= 22) {
                         if (normTextLower.includes(normSnip)) {
                             score += 180;
+                            snippetMatched = true;
                             if (!matchType) matchType = 'snippet';
+                            break;
                         }
                     }
                 }
@@ -1583,13 +1595,13 @@ def find_record_on_dreamina(
                     }
                 }
                 score += matchedDistinctiveCount * 18;
-                if (matchedDistinctiveCount >= 5 && !matchType) {
+                if (matchedDistinctiveCount >= 7 && !matchType) {
                     matchType = 'keywords';
                 }
             }
 
-            // 3. Exact full name match: only if name is descriptive (>= 4 chars and not purely digits)
-            const isDescriptiveName = name && name.length >= 4 && !/^\d+$/.test(name);
+            // 3. Exact full name match: only if name is descriptive (>= 5 chars and not purely digits)
+            const isDescriptiveName = name && name.length >= 5 && !/^\d+$/.test(name);
             if (isDescriptiveName && (normTextLower.includes(name.toLowerCase()))) {
                 score += 80;
                 if (!matchType) matchType = 'name';
@@ -1609,7 +1621,15 @@ def find_record_on_dreamina(
                 }
             }
 
-            if (score > bestScore) {
+            // Strict Confidence Validation:
+            // Match is ONLY valid if:
+            // EITHER (A): Substantial specific phrase (>= 22 chars) matches AND at least 3 distinctive words also match
+            // OR (B): Strong keyword overlap: at least 7 distinctive words match AND overlap ratio >= 25%
+            const overlapRatio = queryDistinctiveSet.size > 0 ? (matchedDistinctiveCount / queryDistinctiveSet.size) : 0;
+            const isConfident = (snippetMatched && (matchedDistinctiveCount >= 3 || queryDistinctiveSet.size < 5)) ||
+                                (matchedDistinctiveCount >= 7 && (overlapRatio >= 0.25 || matchedDistinctiveCount >= 10));
+
+            if (isConfident && score > bestScore) {
                 bestScore = score;
                 bestCard = el;
                 bestMatchType = matchType;
@@ -1618,7 +1638,7 @@ def find_record_on_dreamina(
             }
         }
 
-        if (bestCard && bestScore >= 60) {
+        if (bestCard && bestScore >= 100) {
             const vid = bestCard.querySelector('video');
             let videoSrc = null;
             if (vid) {
@@ -1635,7 +1655,7 @@ def find_record_on_dreamina(
                 score: bestScore,
                 matchType: bestMatchType,
                 matchedWords: bestMatchedWords,
-                text: bestText.slice(0, 150),
+                text: bestText.slice(0, 400),
                 hasVideo: !!vid,
                 videoSrc: videoSrc,
                 isGenerating: isGen,
@@ -1835,6 +1855,9 @@ def pair_seedance_items(driver, local_items: list[dict[str, Any]]) -> list[dict[
         web_video_src = None
         web_status = "offline"
         web_snippet = ""
+        web_score = 0
+        web_match_type = ""
+        web_matched_words = 0
 
         if driver:
             try:
@@ -1851,6 +1874,9 @@ def pair_seedance_items(driver, local_items: list[dict[str, Any]]) -> list[dict[
                     web_has_video = bool(web_res.get("hasVideo") and web_res.get("videoSrc"))
                     web_video_src = web_res.get("videoSrc")
                     web_snippet = web_res.get("text", "")
+                    web_score = web_res.get("score", 0)
+                    web_match_type = web_res.get("matchType", "")
+                    web_matched_words = web_res.get("matchedWords", 0)
                     if web_has_video:
                         web_status = "ready"
                     elif web_res.get("isGenerating"):
@@ -1875,6 +1901,9 @@ def pair_seedance_items(driver, local_items: list[dict[str, Any]]) -> list[dict[
             "web_video_src": web_video_src,
             "web_status": web_status,
             "web_snippet": web_snippet,
+            "web_score": web_score,
+            "web_match_type": web_match_type,
+            "web_matched_words": web_matched_words,
             "can_download": web_has_video
         })
 
