@@ -4168,6 +4168,7 @@ def _make_video_cover_impl(
 @app.get("/api/utils/browse-directory")
 @app.post("/api/utils/browse-directory")
 @app.post("/api/prompt-rewriter/browse-folder")
+@app.post("/api/video-counter/browse-folder")
 def browse_directory() -> dict[str, Any]:
     import sys
     import subprocess
@@ -8112,6 +8113,36 @@ def api_prompt_rewriter_execute(req: PromptRewriterExecuteRequest) -> dict[str, 
 def api_prompt_rewriter_restore(req: PromptRewriterRestoreRequest) -> dict[str, Any]:
     from app.prompt_rewriter import restore_prompt_backup
     return restore_prompt_backup(req.file_path.strip())
+
+# ==============================================================================
+# Video Counter Endpoints
+# ==============================================================================
+
+class VideoCounterSummaryRequest(BaseModel):
+    main_folder: str
+    subfolders_str: str = ""
+
+class VideoCounterCountRequest(BaseModel):
+    main_folder: str
+    subfolders_str: str = ""
+    target_count: int = 10
+
+@app.post("/api/video-counter/summary")
+def api_video_counter_summary(req: VideoCounterSummaryRequest) -> dict[str, Any]:
+    from app.video_counter import get_video_counter_summary
+    return get_video_counter_summary(
+        req.main_folder.strip(),
+        subfolders_str=req.subfolders_str.strip()
+    )
+
+@app.post("/api/video-counter/count")
+def api_video_counter_count(req: VideoCounterCountRequest) -> dict[str, Any]:
+    from app.video_counter import get_video_counter_report
+    return get_video_counter_report(
+        main_folder=req.main_folder.strip(),
+        subfolders_str=req.subfolders_str.strip(),
+        target_count=req.target_count
+    )
 
 @app.get("/")
 def index():

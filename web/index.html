@@ -18,7 +18,8 @@
         'tabFacebookAutoPostBtn': 'facebookAutoPostView',
         'tabMetaAutoPostBtn': 'metaAutoPostView',
         'tabShopeeAffiliateBtn': 'shopeeAffiliateView',
-        'tabPromptRewriterBtn': 'promptRewriterView'
+        'tabPromptRewriterBtn': 'promptRewriterView',
+        'tabVideoCounterBtn': 'videoCounterView'
       };
       const viewId = tabMapping[tabId];
       if (!viewId) return;
@@ -59,6 +60,7 @@
       if (tabId === 'tabVideoGenBtn' && typeof loadVideoPrompts === 'function') loadVideoPrompts();
       if (tabId === 'tabSeedanceGenBtn' && typeof updateSeedanceSubfoldersSummary === 'function') updateSeedanceSubfoldersSummary();
       if (tabId === 'tabPromptRewriterBtn' && typeof updatePromptRewriterSummary === 'function') updatePromptRewriterSummary();
+      if (tabId === 'tabVideoCounterBtn' && typeof updateVideoCounterSummary === 'function') updateVideoCounterSummary();
       if ((tabId === 'tabWorkflowBtn' || tabId === 'tabVideoHelperBtn' || tabId === 'tabFacebookAutoPostBtn' || tabId === 'tabMetaAutoPostBtn' || tabId === 'tabShopeeAffiliateBtn') && typeof loadConfig === 'function') {
         loadConfig();
       }
@@ -137,6 +139,10 @@
         <button id="tabPromptRewriterBtn" class="sidebar-nav-btn" onclick="switchNavigationTab('tabPromptRewriterBtn')">
           <span class="nav-icon">✍️</span>
           <span class="nav-text">Prompt Rewriter</span>
+        </button>
+        <button id="tabVideoCounterBtn" class="sidebar-nav-btn" onclick="switchNavigationTab('tabVideoCounterBtn')">
+          <span class="nav-icon">🔢</span>
+          <span class="nav-text">Video Counter</span>
         </button>
       </nav>
       
@@ -2290,6 +2296,123 @@
           </div>
         </div>
       </div>
+
+      <!-- VIEW: VIDEO COUNTER -->
+      <div id="videoCounterView" class="tab-view hidden">
+        <div class="layout-grid workflow-grid" style="grid-template-columns: 6fr 4fr;">
+          <!-- Left Column: Configuration & Folder Results List -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Configuration Card -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap;">
+                <h2 class="section-title" style="margin-bottom: 0;">🔢 Video Counter (ตัวนับและตรวจสอบจำนวนวิดีโอ)</h2>
+                <span id="videoCounterFolderCountBadge" class="status-badge" style="font-size: 0.8rem; padding: 4px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.25); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 Folders Ready</span>
+              </div>
+              <p class="section-subtitle">สแกนและนับจำนวนไฟล์วิดีโอในแต่ละโฟลเดอร์ย่อย เทียบกับเกณฑ์เป้าหมายที่กำหนด พร้อมรายงานผลอย่างชัดเจน</p>
+
+              <div class="settings-form" style="margin-top: 15px;">
+                <!-- Main Target Folder -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_video_counter_main_folder" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์หลักสำหรับตรวจสอบ (Main Target Folder)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกโฟลเดอร์หลักที่มีโฟลเดอร์ย่อยบรรจุไฟล์วิดีโอ (รองรับ .mp4, .mov, .mkv, .webm ฯลฯ)</div>
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <input id="cfg_video_counter_main_folder" placeholder="เช่น /Users/litar/Downloads/animation_output" style="margin-bottom: 0; flex-grow: 1;" />
+                    <button id="browseVideoCounterMainFolderBtn" type="button" class="secondary" onclick="handleBrowseVideoCounterFolder()" style="padding: 10px 16px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px;">Browse...</button>
+                    <button id="pasteVideoCounterMainFolderBtn" type="button" class="secondary" onclick="handlePasteVideoCounterFolder()" title="วางโฟลเดอร์จาก Clipboard ทันที" style="padding: 10px 14px; font-size: 0.85rem; margin-bottom: 0; white-space: nowrap; border-radius: 10px; background: rgba(58, 160, 255, 0.12); border-color: rgba(58, 160, 255, 0.3); color: #8da6ff;">📋 วาง Path</button>
+                  </div>
+                </div>
+
+                <!-- Subfolders & Target Video Count -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_video_counter_subfolders" style="font-weight: bold; color: #8da6ff;">📁 เลขโฟลเดอร์ย่อย (Sub folders)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1 หรือ 1-10 (เว้นว่าง = ตรวจสอบทุกโฟลเดอร์)</div>
+                    <input id="cfg_video_counter_subfolders" placeholder="เช่น 1 หรือ 1-10 หรือเว้นว่าง" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="cfg_video_counter_target" style="font-weight: bold; color: #34d399;">🎯 จำนวนวิดีโอที่กำหนดไว้ (Target Count)</label>
+                    <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เกณฑ์เป้าหมายจำนวนวิดีโอต่อโฟลเดอร์</div>
+                    <input id="cfg_video_counter_target" type="number" min="1" value="10" placeholder="10" style="margin-bottom: 0; width: 100%;" />
+                  </div>
+                </div>
+
+                <!-- Live Subfolders Summary Preview -->
+                <div id="videoCounterSubfoldersSummary" style="display: none; margin-top: -6px; margin-bottom: 18px; padding: 10px 14px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(141, 166, 255, 0.2); border-radius: 10px; font-size: 0.82rem; backdrop-filter: blur(8px);"></div>
+
+                <!-- Action Button -->
+                <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+                  <button id="btnCountVideos" type="button" class="btn-primary" style="padding: 12px 28px; font-weight: bold; font-size: 0.95rem; border-radius: 10px; display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #38bdf8, #2563eb); border: none; color: #fff; cursor: pointer;">
+                    <span>🔍 เริ่มนับและตรวจสอบวิดีโอ (Count Videos)</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Detailed Folders List Card -->
+            <section class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #8da6ff;">📋 รายละเอียดจำนวนวิดีโอทุกโฟลเดอร์ (Detailed Breakdown)</h3>
+                <span id="videoCounterResultBadge" style="font-size: 0.8rem; padding: 3px 10px; background: rgba(58, 160, 255, 0.15); border: 1px solid rgba(58, 160, 255, 0.3); color: #8da6ff; border-radius: 20px; font-weight: bold;">0 โฟลเดอร์</span>
+              </div>
+
+              <!-- Folder List Container -->
+              <div id="videoCounterFolderList" style="display: flex; flex-direction: column; gap: 10px; max-height: 520px; overflow-y: auto; padding-right: 4px;">
+                <div style="padding: 28px; text-align: center; color: rgba(255,255,255,0.4); font-size: 0.9rem;">ยังไม่มีผลการนับวิดีโอ (กรุณาระบุโฟลเดอร์หลักแล้วกด '🔍 เริ่มนับและตรวจสอบวิดีโอ')</div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Right Column: Executive Summary, Alert Banner & Console -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <section class="card" style="display: flex; flex-direction: column; height: 100%;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <h2 class="section-title" style="margin-bottom: 0;">📊 สรุปผลการตรวจสอบ (Summary Report)</h2>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button id="btnCopyVideoCounterReport" type="button" class="secondary" style="padding: 5px 12px; font-size: 0.8rem; border-radius: 8px; margin: 0; background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.35); color: #38bdf8;">📋 คัดลอกรายงาน</button>
+                  <button id="clearVideoCounterConsoleBtn" type="button" class="secondary" style="padding: 5px 10px; font-size: 0.78rem; border-radius: 8px; margin: 0;">Clear</button>
+                </div>
+              </div>
+              <p class="section-subtitle">รายงานสถานะภาพรวมและแจ้งเตือนโฟลเดอร์ที่ไม่ถึงเกณฑ์ที่กำหนด</p>
+
+              <!-- Prominent Below-Threshold Alert Banner -->
+              <div id="videoCounterAlertBanner" style="display: none; margin-bottom: 16px;"></div>
+
+              <!-- KPI Stats Grid -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;">
+                <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; text-align: center;">
+                  <div style="font-size: 0.78rem; color: rgba(255,255,255,0.6);">📁 โฟลเดอร์ที่ตรวจ</div>
+                  <div id="kpiTotalFolders" style="font-size: 1.4rem; font-weight: bold; color: #fff; margin-top: 4px;">0</div>
+                </div>
+                <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; text-align: center;">
+                  <div style="font-size: 0.78rem; color: rgba(255,255,255,0.6);">🎬 รวมวิดีโอทั้งหมด</div>
+                  <div id="kpiTotalVideos" style="font-size: 1.4rem; font-weight: bold; color: #38bdf8; margin-top: 4px;">0</div>
+                </div>
+                <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 10px; padding: 12px; text-align: center;">
+                  <div style="font-size: 0.78rem; color: #6ee7b7;">✅ ครบตามเกณฑ์</div>
+                  <div id="kpiMetFolders" style="font-size: 1.4rem; font-weight: bold; color: #34d399; margin-top: 4px;">0</div>
+                </div>
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 12px; text-align: center;">
+                  <div style="font-size: 0.78rem; color: #fca5a5;">⚠️ ไม่ถึงเกณฑ์</div>
+                  <div id="kpiBelowFolders" style="font-size: 1.4rem; font-weight: bold; color: #f87171; margin-top: 4px;">0</div>
+                </div>
+              </div>
+
+              <!-- Quick Text Report Area -->
+              <div style="margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span style="font-size: 0.8rem; font-weight: bold; color: #8da6ff;">📄 ข้อความรายงานสรุป (Text Summary)</span>
+                </div>
+                <textarea id="videoCounterTextReportArea" readonly placeholder="รายงานสรุปจะแสดงที่นี่..." style="width: 100%; height: 160px; font-family: monospace; font-size: 0.76rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: rgba(255,255,255,0.85); padding: 10px; resize: vertical; outline: none;"></textarea>
+              </div>
+
+              <!-- Log Console -->
+              <div id="videoCounterConsole" class="console-box" style="flex-grow: 1; min-height: 180px;">
+                <div class="console-line system">Ready for Video Counter operations...</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -2359,6 +2482,6 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/web/app.js?v=94"></script>
+  <script src="/web/app.js?v=95"></script>
 </body>
 </html>

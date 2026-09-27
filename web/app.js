@@ -15948,5 +15948,400 @@ if (document.readyState === 'loading') {
   initPromptRewriterModule();
 }
 
+// ==============================================================================
+// Video Counter Frontend Module
+// ==============================================================================
+
+function initVideoCounterModule() {
+  const mainFolderInput = document.getElementById('cfg_video_counter_main_folder');
+  const subfoldersInput = document.getElementById('cfg_video_counter_subfolders');
+  const targetInput = document.getElementById('cfg_video_counter_target');
+  const browseFolderBtn = document.getElementById('browseVideoCounterMainFolderBtn');
+  const pasteFolderBtn = document.getElementById('pasteVideoCounterMainFolderBtn');
+  const summaryBox = document.getElementById('videoCounterSubfoldersSummary');
+  const badgeCount = document.getElementById('videoCounterFolderCountBadge');
+  const countBtn = document.getElementById('btnCountVideos');
+  const folderList = document.getElementById('videoCounterFolderList');
+  const resultBadge = document.getElementById('videoCounterResultBadge');
+  const alertBanner = document.getElementById('videoCounterAlertBanner');
+  const kpiTotalFolders = document.getElementById('kpiTotalFolders');
+  const kpiTotalVideos = document.getElementById('kpiTotalVideos');
+  const kpiMetFolders = document.getElementById('kpiMetFolders');
+  const kpiBelowFolders = document.getElementById('kpiBelowFolders');
+  const textReportArea = document.getElementById('videoCounterTextReportArea');
+  const copyReportBtn = document.getElementById('btnCopyVideoCounterReport');
+  const consoleBox = document.getElementById('videoCounterConsole');
+  const clearConsoleBtn = document.getElementById('clearVideoCounterConsoleBtn');
+
+  if (!mainFolderInput && !countBtn) return;
+
+  function logVideoCounter(msg, type = 'info') {
+    if (!consoleBox) return;
+    const time = new Date().toLocaleTimeString();
+    const line = document.createElement('div');
+    line.className = `console-line ${type}`;
+    line.textContent = `[${time}] ${msg}`;
+    consoleBox.appendChild(line);
+    consoleBox.scrollTop = consoleBox.scrollHeight;
+  }
+
+  if (clearConsoleBtn) {
+    clearConsoleBtn.addEventListener('click', () => {
+      if (consoleBox) consoleBox.innerHTML = '<div class="console-line system">Console cleared. Ready.</div>';
+    });
+  }
+
+  // Load persisted state
+  try {
+    const savedFolder = localStorage.getItem('cfg_video_counter_main_folder');
+    if (savedFolder && mainFolderInput) mainFolderInput.value = savedFolder;
+
+    const savedSub = localStorage.getItem('cfg_video_counter_subfolders');
+    if (savedSub && subfoldersInput) subfoldersInput.value = savedSub;
+
+    const savedTarget = localStorage.getItem('cfg_video_counter_target');
+    if (savedTarget && targetInput) targetInput.value = savedTarget;
+  } catch (e) {}
+
+  function saveVideoCounterState() {
+    try {
+      if (mainFolderInput) localStorage.setItem('cfg_video_counter_main_folder', mainFolderInput.value.trim());
+      if (subfoldersInput) localStorage.setItem('cfg_video_counter_subfolders', subfoldersInput.value.trim());
+      if (targetInput) localStorage.setItem('cfg_video_counter_target', targetInput.value.trim());
+    } catch (e) {}
+  }
+
+  // Update Summary debounce
+  let summaryTimer = null;
+  window.updateVideoCounterSummary = function() {
+    if (summaryTimer) clearTimeout(summaryTimer);
+    summaryTimer = setTimeout(async () => {
+      saveVideoCounterState();
+      const mainFolder = mainFolderInput ? mainFolderInput.value.trim() : '';
+      const subfolders = subfoldersInput ? subfoldersInput.value.trim() : '';
+
+      if (!mainFolder) {
+        if (summaryBox) {
+          summaryBox.style.display = 'none';
+          summaryBox.innerHTML = '';
+        }
+        if (badgeCount) badgeCount.textContent = '0 Folders Ready';
+        return;
+      }
+
+      try {
+        const res = await jsonFetch('/api/video-counter/summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ main_folder: mainFolder, subfolders_str: subfolders })
+        });
+
+        if (res && res.ok) {
+          const total = res.total_folders || 0;
+          if (badgeCount) badgeCount.textContent = `${total} Folders Ready`;
+
+          if (summaryBox) {
+            summaryBox.style.display = 'block';
+            if (total === 0) {
+              summaryBox.innerHTML = `<span style="color: #f87171;">⚠️ ไม่พบโฟลเดอร์ย่อยที่ตรงกับเงื่อนไข: "${subfolders || 'ทุกโฟลเดอร์'}"</span>`;
+            } else {
+              const names = (res.folders || []).map(f => `<code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; color: #8da6ff;">${f.name}</code>`).join(' ');
+              summaryBox.innerHTML = `<span style="color: #34d399;">✓ พบ ${total} โจลเดอร์ที่พร้อมตรวจสอบ:</span> ${names}`;
+            }
+          }
+        } else {
+          if (badgeCount) badgeCount.textContent = '0 Folders Ready';
+          if (summaryBox) {
+            summaryBox.style.display = 'block';
+            summaryBox.innerHTML = `<span style="color: #f87171;">⚠️ ${res.error || 'ไม่สามารถอ่านโฟลเดอร์ได้'}</span>`;
+          }
+        }
+      } catch (err) {
+        if (badgeCount) badgeCount.textContent = '0 Folders Ready';
+      }
+    }, 250);
+  };
+
+  if (mainFolderInput) {
+    mainFolderInput.addEventListener('input', window.updateVideoCounterSummary);
+    mainFolderInput.addEventListener('change', window.updateVideoCounterSummary);
+  }
+  if (subfoldersInput) {
+    subfoldersInput.addEventListener('input', window.updateVideoCounterSummary);
+    subfoldersInput.addEventListener('change', window.updateVideoCounterSummary);
+  }
+  if (targetInput) {
+    targetInput.addEventListener('input', saveVideoCounterState);
+    targetInput.addEventListener('change', saveVideoCounterState);
+  }
+
+  // Browse folder handler
+  window.handleBrowseVideoCounterFolder = async function() {
+    const input = document.getElementById('cfg_video_counter_main_folder');
+    try {
+      let res = null;
+      try {
+        res = await jsonFetch('/api/video-counter/browse-folder', { method: 'POST' });
+      } catch (e) {
+        res = await jsonFetch('/api/browse-directory', { method: 'POST' });
+      }
+      if (res && res.path) {
+        if (input) {
+          input.value = res.path;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        saveVideoCounterState();
+        window.updateVideoCounterSummary();
+        logVideoCounter(`📂 เลือกโฟลเดอร์: ${res.path}`, 'success');
+        if (typeof showToast === 'function') showToast('เลือกโฟลเดอร์สำเร็จ!', 'success');
+      }
+    } catch (err) {
+      logVideoCounter(`Browse folder error: ${err.message}`, 'error');
+    }
+  };
+
+  if (browseFolderBtn) {
+    browseFolderBtn.addEventListener('click', window.handleBrowseVideoCounterFolder);
+  }
+
+  // Paste folder handler
+  window.handlePasteVideoCounterFolder = async function() {
+    const input = document.getElementById('cfg_video_counter_main_folder');
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        const cleanPath = text.trim();
+        if (input) {
+          input.value = cleanPath;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        saveVideoCounterState();
+        window.updateVideoCounterSummary();
+        logVideoCounter(`📋 วาง Path โฟลเดอร์: ${cleanPath}`, 'success');
+        if (typeof showToast === 'function') showToast('วาง Path สำเร็จ!', 'success');
+      } else {
+        if (typeof showToast === 'function') showToast('Clipboard ว่างเปล่า', 'error');
+      }
+    } catch (err) {
+      logVideoCounter(`Clipboard read error: ${err.message}`, 'error');
+    }
+  };
+
+  if (pasteFolderBtn) {
+    pasteFolderBtn.addEventListener('click', window.handlePasteVideoCounterFolder);
+  }
+
+  // Copy report handler
+  if (copyReportBtn) {
+    copyReportBtn.addEventListener('click', async () => {
+      const reportText = textReportArea ? textReportArea.value : '';
+      if (!reportText || !reportText.trim()) {
+        if (typeof showToast === 'function') showToast('ยังไม่มีรายงานให้คัดลอก', 'error');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(reportText);
+        logVideoCounter('📋 คัดลอกรายงานสรุปผลลง Clipboard สำเร็จ!', 'success');
+        if (typeof showToast === 'function') showToast('คัดลอกรายงานสรุปสำเร็จ!', 'success');
+      } catch (e) {
+        logVideoCounter(`คัดลอกไม่สำเร็จ: ${e.message}`, 'error');
+      }
+    });
+  }
+
+  // Execute Count & Compare
+  let isCounting = false;
+  async function executeVideoCounter() {
+    if (isCounting) return;
+    const mainFolder = mainFolderInput ? mainFolderInput.value.trim() : '';
+    if (!mainFolder) {
+      alert('กรุณาระบุหรือเลือกโฟลเดอร์หลักก่อน');
+      if (mainFolderInput) mainFolderInput.focus();
+      return;
+    }
+
+    const subfolders = subfoldersInput ? subfoldersInput.value.trim() : '';
+    const targetCount = targetInput ? parseInt(targetInput.value) || 10 : 10;
+
+    isCounting = true;
+    if (countBtn) {
+      countBtn.disabled = true;
+      countBtn.innerHTML = '<span>⏳ กำลังนับและตรวจสอบไฟล์วิดีโอ...</span>';
+    }
+
+    logVideoCounter(`🚀 เริ่มนับและตรวจสอบวิดีโอใน: ${mainFolder} (เป้าหมาย ${targetCount} วิดีโอ/โฟลเดอร์)...`, 'system');
+
+    try {
+      const res = await jsonFetch('/api/video-counter/count', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          main_folder: mainFolder,
+          subfolders_str: subfolders,
+          target_count: targetCount
+        })
+      });
+
+      if (res && res.ok) {
+        logVideoCounter(
+          `✨ ตรวจสอบเสร็จสิ้น: ทั้งหมด ${res.total_folders} โฟลเดอร์, ครบเกณฑ์ ${res.met_count}, ไม่ถึงเกณฑ์ ${res.below_count} (รวม ${res.total_videos} วิดีโอ)`,
+          res.all_met ? 'success' : 'warning'
+        );
+
+        // Update KPIs
+        if (kpiTotalFolders) kpiTotalFolders.textContent = res.total_folders;
+        if (kpiTotalVideos) kpiTotalVideos.textContent = res.total_videos;
+        if (kpiMetFolders) kpiMetFolders.textContent = res.met_count;
+        if (kpiBelowFolders) kpiBelowFolders.textContent = res.below_count;
+
+        // Update Text Report
+        if (textReportArea) textReportArea.value = res.text_report || '';
+
+        // Update Result Badge
+        if (resultBadge) resultBadge.textContent = `${res.total_folders} โฟลเดอร์ (${res.total_videos} วิดีโอ)`;
+
+        // Render Alert Banner for below-threshold folders
+        renderAlertBanner(res);
+
+        // Render Folder List Breakdown
+        renderFolderBreakdown(res);
+
+        if (typeof showToast === 'function') {
+          if (res.all_met) {
+            showToast(`ทุกโฟลเดอร์ครบตามเกณฑ์ (${res.total_videos} วิดีโอ)!`, 'success');
+          } else {
+            showToast(`พบ ${res.below_count} โฟลเดอร์ที่ไม่ถึงเกณฑ์`, 'error');
+          }
+        }
+      } else {
+        const errMsg = res ? res.error : 'เกิดข้อผิดพลาดในการตรวจสอบ';
+        logVideoCounter(`❌ ล้มเหลว: ${errMsg}`, 'error');
+        alert(`เกิดข้อผิดพลาด: ${errMsg}`);
+      }
+    } catch (err) {
+      logVideoCounter(`❌ Connection error: ${err.message}`, 'error');
+      alert(`Connection error: ${err.message}`);
+    } finally {
+      isCounting = false;
+      if (countBtn) {
+        countBtn.disabled = false;
+        countBtn.innerHTML = '<span>🔍 เริ่มนับและตรวจสอบวิดีโอ (Count Videos)</span>';
+      }
+    }
+  }
+
+  if (countBtn) countBtn.addEventListener('click', executeVideoCounter);
+
+  function renderAlertBanner(res) {
+    if (!alertBanner) return;
+    if (res.total_folders === 0) {
+      alertBanner.style.display = 'none';
+      alertBanner.innerHTML = '';
+      return;
+    }
+
+    alertBanner.style.display = 'block';
+
+    if (res.below_count > 0) {
+      const belowItems = (res.below_target_folders || []).map(bf => {
+        return `<li style="margin-bottom: 4px;">
+          <strong>โฟลเดอร์ ${bf.folder_name}:</strong> มี <strong>${bf.video_count}</strong> วิดีโอ 
+          <span style="color: #fca5a5;">(ขาดอีก ${bf.missing_count} วิดีโอ เพื่อให้ครบเกณฑ์ ${res.target_count})</span>
+        </li>`;
+      }).join('');
+
+      alertBanner.innerHTML = `
+        <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 14px 18px; color: #fff;">
+          <div style="font-weight: bold; font-size: 0.95rem; color: #f87171; display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span>⚠️</span>
+            <span>พบ ${res.below_count} โฟลเดอร์ที่ไม่ถึงเกณฑ์ที่กำหนด (&lt; ${res.target_count} วิดีโอ)</span>
+          </div>
+          <ul style="margin: 0; padding-left: 20px; font-size: 0.85rem; line-height: 1.5; color: rgba(255,255,255,0.9);">
+            ${belowItems}
+          </ul>
+        </div>
+      `;
+    } else {
+      alertBanner.innerHTML = `
+        <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 14px 18px; color: #fff;">
+          <div style="font-weight: bold; font-size: 0.95rem; color: #34d399; display: flex; align-items: center; gap: 8px;">
+            <span>🎉</span>
+            <span>ยอดเยี่ยม! ทุกโฟลเดอร์มีจำนวนวิดีโอครบตามเกณฑ์ที่กำหนด (&gt;= ${res.target_count} วิดีโอ)</span>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  function renderFolderBreakdown(res) {
+    if (!folderList) return;
+    const folders = res.folders || [];
+    if (folders.length === 0) {
+      folderList.innerHTML = '<div style="padding: 24px; text-align: center; color: rgba(255,255,255,0.4); font-size: 0.9rem;">ไม่พบโฟลเดอร์สำหรับแสดงผล</div>';
+      return;
+    }
+
+    folderList.innerHTML = folders.map(f => {
+      const pct = Math.min(100, Math.round((f.video_count / f.target_count) * 100));
+      const barColor = f.is_met ? 'linear-gradient(90deg, #10b981, #059669)' : 'linear-gradient(90deg, #ef4444, #f97316)';
+      const borderColor = f.is_met ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.3)';
+      const bgColor = f.is_met ? 'rgba(15, 23, 42, 0.6)' : 'rgba(239, 68, 68, 0.05)';
+
+      const statusBadge = f.is_met
+        ? `<span style="color: #34d399; font-size: 0.76rem; font-weight: bold; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 8px; border-radius: 6px;">✅ ครบเกณฑ์${f.diff > 0 ? ' (+' + f.diff + ')' : ''}</span>`
+        : `<span style="color: #f87171; font-size: 0.76rem; font-weight: bold; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); padding: 3px 8px; border-radius: 6px;">⚠️ ขาดอีก ${f.missing_count} วิดีโอ</span>`;
+
+      const videoListHtml = (f.video_files && f.video_files.length > 0)
+        ? `<details style="margin-top: 6px; font-size: 0.76rem; color: rgba(255,255,255,0.6);">
+            <summary style="cursor: pointer; color: #8da6ff; user-select: none;">📁 ดูรายชื่อไฟล์ทั้งหมด (${f.video_files.length} ไฟล์)</summary>
+            <div style="margin-top: 6px; padding: 6px 10px; background: rgba(0,0,0,0.25); border-radius: 6px; max-height: 120px; overflow-y: auto; font-family: monospace; line-height: 1.4;">
+              ${f.video_files.map(v => `<div style="color: rgba(255,255,255,0.85); margin-bottom: 2px;">🎬 ${v}</div>`).join('')}
+            </div>
+          </details>`
+        : `<div style="font-size: 0.76rem; color: rgba(255,255,255,0.4); margin-top: 4px;">(ไม่พบไฟล์วิดีโอในโฟลเดอร์นี้)</div>`;
+
+      return `
+        <div style="background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.1rem;">📁</span>
+              <strong style="color: #fff; font-size: 0.92rem;">โฟลเดอร์ ${f.folder_name}</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-weight: bold; font-size: 0.88rem; color: ${f.is_met ? '#34d399' : '#f87171'};">
+                ${f.video_count} / ${f.target_count} ไฟล์
+              </span>
+              ${statusBadge}
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+            <div style="width: ${pct}%; height: 100%; background: ${barColor}; transition: width 0.3s;"></div>
+          </div>
+
+          <!-- File List -->
+          ${videoListHtml}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Initial summary load if folder is pre-filled
+  if (mainFolderInput && mainFolderInput.value.trim()) {
+    window.updateVideoCounterSummary();
+  }
+}
+
+// Call on DOMContentLoaded or immediately
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initVideoCounterModule);
+} else {
+  initVideoCounterModule();
+}
+
+
 
 
