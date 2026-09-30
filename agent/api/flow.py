@@ -591,6 +591,8 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
         await asyncio.sleep(3.0)
         status_js = """(() => {
             const pending = [...document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]')];
+            const errorToast = document.querySelector('mat-snack-bar-container, .error-message, [class*="error-snackbar"], .cdk-overlay-container [role="alert"], [class*="toast"]');
+            const errorText = errorToast ? (errorToast.innerText || '').trim() : '';
             const tiles = [...document.querySelectorAll('flow-image-tile')];
             let latestImg = null;
             if (tiles.length > 0) {
@@ -612,12 +614,17 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
             return {
                 pendingCount: pending.length,
                 pendingPcts: pending.map(p => (p.innerText || '').match(/(\\d+)%/)?.[1]).filter(Boolean),
-                latestImg: latestImg
+                latestImg: latestImg,
+                errorText: errorText
             };
         })()"""
         render_status = await eval_js(status_js)
         pending_count = render_status.get("pendingCount", 0)
         latest_img = render_status.get("latestImg")
+        error_text = render_status.get("errorText") or ""
+
+        if error_text and any(w in error_text.lower() for w in ["policy", "violate", "safety", "guideline", "ละเมิด", "ไม่สามารถสร้าง", "นโยบาย"]):
+            raise HTTPException(422, f"Safety policy block detected: {error_text}")
 
         if pending_count == 0 and latest_img:
             generated_img_url = latest_img

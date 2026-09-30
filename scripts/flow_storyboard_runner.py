@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -30,14 +31,26 @@ def error_exit(msg: str):
 
 def http_get(url: str, timeout: int = 15) -> dict:
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
 
 def http_post(url: str, data: dict, timeout: int = 240) -> dict:
     body = json.dumps(data).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            err_json = json.loads(e.read().decode("utf-8"))
+            return {"success": False, "status_code": e.code, "detail": err_json.get("detail", str(err_json))}
+        except Exception:
+            return {"success": False, "status_code": e.code, "detail": str(e)}
+    except Exception as e:
+        return {"success": False, "detail": str(e)}
 
 def parse_range(range_str: str) -> List[int]:
     """Parses range strings like '1-20', '1,2,5', '1-5,8' into sorted list of ints."""
@@ -50,6 +63,49 @@ def parse_range(range_str: str) -> List[int]:
         elif part.isdigit():
             result.add(int(part))
     return sorted(list(result))
+
+# ─────────────────────────────────────────────────────────────
+# Content Safety & Moderation Bypass Rule Engine
+# ─────────────────────────────────────────────────────────────
+
+SAFETY_REPLACEMENTS = [
+    # Multi-word patterns first
+    (r"\btorture\s*dungeon\b", "dim shadowy chamber"),
+    (r"\btorture\s*room\b", "dim punishment chamber"),
+    (r"\bscreaming\s+in\s+agony\b", "looking upward in deep emotional sorrow"),
+    (r"\bcrying\s+bloody\s+tears\b", "tears glistening in dramatic firelight"),
+    (r"\bblood(?:y)?\s+tears\b", "glistening tears"),
+    (r"\btied\s+up\b", "standing constrained"),
+    (r"\bchained\s+up\b", "standing constrained"),
+    (r"\bholding\s+(?:a\s+)?(?:knife|blade|gun|weapon)\b", "gesturing with a dramatically pointed finger"),
+    (r"\bpointing\s+(?:a\s+)?(?:knife|blade|gun|weapon)\b", "pointing a stern finger"),
+
+    # Single-word violence & weapons
+    (r"\b(blood|bloody|bleeding)\b", "glistening tear streaks"),
+    (r"\b(wounds?|injur(?:y|ies|ed))\b", "fatigued posture"),
+    (r"\b(knife|knives|blade|gun|guns|weapons?)\b", "glowing crystal amulet"),
+    (r"\b(stab|stabbing|shot|shooting)\b", "striking a dramatic confrontational pose"),
+    (r"\b(kill|killing|killed|murder|murdered|murdering)\b", "confronting fiercely"),
+    (r"\b(death|dead|corpse)\b", "fallen unconscious"),
+    (r"\b(tortur(?:e|ed|ing)|abus(?:e|ed|ing))\b", "harsh reprimand"),
+    (r"\b(dungeon)\b", "dim stone chamber"),
+    (r"\b(shackled)\b", "held firmly"),
+    (r"\b(strangl(?:e|ed|ing)|chok(?:e|ed|ing))\b", "gripping collar in fierce confrontation"),
+    (r"\b(slap|slapping|punch|punching|beat|beating)\b", "dramatic emotional outburst"),
+    (r"\b(agony|excruciating)\b", "deep emotional distress"),
+    (r"\b(cruel|brutal)\b", "stern and uncompromising"),
+    (r"\b(scam|scammer|fraud)\b", "illicit scheme"),
+    (r"\b(hostage|kidnap(?:ped)?)\b", "detained person"),
+]
+
+def soften_prompt_for_safety(prompt: str, round_num: int = 1) -> str:
+    """Softens sensitive or blocked keywords in prompt according to Content Safety & Moderation Bypass Skill."""
+    res = prompt
+    for pattern, repl in SAFETY_REPLACEMENTS:
+        res = re.sub(pattern, repl, res, flags=re.IGNORECASE)
+    if round_num >= 2:
+        res += " Family-friendly emotional Thai melodrama, non-violent cinematic tension."
+    return res
 
 # ─────────────────────────────────────────────────────────────
 # Channel-Specific Metadata Resolvers
@@ -196,6 +252,8 @@ def main():
     parser.add_argument("--api-base", type=str, default=DEFAULT_API_BASE, help="FlowKit API server base URL")
     parser.add_argument("--skip-existing", action="store_true", default=True, help="Skip scenes that already have a completed image file")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing images")
+    parser.add_argument("--batch-size", "-b", type=int, default=5, help="Number of scenes to process per batch (default: 5)")
+    parser.add_argument("--max-retries", "-r", type=int, default=2, help="Max retry attempts for failed scenes with softened prompts (default: 2)")
     parser.add_argument("--delay", "-d", type=float, default=3.0, help="Delay between scene submissions in seconds")
     parser.add_argument("--timeout", type=int, default=180, help="Max timeout per scene generation in seconds")
 
@@ -263,55 +321,129 @@ def main():
     except Exception as e:
         log(f"  Character preload check warning: {e}")
 
-    # 5. Process each scene
+    # 5. Process scenes in batches with auto-retry & safety prompt softening
     completed_count = 0
     skipped_count = 0
     failed_count = 0
 
     endpoint = f"{args.api_base}/api/flow/generate-storyboard"
 
-    for idx, sc_idx in enumerate(target_scene_nums):
-        item = scenes_map[sc_idx]
-        out_path = item["output_path"]
+    batch_size = max(1, args.batch_size)
+    batches = [target_scene_nums[i:i + batch_size] for i in range(0, len(target_scene_nums), batch_size)]
+    total_scenes_to_run = len(target_scene_nums)
 
-        # Check skip existing
-        if not args.force and args.skip_existing and os.path.isfile(out_path) and os.path.getsize(out_path) > 30000:
-            log(f"[{idx+1}/{len(target_scene_nums)}] Scene {sc_idx:02d}: already exists, skipping ({os.path.basename(out_path)})")
-            skipped_count += 1
+    log(f"\n🚀 Starting batch processing: {len(batches)} batches (Batch size: {batch_size}, Max retries: {args.max_retries})")
+
+    for batch_idx, batch in enumerate(batches):
+        log("\n" + "="*50)
+        log(f"📦 BATCH {batch_idx + 1}/{len(batches)} : Scenes {batch}")
+        log("="*50)
+
+        # 5.1 Check skip existing first
+        scenes_to_process = []
+        for sc_idx in batch:
+            item = scenes_map[sc_idx]
+            out_path = item["output_path"]
+            if not args.force and args.skip_existing and os.path.isfile(out_path) and os.path.getsize(out_path) > 30000:
+                log(f"  ⏭️ Scene {sc_idx:02d}: already exists, skipping ({os.path.basename(out_path)})")
+                skipped_count += 1
+            else:
+                scenes_to_process.append(sc_idx)
+
+        if not scenes_to_process:
+            log(f"  All scenes in Batch {batch_idx + 1} already exist. Moving to next batch.")
             continue
 
-        log(f"\n[{idx+1}/{len(target_scene_nums)}] === Rendering Scene {sc_idx:02d} ({args.aspect_ratio}) ===")
-        log(f"  Prompt preview: {item['prompt'][:90]}...")
-        if item["reference_images"]:
-            log(f"  Attached refs: {[os.path.basename(p) for p in item['reference_images']]}")
-        log(f"  Target file: {os.path.basename(out_path)}")
+        failed_scenes = []
 
-        payload = {
-            "prompt": item["prompt"],
-            "project_id": args.project_id,
-            "aspect_ratio": args.aspect_ratio,
-            "reference_images": item["reference_images"],
-            "output_path": out_path,
-            "timeout": args.timeout
-        }
+        # 5.2 Pass 1: Initial generation for batch
+        for sc_idx in scenes_to_process:
+            item = scenes_map[sc_idx]
+            out_path = item["output_path"]
 
-        try:
-            res = http_post(endpoint, payload, timeout=args.timeout + 30)
-            if res.get("success"):
-                log(f"  ✅ Successfully rendered Scene {sc_idx:02d}! Saved to: {out_path}")
-                completed_count += 1
-            else:
-                log(f"  ❌ Generation failed for Scene {sc_idx:02d}: {res}")
-                failed_count += 1
-        except Exception as e:
-            log(f"  ❌ Error rendering Scene {sc_idx:02d}: {e}")
-            failed_count += 1
+            log(f"\n  🎬 Rendering Scene {sc_idx:02d} ({args.aspect_ratio}) [Initial Attempt]")
+            log(f"     Prompt: {item['prompt'][:90]}...")
+            if item["reference_images"]:
+                log(f"     Attached refs: {[os.path.basename(p) for p in item['reference_images']]}")
+            log(f"     Target file: {os.path.basename(out_path)}")
 
-        if idx < len(target_scene_nums) - 1:
+            payload = {
+                "prompt": item["prompt"],
+                "project_id": args.project_id,
+                "aspect_ratio": args.aspect_ratio,
+                "reference_images": item["reference_images"],
+                "output_path": out_path,
+                "timeout": args.timeout
+            }
+
+            try:
+                res = http_post(endpoint, payload, timeout=args.timeout + 30)
+                if res.get("success"):
+                    log(f"  ✅ Successfully rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_path)}")
+                    completed_count += 1
+                else:
+                    err_msg = res.get("detail") or res.get("message") or str(res)
+                    log(f"  ⚠️ Generation failed for Scene {sc_idx:02d}: {err_msg}")
+                    failed_scenes.append((sc_idx, err_msg))
+            except Exception as e:
+                log(f"  ⚠️ Error rendering Scene {sc_idx:02d}: {e}")
+                failed_scenes.append((sc_idx, str(e)))
+
             time.sleep(args.delay)
 
+        # 5.3 Retry Pass for failed scenes in this batch with prompt softening
+        retry_round = 1
+        while failed_scenes and retry_round <= args.max_retries:
+            log(f"\n  🔄 [Batch {batch_idx + 1}] Retrying {len(failed_scenes)} failed scene(s) (Attempt {retry_round}/{args.max_retries}) with softened prompts...")
+            still_failed = []
+
+            for sc_idx, prev_err in failed_scenes:
+                item = scenes_map[sc_idx]
+                out_path = item["output_path"]
+
+                # Soften prompt according to safety rules
+                softened_prompt = soften_prompt_for_safety(item["prompt"], round_num=retry_round)
+                log(f"\n  🛡️ Retrying Scene {sc_idx:02d} with softened prompt:")
+                log(f"     Original : {item['prompt'][:70]}...")
+                log(f"     Softened : {softened_prompt[:70]}...")
+
+                payload = {
+                    "prompt": softened_prompt,
+                    "project_id": args.project_id,
+                    "aspect_ratio": args.aspect_ratio,
+                    "reference_images": item["reference_images"],
+                    "output_path": out_path,
+                    "timeout": args.timeout
+                }
+
+                try:
+                    res = http_post(endpoint, payload, timeout=args.timeout + 30)
+                    if res.get("success"):
+                        log(f"  ✅ [Retry {retry_round} OK] Rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_path)}")
+                        completed_count += 1
+                    else:
+                        err_msg = res.get("detail") or res.get("message") or str(res)
+                        log(f"  ⚠️ [Retry {retry_round} Failed] Scene {sc_idx:02d}: {err_msg}")
+                        still_failed.append((sc_idx, err_msg))
+                except Exception as e:
+                    log(f"  ⚠️ [Retry {retry_round} Error] Scene {sc_idx:02d}: {e}")
+                    still_failed.append((sc_idx, str(e)))
+
+                time.sleep(args.delay)
+
+            failed_scenes = still_failed
+            retry_round += 1
+
+        # 5.4 Count any scene still failed after all retries
+        if failed_scenes:
+            for sc_idx, err in failed_scenes:
+                log(f"  ❌ Permanently failed Scene {sc_idx:02d} after {args.max_retries} retries: {err}")
+                failed_count += 1
+
+        log(f"📦 Finished Batch {batch_idx + 1}/{len(batches)}. Current Progress: {completed_count}/{total_scenes_to_run} completed, {skipped_count} skipped, {failed_count} failed.")
+
     log("\n" + "="*50)
-    log(f"Storyboard Generation Finished!")
+    log(f"🎉 Storyboard Generation Finished!")
     log(f"  Total Processed : {len(target_scene_nums)}")
     log(f"  Completed       : {completed_count}")
     log(f"  Skipped         : {skipped_count}")

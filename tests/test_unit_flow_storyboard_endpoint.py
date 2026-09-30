@@ -3,7 +3,7 @@ Unit tests for Flow Storyboard Central Endpoint & Runner
 """
 import unittest
 from agent.api.flow import GenerateStoryboardRequest, PreloadCharactersRequest, router
-from scripts.flow_storyboard_runner import parse_range
+from scripts.flow_storyboard_runner import parse_range, soften_prompt_for_safety
 
 class TestFlowStoryboard(unittest.TestCase):
     def test_preload_characters_request_defaults(self):
@@ -47,6 +47,22 @@ class TestFlowStoryboard(unittest.TestCase):
         self.assertEqual(parse_range("1-5"), [1, 2, 3, 4, 5])
         self.assertEqual(parse_range("1,3,7"), [1, 3, 7])
         self.assertEqual(parse_range("1-3,5,8-10"), [1, 2, 3, 5, 8, 9, 10])
+
+    def test_soften_prompt_for_safety_round_1(self):
+        raw = "Villain holding a knife in the torture dungeon with blood on hands"
+        softened = soften_prompt_for_safety(raw, round_num=1)
+        self.assertNotIn("knife", softened.lower())
+        self.assertNotIn("torture dungeon", softened.lower())
+        self.assertNotIn("blood", softened.lower())
+        self.assertIn("dim shadowy chamber", softened)
+        self.assertIn("gesturing with a dramatically pointed finger", softened)
+
+    def test_soften_prompt_for_safety_round_2(self):
+        raw = "Screaming in agony while tied up"
+        softened = soften_prompt_for_safety(raw, round_num=2)
+        self.assertNotIn("screaming in agony", softened.lower())
+        self.assertNotIn("tied up", softened.lower())
+        self.assertIn("Family-friendly emotional Thai melodrama", softened)
 
 if __name__ == "__main__":
     unittest.main()
