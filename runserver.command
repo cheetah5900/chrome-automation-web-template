@@ -53,4 +53,5 @@ uvicorn app.main:app --port 6969 --reload \
     --reload-include "*.js" \
     --reload-include "*.css" \
     --reload-exclude "runtime/*" \
-    --reload-exclude "*.bak"
+    --reload-exclude "*.bak" \
+    --timeout-graceful-shutdown 1

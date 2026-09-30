@@ -7535,7 +7535,16 @@ async function applyFacebookPreset(presetNameOrEvent, presetObj) {
   if (document.getElementById('cfg_facebook_main_folder')) document.getElementById('cfg_facebook_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_facebook_subfolders')) document.getElementById('cfg_facebook_subfolders').value = preset.subfolders || '';
   if (document.getElementById('cfg_facebook_folder_mode')) {
-    document.getElementById('cfg_facebook_folder_mode').value = preset.folder_mode || 'generic';
+    let mode = preset.folder_mode;
+    if (!mode) {
+      const mf = (preset.main_folder || '').toLowerCase();
+      if (mf.includes('ละคร') || mf.includes('lakorn')) {
+        mode = 'lakorn';
+      } else {
+        mode = 'generic';
+      }
+    }
+    document.getElementById('cfg_facebook_folder_mode').value = mode;
     updateFacebookFolderModeUI();
   }
   if (document.getElementById('cfg_facebook_video_prefix')) document.getElementById('cfg_facebook_video_prefix').value = preset.video_prefix || 'combined';

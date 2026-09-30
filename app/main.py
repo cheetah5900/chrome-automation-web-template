@@ -4682,12 +4682,26 @@ def scan_lakorn_autopost(req: MetaScanRequest) -> dict[str, Any]:
 
 @app.post("/api/meta-autopost/scan")
 def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
-    if getattr(req, "folder_mode", "generic") == "lakorn":
-        return scan_lakorn_autopost(req)
     import os
     import re
     import random
     from datetime import datetime, timedelta
+
+    folder_mode = getattr(req, "folder_mode", "generic")
+    if folder_mode == "lakorn":
+        return scan_lakorn_autopost(req)
+
+    # Smart auto-detection: if 10 - Final is present directly or inside the subfolder, use Lakorn scanner
+    clean_mf = os.path.expanduser(req.main_folder.strip().strip('"').strip("'")) if req.main_folder else ""
+    if clean_mf and os.path.exists(clean_mf):
+        if os.path.isdir(os.path.join(clean_mf, "10 - Final")):
+            return scan_lakorn_autopost(req)
+        sub = req.subfolders_str.strip()
+        if sub:
+            for part in sub.split(","):
+                part_clean = part.strip()
+                if part_clean and os.path.isdir(os.path.join(clean_mf, part_clean, "10 - Final")):
+                    return scan_lakorn_autopost(req)
 
     main_folder = req.main_folder.strip().strip('"').strip("'")
     main_folder = os.path.expanduser(main_folder)
