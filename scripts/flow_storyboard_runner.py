@@ -241,6 +241,54 @@ def load_stickman_scenes(story_path: str, aspect_ratio: str) -> Dict[int, Dict]:
                 }
     return scenes
 
+def ensure_image_mode(api_base: str) -> bool:
+    """Ensures Google Flow prompt box is toggled to Image mode ('🍌 Nano Banana 2' / 'รูปภาพ')."""
+    try:
+        check_js = """(() => {
+            const btn = document.querySelector('button.settings-trigger-button') ||
+                        document.querySelector('button[aria-label="ทริกเกอร์การตั้งค่า"]');
+            if (!btn) return { error: "settings button not found" };
+            const text = (btn.innerText || '').toLowerCase();
+            if (text.includes('รูปภาพ') || text.includes('image') || text.includes('banana') || text.includes('imagen')) {
+                return { alreadyImage: true, text: btn.innerText.replace(/\\n/g, ' ') };
+            }
+            btn.click();
+            return { needSwitch: true, text: btn.innerText.replace(/\\n/g, ' ') };
+        })()"""
+        encoded = urllib.parse.quote(check_js)
+        res = http_get(f"{api_base}/api/flow/inspect-tab?js={encoded}")
+        script_res = res.get("result", {}).get("res", {}).get("result")
+        if isinstance(script_res, dict) and script_res.get("alreadyImage"):
+            log(f"Prompt box verified in Image mode: {script_res.get('text')}")
+            return True
+
+        if isinstance(script_res, dict) and script_res.get("needSwitch"):
+            log(f"Prompt box currently in Video mode ({script_res.get('text')}). Switching to Image mode...")
+            time.sleep(0.8)
+            switch_js = """(() => {
+                const overlay = document.querySelector('.cdk-overlay-container');
+                if (!overlay) return { error: "no overlay" };
+                const spans = Array.from(overlay.querySelectorAll('span'));
+                const imgSpan = spans.find(s => s.innerText && s.innerText.trim() === 'รูปภาพ');
+                if (imgSpan) {
+                    const clickable = imgSpan.closest('button') || imgSpan.closest('mat-button-toggle') || imgSpan;
+                    clickable.click();
+                    const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                    if (backdrop) backdrop.click();
+                    return { success: true };
+                }
+                return { error: "imgSpan not found" };
+            })()"""
+            encoded_sw = urllib.parse.quote(switch_js)
+            http_get(f"{api_base}/api/flow/inspect-tab?js={encoded_sw}")
+            time.sleep(1.0)
+            log("Switched Google Flow prompt box to Image mode successfully.")
+            return True
+        return False
+    except Exception as e:
+        log(f"Notice on ensuring image mode: {e}")
+        return False
+
 # ─────────────────────────────────────────────────────────────
 # Main Runner Loop
 # ─────────────────────────────────────────────────────────────
@@ -271,6 +319,9 @@ def main():
         log("FlowKit server and Chrome extension are CONNECTED.")
     except Exception as e:
         error_exit(f"Could not connect to FlowKit server at {args.api_base}: {e}")
+
+    # Ensure Google Flow prompt box is in Image mode
+    ensure_image_mode(args.api_base)
 
     # 2. Parse episode number
     ep_num = int(re.search(r'\d+', args.ep).group(0)) if re.search(r'\d+', args.ep) else 1
