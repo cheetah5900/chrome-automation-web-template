@@ -252,7 +252,14 @@ async function getOrOpenFlowTab(preferLabs = false) {
   _flowTabPromise = (async () => {
     try {
       console.log('[FlowAgent] No Flow tab found — opening single background Flow tab on flow.google.com');
-      const newTab = await chrome.tabs.create({ url: 'https://flow.google.com/', active: false });
+      let newTab;
+      try {
+        newTab = await chrome.tabs.create({ url: 'https://flow.google.com/', active: false });
+      } catch (tabErr) {
+        const newWin = await chrome.windows.create({ url: 'https://flow.google.com/', focused: false });
+        newTab = newWin?.tabs?.[0];
+      }
+      if (!newTab?.id) return null;
 
       // Wait up to 10 seconds for tab to finish loading
       for (let i = 0; i < 20; i++) {
@@ -1577,39 +1584,94 @@ function connectToAgent() {
             }
           });
 
-          // Send CDP Input.insertText
+          // Send CDP Input.insertText and click submit via CDP
+          let clicked = false;
+          let canGenerate = false;
+          let pmTextAfter = null;
           const dbgTarget = { tabId: tab.id };
           await chrome.debugger.attach(dbgTarget, '1.3');
           try {
             await chrome.debugger.sendCommand(dbgTarget, 'Input.insertText', { text: text || '' });
+            await sleep(400);
+
+            if (clickSubmit) {
+              const checkBtn = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => {
+                  const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
+                  const pm = document.querySelector('.ProseMirror');
+                  if (!submitBtn || submitBtn.disabled || submitBtn.classList.contains('mat-mdc-button-disabled')) {
+                    return { isEnabled: false, pmText: pm ? pm.innerText?.trim() : null };
+                  }
+                  const r = submitBtn.getBoundingClientRect();
+                  return {
+                    isEnabled: true,
+                    x: Math.round(r.x + r.width / 2),
+                    y: Math.round(r.y + r.height / 2),
+                    pmText: pm ? pm.innerText?.trim() : null
+                  };
+                }
+              });
+              const res = checkBtn[0]?.result;
+              pmTextAfter = res?.pmText;
+              canGenerate = !!res?.isEnabled;
+
+              if (res?.isEnabled) {
+                // 1. Dispatch real CDP Enter key
+                await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchKeyEvent', {
+                  type: 'rawKeyDown',
+                  windowsVirtualKeyCode: 13,
+                  nativeVirtualKeyCode: 13,
+                  code: 'Enter',
+                  key: 'Enter',
+                  text: '\r',
+                  unmodifiedText: '\r'
+                });
+                await sleep(60);
+                await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchKeyEvent', {
+                  type: 'keyUp',
+                  windowsVirtualKeyCode: 13,
+                  nativeVirtualKeyCode: 13,
+                  code: 'Enter',
+                  key: 'Enter'
+                });
+                await sleep(100);
+
+                // 2. Dispatch real CDP mouse click on button coordinates if available
+                if (res.x && res.y) {
+                  await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
+                    type: 'mousePressed',
+                    x: res.x,
+                    y: res.y,
+                    button: 'left',
+                    clickCount: 1
+                  });
+                  await sleep(80);
+                  await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
+                    type: 'mouseReleased',
+                    x: res.x,
+                    y: res.y,
+                    button: 'left',
+                    clickCount: 1
+                  });
+                }
+                clicked = true;
+              }
+            }
           } finally {
             try { await chrome.debugger.detach(dbgTarget); } catch {}
           }
 
           await sleep(500);
 
-          // Check submit button
-          const checkRes = await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: (shouldClick) => {
-              const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
-              const pm = document.querySelector('.ProseMirror');
-              const isEnabled = submitBtn ? !submitBtn.disabled : false;
-              let clicked = false;
-              if (shouldClick && isEnabled) {
-                submitBtn.click();
-                clicked = true;
-              }
-              return {
-                pmText: pm ? pm.innerText?.trim() : null,
-                canGenerate: isEnabled,
-                clicked
-              };
-            },
-            args: [clickSubmit]
+          sendToAgent({
+            id: msg.id,
+            result: {
+              pmText: pmTextAfter,
+              canGenerate,
+              clicked
+            }
           });
-
-          sendToAgent({ id: msg.id, result: checkRes[0]?.result });
         } catch (e) {
           sendToAgent({ id: msg.id, error: e.message });
         }
@@ -1619,13 +1681,21 @@ function connectToAgent() {
           if (msg.params?.url) {
             console.log('[FlowAgent] No Flow tab found for inspect_tab — creating requested tab:', msg.params.url);
             try {
-              const newTab = await chrome.tabs.create({ url: msg.params.url, active: false });
-              for (let i = 0; i < 30; i++) {
-                await sleep(500);
-                const cur = await chrome.tabs.get(newTab.id);
-                if (cur && cur.status === 'complete') break;
+              let newTab;
+              try {
+                newTab = await chrome.tabs.create({ url: msg.params.url, active: false });
+              } catch (tabErr) {
+                const newWin = await chrome.windows.create({ url: msg.params.url, focused: false });
+                newTab = newWin?.tabs?.[0];
               }
-              tabs = [newTab];
+              if (newTab?.id) {
+                for (let i = 0; i < 30; i++) {
+                  await sleep(500);
+                  const cur = await chrome.tabs.get(newTab.id);
+                  if (cur && cur.status === 'complete') break;
+                }
+                tabs = [newTab];
+              }
             } catch (e) {
               console.error('[FlowAgent] Failed to open inspect_tab requested url:', e);
             }
@@ -1663,6 +1733,17 @@ function connectToAgent() {
                 world: 'MAIN',
                 func: (code) => {
                   try {
+                    let policy = window.trustedTypes?.defaultPolicy;
+                    if (!policy && window.trustedTypes?.createPolicy) {
+                      try {
+                        policy = window.trustedTypes.createPolicy('flowkit_eval', { createScript: s => s });
+                      } catch {
+                        try { policy = window.trustedTypes.createPolicy('default', { createScript: s => s }); } catch {}
+                      }
+                    }
+                    if (policy && policy.createScript) {
+                      return window.eval(policy.createScript(code));
+                    }
                     return eval(code);
                   } catch (e) {
                     return { __evalError: e.message };
