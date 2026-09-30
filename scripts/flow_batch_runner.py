@@ -22,6 +22,7 @@ from flow_video_generator import (
     retrieve_signed_video_url,
     download_video,
     sanitize_prompt,
+    sanitize_prompt_for_safety,
     DEFAULT_API_BASE,
     DEFAULT_PROJECT_ID,
     log,
@@ -132,10 +133,21 @@ def main():
             log(f"Pre-uploading {len(needed_uploads)} missing storyboard images to library (zero page reloads)...")
             for sc_idx in needed_uploads:
                 img_path = available_scenes[sc_idx]
-                try:
-                    upload_storyboard_image(args.api_base, img_path, args.project_id)
-                except Exception as e:
-                    log(f"Notice on pre-uploading Scene {sc_idx}: {e}")
+                for attempt in range(3):
+                    try:
+                        upload_storyboard_image(args.api_base, img_path, args.project_id)
+                        break
+                    except Exception as e:
+                        if attempt == 2:
+                            log(f"⚠️ Pre-upload failed for Scene {sc_idx} after 3 attempts: {e}")
+                        time.sleep(2)
+            log("Reloading Google Flow tab once so newly uploaded assets appear in the UI...")
+            try:
+                import subprocess
+                subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to reload active tab of front window'], check=False)
+                time.sleep(6)
+            except Exception as re_err:
+                log(f"Notice on reload: {re_err}")
         else:
             log("  🎉 All target storyboard images are already present on Google Flow! 100% duplicate uploads avoided.")
     elif args.skip_upload:
@@ -172,6 +184,9 @@ def main():
 
                 with open(prompt_file, "r", encoding="utf-8") as pf:
                     prompt_text = pf.read().strip()
+
+                # Always sanitize upfront to avoid false positive policy filter blocks
+                prompt_text = sanitize_prompt_for_safety(prompt_text, tier=1)
 
                 log(f"\n  ⚡ [Queue {q_idx}/{len(batch)}] Dispatching Scene {sc_idx:02d} with image: {os.path.basename(img_path)}...")
                 try:
@@ -262,6 +277,8 @@ def main():
 
                 with open(prompt_file, "r", encoding="utf-8") as pf:
                     prompt_text = pf.read().strip()
+
+                prompt_text = sanitize_prompt_for_safety(prompt_text, tier=1)
 
                 log(f"\n  🎬 Rendering Scene {sc_idx:02d} ({args.aspect_ratio}) [Single Scene] -> {os.path.basename(img_path)}...")
                 try:

@@ -43,8 +43,17 @@ def inspect_tab_js(api_base: str, js_code: str, timeout: int = 25) -> Any:
     """Executes arbitrary JavaScript inside the active Google Flow tab via FlowKit extension."""
     encoded = urllib.parse.quote(js_code)
     url = f"{api_base}/api/flow/inspect-tab?js={encoded}"
-    res = http_get(url, timeout=timeout)
-    script_res = res.get("result", {}).get("res", {})
+    res = None
+    for attempt in range(4):
+        try:
+            res = http_get(url, timeout=timeout)
+            break
+        except Exception:
+            if attempt == 3:
+                raise
+            time.sleep(1.2)
+
+    script_res = (res or {}).get("result", {}).get("res", {})
     if not script_res.get("success"):
         err = script_res.get("error") or "inspect_tab script failed"
         raise RuntimeError(f"Browser script error: {err}")
@@ -358,6 +367,8 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
 
     # 2. Click "เพิ่มองค์ประกอบลงในช่องพรอมต์" (button.add-menu-trigger)
     open_js = """(() => {
+        const popover = document.querySelector('flow-add-menu-popover-content');
+        if (popover) return { ok: true, alreadyOpen: true };
         const trigger = document.querySelector('button.add-menu-trigger') ||
                         document.querySelector('button[aria-label*="เพิ่มองค์ประกอบ"]');
         if (!trigger) return { error: "add-menu-trigger button not found" };
@@ -384,13 +395,18 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
     inspect_tab_js(api_base, filter_js)
     time.sleep(0.8)
 
+    sc_match = re.search(r"Scene\s*(\d+)", file_name, re.IGNORECASE)
+    sc_tag = f"Scene {int(sc_match.group(1)):02d}" if sc_match else ""
+    search_query = sc_tag if sc_tag else file_name
+
     # 3.5 Use search input box to filter directly to target filename
     search_js = f"""(() => {{
         const popover = document.querySelector('flow-add-menu-popover-content');
         if (!popover) return false;
         const searchInput = popover.querySelector('input.search-input');
         if (searchInput) {{
-            searchInput.value = "{file_name}";
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(searchInput, "{search_query}");
             searchInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
             searchInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
             return true;
@@ -398,10 +414,7 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
         return false;
     }})()"""
     inspect_tab_js(api_base, search_js)
-    time.sleep(0.4)
-
-    sc_match = re.search(r"Scene\s*(\d+)", file_name, re.IGNORECASE)
-    sc_tag = f"Scene {int(sc_match.group(1)):02d}" if sc_match else ""
+    time.sleep(0.5)
 
     # 4. Click matching image asset item
     click_item_js = f"""(() => {{
@@ -613,7 +626,7 @@ def monitor_video_rendering(api_base: str, prompt_snippet: str, timeout_seconds:
 
     monitor_js = """(() => {
         // Check pending progress %
-        const tiles = Array.from(document.querySelectorAll('.tiles-container, flow-pending-tile, [class*="tile"]'));
+        const tiles = Array.from(document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]'));
         let pct = null;
         let failureText = null;
         for (const t of tiles) {
@@ -843,13 +856,18 @@ def monitor_video_batch(
     last_pct = ""
 
     monitor_js = """(() => {
-        const pending = Array.from(document.querySelectorAll('.tiles-container, flow-pending-tile, [class*="pending-tile"], [class*="pending"]'));
+        const pending = Array.from(document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]'));
         let pcts = [];
         let failureText = null;
         for (const t of pending) {
             const text = t.innerText || '';
             const m = text.match(/(\\d+)%/);
             if (m) pcts.push(m[1] + '%');
+        }
+
+        const errorTiles = Array.from(document.querySelectorAll('flow-error-tile, [class*="error-tile"]'));
+        for (const et of errorTiles) {
+            const text = et.innerText || '';
             if (text.includes('ล้มเหลว') || text.includes('Failed') || text.includes('ละเมิดนโยบาย')) {
                 failureText = text.replace(/\\s+/g, ' ').trim().slice(0, 150);
             }
@@ -884,6 +902,8 @@ def monitor_video_batch(
 
     consecutive_zero_pending = 0
     poll_status = {}
+    last_failure_text = ""
+    stuck_99_count = 0
 
     while time.time() - start_time < timeout_seconds:
         poll_status = inspect_tab_js(api_base, monitor_js) or {}
@@ -895,19 +915,30 @@ def monitor_video_batch(
         if pcts and str(pcts) != last_pct:
             log(f"  Rendering in progress: {', '.join(pcts[:5])} ({pending_count} pending)")
             last_pct = str(pcts)
+            stuck_99_count = 0
+        elif pcts and all(p == "99%" for p in pcts):
+            stuck_99_count += 1
+            if stuck_99_count >= 12:  # 60s stuck at 99%
+                log("  Notice: Pending tile(s) stuck at 99% for 60s. Proceeding to completed tiles...")
+                break
 
         new_tiles = [t for t in tiles if t["media_id"] not in seen_ids]
 
+        if len(new_tiles) >= len(batch_scenes):
+            log(f"All {len(new_tiles)} target video(s) completed rendering!")
+            break
+
         if not poll_status.get("isRendering"):
             consecutive_zero_pending += 1
-            if len(new_tiles) >= len(batch_scenes) or consecutive_zero_pending >= 2:
-                log(f"All {len(new_tiles)} video(s) completed rendering!")
+            if consecutive_zero_pending >= 2:
+                log(f"Pending queue cleared with {len(new_tiles)} completed video(s).")
                 break
         else:
             consecutive_zero_pending = 0
 
-        if failure_text and (time.time() - start_time > 30):
+        if failure_text and failure_text != last_failure_text and (time.time() - start_time > 30):
             log(f"Warning: failure text detected: {failure_text}")
+            last_failure_text = failure_text
 
         time.sleep(5)
 
