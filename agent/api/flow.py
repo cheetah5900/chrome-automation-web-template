@@ -1,12 +1,75 @@
-"""Direct Flow API endpoints — for manual operations outside the queue."""
+import asyncio
 import logging
+from typing import Optional, Any
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional
 from agent.services.flow_client import get_flow_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/flow", tags=["flow"])
+
+# Concurrency Lock & Active Task Tracking for Storyboard Rendering
+_storyboard_lock = asyncio.Lock()
+_storyboard_active_state: dict[str, Any] = {
+    "busy": False,
+    "project_id": None,
+    "started_at": None,
+    "prompt": None
+}
+
+
+async def _check_flow_busy(client, target_project_id: str) -> Optional[JSONResponse]:
+    """Checks both the in-process concurrency lock and the active Chrome tab.
+    If either the server is executing another generation or the Google Flow tab has pending tiles rendering,
+    returns an HTTP 429 (Too Many Requests / Busy) JSONResponse.
+    """
+    # 1. In-process Concurrency Lock check
+    if _storyboard_lock.locked() or _storyboard_active_state.get("busy"):
+        curr_proj = _storyboard_active_state.get("project_id") or target_project_id or ""
+        logger.warning("Storyboard Concurrency Lock active (busy with project %s). Returning HTTP 429.", curr_proj)
+        return JSONResponse(
+            status_code=429,
+            content={
+                "success": False,
+                "status": "busy",
+                "message": "Google Flow is currently busy rendering another task",
+                "current_project": curr_proj
+            }
+        )
+
+    # 2. Chrome Extension Tab check (live DOM check for pending tiles)
+    if client and client.connected:
+        tab_busy_js = """(() => {
+            const pending = Array.from(document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]'));
+            const url = window.location.href || '';
+            const match = url.match(/\\/project\\/([a-zA-Z0-9_-]+)/);
+            const currentProject = match ? match[1] : '';
+            return {
+                isBusy: pending.length > 0,
+                pendingCount: pending.length,
+                currentProject: currentProject
+            };
+        })()"""
+        try:
+            tab_status = await _eval_js_internal(client, tab_busy_js, timeout=4) or {}
+            if tab_status.get("isBusy"):
+                curr_proj = tab_status.get("currentProject") or target_project_id or ""
+                logger.warning("Google Flow tab has %d pending tile(s) rendering (project %s). Returning HTTP 429.",
+                               tab_status.get("pendingCount", 0), curr_proj)
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "success": False,
+                        "status": "busy",
+                        "message": "Google Flow is currently busy rendering another task",
+                        "current_project": curr_proj
+                    }
+                )
+        except Exception as e:
+            logger.debug("Non-critical error checking tab busy state: %s", e)
+
+    return None
 
 
 class GenerateImageRequest(BaseModel):
@@ -447,7 +510,7 @@ class GenerateStoryboardRequest(BaseModel):
     aspect_ratio: str = "9:16"
     reference_images: Optional[list[str]] = None
     output_path: Optional[str] = None
-    timeout: int = 60
+    timeout: int = 180
 
 
 
@@ -938,6 +1001,7 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
     """Centralized background storyboard image generation via Google Flow CDP automation.
 
     Reusable by all channels (Lakorn, Stickman, etc.).
+    - Concurrency Lock: Checks if server or Chrome tab is busy rendering, returns HTTP 429 (Too Many Requests / Busy) if busy.
     - Uploads and attaches character sheet reference images as ingredient chips
     - Sets aspect ratio (9:16 or 16:9)
     - Submits prompt via CDP
@@ -953,113 +1017,142 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
     if not client.connected:
         raise HTTPException(503, "FlowKit extension not connected")
 
-    # 1. Snapshot existing tiles before submitting prompt to guarantee only newly generated tiles are accepted
-    snap_js = """(() => {
-        const tiles = Array.from(document.querySelectorAll('flow-image-tile'));
-        const urls = [];
-        const mediaIds = [];
-        for (const t of tiles) {
-            const img = t.querySelector('img');
-            if (img && img.src) {
-                urls.push(img.src);
-                const mid = img.getAttribute('data-media-id');
-                if (mid) mediaIds.push(mid);
+    # 1. Concurrency Lock & Tab Busy Check (Non-blocking check)
+    busy_response = await _check_flow_busy(client, body.project_id)
+    if busy_response is not None:
+        return busy_response
+
+    if _storyboard_lock.locked():
+        curr_proj = _storyboard_active_state.get("project_id") or body.project_id or ""
+        return JSONResponse(
+            status_code=429,
+            content={
+                "success": False,
+                "status": "busy",
+                "message": "Google Flow is currently busy rendering another task",
+                "current_project": curr_proj
             }
-        }
-        return { urls: urls, media_ids: mediaIds };
-    })()"""
-    pre_snap = await _eval_js_internal(client, snap_js) or {}
-    pre_urls = set(pre_snap.get("urls", []))
-    pre_media_ids = set(pre_snap.get("media_ids", []))
+        )
 
-    # 2. Submit prompt via CDP
-    await _submit_flow_prompt_internal(
-        client=client,
-        prompt=body.prompt,
-        project_id=body.project_id,
-        aspect_ratio=body.aspect_ratio,
-        reference_images=body.reference_images,
-        wait_after_submit=1.0
-    )
+    async with _storyboard_lock:
+        _storyboard_active_state["busy"] = True
+        _storyboard_active_state["project_id"] = body.project_id
+        _storyboard_active_state["started_at"] = time.time()
+        _storyboard_active_state["prompt"] = body.prompt[:100]
 
-    # 3. Monitor rendering until done (default 60s timeout)
-    start_time = time.time()
-    generated_img_url = None
-    consecutive_zero_pending = 0
+        try:
+            # 1. Snapshot existing tiles before submitting prompt to guarantee only newly generated tiles are accepted
+            snap_js = """(() => {
+                const tiles = Array.from(document.querySelectorAll('flow-image-tile'));
+                const urls = [];
+                const mediaIds = [];
+                for (const t of tiles) {
+                    const img = t.querySelector('img');
+                    if (img && img.src) {
+                        urls.push(img.src);
+                        const mid = img.getAttribute('data-media-id');
+                        if (mid) mediaIds.push(mid);
+                    }
+                }
+                return { urls: urls, media_ids: mediaIds };
+            })()"""
+            pre_snap = await _eval_js_internal(client, snap_js) or {}
+            pre_urls = set(pre_snap.get("urls", []))
+            pre_media_ids = set(pre_snap.get("media_ids", []))
 
-    while time.time() - start_time < body.timeout:
-        await asyncio.sleep(2.5)
-        status_js = """(() => {
-            const pending = [...document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]')];
-            const errorToast = document.querySelector('mat-snack-bar-container, .error-message, [class*="error-snackbar"], .cdk-overlay-container [role="alert"], [class*="toast"]');
-            const errorText = errorToast ? (errorToast.innerText || '').trim() : '';
-            const tiles = [...document.querySelectorAll('flow-image-tile')];
-            const tileData = tiles.map(t => {
-                const img = t.querySelector('img');
-                return {
-                    src: img ? img.src : '',
-                    media_id: img ? (img.getAttribute('data-media-id') || '') : '',
-                    is_outfit: (t.innerText || '').includes('Outfit 1') || (t.innerText || '').includes('Outfit 2') || (t.innerText || '').includes('Outfit 3')
-                };
-            }).filter(t => t.src && !t.is_outfit);
-            return {
-                pendingCount: pending.length,
-                pendingPcts: pending.map(p => (p.innerText || '').match(/(\\d+)%/)?.[1]).filter(Boolean),
-                tiles: tileData,
-                errorText: errorText
-            };
-        })()"""
-        render_status = await _eval_js_internal(client, status_js) or {}
-        pending_count = render_status.get("pendingCount", 0)
-        error_text = render_status.get("errorText") or ""
-        tiles = render_status.get("tiles") or []
+            # 2. Submit prompt via CDP
+            await _submit_flow_prompt_internal(
+                client=client,
+                prompt=body.prompt,
+                project_id=body.project_id,
+                aspect_ratio=body.aspect_ratio,
+                reference_images=body.reference_images,
+                wait_after_submit=1.0
+            )
 
-        if error_text and any(w in error_text.lower() for w in ["policy", "violate", "safety", "guideline", "ละเมิด", "ไม่สามารถสร้าง", "นโยบาย"]):
-            raise HTTPException(422, f"Safety policy block detected: {error_text}")
+            # 3. Monitor rendering until done (default 60s timeout)
+            start_time = time.time()
+            generated_img_url = None
+            consecutive_zero_pending = 0
 
-        # Strictly filter for NEW tiles that did not exist before this prompt submission
-        new_tiles = [
-            t for t in tiles
-            if (t.get("src") not in pre_urls) and (not t.get("media_id") or t.get("media_id") not in pre_media_ids)
-        ]
+            while time.time() - start_time < body.timeout:
+                await asyncio.sleep(2.5)
+                status_js = """(() => {
+                    const pending = [...document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]')];
+                    const errorToast = document.querySelector('mat-snack-bar-container, .error-message, [class*="error-snackbar"], .cdk-overlay-container [role="alert"], [class*="toast"]');
+                    const errorText = errorToast ? (errorToast.innerText || '').trim() : '';
+                    const tiles = [...document.querySelectorAll('flow-image-tile')];
+                    const tileData = tiles.map(t => {
+                        const img = t.querySelector('img');
+                        return {
+                            src: img ? img.src : '',
+                            media_id: img ? (img.getAttribute('data-media-id') || '') : '',
+                            is_outfit: (t.innerText || '').includes('Outfit 1') || (t.innerText || '').includes('Outfit 2') || (t.innerText || '').includes('Outfit 3')
+                        };
+                    }).filter(t => t.src && !t.is_outfit);
+                    return {
+                        pendingCount: pending.length,
+                        pendingPcts: pending.map(p => (p.innerText || '').match(/(\\d+)%/)?.[1]).filter(Boolean),
+                        tiles: tileData,
+                        errorText: errorText
+                    };
+                })()"""
+                render_status = await _eval_js_internal(client, status_js) or {}
+                pending_count = render_status.get("pendingCount", 0)
+                error_text = render_status.get("errorText") or ""
+                tiles = render_status.get("tiles") or []
 
-        if new_tiles:
-            generated_img_url = new_tiles[0].get("src")
-            break
+                if error_text and any(w in error_text.lower() for w in ["policy", "violate", "safety", "guideline", "ละเมิด", "ไม่สามารถสร้าง", "นโยบาย"]):
+                    raise HTTPException(422, f"Safety policy block detected: {error_text}")
 
-        if pending_count == 0:
-            consecutive_zero_pending += 1
-            if consecutive_zero_pending >= 2:
-                # Pending tile vanished (e.g. user refreshed the tab or Google Flow dropped the task)
+                # Strictly filter for NEW tiles that did not exist before this prompt submission
+                new_tiles = [
+                    t for t in tiles
+                    if (t.get("src") not in pre_urls) and (not t.get("media_id") or t.get("media_id") not in pre_media_ids)
+                ]
+
                 if new_tiles:
                     generated_img_url = new_tiles[0].get("src")
                     break
-                raise HTTPException(410, "Pending tile vanished without producing a new image (tab was refreshed or generation aborted). Must re-generate.")
-        else:
-            consecutive_zero_pending = 0
 
-    if not generated_img_url:
-        raise HTTPException(504, f"Image generation timed out after {body.timeout}s without producing a new tile")
+                if pending_count == 0:
+                    consecutive_zero_pending += 1
+                    if consecutive_zero_pending >= 2:
+                        # Pending tile vanished (e.g. user refreshed the tab or Google Flow dropped the task)
+                        if new_tiles:
+                            generated_img_url = new_tiles[0].get("src")
+                            break
+                        raise HTTPException(410, "Pending tile vanished without producing a new image (tab was refreshed or generation aborted). Must re-generate.")
+                else:
+                    consecutive_zero_pending = 0
 
-    # 4. Download and validate image to output_path if provided
-    if body.output_path:
-        os.makedirs(os.path.dirname(os.path.abspath(body.output_path)), exist_ok=True)
-        async with httpx.AsyncClient(follow_redirects=True) as http_client:
-            resp = await http_client.get(generated_img_url, timeout=30.0)
-            if resp.status_code == 200:
-                if not is_valid_image_bytes(resp.content):
-                    raise HTTPException(502, f"Downloaded content from {generated_img_url} is not a valid image file ({len(resp.content)} bytes, HTML redirect or corrupt)")
-                with open(body.output_path, "wb") as f:
-                    f.write(resp.content)
-            else:
-                raise HTTPException(502, f"Failed to download image from CDN: status {resp.status_code}")
+            if not generated_img_url:
+                raise HTTPException(504, f"Image generation timed out after {body.timeout}s without producing a new tile")
 
-    return {
-        "success": True,
-        "image_url": generated_img_url,
-        "output_path": body.output_path,
-        "aspect_ratio": body.aspect_ratio
-    }
+            # 4. Download and validate image to output_path if provided
+            if body.output_path:
+                os.makedirs(os.path.dirname(os.path.abspath(body.output_path)), exist_ok=True)
+                async with httpx.AsyncClient(follow_redirects=True) as http_client:
+                    resp = await http_client.get(generated_img_url, timeout=30.0)
+                    if resp.status_code == 200:
+                        if not is_valid_image_bytes(resp.content):
+                            raise HTTPException(502, f"Downloaded content from {generated_img_url} is not a valid image file ({len(resp.content)} bytes, HTML redirect or corrupt)")
+                        with open(body.output_path, "wb") as f:
+                            f.write(resp.content)
+                    else:
+                        raise HTTPException(502, f"Failed to download image from CDN: status {resp.status_code}")
+
+            return {
+                "success": True,
+                "image_url": generated_img_url,
+                "output_path": body.output_path,
+                "aspect_ratio": body.aspect_ratio
+            }
+        finally:
+            _storyboard_active_state["busy"] = False
+            _storyboard_active_state["project_id"] = None
+            _storyboard_active_state["started_at"] = None
+            _storyboard_active_state["prompt"] = None
 
 
 @router.post("/reload-extension")

@@ -64,5 +64,61 @@ class TestFlowStoryboard(unittest.TestCase):
         self.assertNotIn("tied up", softened.lower())
         self.assertIn("Family-friendly emotional Thai melodrama", softened)
 
+    def test_check_flow_busy_in_process_lock(self):
+        import asyncio
+        import json
+        from agent.api.flow import _check_flow_busy, _storyboard_active_state
+
+        _storyboard_active_state["busy"] = True
+        _storyboard_active_state["project_id"] = "active-proj-999"
+        try:
+            resp = asyncio.run(_check_flow_busy(None, "fallback-proj-123"))
+            self.assertIsNotNone(resp)
+            self.assertEqual(resp.status_code, 429)
+            body = json.loads(resp.body.decode("utf-8"))
+            self.assertFalse(body["success"])
+            self.assertEqual(body["status"], "busy")
+            self.assertEqual(body["message"], "Google Flow is currently busy rendering another task")
+            self.assertEqual(body["current_project"], "active-proj-999")
+        finally:
+            _storyboard_active_state["busy"] = False
+            _storyboard_active_state["project_id"] = None
+
+    def test_check_flow_busy_live_tab_pending(self):
+        import asyncio
+        import json
+        from unittest.mock import MagicMock, AsyncMock, patch
+        from agent.api.flow import _check_flow_busy
+
+        mock_client = MagicMock()
+        mock_client.connected = True
+
+        with patch("agent.api.flow._eval_js_internal", new=AsyncMock(return_value={"isBusy": True, "pendingCount": 2, "currentProject": "tab-proj-888"})):
+            resp = asyncio.run(_check_flow_busy(mock_client, "fallback-proj-123"))
+            self.assertIsNotNone(resp)
+            self.assertEqual(resp.status_code, 429)
+            body = json.loads(resp.body.decode("utf-8"))
+            self.assertFalse(body["success"])
+            self.assertEqual(body["status"], "busy")
+            self.assertEqual(body["message"], "Google Flow is currently busy rendering another task")
+            self.assertEqual(body["current_project"], "tab-proj-888")
+
+    def test_post_with_busy_retry_retries_and_succeeds(self):
+        from unittest.mock import patch
+        from scripts.flow_storyboard_runner import post_with_busy_retry
+
+        # Call 1: 429 busy
+        # Call 2: success
+        side_effects = [
+            {"success": False, "status_code": 429, "status": "busy", "message": "Google Flow is currently busy rendering another task", "current_project": "proj-1"},
+            {"success": True, "image_url": "https://flow.google/img.jpg"}
+        ]
+        with patch("scripts.flow_storyboard_runner.http_post", side_effect=side_effects):
+            with patch("time.sleep"):  # do not delay tests
+                res = post_with_busy_retry("http://localhost:6969/api/flow/generate-storyboard", {"prompt": "test"}, timeout=10, max_busy_retries=5)
+                self.assertTrue(res.get("success"))
+                self.assertEqual(res.get("image_url"), "https://flow.google/img.jpg")
+
 if __name__ == "__main__":
     unittest.main()
+

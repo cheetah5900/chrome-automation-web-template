@@ -46,11 +46,29 @@ def http_post(url: str, data: dict, timeout: int = 240) -> dict:
     except urllib.error.HTTPError as e:
         try:
             err_json = json.loads(e.read().decode("utf-8"))
-            return {"success": False, "status_code": e.code, "detail": err_json.get("detail", str(err_json))}
+            if isinstance(err_json, dict):
+                err_json["status_code"] = e.code
+                return err_json
+            return {"success": False, "status_code": e.code, "detail": str(err_json)}
         except Exception:
             return {"success": False, "status_code": e.code, "detail": str(e)}
     except Exception as e:
         return {"success": False, "detail": str(e)}
+
+def post_with_busy_retry(endpoint: str, payload: dict, timeout: int, max_busy_retries: int = 30) -> dict:
+    """Posts payload to endpoint, automatically entering a Retry Queue on HTTP 429 Busy responses."""
+    busy_attempts = 0
+    while True:
+        res = http_post(endpoint, payload, timeout=timeout)
+        if res.get("status_code") == 429 or res.get("status") == "busy":
+            curr_proj = res.get("current_project") or payload.get("project_id") or "unknown"
+            busy_attempts += 1
+            if busy_attempts <= max_busy_retries:
+                log(f"  ⏳ [Busy 429 Queue] Google Flow is busy rendering another task (Project: {curr_proj}). Retrying in 10s ({busy_attempts}/{max_busy_retries})...")
+                time.sleep(10)
+                continue
+        return res
+
 
 def parse_range(range_str: str) -> List[int]:
     """Parses range strings like '1-20', '1,2,5', '1-5,8' into sorted list of ints."""
@@ -542,7 +560,7 @@ def main():
                 }
 
                 try:
-                    res = http_post(endpoint, payload, timeout=args.timeout + 30)
+                    res = post_with_busy_retry(endpoint, payload, timeout=args.timeout + 30)
                     if res.get("success") and is_valid_image_file(out_path):
                         log(f"  ✅ Successfully rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_path)}")
                         completed_count += 1
@@ -587,7 +605,7 @@ def main():
                 }
 
                 try:
-                    res = http_post(endpoint, payload, timeout=args.timeout + 30)
+                    res = post_with_busy_retry(endpoint, payload, timeout=args.timeout + 30)
                     if res.get("success") and is_valid_image_file(out_path):
                         log(f"  ✅ [Retry {retry_round} OK] Rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_path)}")
                         completed_count += 1
