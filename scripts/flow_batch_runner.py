@@ -23,6 +23,7 @@ from flow_video_generator import (
     download_video,
     sanitize_prompt,
     sanitize_prompt_for_safety,
+    ensure_video_settings,
     DEFAULT_API_BASE,
     DEFAULT_PROJECT_ID,
     log,
@@ -154,6 +155,10 @@ def main():
         log("Skipping storyboard image upload as requested (--skip-upload).")
 
     # 3. Process scenes in batches of batch_size (default: 5)
+    # Lock Google Flow video settings: Video Mode, Aspect Ratio, x1 Output Count
+    log(f"\n🔒 Verifying Google Flow video settings (Video Mode, {args.aspect_ratio}, x1 single video)...")
+    ensure_video_settings(args.api_base, aspect=args.aspect_ratio, output_count=1)
+
     batch_size = max(1, args.batch_size)
     batches = [scenes_to_run[i:i + batch_size] for i in range(0, len(scenes_to_run), batch_size)]
 
