@@ -1630,6 +1630,16 @@
                   </div>
                 </div>
 
+                <!-- Folder Mode Dropdown -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                  <label for="cfg_facebook_folder_mode" style="font-weight: bold; color: #ffb86c;">📁 รูปแบบโครงสร้างโฟลเดอร์ (Folder Mode)</label>
+                  <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 4px 0 8px 0; line-height: 1.4;">เลือกระหว่างโฟลเดอร์ทั่วไป (โฟลเดอร์ย่อยบรรจุวิดีโอ+แคปชัน) หรือโปรเจคละครไทย (10 - Final, 8 - Affiliate, 9 - Caption)</div>
+                  <select id="cfg_facebook_folder_mode" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.25); color: white; border: 1px solid rgba(255,255,255,0.15); outline: none;">
+                    <option value="generic">📂 โฟลเดอร์ทั่วไป (Generic Subfolders: 1, 2, 3...)</option>
+                    <option value="lakorn">🎬 โปรเจคละครไทย (Lakorn Project: 10 - Final, 8 - Affiliate, 9 - Caption)</option>
+                  </select>
+                </div>
+
                 <!-- Main Folder -->
                 <div class="form-group" style="margin-bottom: 18px;">
                   <label for="cfg_facebook_main_folder" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์หลักสำหรับดึงข้อมูล (Main Target Folder)</label>
@@ -1641,16 +1651,16 @@
                 </div>
 
                 <!-- Sub folders & Video Prefix Grid -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
+                <div id="facebook_subfolders_grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
                   <!-- Sub folders input -->
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label for="cfg_facebook_subfolders" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
-                    <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)</div>
+                    <label id="lbl_facebook_subfolders" for="cfg_facebook_subfolders" style="font-weight: bold; color: #8da6ff;">โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)</label>
+                    <div id="hint_facebook_subfolders" style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)</div>
                     <input id="cfg_facebook_subfolders" placeholder="เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด" style="margin-bottom: 0; width: 100%;" />
                   </div>
 
                   <!-- Video Prefix input -->
-                  <div class="form-group" style="margin-bottom: 0;">
+                  <div id="group_facebook_video_prefix" class="form-group" style="margin-bottom: 0;">
                     <label for="cfg_facebook_video_prefix" style="font-weight: bold; color: #8da6ff;">คำนำหน้าชื่อวิดีโอ (Video Prefix)</label>
                     <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ขึ้นต้นด้วยคำนี้เพื่อจับคู่วิดีโอ (ค่าเริ่มต้น: combined)</div>
                     <input id="cfg_facebook_video_prefix" value="combined" placeholder="เช่น combined หรือ final" style="margin-bottom: 0; width: 100%;" />

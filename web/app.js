@@ -859,7 +859,7 @@ function initTabNavigation() {
       const savedClear = localStorage.getItem('seedance_clear_mode') || 'both';
       if (typeof setSeedanceClearMode === 'function') setSeedanceClearMode(savedClear, false);
     } },
-    { btn: btnFacebookAutoPost, view: viewFacebookAutoPost, onLoad: loadConfig },
+    { btn: btnFacebookAutoPost, view: viewFacebookAutoPost, onLoad: () => { loadConfig(); if (typeof updateFacebookFolderModeUI === 'function') updateFacebookFolderModeUI(); } },
     { btn: btnMetaAutoPost, view: viewMetaAutoPost, onLoad: loadConfig },
     { btn: btnShopeeAffiliate, view: viewShopeeAffiliate, onLoad: loadConfig }
   ];
@@ -7390,6 +7390,31 @@ function loadFacebookPresets(presets) {
 }
 window.loadFacebookPresets = loadFacebookPresets;
 
+function updateFacebookFolderModeUI() {
+  const modeSelect = document.getElementById('cfg_facebook_folder_mode');
+  const mode = modeSelect ? modeSelect.value : 'generic';
+  const prefixGroup = document.getElementById('group_facebook_video_prefix');
+  const subfoldersGrid = document.getElementById('facebook_subfolders_grid');
+  const subfoldersLabel = document.getElementById('lbl_facebook_subfolders');
+  const subfoldersHint = document.getElementById('hint_facebook_subfolders');
+  const subfoldersInput = document.getElementById('cfg_facebook_subfolders');
+
+  if (mode === 'lakorn') {
+    if (prefixGroup) prefixGroup.style.display = 'none';
+    if (subfoldersGrid) subfoldersGrid.style.gridTemplateColumns = '1fr';
+    if (subfoldersLabel) subfoldersLabel.textContent = '🎬 ระบุ EP ที่ต้องการรัน (Episode Selection)';
+    if (subfoldersHint) subfoldersHint.textContent = 'เช่น 1-3, 1, 2 (เว้นว่าง = รันทุก EP ที่พบในโฟลเดอร์ 10 - Final)';
+    if (subfoldersInput) subfoldersInput.placeholder = 'เช่น 1-3 หรือเว้นว่างเพื่อดึงทั้งหมด';
+  } else {
+    if (prefixGroup) prefixGroup.style.display = '';
+    if (subfoldersGrid) subfoldersGrid.style.gridTemplateColumns = '1fr 1fr';
+    if (subfoldersLabel) subfoldersLabel.textContent = 'โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)';
+    if (subfoldersHint) subfoldersHint.textContent = 'เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)';
+    if (subfoldersInput) subfoldersInput.placeholder = 'เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด';
+  }
+}
+window.updateFacebookFolderModeUI = updateFacebookFolderModeUI;
+
 async function saveFacebookPreset() {
   const currentKey = document.getElementById('facebookPresetSelect')?.value || '';
   const name = prompt('ระบุชื่อ Preset สำหรับ Facebook Auto Post (หรือระบุชื่อเดิมเพื่อบันทึกทับ):', currentKey);
@@ -7405,6 +7430,7 @@ async function saveFacebookPreset() {
   const presets = currentConfig.facebook_presets || {};
 
   presets[trimmedName] = {
+    folder_mode: document.getElementById('cfg_facebook_folder_mode')?.value || 'generic',
     page_url: document.getElementById('cfg_facebook_page_url')?.value || '',
     main_folder: document.getElementById('cfg_facebook_main_folder')?.value || '',
     subfolders: document.getElementById('cfg_facebook_subfolders')?.value || '',
@@ -7501,6 +7527,10 @@ async function applyFacebookPreset(presetNameOrEvent, presetObj) {
   if (document.getElementById('cfg_facebook_page_url')) document.getElementById('cfg_facebook_page_url').value = preset.page_url || preset.channel_url || '';
   if (document.getElementById('cfg_facebook_main_folder')) document.getElementById('cfg_facebook_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_facebook_subfolders')) document.getElementById('cfg_facebook_subfolders').value = preset.subfolders || '';
+  if (document.getElementById('cfg_facebook_folder_mode')) {
+    document.getElementById('cfg_facebook_folder_mode').value = preset.folder_mode || 'generic';
+    updateFacebookFolderModeUI();
+  }
   if (document.getElementById('cfg_facebook_video_prefix')) document.getElementById('cfg_facebook_video_prefix').value = preset.video_prefix || 'combined';
   if (document.getElementById('cfg_facebook_start_date')) document.getElementById('cfg_facebook_start_date').value = preset.start_date || '';
   if (document.getElementById('cfg_facebook_start_hour')) {
@@ -7558,7 +7588,9 @@ async function scanFacebookBatch() {
     if (textSpan) textSpan.textContent = 'กำลังสแกน...';
   }
 
-  writeConsoleLine(`Facebook Auto Post: เริ่มสแกนโฟลเดอร์ "${mainFolder}" (Prefix: "${videoPrefix}", เวลา: ${startHour}:xx สุ่มนาที, วันละ 1 โพสต์)...`, 'system', 'facebookConsole');
+  const folderMode = document.getElementById('cfg_facebook_folder_mode')?.value || 'generic';
+  const modeLabel = folderMode === 'lakorn' ? 'โหมดโปรเจคละคร (10 - Final, 8 - Affiliate, 9 - Caption)' : `Prefix: "${videoPrefix}"`;
+  writeConsoleLine(`Facebook Auto Post: เริ่มสแกนโฟลเดอร์ "${mainFolder}" (${modeLabel}, เวลา: ${startHour}:xx สุ่มนาที, วันละ 1 โพสต์)...`, 'system', 'facebookConsole');
 
   try {
     const res = await jsonFetch('/api/facebook-autopost/scan', {
@@ -7569,7 +7601,8 @@ async function scanFacebookBatch() {
         subfolders_str: subfoldersStr,
         video_prefix: videoPrefix,
         start_date: startDate,
-        start_hour: startHour
+        start_hour: startHour,
+        folder_mode: folderMode
       })
     });
 
@@ -7682,7 +7715,7 @@ function renderFacebookPostQueue() {
 
       <div>
         <label style="font-size: 0.78rem; color: ${item.has_affiliate_url ? 'rgba(255,255,255,0.7)' : '#ff8585'}; display: block; margin-bottom: 4px;">
-          🛍️ ลิงก์สินค้า Affiliate (อ่านจาก Affiliate Link.md) ${item.has_affiliate_url ? '' : '<strong style="color: #ff4d4f;">— ⚠️ ไม่มีไฟล์นี้ จะไม่สามารถโพสต์ได้</strong>'}
+          🛍️ ลิงก์สินค้า Affiliate (${item.affiliate_file ? 'อ่านจาก ' + item.affiliate_file : 'อ่านจาก Affiliate Link.md'}) ${item.has_affiliate_url ? '' : '<strong style="color: #ff4d4f;">— ⚠️ ไม่มีไฟล์นี้ จะไม่สามารถโพสต์ได้</strong>'}
         </label>
         <input type="text" class="facebook-affiliate-input" data-index="${index}" value="${item.affiliate_url || ''}" placeholder="ระบุหรือวางลิงก์ Affiliate (จำเป็นต้องมีเพื่อโพสต์)..." style="font-size: 0.82rem; padding: 8px 10px; margin-bottom: 0; width: 100%; border: 1px solid ${item.has_affiliate_url ? 'rgba(255,255,255,0.1)' : 'rgba(239, 68, 68, 0.6)'}; background: ${item.has_affiliate_url ? 'rgba(0,0,0,0.2)' : 'rgba(239, 68, 68, 0.08)'};" />
       </div>
@@ -7960,6 +7993,12 @@ function initFacebookAutoPostListeners() {
 
   const presetSelect = document.getElementById('facebookPresetSelect');
   if (presetSelect) presetSelect.addEventListener('change', applyFacebookPreset);
+
+  const folderModeSelect = document.getElementById('cfg_facebook_folder_mode');
+  if (folderModeSelect) {
+    folderModeSelect.addEventListener('change', updateFacebookFolderModeUI);
+    updateFacebookFolderModeUI();
+  }
 
   const scanBtn = document.getElementById('btnScanFacebookBatch');
   if (scanBtn) scanBtn.addEventListener('click', scanFacebookBatch);

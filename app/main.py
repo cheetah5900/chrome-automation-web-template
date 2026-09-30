@@ -4328,6 +4328,7 @@ class MetaScanRequest(BaseModel):
     video_prefix: str = "combined"
     start_date: str = ""
     start_hour: int | str = 18
+    folder_mode: str = "generic"
 
 class MetaRunRequest(BaseModel):
     posts: list[dict[str, Any]]
@@ -4423,8 +4424,226 @@ def run_meta_autopost(req: MetaRunRequest) -> dict[str, Any]:
         "total": len(posts)
     }
 
+def scan_lakorn_autopost(req: MetaScanRequest) -> dict[str, Any]:
+    import os
+    import re
+    import random
+    from datetime import datetime, timedelta
+
+    main_folder = req.main_folder.strip().strip('"').strip("'")
+    main_folder = os.path.expanduser(main_folder)
+
+    if not main_folder or not os.path.exists(main_folder) or not os.path.isdir(main_folder):
+        raise HTTPException(status_code=400, detail="โฟลเดอร์หลักไม่ถูกต้องหรือไม่พบในระบบ")
+
+    final_dir = os.path.join(main_folder, "10 - Final")
+    affiliate_dir = os.path.join(main_folder, "8 - Affiliate")
+    caption_dir = os.path.join(main_folder, "9 - Caption")
+
+    if not os.path.exists(final_dir) or not os.path.isdir(final_dir):
+        return {
+            "ok": False,
+            "items": [],
+            "count": 0,
+            "message": f"ไม่พบโฟลเดอร์ '10 - Final' ในโปรเจคละคร ({main_folder})"
+        }
+
+    def extract_ep_num(filename: str) -> int | None:
+        name, _ = os.path.splitext(filename)
+        m1 = re.search(r'[-_]\s*0*([0-9]+)$', name)
+        if m1:
+            return int(m1.group(1))
+        m2 = re.search(r'(?:ep|episode)\s*0*([0-9]+)', name, re.IGNORECASE)
+        if m2:
+            return int(m2.group(1))
+        m3 = re.search(r'0*([0-9]+)$', name)
+        if m3:
+            return int(m3.group(1))
+        return None
+
+    target_eps: set[int] = set()
+    subfolders_input = req.subfolders_str.strip()
+    if subfolders_input:
+        parts = subfolders_input.split(',')
+        for part in parts:
+            trimmed = part.strip()
+            if not trimmed:
+                continue
+            if '-' in trimmed:
+                rng = trimmed.split('-')
+                if len(rng) == 2 and rng[0].strip().isdigit() and rng[1].strip().isdigit():
+                    s_val = int(rng[0].strip())
+                    e_val = int(rng[1].strip())
+                    if s_val <= e_val:
+                        for k in range(s_val, e_val + 1):
+                            target_eps.add(k)
+                        continue
+            digits = re.findall(r'\d+', trimmed)
+            for d in digits:
+                target_eps.add(int(d))
+
+    video_exts = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"]
+    try:
+        final_files = os.listdir(final_dir)
+    except Exception:
+        final_files = []
+
+    ep_videos: dict[int, str] = {}
+    for f in final_files:
+        if not any(f.lower().endswith(ext) for ext in video_exts):
+            continue
+        ep = extract_ep_num(f)
+        if ep is not None:
+            if target_eps and ep not in target_eps:
+                continue
+            if ep not in ep_videos:
+                ep_videos[ep] = f
+
+    detected_eps = sorted(ep_videos.keys())
+    if not detected_eps:
+        msg = "ไม่พบวิดีโอในโฟลเดอร์ '10 - Final'" if not target_eps else f"ไม่พบวิดีโอสำหรับ EP {sorted(target_eps)} ในโฟลเดอร์ '10 - Final'"
+        return {"ok": True, "items": [], "count": 0, "message": msg}
+
+    caption_files = []
+    if os.path.exists(caption_dir) and os.path.isdir(caption_dir):
+        try:
+            caption_files = os.listdir(caption_dir)
+        except Exception:
+            caption_files = []
+
+    ep_captions: dict[int, tuple[str, str]] = {}
+    for f in caption_files:
+        if not any(f.lower().endswith(ext) for ext in [".md", ".txt"]):
+            continue
+        ep = extract_ep_num(f)
+        if ep is not None and ep not in ep_captions:
+            cap_path = os.path.join(caption_dir, f)
+            text = ""
+            for enc in ("utf-8", "utf-8-sig", "latin-1"):
+                try:
+                    with open(cap_path, "r", encoding=enc) as cf:
+                        text = cf.read().strip()
+                    break
+                except Exception:
+                    continue
+            ep_captions[ep] = (text, f)
+
+    affiliate_files = []
+    if os.path.exists(affiliate_dir) and os.path.isdir(affiliate_dir):
+        try:
+            affiliate_files = os.listdir(affiliate_dir)
+        except Exception:
+            affiliate_files = []
+
+    def find_affiliate_for_ep(ep: int) -> tuple[str, str]:
+        matching = []
+        for f in affiliate_files:
+            if not any(f.lower().endswith(ext) for ext in [".md", ".txt"]):
+                continue
+            f_ep = extract_ep_num(f)
+            if f_ep == ep:
+                score = 0
+                f_lower = f.lower()
+                if "affiliate link" in f_lower:
+                    score = 10
+                elif "affiliate" in f_lower:
+                    score = 8
+                elif "link" in f_lower:
+                    score = 6
+                else:
+                    score = 2
+                matching.append((score, f))
+        matching.sort(key=lambda x: x[0], reverse=True)
+        for _, f in matching:
+            aff_path = os.path.join(affiliate_dir, f)
+            for enc in ("utf-8", "utf-8-sig", "latin-1"):
+                try:
+                    with open(aff_path, "r", encoding=enc) as af:
+                        for line in af:
+                            line_str = line.strip()
+                            if line_str.startswith("http://") or line_str.startswith("https://"):
+                                return line_str, f
+                except Exception:
+                    continue
+        for f in affiliate_files:
+            if f.lower() in ("affiliate link.md", "affiliate_link.md", "affiliatelink.md"):
+                aff_path = os.path.join(affiliate_dir, f)
+                for enc in ("utf-8", "utf-8-sig", "latin-1"):
+                    try:
+                        with open(aff_path, "r", encoding=enc) as af:
+                            for line in af:
+                                line_str = line.strip()
+                                if line_str.startswith("http://") or line_str.startswith("https://"):
+                                    return line_str, f
+                    except Exception:
+                        continue
+        return "", ""
+
+    try:
+        target_hour = int(req.start_hour)
+        if target_hour < 0 or target_hour > 23:
+            target_hour = 18
+    except Exception:
+        target_hour = 18
+
+    if req.start_date and req.start_date.strip():
+        try:
+            base_day = datetime.strptime(req.start_date.strip(), "%Y-%m-%d").date()
+        except Exception:
+            base_day = (datetime.now() + timedelta(days=1)).date()
+    else:
+        base_day = (datetime.now() + timedelta(days=1)).date()
+
+    items: list[dict[str, Any]] = []
+    for idx, ep in enumerate(detected_eps):
+        selected_video = ep_videos[ep]
+        video_path = os.path.join(final_dir, selected_video)
+
+        post_day = base_day + timedelta(days=idx)
+        random_minute = random.randint(0, 59)
+        item_dt = datetime(post_day.year, post_day.month, post_day.day, target_hour, random_minute)
+        scheduled_iso = item_dt.strftime("%Y-%m-%dT%H:%M")
+
+        cap_text, cap_filename = ep_captions.get(ep, ("", ""))
+        aff_url, aff_filename = find_affiliate_for_ep(ep)
+
+        has_vid = bool(selected_video and os.path.isfile(video_path))
+        has_cap = bool(cap_text)
+        has_aff = bool(aff_url)
+
+        items.append({
+            "id": idx + 1,
+            "checked": has_aff,
+            "subfolder_name": f"EP {ep}",
+            "subfolder_path": main_folder,
+            "video_path": video_path,
+            "video_name": selected_video,
+            "has_video": has_vid,
+            "caption": cap_text,
+            "caption_file": cap_filename,
+            "has_caption": has_cap,
+            "affiliate_url": aff_url,
+            "affiliate_file": aff_filename,
+            "has_affiliate_url": has_aff,
+            "scheduled_datetime": scheduled_iso,
+            "status": "ready" if (has_vid and has_cap and has_aff) else ("missing_affiliate" if not has_aff else "warning")
+        })
+
+    missing_affiliate_count = sum(1 for it in items if not it["has_affiliate_url"])
+    missing_affiliate_folders = [it["subfolder_name"] for it in items if not it["has_affiliate_url"]]
+
+    return {
+        "ok": True,
+        "items": items,
+        "count": len(items),
+        "missing_affiliate_count": missing_affiliate_count,
+        "missing_affiliate_folders": missing_affiliate_folders
+    }
+
 @app.post("/api/meta-autopost/scan")
 def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
+    if getattr(req, "folder_mode", "generic") == "lakorn":
+        return scan_lakorn_autopost(req)
     import os
     import re
     import random
@@ -4869,6 +5088,7 @@ class FacebookScanRequest(BaseModel):
     video_prefix: str = "combined"
     start_date: str = ""
     start_hour: int | str = 18
+    folder_mode: str = "generic"
 
 class FacebookOpenUrlRequest(BaseModel):
     url: str
@@ -4984,7 +5204,8 @@ def scan_facebook_autopost_endpoint(req: FacebookScanRequest) -> dict[str, Any]:
         subfolders_str=req.subfolders_str,
         video_prefix=req.video_prefix,
         start_date=req.start_date,
-        start_hour=req.start_hour
+        start_hour=req.start_hour,
+        folder_mode=getattr(req, "folder_mode", "generic")
     )
     return scan_meta_autopost(meta_req)
 
