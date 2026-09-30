@@ -298,13 +298,19 @@ def check_asset_exists_in_flow(api_base: str, file_name: str, existing_assets: l
     base_name = os.path.splitext(file_name)[0]
     sc_match = re.search(r"Scene\s*(\d+)", file_name, re.IGNORECASE)
     sc_tag = f"Scene {int(sc_match.group(1)):02d}" if sc_match else ""
+    ep_match = re.search(r"EP\s*(\d+)", file_name, re.IGNORECASE)
+    ep_tag = f"EP{int(ep_match.group(1)):02d}" if ep_match else ""
 
     if existing_assets is not None:
         for asset in existing_assets:
             if file_name.lower() in asset.lower() or base_name.lower() in asset.lower():
                 return True
-            if sc_tag and sc_tag.lower() in asset.lower():
-                return True
+            if ep_tag:
+                if ep_tag.lower() in asset.lower() and sc_tag and sc_tag.lower() in asset.lower():
+                    return True
+            else:
+                if sc_tag and sc_tag.lower() in asset.lower():
+                    return True
         return False
 
     check_js = f"""(() => {{
@@ -312,9 +318,14 @@ def check_asset_exists_in_flow(api_base: str, file_name: str, existing_assets: l
         const targetFull = "{file_name}".toLowerCase();
         const targetBase = "{base_name}".toLowerCase();
         const scTag = "{sc_tag}".toLowerCase();
+        const epTag = "{ep_tag}".toLowerCase();
         
         if (text.includes(targetFull) || text.includes(targetBase)) return true;
-        if (scTag && text.includes(scTag)) return true;
+        if (epTag) {{
+            if (scTag && text.includes(epTag) && text.includes(scTag)) return true;
+        }} else {{
+            if (scTag && text.includes(scTag)) return true;
+        }}
         return false;
     }})()"""
     try:
@@ -395,9 +406,17 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
     inspect_tab_js(api_base, filter_js)
     time.sleep(0.8)
 
+    ep_match = re.search(r"EP\s*(\d+)", file_name, re.IGNORECASE)
+    ep_tag = f"EP{int(ep_match.group(1)):02d}" if ep_match else ""
     sc_match = re.search(r"Scene\s*(\d+)", file_name, re.IGNORECASE)
     sc_tag = f"Scene {int(sc_match.group(1)):02d}" if sc_match else ""
-    search_query = sc_tag if sc_tag else file_name
+
+    if ep_tag and sc_tag:
+        search_query = f"{ep_tag} - {sc_tag}"
+    elif sc_tag:
+        search_query = sc_tag
+    else:
+        search_query = file_name
 
     # 3.5 Use search input box to filter directly to target filename
     search_js = f"""(() => {{
@@ -421,13 +440,17 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
         const targetName = "{file_name}".toLowerCase();
         const targetBase = "{os.path.splitext(file_name)[0]}".toLowerCase();
         const scTag = "{sc_tag}".toLowerCase();
+        const epTag = "{ep_tag}".toLowerCase();
         const popover = document.querySelector('flow-add-menu-popover-content');
         if (!popover) return {{ error: "popover not found" }};
         const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
         
         let target = items.find(el => {{
             const t = (el.innerText || '').toLowerCase();
-            return t.includes(targetName) || t.includes(targetBase) || (scTag && t.includes(scTag));
+            if (t.includes(targetName) || t.includes(targetBase)) return true;
+            if (epTag && scTag && t.includes(epTag) && t.includes(scTag)) return true;
+            if (!epTag && scTag && t.includes(scTag)) return true;
+            return false;
         }}) || items[0];
 
         if (target) {{
