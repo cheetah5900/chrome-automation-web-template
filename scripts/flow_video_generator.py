@@ -165,16 +165,9 @@ def upload_storyboard_image(api_base: str, image_path: str, project_id: str) -> 
     if not media_id:
         error_exit(f"Failed to upload image: {res}")
     log(f"Uploaded successfully! Media ID: {media_id}")
-    # Refresh Google Flow tab to ensure the Angular app re-fetches project media library
-    try:
-        log("Refreshing Google Flow tab to sync newly uploaded asset...")
-        inspect_tab_js(api_base, "window.location.reload();")
-        time.sleep(4.5)
-    except Exception as e:
-        log(f"Notice during tab refresh: {e}")
     return media_id
 
-def attach_start_frame(api_base: str, file_name: str) -> bool:
+def attach_start_frame(api_base: str, file_name: str, project_id: str = None) -> bool:
     """Attaches the uploaded storyboard image into the Google Flow prompt box."""
     log(f"Attaching {file_name} into Google Flow prompt box...")
 
@@ -258,14 +251,11 @@ def attach_start_frame(api_base: str, file_name: str) -> bool:
     }})()"""
     res_click = inspect_tab_js(api_base, click_item_js)
     if res_click.get("error"):
-        log("Asset item not found on first attempt, reloading Google Flow tab to sync...")
+        log(f"Asset item '{file_name}' not found on first attempt, retrying search without reload...")
         try:
-            inspect_tab_js(api_base, "window.location.reload();")
-            time.sleep(5.0)
-            inspect_tab_js(api_base, open_js)
             time.sleep(1.0)
-            inspect_tab_js(api_base, filter_js)
-            time.sleep(1.0)
+            inspect_tab_js(api_base, search_js)
+            time.sleep(0.8)
             res_click = inspect_tab_js(api_base, click_item_js)
         except Exception as e:
             log(f"Notice during retry: {e}")
@@ -309,6 +299,8 @@ def attach_start_frame(api_base: str, file_name: str) -> bool:
 
     log(f"Successfully attached {file_name} into prompt box (image chip verified present).")
     return True
+
+select_storyboard_image_chip = attach_start_frame
 
 
 def set_aspect_ratio(api_base: str, aspect: str = "16:9") -> bool:

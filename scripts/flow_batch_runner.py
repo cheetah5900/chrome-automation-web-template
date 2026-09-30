@@ -57,6 +57,7 @@ def main():
     parser.add_argument("--api-base", type=str, default=DEFAULT_API_BASE, help="FlowKit API base URL")
     parser.add_argument("--auto-capcut", action="store_true", default=True, help="Automatically clone CapCut template and assemble project after batch download")
     parser.add_argument("--no-capcut", dest="auto_capcut", action="store_false", help="Disable automatic CapCut project building")
+    parser.add_argument("--skip-upload", action="store_true", help="Skip pre-uploading storyboard images if already in Google Flow library")
 
     args = parser.parse_args()
 
@@ -107,21 +108,34 @@ def main():
             continue
         scenes_to_run.append(sc_idx)
 
-    # 2. Batch pre-upload all images up front
-    if scenes_to_run:
-        log(f"Batch pre-uploading {len(scenes_to_run)} storyboard images up-front...")
-        for sc_idx in scenes_to_run:
-            img_path = available_scenes[sc_idx]
-            try:
-                upload_storyboard_image(args.api_base, img_path, args.project_id)
-            except Exception as e:
-                log(f"Notice on pre-uploading Scene {sc_idx}: {e}")
-        log("Refreshing Google Flow tab once to sync library assets...")
+    # 2. Batch pre-upload storyboard images up front (ZERO page reloads)
+    if scenes_to_run and not args.skip_upload:
         try:
-            inspect_tab_js(args.api_base, "window.location.reload();")
-            time.sleep(5.0)
-        except Exception as e:
-            log(f"Notice during tab refresh: {e}")
+            body_check = inspect_tab_js(args.api_base, "document.body.innerText")
+            body_text = str(body_check.get("res", {}).get("result", "")) if isinstance(body_check, dict) else ""
+        except Exception:
+            body_text = ""
+
+        needed_uploads = []
+        for sc_idx in scenes_to_run:
+            sc_basename = f"Scene {sc_idx:02d}"
+            if sc_basename in body_text:
+                log(f"  Storyboard for {sc_basename} already present in Google Flow library. Skipping upload.")
+            else:
+                needed_uploads.append(sc_idx)
+
+        if needed_uploads:
+            log(f"Pre-uploading {len(needed_uploads)} new storyboard images to library (zero page reloads)...")
+            for sc_idx in needed_uploads:
+                img_path = available_scenes[sc_idx]
+                try:
+                    upload_storyboard_image(args.api_base, img_path, args.project_id)
+                except Exception as e:
+                    log(f"Notice on pre-uploading Scene {sc_idx}: {e}")
+        else:
+            log("All required storyboard images are already uploaded in Google Flow library.")
+    elif args.skip_upload:
+        log("Skipping storyboard image upload as requested (--skip-upload).")
 
     # 3. Process scenes in batches of batch_size (default: 5)
     batch_size = max(1, args.batch_size)
