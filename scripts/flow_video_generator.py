@@ -191,6 +191,10 @@ def sanitize_prompt_for_safety(prompt: str, tier: int = 1) -> str:
         (r"\bokra\s+girl\b", "okra lady"),
         (r"\bOkra\s+girl\b", "Okra lady"),
         (r"\bOkra\s+Girl\b", "Okra Lady"),
+        (r"\bboth\s+boys\b", "both young characters"),
+        (r"\bboys?\b", "young characters"),
+        (r"\bbinds?\s+the\s+wound\b", "tends to the arm"),
+        (r"\bwound(?:ed)?\b", "arm"),
         # Police / Law / Authority roles
         (r"\bpolice\b", "guard"),
         (r"\bPolice\b", "Guard"),
