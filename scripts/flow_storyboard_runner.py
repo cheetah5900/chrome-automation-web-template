@@ -64,6 +64,23 @@ def parse_range(range_str: str) -> List[int]:
             result.add(int(part))
     return sorted(list(result))
 
+def is_valid_image_file(filepath: str) -> bool:
+    """Verifies that the file exists, is non-empty, and is a valid image (not HTML redirect)."""
+    if not filepath or not os.path.isfile(filepath):
+        return False
+    if os.path.getsize(filepath) < 20480:  # < 20KB is corrupt/placeholder
+        return False
+    try:
+        with open(filepath, "rb") as f:
+            h = f.read(32)
+        if h.startswith(b"<!doctype") or h.startswith(b"<html") or b"<body" in h.lower():
+            return False
+        if h.startswith(b"\xff\xd8\xff") or h.startswith(b"\x89PNG\r\n\x1a\n") or (h[:4] == b"RIFF" and h[8:12] == b"WEBP"):
+            return True
+    except Exception:
+        pass
+    return False
+
 # ─────────────────────────────────────────────────────────────
 # Content Safety & Moderation Bypass Rule Engine
 # ─────────────────────────────────────────────────────────────
@@ -306,7 +323,7 @@ def main():
     parser.add_argument("--batch-size", "-b", type=int, default=5, help="Number of scenes to process per batch (default: 5)")
     parser.add_argument("--max-retries", "-r", type=int, default=2, help="Max retry attempts for failed scenes with softened prompts (default: 2)")
     parser.add_argument("--delay", "-d", type=float, default=3.0, help="Delay between scene submissions in seconds")
-    parser.add_argument("--timeout", type=int, default=180, help="Max timeout per scene generation in seconds")
+    parser.add_argument("--timeout", type=int, default=60, help="Max timeout per scene generation in seconds (default: 60)")
 
     args = parser.parse_args()
 
@@ -398,10 +415,16 @@ def main():
         for sc_idx in batch:
             item = scenes_map[sc_idx]
             out_path = item["output_path"]
-            if not args.force and args.skip_existing and os.path.isfile(out_path) and os.path.getsize(out_path) > 30000:
-                log(f"  ⏭️ Scene {sc_idx:02d}: already exists, skipping ({os.path.basename(out_path)})")
+            if not args.force and args.skip_existing and is_valid_image_file(out_path):
+                log(f"  ⏭️ Scene {sc_idx:02d}: valid image already exists, skipping ({os.path.basename(out_path)})")
                 skipped_count += 1
             else:
+                if os.path.isfile(out_path) and not is_valid_image_file(out_path):
+                    log(f"  ⚠️ Scene {sc_idx:02d}: existing file is corrupt/HTML redirect ({os.path.getsize(out_path)} bytes), removing to re-generate!")
+                    try:
+                        os.remove(out_path)
+                    except Exception:
+                        pass
                 scenes_to_process.append(sc_idx)
 
         if not scenes_to_process:
@@ -475,13 +498,19 @@ def main():
                     if collect_res.get("success"):
                         for r in collect_res.get("results", []):
                             sc_num = r.get("scene_num")
-                            if r.get("success"):
+                            target_out = scenes_map[sc_num]["output_path"]
+                            if r.get("success") and is_valid_image_file(target_out):
                                 log(f"  ✅ [Batch OK] Scene {sc_num:02d} rendered & saved: {os.path.basename(r.get('output_path', ''))} ({r.get('footer_title', '')})")
                                 completed_count += 1
                             else:
-                                err_msg = r.get("error", "Collection failed")
+                                err_msg = r.get("error", "Collection failed or corrupt image")
                                 log(f"  ⚠️ Scene {sc_num:02d} generation failed: {err_msg}")
                                 failed_scenes.append((sc_num, err_msg))
+                                if os.path.isfile(target_out) and not is_valid_image_file(target_out):
+                                    try:
+                                        os.remove(target_out)
+                                    except Exception:
+                                        pass
                     else:
                         err_msg = collect_res.get("detail") or collect_res.get("message") or str(collect_res)
                         log(f"  ⚠️ Batch collection failed: {err_msg}")
@@ -514,13 +543,18 @@ def main():
 
                 try:
                     res = http_post(endpoint, payload, timeout=args.timeout + 30)
-                    if res.get("success"):
+                    if res.get("success") and is_valid_image_file(out_path):
                         log(f"  ✅ Successfully rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_path)}")
                         completed_count += 1
                     else:
-                        err_msg = res.get("detail") or res.get("message") or str(res)
+                        err_msg = res.get("detail") or res.get("message") or "Corrupt image or download failed"
                         log(f"  ⚠️ Generation failed for Scene {sc_idx:02d}: {err_msg}")
                         failed_scenes.append((sc_idx, err_msg))
+                        if os.path.isfile(out_path) and not is_valid_image_file(out_path):
+                            try:
+                                os.remove(out_path)
+                            except Exception:
+                                pass
                 except Exception as e:
                     log(f"  ⚠️ Error rendering Scene {sc_idx:02d}: {e}")
                     failed_scenes.append((sc_idx, str(e)))
@@ -554,13 +588,18 @@ def main():
 
                 try:
                     res = http_post(endpoint, payload, timeout=args.timeout + 30)
-                    if res.get("success"):
+                    if res.get("success") and is_valid_image_file(out_path):
                         log(f"  ✅ [Retry {retry_round} OK] Rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_path)}")
                         completed_count += 1
                     else:
-                        err_msg = res.get("detail") or res.get("message") or str(res)
+                        err_msg = res.get("detail") or res.get("message") or "Corrupt image or download failed"
                         log(f"  ⚠️ [Retry {retry_round} Failed] Scene {sc_idx:02d}: {err_msg}")
                         still_failed.append((sc_idx, err_msg))
+                        if os.path.isfile(out_path) and not is_valid_image_file(out_path):
+                            try:
+                                os.remove(out_path)
+                            except Exception:
+                                pass
                 except Exception as e:
                     log(f"  ⚠️ [Retry {retry_round} Error] Scene {sc_idx:02d}: {e}")
                     still_failed.append((sc_idx, str(e)))

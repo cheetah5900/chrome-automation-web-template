@@ -425,13 +425,30 @@ async def preload_characters(body: PreloadCharactersRequest):
     }
 
 
+def is_valid_image_bytes(data: bytes) -> bool:
+    """Verifies that bytes represent a valid non-empty image (not HTML login/error page)."""
+    if not data or len(data) < 20480:
+        return False
+    header = data[:32]
+    if header.startswith(b"<!doctype") or header.startswith(b"<html") or b"<body" in header.lower():
+        return False
+    if header.startswith(b"\xff\xd8\xff"):  # JPEG
+        return True
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):  # PNG
+        return True
+    if header[:4] == b"RIFF" and header[8:12] == b"WEBP":  # WEBP
+        return True
+    return False
+
+
 class GenerateStoryboardRequest(BaseModel):
     prompt: str
     project_id: str = "21a1632e-9926-46fa-954c-240d71d78f41"
     aspect_ratio: str = "9:16"
     reference_images: Optional[list[str]] = None
     output_path: Optional[str] = None
-    timeout: int = 180
+    timeout: int = 60
+
 
 
 class DispatchStoryboardPromptRequest(BaseModel):
@@ -853,7 +870,7 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
                 os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
                 try:
                     resp = await http_client.get(img_url, timeout=30.0)
-                    if resp.status_code == 200:
+                    if resp.status_code == 200 and is_valid_image_bytes(resp.content):
                         with open(out_path, "wb") as f:
                             f.write(resp.content)
                         logger.info("Saved batch image for Scene %02d to %s", sc_num, out_path)
@@ -863,6 +880,12 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
                             "output_path": out_path,
                             "footer_title": footer_title,
                             "image_url": img_url
+                        })
+                    elif resp.status_code == 200 and not is_valid_image_bytes(resp.content):
+                        results.append({
+                            "scene_num": sc_num,
+                            "success": False,
+                            "error": f"Downloaded content is not a valid image ({len(resp.content)} bytes, HTML redirect or corrupt)"
                         })
                     else:
                         results.append({
@@ -916,6 +939,26 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
     if not client.connected:
         raise HTTPException(503, "FlowKit extension not connected")
 
+    # 1. Snapshot existing tiles before submitting prompt to guarantee only newly generated tiles are accepted
+    snap_js = """(() => {
+        const tiles = Array.from(document.querySelectorAll('flow-image-tile'));
+        const urls = [];
+        const mediaIds = [];
+        for (const t of tiles) {
+            const img = t.querySelector('img');
+            if (img && img.src) {
+                urls.push(img.src);
+                const mid = img.getAttribute('data-media-id');
+                if (mid) mediaIds.push(mid);
+            }
+        }
+        return { urls: urls, media_ids: mediaIds };
+    })()"""
+    pre_snap = await _eval_js_internal(client, snap_js) or {}
+    pre_urls = set(pre_snap.get("urls", []))
+    pre_media_ids = set(pre_snap.get("media_ids", []))
+
+    # 2. Submit prompt via CDP
     await _submit_flow_prompt_internal(
         client=client,
         prompt=body.prompt,
@@ -925,61 +968,73 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
         wait_after_submit=1.0
     )
 
-    # Monitor rendering until done
+    # 3. Monitor rendering until done (default 60s timeout)
     start_time = time.time()
     generated_img_url = None
+    consecutive_zero_pending = 0
+
     while time.time() - start_time < body.timeout:
-        await asyncio.sleep(3.0)
+        await asyncio.sleep(2.5)
         status_js = """(() => {
             const pending = [...document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]')];
             const errorToast = document.querySelector('mat-snack-bar-container, .error-message, [class*="error-snackbar"], .cdk-overlay-container [role="alert"], [class*="toast"]');
             const errorText = errorToast ? (errorToast.innerText || '').trim() : '';
             const tiles = [...document.querySelectorAll('flow-image-tile')];
-            let latestImg = null;
-            if (tiles.length > 0) {
-                for (const t of tiles) {
-                    const text = t.innerText || '';
-                    if (!text.includes('Outfit 1') && !text.includes('Outfit 2') && !text.includes('Outfit 3')) {
-                        const img = t.querySelector('img');
-                        if (img && img.src && (img.src.includes('/image/') || img.src.includes('googleusercontent') || img.src.includes('flow-content'))) {
-                            latestImg = img.src;
-                            break;
-                        }
-                    }
-                }
-                if (!latestImg) {
-                    const img = tiles[0].querySelector('img');
-                    if (img && img.src) latestImg = img.src;
-                }
-            }
+            const tileData = tiles.map(t => {
+                const img = t.querySelector('img');
+                return {
+                    src: img ? img.src : '',
+                    media_id: img ? (img.getAttribute('data-media-id') || '') : '',
+                    is_outfit: (t.innerText || '').includes('Outfit 1') || (t.innerText || '').includes('Outfit 2') || (t.innerText || '').includes('Outfit 3')
+                };
+            }).filter(t => t.src && !t.is_outfit);
             return {
                 pendingCount: pending.length,
                 pendingPcts: pending.map(p => (p.innerText || '').match(/(\\d+)%/)?.[1]).filter(Boolean),
-                latestImg: latestImg,
+                tiles: tileData,
                 errorText: errorText
             };
         })()"""
-        render_status = await _eval_js_internal(client, status_js)
+        render_status = await _eval_js_internal(client, status_js) or {}
         pending_count = render_status.get("pendingCount", 0)
-        latest_img = render_status.get("latestImg")
         error_text = render_status.get("errorText") or ""
+        tiles = render_status.get("tiles") or []
 
         if error_text and any(w in error_text.lower() for w in ["policy", "violate", "safety", "guideline", "ละเมิด", "ไม่สามารถสร้าง", "นโยบาย"]):
             raise HTTPException(422, f"Safety policy block detected: {error_text}")
 
-        if pending_count == 0 and latest_img:
-            generated_img_url = latest_img
+        # Strictly filter for NEW tiles that did not exist before this prompt submission
+        new_tiles = [
+            t for t in tiles
+            if (t.get("src") not in pre_urls) and (not t.get("media_id") or t.get("media_id") not in pre_media_ids)
+        ]
+
+        if new_tiles:
+            generated_img_url = new_tiles[0].get("src")
             break
 
-    if not generated_img_url:
-        raise HTTPException(504, f"Image generation timed out after {body.timeout}s")
+        if pending_count == 0:
+            consecutive_zero_pending += 1
+            if consecutive_zero_pending >= 2:
+                # Pending tile vanished (e.g. user refreshed the tab or Google Flow dropped the task)
+                if new_tiles:
+                    generated_img_url = new_tiles[0].get("src")
+                    break
+                raise HTTPException(410, "Pending tile vanished without producing a new image (tab was refreshed or generation aborted). Must re-generate.")
+        else:
+            consecutive_zero_pending = 0
 
-    # Download image to output_path if provided
+    if not generated_img_url:
+        raise HTTPException(504, f"Image generation timed out after {body.timeout}s without producing a new tile")
+
+    # 4. Download and validate image to output_path if provided
     if body.output_path:
         os.makedirs(os.path.dirname(os.path.abspath(body.output_path)), exist_ok=True)
         async with httpx.AsyncClient(follow_redirects=True) as http_client:
             resp = await http_client.get(generated_img_url, timeout=30.0)
             if resp.status_code == 200:
+                if not is_valid_image_bytes(resp.content):
+                    raise HTTPException(502, f"Downloaded content from {generated_img_url} is not a valid image file ({len(resp.content)} bytes, HTML redirect or corrupt)")
                 with open(body.output_path, "wb") as f:
                     f.write(resp.content)
             else:
