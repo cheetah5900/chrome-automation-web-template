@@ -117,5 +117,42 @@ class TestLakornAutoPostScanner(unittest.TestCase):
         self.assertFalse(res["ok"])
         self.assertIn("99", res["message"])
 
+    def test_scan_with_clip_part_filter(self):
+        # Test range filter "1-2"
+        req = MetaScanRequest(
+            main_folder=self.channel_root,
+            subfolders_str="21",
+            video_prefix="1-2",
+            folder_mode="lakorn"
+        )
+        res = scan_lakorn_autopost(req)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["count"], 2)
+        self.assertEqual(res["items"][0]["video_name"], "21-1.mp4")
+        self.assertEqual(res["items"][1]["video_name"], "21-2.mp4")
+
+        # Test single clip filter "3"
+        req_single = MetaScanRequest(
+            main_folder=self.channel_root,
+            subfolders_str="21",
+            video_prefix="3",
+            folder_mode="lakorn"
+        )
+        res_single = scan_lakorn_autopost(req_single)
+        self.assertTrue(res_single["ok"])
+        self.assertEqual(res_single["count"], 1)
+        self.assertEqual(res_single["items"][0]["video_name"], "21-3.mp4")
+
+        # Test fallback: prefix is story_name or "combined" -> should pull all
+        req_fallback = MetaScanRequest(
+            main_folder=self.channel_root,
+            subfolders_str="21",
+            video_prefix="21",
+            folder_mode="lakorn"
+        )
+        res_fallback = scan_lakorn_autopost(req_fallback)
+        self.assertTrue(res_fallback["ok"])
+        self.assertEqual(res_fallback["count"], 3)
+
 if __name__ == "__main__":
     unittest.main()

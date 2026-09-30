@@ -4537,12 +4537,35 @@ def scan_lakorn_autopost(req: MetaScanRequest) -> dict[str, Any]:
         except Exception:
             final_files = []
 
+        # Parse clip filter from req.video_prefix if provided (e.g. "1-3", "1, 2", "2")
+        target_clips: set[int] = set()
+        prefix_val = (req.video_prefix or "").strip()
+        if prefix_val and prefix_val.lower() != "combined" and prefix_val != story_name:
+            for part in prefix_val.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                if "-" in part:
+                    rng = part.split("-")
+                    if len(rng) == 2 and rng[0].strip().isdigit() and rng[1].strip().isdigit():
+                        s_val, e_val = int(rng[0].strip()), int(rng[1].strip())
+                        if s_val <= e_val:
+                            for k in range(s_val, e_val + 1):
+                                target_clips.add(k)
+                            continue
+                digits = re.findall(r'\d+', part)
+                for d in digits:
+                    if int(d) != int(story_name):
+                        target_clips.add(int(d))
+
         ep_videos: dict[int, str] = {}
         for f in final_files:
             if not any(f.lower().endswith(ext) for ext in video_exts):
                 continue
             ep = extract_ep_num(f)
             if ep is not None:
+                if target_clips and ep not in target_clips:
+                    continue
                 if ep not in ep_videos:
                     ep_videos[ep] = f
 
