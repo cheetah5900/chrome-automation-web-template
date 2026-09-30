@@ -248,6 +248,21 @@ def main():
 
     log(f"Total scenes found: {len(scenes_map)}. Target scenes to process: {target_scene_nums}")
 
+    # 4.5 Pre-upload story characters to Google Flow project
+    log(f"Pre-syncing Character Sheets for {os.path.basename(story_path)}...")
+    try:
+        preload_payload = {
+            "project_id": args.project_id,
+            "story_path": story_path
+        }
+        preload_res = http_post(f"{args.api_base}/api/flow/preload-characters", preload_payload, timeout=60)
+        if preload_res.get("success"):
+            exists = preload_res.get("already_exists", [])
+            up = preload_res.get("uploaded", [])
+            log(f"  Character Sheets verified! Already in project: {len(exists)}, Newly uploaded: {len(up)}")
+    except Exception as e:
+        log(f"  Character preload check warning: {e}")
+
     # 5. Process each scene
     completed_count = 0
     skipped_count = 0

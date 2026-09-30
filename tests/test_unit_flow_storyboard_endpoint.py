@@ -2,10 +2,20 @@
 Unit tests for Flow Storyboard Central Endpoint & Runner
 """
 import unittest
-from agent.api.flow import GenerateStoryboardRequest, router
+from agent.api.flow import GenerateStoryboardRequest, PreloadCharactersRequest, router
 from scripts.flow_storyboard_runner import parse_range
 
 class TestFlowStoryboard(unittest.TestCase):
+    def test_preload_characters_request_defaults(self):
+        req = PreloadCharactersRequest()
+        self.assertEqual(req.project_id, "21a1632e-9926-46fa-954c-240d71d78f41")
+        self.assertIsNone(req.story_path)
+        self.assertIsNone(req.image_paths)
+
+    def test_preload_characters_route_registered(self):
+        route_paths = [r.path for r in router.routes]
+        self.assertIn("/flow/preload-characters", route_paths)
+
     def test_generate_storyboard_request_defaults(self):
         req = GenerateStoryboardRequest(prompt="Test prompt")
         self.assertEqual(req.prompt, "Test prompt")
