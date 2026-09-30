@@ -280,6 +280,211 @@ async def cdp_type_text(body: CdpTypeTextRequest):
     }, timeout=45)
 
 
+class GenerateStoryboardRequest(BaseModel):
+    prompt: str
+    project_id: str = "21a1632e-9926-46fa-954c-240d71d78f41"
+    aspect_ratio: str = "9:16"
+    reference_images: Optional[list[str]] = None
+    output_path: Optional[str] = None
+    timeout: int = 180
+
+
+@router.post("/generate-storyboard")
+async def generate_storyboard(body: GenerateStoryboardRequest):
+    """Centralized background storyboard image generation via Google Flow CDP automation.
+
+    Reusable by all channels (Lakorn, Stickman, etc.).
+    - Uploads and attaches character sheet reference images as ingredient chips
+    - Sets aspect ratio (9:16 or 16:9)
+    - Submits prompt via CDP
+    - Monitors rendering progress until 100%
+    - Downloads completed image to output_path
+    """
+    import asyncio
+    import os
+    import time
+    import httpx
+    import base64
+    import mimetypes
+
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "FlowKit extension not connected")
+
+    async def eval_js(js_code: str, timeout: int = 15):
+        raw = await client._send("inspect_tab", {"js": js_code}, timeout=timeout)
+        script_res = raw.get("result", {}).get("res", {}) if isinstance(raw, dict) and "result" in raw else (raw.get("res", {}) if isinstance(raw, dict) else {})
+        if not script_res.get("success"):
+            err = script_res.get("error") or "inspect_tab script failed"
+            raise HTTPException(500, f"Browser script error: {err}")
+        return script_res.get("result")
+
+    # 1. Clear any existing chips and prompt text
+    clear_js = """(() => {
+        const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip, flow-prompt-box .chip-container'));
+        for (const chip of chips) {
+            const cancelBtn = chip.querySelector('.hover-icon-overlay, mat-icon, button') || chip;
+            cancelBtn.click();
+        }
+        const pm = document.querySelector('.ProseMirror');
+        if (pm) pm.innerText = '';
+        return true;
+    })()"""
+    await eval_js(clear_js)
+    await asyncio.sleep(0.4)
+
+    # 2. Attach reference images if provided
+    if body.reference_images:
+        for ref_img_path in body.reference_images:
+            if not ref_img_path or not os.path.isfile(ref_img_path):
+                continue
+            filename = os.path.basename(ref_img_path)
+
+            # Open add menu to check if asset already in project
+            open_menu_js = """(() => {
+                const trigger = document.querySelector('button.add-menu-trigger') ||
+                                document.querySelector('button[aria-label*="เพิ่มองค์ประกอบ"]');
+                if (trigger) { trigger.click(); return true; }
+                return false;
+            })()"""
+            await eval_js(open_menu_js)
+            await asyncio.sleep(0.5)
+
+            filter_img_js = """(() => {
+                const popover = document.querySelector('flow-add-menu-popover-content');
+                if (!popover) return false;
+                const navItems = Array.from(popover.querySelectorAll('mat-list-item, .mat-mdc-list-item'));
+                const imgNav = navItems.find(el => (el.innerText || '').includes('รูปภาพ') || (el.innerText || '').toLowerCase().includes('image'));
+                if (imgNav) { imgNav.click(); return true; }
+                return false;
+            })()"""
+            await eval_js(filter_img_js)
+            await asyncio.sleep(0.5)
+
+            find_item_js = f"""(() => {{
+                const popover = document.querySelector('flow-add-menu-popover-content');
+                if (!popover) return false;
+                const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
+                return items.some(el => (el.innerText || '').includes("{filename}"));
+            }})()"""
+            asset_exists = await eval_js(find_item_js)
+
+            # Close popover
+            await eval_js("""(() => {
+                const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                if (backdrop) backdrop.click();
+            })()""")
+            await asyncio.sleep(0.3)
+
+            # If not uploaded, upload now
+            if not asset_exists:
+                try:
+                    with open(ref_img_path, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode()
+                    mime = mimetypes.guess_type(ref_img_path)[0] or "image/png"
+                    await client.upload_image(b64, mime_type=mime, project_id=body.project_id, file_name=filename)
+                    # Reload page to sync project assets
+                    await eval_js("window.location.reload();")
+                    await asyncio.sleep(4.5)
+                except Exception as up_err:
+                    pass
+
+            # Attach asset chip into prompt box
+            await eval_js(open_menu_js)
+            await asyncio.sleep(0.5)
+            await eval_js(filter_img_js)
+            await asyncio.sleep(0.5)
+
+            click_item_js = f"""(() => {{
+                const popover = document.querySelector('flow-add-menu-popover-content');
+                if (!popover) return {{ error: 'popover not found' }};
+                const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
+                const target = items.find(el => (el.innerText || '').includes("{filename}")) || items[0];
+                if (target) {{
+                    const btn = target.querySelector('button') || target;
+                    btn.click();
+                    return {{ ok: true, name: target.innerText.trim() }};
+                }}
+                return {{ error: 'item not found' }};
+            }})()"""
+            await eval_js(click_item_js)
+            await asyncio.sleep(0.6)
+
+    # 3. Submit prompt via CDP with aspect ratio
+    cdp_res = await client._send("flow_cdp_type_text", {
+        "text": body.prompt,
+        "clickSubmit": True,
+        "outputCount": 1,
+        "aspectRatio": body.aspect_ratio
+    }, timeout=45)
+
+    if not cdp_res.get("clicked"):
+        await eval_js("""(() => {
+            const btn = document.querySelector('.generate-icon-button') || document.querySelector('button[aria-label="เริ่มสร้าง"]');
+            if (btn && !btn.classList.contains('mat-mdc-button-disabled')) btn.click();
+        })()""")
+
+    # 4. Monitor rendering until done
+    start_time = time.time()
+    generated_img_url = None
+    while time.time() - start_time < body.timeout:
+        await asyncio.sleep(3.0)
+        status_js = """(() => {
+            const pending = [...document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]')];
+            const tiles = [...document.querySelectorAll('flow-image-tile')];
+            let latestImg = null;
+            if (tiles.length > 0) {
+                for (const t of tiles) {
+                    const text = t.innerText || '';
+                    if (!text.includes('Outfit 1') && !text.includes('Outfit 2') && !text.includes('Outfit 3')) {
+                        const img = t.querySelector('img');
+                        if (img && img.src && (img.src.includes('/image/') || img.src.includes('googleusercontent') || img.src.includes('flow-content'))) {
+                            latestImg = img.src;
+                            break;
+                        }
+                    }
+                }
+                if (!latestImg) {
+                    const img = tiles[0].querySelector('img');
+                    if (img && img.src) latestImg = img.src;
+                }
+            }
+            return {
+                pendingCount: pending.length,
+                pendingPcts: pending.map(p => (p.innerText || '').match(/(\\d+)%/)?.[1]).filter(Boolean),
+                latestImg: latestImg
+            };
+        })()"""
+        render_status = await eval_js(status_js)
+        pending_count = render_status.get("pendingCount", 0)
+        latest_img = render_status.get("latestImg")
+
+        if pending_count == 0 and latest_img:
+            generated_img_url = latest_img
+            break
+
+    if not generated_img_url:
+        raise HTTPException(504, f"Image generation timed out after {body.timeout}s")
+
+    # 5. Download image to output_path if provided
+    if body.output_path:
+        os.makedirs(os.path.dirname(os.path.abspath(body.output_path)), exist_ok=True)
+        async with httpx.AsyncClient() as http_client:
+            resp = await http_client.get(generated_img_url, timeout=30.0)
+            if resp.status_code == 200:
+                with open(body.output_path, "wb") as f:
+                    f.write(resp.content)
+            else:
+                raise HTTPException(502, f"Failed to download image from CDN: status {resp.status_code}")
+
+    return {
+        "success": True,
+        "image_url": generated_img_url,
+        "output_path": body.output_path,
+        "aspect_ratio": body.aspect_ratio
+    }
+
+
 @router.post("/reload-extension")
 async def reload_ext():
     """Trigger extension reload via WS."""
