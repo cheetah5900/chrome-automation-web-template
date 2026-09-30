@@ -319,6 +319,21 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
             raise HTTPException(500, f"Browser script error: {err}")
         return script_res.get("result")
 
+    # 0. Ensure browser tab is locked to the requested project_id
+    if body.project_id:
+        try:
+            current_url = str(await eval_js("window.location.href") or "")
+            if body.project_id not in current_url:
+                import re
+                m = re.match(r"(https?://[^/]+(?:/u/\d+)?/(?:project/|tools/flow/project/))", current_url)
+                prefix = m.group(1) if m else "https://flow.google.com/project/"
+                target_url = prefix + body.project_id
+                logger.info("Switching Google Flow project to: %s", target_url)
+                await eval_js(f"window.location.href = '{target_url}';")
+                await asyncio.sleep(5.0)
+        except Exception as e:
+            logger.warning("Project lock check warning: %s", e)
+
     # 1. Clear any existing chips and prompt text
     clear_js = """(() => {
         const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip, flow-prompt-box .chip-container'));
