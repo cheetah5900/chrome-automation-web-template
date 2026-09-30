@@ -1,9 +1,11 @@
 """Direct Flow API endpoints — for manual operations outside the queue."""
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from agent.services.flow_client import get_flow_client
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/flow", tags=["flow"])
 
 
