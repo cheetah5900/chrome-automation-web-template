@@ -385,16 +385,45 @@ def main():
             "output_path": out_mp4
         })
 
-    # 4. Run Universal Bulk Pipeline
-    pipeline_res = run_bulk_video_pipeline(
-        scenes_data=scenes_data,
-        api_base=args.api_base,
-        project_id=args.project_id,
-        aspect_ratio=args.aspect_ratio,
-        delay=args.delay,
-        timeout=args.timeout,
-        auto_retry_filters=True
-    )
+    # 4. Run Universal Bulk Pipeline in Chunks (respecting batch_size to prevent Flow queue overload)
+    batch_size = max(1, args.batch_size) if hasattr(args, 'batch_size') and args.batch_size else 4
+    all_results = []
+    completed_sc_nums = set()
+    failed_sc_nums = set()
+
+    chunks = [scenes_data[i:i + batch_size] for i in range(0, len(scenes_data), batch_size)]
+    for chunk_idx, chunk in enumerate(chunks, start=1):
+        log(f"\n{'='*60}")
+        log(f" 🚀 Processing Batch {chunk_idx}/{len(chunks)} ({len(chunk)} scenes: {[s['scene_num'] for s in chunk]})")
+        log(f"{'='*60}")
+        sub_res = run_bulk_video_pipeline(
+            scenes_data=chunk,
+            api_base=args.api_base,
+            project_id=args.project_id,
+            aspect_ratio=args.aspect_ratio,
+            delay=args.delay,
+            timeout=args.timeout,
+            auto_retry_filters=True
+        )
+        for r in sub_res.get("results", []):
+            all_results.append(r)
+            if r.get("status") == "SUCCESS":
+                completed_sc_nums.add(r.get("scene"))
+            else:
+                failed_sc_nums.add(r.get("scene"))
+
+        if chunk_idx < len(chunks):
+            log("Cooling down 4 seconds between batches...")
+            time.sleep(4.0)
+
+    pipeline_res = {
+        "success": len(completed_sc_nums) == len(scenes_data),
+        "total": len(scenes_data),
+        "completed": len(completed_sc_nums),
+        "completed_scenes": sorted(list(completed_sc_nums)),
+        "failed_scenes": sorted(list(failed_sc_nums - completed_sc_nums)),
+        "results": all_results
+    }
 
     log("\n==================================================")
     log(" Batch Video Generation Summary")

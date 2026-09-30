@@ -366,8 +366,10 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
     """Attaches the uploaded storyboard image into the Google Flow prompt box."""
     log(f"Attaching {file_name} into Google Flow prompt box...")
 
-    # 1. Clear any old chips and prompt text
+    # 1. Clear any old chips, prompt text, and close any lingering popover/backdrop
     clear_js = """(() => {
+        const backdrop = document.querySelector('.cdk-overlay-backdrop');
+        if (backdrop) backdrop.click();
         const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip, flow-prompt-box .chip-container'));
         for (const chip of chips) {
             const cancelBtn = chip.querySelector('.hover-icon-overlay, mat-icon, button') || chip;
