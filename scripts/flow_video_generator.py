@@ -637,10 +637,14 @@ def monitor_video_rendering(api_base: str, prompt_snippet: str, timeout_seconds:
             }
         }
 
-        // Check video tiles
-        const videoTiles = Array.from(document.querySelectorAll('flow-video-tile'));
+        // Check video tiles and error tiles for failureText and completedIds
+        const videoTiles = Array.from(document.querySelectorAll('flow-video-tile, flow-error-tile, [class*="video-tile"], [class*="error-tile"]'));
         const completedIds = [];
         for (const vt of videoTiles) {
+            const text = vt.innerText || '';
+            if (text.includes('ล้มเหลว') || text.includes('Failed') || text.includes('ละเมิดนโยบาย')) {
+                failureText = text.replace(/\\s+/g, ' ').trim().slice(0, 150);
+            }
             const img = vt.querySelector('img.thumbnail, img');
             if (img && img.src && img.src.includes('/image/')) {
                 const match = img.src.match(/\\/image\\/([0-9a-fA-F-]+)/);
@@ -656,17 +660,30 @@ def monitor_video_rendering(api_base: str, prompt_snippet: str, timeout_seconds:
         };
     })()"""
 
+    stuck_99_count = 0
     while time.time() - start_time < timeout_seconds:
         status = inspect_tab_js(api_base, monitor_js)
         pct = status.get("pct")
         if pct and pct != last_pct:
             log(f"  Rendering in progress: {pct}")
             last_pct = pct
+            stuck_99_count = 0
+        elif pct == "99%":
+            stuck_99_count += 1
+            if stuck_99_count >= 8:  # ~32s stuck at 99%
+                log("  Notice: Pending tile stuck at 99% for 30s. Checking completed tiles...")
+                completed_ids = status.get("completedIds") or []
+                new_ids = [cid for cid in completed_ids if cid not in seen_ids]
+                if new_ids:
+                    log(f"Rendering complete (recovered from 99% stick)! Found: {new_ids}")
+                    return new_ids
+                elif completed_ids:
+                    return completed_ids[:2]
 
         completed_ids = status.get("completedIds") or []
         new_ids = [cid for cid in completed_ids if cid not in seen_ids]
 
-        if new_ids and not status.get("isRendering"):
+        if new_ids:
             log(f"Rendering complete! Found {len(new_ids)} video candidate(s): {new_ids}")
             return new_ids
 
@@ -675,7 +692,7 @@ def monitor_video_rendering(api_base: str, prompt_snippet: str, timeout_seconds:
             return completed_ids[:2]
 
         failure_text = status.get("failureText")
-        if failure_text and not status.get("isRendering") and (time.time() - start_time > 15):
+        if failure_text and (time.time() - start_time > 10):
             is_policy = any(kw in failure_text.lower() for kw in ["นโยบาย", "policy", "safety", "harmful", "บุคคลที่สาม", "ละเมิด"])
             if is_policy or "ล้มเหลว" in failure_text or "failed" in failure_text.lower():
                 raise PolicyFilterError(f"Google Flow video rendering failed: {failure_text}", failure_text=failure_text)
@@ -872,9 +889,13 @@ def monitor_video_batch(
             }
         }
 
-        const videoTiles = Array.from(document.querySelectorAll('flow-video-tile'));
+        const videoTiles = Array.from(document.querySelectorAll('flow-video-tile, [class*="video-tile"]'));
         const tileData = [];
         for (const vt of videoTiles) {
+            const text = vt.innerText || '';
+            if (text.includes('ล้มเหลว') || text.includes('Failed') || text.includes('ละเมิดนโยบาย')) {
+                failureText = text.replace(/\\s+/g, ' ').trim().slice(0, 150);
+            }
             const img = vt.querySelector('img.thumbnail, img');
             const footer = vt.querySelector('.footer-title');
             let mid = null;

@@ -251,6 +251,13 @@ def main():
                         m_out_mp4 = m_item["output_path"]
                         m_img_path = m_item["image_path"]
                         m_prompt = m_item["prompt"]
+
+                        if os.path.exists(m_out_mp4) and os.path.getsize(m_out_mp4) > 500000:
+                            log(f"  ✅ [Fallback Skip] Scene {m_sc_idx:02d} already downloaded and verified: {os.path.basename(m_out_mp4)}")
+                            completed_sc_nums.add(m_sc_idx)
+                            results.append({"scene": m_sc_idx, "status": "SUCCESS", "output": m_out_mp4, "size": os.path.getsize(m_out_mp4)})
+                            continue
+
                         try:
                             gen_res = generate_video_flow(
                                 image_path=m_img_path,
