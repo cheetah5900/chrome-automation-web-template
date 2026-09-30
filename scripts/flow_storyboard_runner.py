@@ -360,39 +360,121 @@ def main():
         failed_scenes = []
 
         # 5.2 Pass 1: Initial generation for batch
-        for sc_idx in scenes_to_process:
-            item = scenes_map[sc_idx]
-            out_path = item["output_path"]
+        if len(scenes_to_process) > 1:
+            log(f"\n  🚀 [Rapid Batch Dispatch] Queueing {len(scenes_to_process)} scenes into Google Flow...")
 
-            log(f"\n  🎬 Rendering Scene {sc_idx:02d} ({args.aspect_ratio}) [Initial Attempt]")
-            log(f"     Prompt: {item['prompt'][:90]}...")
-            if item["reference_images"]:
-                log(f"     Attached refs: {[os.path.basename(p) for p in item['reference_images']]}")
-            log(f"     Target file: {os.path.basename(out_path)}")
+            # 1. Snapshot existing tiles before dispatching
+            snap = http_get(f"{args.api_base}/api/flow/snapshot-existing-tiles")
+            known_urls = snap.get("urls", [])
+            known_media_ids = snap.get("media_ids", [])
+            log(f"     Recorded {len(known_urls)} existing tiles in project before queueing.")
 
-            payload = {
-                "prompt": item["prompt"],
-                "project_id": args.project_id,
-                "aspect_ratio": args.aspect_ratio,
-                "reference_images": item["reference_images"],
-                "output_path": out_path,
-                "timeout": args.timeout
-            }
+            # 2. Dispatch prompts rapidly into Google Flow queue
+            dispatched_scenes = []
+            for q_idx, sc_idx in enumerate(scenes_to_process, 1):
+                item = scenes_map[sc_idx]
+                log(f"\n  ⚡ [Queue {q_idx}/{len(scenes_to_process)}] Dispatching Scene {sc_idx:02d} ({args.aspect_ratio})...")
+                log(f"     Prompt: {item['prompt'][:85]}...")
+                if item["reference_images"]:
+                    log(f"     Attached refs: {[os.path.basename(p) for p in item['reference_images']]}")
 
-            try:
-                res = http_post(endpoint, payload, timeout=args.timeout + 30)
-                if res.get("success"):
-                    log(f"  ✅ Successfully rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_path)}")
-                    completed_count += 1
-                else:
-                    err_msg = res.get("detail") or res.get("message") or str(res)
-                    log(f"  ⚠️ Generation failed for Scene {sc_idx:02d}: {err_msg}")
-                    failed_scenes.append((sc_idx, err_msg))
-            except Exception as e:
-                log(f"  ⚠️ Error rendering Scene {sc_idx:02d}: {e}")
-                failed_scenes.append((sc_idx, str(e)))
+                dispatch_payload = {
+                    "prompt": item["prompt"],
+                    "project_id": args.project_id,
+                    "aspect_ratio": args.aspect_ratio,
+                    "reference_images": item["reference_images"],
+                    "wait_after_submit": 2.0
+                }
 
-            time.sleep(args.delay)
+                try:
+                    res = http_post(f"{args.api_base}/api/flow/dispatch-storyboard-prompt", dispatch_payload, timeout=60)
+                    if res.get("success"):
+                        dispatched_scenes.append(sc_idx)
+                        log(f"     ✅ Queued Scene {sc_idx:02d} successfully into Google Flow queue!")
+                    else:
+                        err_msg = res.get("detail") or res.get("message") or str(res)
+                        log(f"     ⚠️ Dispatch failed for Scene {sc_idx:02d}: {err_msg}")
+                        failed_scenes.append((sc_idx, err_msg))
+                except Exception as e:
+                    log(f"     ⚠️ Dispatch error for Scene {sc_idx:02d}: {e}")
+                    failed_scenes.append((sc_idx, str(e)))
+
+                time.sleep(args.delay)
+
+            # 3. Concurrently collect rendered batch
+            if dispatched_scenes:
+                log(f"\n  ⏳ All {len(dispatched_scenes)} prompts queued! Waiting for Google Flow concurrent rendering & collection...")
+                collect_payload = {
+                    "scenes": [
+                        {
+                            "scene_num": sc_idx,
+                            "prompt": scenes_map[sc_idx]["prompt"],
+                            "output_path": scenes_map[sc_idx]["output_path"],
+                            "reference_images": scenes_map[sc_idx]["reference_images"]
+                        }
+                        for sc_idx in dispatched_scenes
+                    ],
+                    "known_existing_urls": known_urls,
+                    "known_existing_media_ids": known_media_ids,
+                    "timeout": args.timeout
+                }
+
+                try:
+                    collect_res = http_post(f"{args.api_base}/api/flow/collect-storyboard-batch", collect_payload, timeout=args.timeout + 30)
+                    if collect_res.get("success"):
+                        for r in collect_res.get("results", []):
+                            sc_num = r.get("scene_num")
+                            if r.get("success"):
+                                log(f"  ✅ [Batch OK] Scene {sc_num:02d} rendered & saved: {os.path.basename(r.get('output_path', ''))} ({r.get('footer_title', '')})")
+                                completed_count += 1
+                            else:
+                                err_msg = r.get("error", "Collection failed")
+                                log(f"  ⚠️ Scene {sc_num:02d} generation failed: {err_msg}")
+                                failed_scenes.append((sc_num, err_msg))
+                    else:
+                        err_msg = collect_res.get("detail") or collect_res.get("message") or str(collect_res)
+                        log(f"  ⚠️ Batch collection failed: {err_msg}")
+                        for sc_idx in dispatched_scenes:
+                            failed_scenes.append((sc_idx, err_msg))
+                except Exception as e:
+                    log(f"  ⚠️ Batch collection error: {e}")
+                    for sc_idx in dispatched_scenes:
+                        failed_scenes.append((sc_idx, str(e)))
+        else:
+            # Single-scene sequential execution
+            for sc_idx in scenes_to_process:
+                item = scenes_map[sc_idx]
+                out_path = item["output_path"]
+
+                log(f"\n  🎬 Rendering Scene {sc_idx:02d} ({args.aspect_ratio}) [Single Scene]")
+                log(f"     Prompt: {item['prompt'][:90]}...")
+                if item["reference_images"]:
+                    log(f"     Attached refs: {[os.path.basename(p) for p in item['reference_images']]}")
+                log(f"     Target file: {os.path.basename(out_path)}")
+
+                payload = {
+                    "prompt": item["prompt"],
+                    "project_id": args.project_id,
+                    "aspect_ratio": args.aspect_ratio,
+                    "reference_images": item["reference_images"],
+                    "output_path": out_path,
+                    "timeout": args.timeout
+                }
+
+                try:
+                    res = http_post(endpoint, payload, timeout=args.timeout + 30)
+                    if res.get("success"):
+                        log(f"  ✅ Successfully rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_path)}")
+                        completed_count += 1
+                    else:
+                        err_msg = res.get("detail") or res.get("message") or str(res)
+                        log(f"  ⚠️ Generation failed for Scene {sc_idx:02d}: {err_msg}")
+                        failed_scenes.append((sc_idx, err_msg))
+                except Exception as e:
+                    log(f"  ⚠️ Error rendering Scene {sc_idx:02d}: {e}")
+                    failed_scenes.append((sc_idx, str(e)))
+
+                time.sleep(args.delay)
 
         # 5.3 Retry Pass for failed scenes in this batch with prompt softening
         retry_round = 1

@@ -434,52 +434,69 @@ class GenerateStoryboardRequest(BaseModel):
     timeout: int = 180
 
 
-@router.post("/generate-storyboard")
-async def generate_storyboard(body: GenerateStoryboardRequest):
-    """Centralized background storyboard image generation via Google Flow CDP automation.
+class DispatchStoryboardPromptRequest(BaseModel):
+    prompt: str
+    project_id: str = "21a1632e-9926-46fa-954c-240d71d78f41"
+    aspect_ratio: str = "9:16"
+    reference_images: Optional[list[str]] = None
+    wait_after_submit: float = 2.0
 
-    Reusable by all channels (Lakorn, Stickman, etc.).
-    - Uploads and attaches character sheet reference images as ingredient chips
-    - Sets aspect ratio (9:16 or 16:9)
-    - Submits prompt via CDP
-    - Monitors rendering progress until 100%
-    - Downloads completed image to output_path
-    """
-    import asyncio
-    import os
-    import time
-    import httpx
-    import base64
-    import mimetypes
 
-    client = get_flow_client()
-    if not client.connected:
-        raise HTTPException(503, "FlowKit extension not connected")
+class ExpectedBatchScene(BaseModel):
+    scene_num: int
+    prompt: str
+    output_path: str
+    reference_images: Optional[list[str]] = None
 
-    async def eval_js(js_code: str, timeout: int = 15):
-        raw = await client._send("inspect_tab", {"js": js_code}, timeout=timeout)
-        script_res = raw.get("result", {}).get("res", {}) if isinstance(raw, dict) and "result" in raw else (raw.get("res", {}) if isinstance(raw, dict) else {})
-        if not script_res.get("success"):
-            err = script_res.get("error") or "inspect_tab script failed"
-            raise HTTPException(500, f"Browser script error: {err}")
-        return script_res.get("result")
 
-    # 0. Ensure browser tab is locked to the requested project_id
-    if body.project_id:
-        try:
-            current_url = str(await eval_js("window.location.href") or "")
-            if body.project_id not in current_url:
-                import re
-                m = re.match(r"(https?://[^/]+(?:/u/\d+)?/(?:project/|tools/flow/project/))", current_url)
-                prefix = m.group(1) if m else "https://flow.google.com/project/"
-                target_url = prefix + body.project_id
-                logger.info("Switching Google Flow project to: %s", target_url)
-                await eval_js(f"window.location.href = '{target_url}';")
-                await asyncio.sleep(5.0)
-        except Exception as e:
-            logger.warning("Project lock check warning: %s", e)
+class CollectStoryboardBatchRequest(BaseModel):
+    scenes: list[ExpectedBatchScene]
+    known_existing_urls: Optional[list[str]] = None
+    known_existing_media_ids: Optional[list[str]] = None
+    timeout: int = 240
+    poll_interval: float = 3.0
 
-    # 1. Clear any existing chips and prompt text
+
+async def _eval_js_internal(client, js_code: str, timeout: int = 15):
+    raw = await client._send("inspect_tab", {"js": js_code}, timeout=timeout)
+    script_res = raw.get("result", {}).get("res", {}) if isinstance(raw, dict) and "result" in raw else (raw.get("res", {}) if isinstance(raw, dict) else {})
+    if not script_res.get("success"):
+        err = script_res.get("error") or "inspect_tab script failed"
+        raise HTTPException(500, f"Browser script error: {err}")
+    return script_res.get("result")
+
+
+async def _ensure_project_id(client, project_id: str):
+    if not project_id:
+        return
+    import asyncio, re
+    try:
+        current_url = str(await _eval_js_internal(client, "window.location.href") or "")
+        if project_id not in current_url:
+            m = re.match(r"(https?://[^/]+(?:/u/\d+)?/(?:project/|tools/flow/project/))", current_url)
+            prefix = m.group(1) if m else "https://flow.google.com/project/"
+            target_url = prefix + project_id
+            logger.info("Switching Google Flow project to: %s", target_url)
+            await _eval_js_internal(client, f"window.location.href = '{target_url}';")
+            await asyncio.sleep(5.0)
+    except Exception as e:
+        logger.warning("Project lock check warning: %s", e)
+
+
+async def _submit_flow_prompt_internal(
+    client,
+    prompt: str,
+    project_id: str,
+    aspect_ratio: str = "9:16",
+    reference_images: Optional[list[str]] = None,
+    wait_after_submit: float = 2.0
+):
+    import asyncio, os, base64, mimetypes
+
+    # 0. Ensure project lock
+    await _ensure_project_id(client, project_id)
+
+    # 1. Clear existing chips and prompt text
     clear_js = """(() => {
         const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip, flow-prompt-box .chip-container'));
         for (const chip of chips) {
@@ -490,19 +507,18 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
         if (pm) pm.innerText = '';
         return true;
     })()"""
-    await eval_js(clear_js)
+    await _eval_js_internal(client, clear_js)
     await asyncio.sleep(0.4)
 
     # 2. Attach reference images if provided
-    if body.reference_images:
-        for ref_img_path in body.reference_images:
+    if reference_images:
+        for ref_img_path in reference_images:
             if not ref_img_path or not os.path.isfile(ref_img_path):
                 continue
             filename = os.path.basename(ref_img_path)
             c_name = filename.split(" - ")[0]
             filename_no_ext = os.path.splitext(filename)[0]
 
-            # 2.1 Open add menu if not open
             open_menu_js = """(() => {
                 let popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) {
@@ -513,10 +529,9 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 }
                 return true;
             })()"""
-            await eval_js(open_menu_js)
+            await _eval_js_internal(client, open_menu_js)
             await asyncio.sleep(0.6)
 
-            # 2.2 Filter to 'รูปภาพ' / 'image'
             filter_img_js = """(() => {
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return false;
@@ -525,10 +540,9 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 if (imgNav) { imgNav.click(); return true; }
                 return false;
             })()"""
-            await eval_js(filter_img_js)
+            await _eval_js_internal(client, filter_img_js)
             await asyncio.sleep(0.6)
 
-            # 2.3 Search for character in search box to filter list with 100% precision
             search_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return false;
@@ -541,10 +555,9 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 }}
                 return false;
             }})()"""
-            await eval_js(search_item_js)
+            await _eval_js_internal(client, search_item_js)
             await asyncio.sleep(0.4)
 
-            # 2.4 Check if asset already exists in list
             find_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return false;
@@ -554,11 +567,10 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                     return t.includes("{filename}") || t.includes("{filename_no_ext}") || t.includes("{c_name}");
                 }});
             }})()"""
-            asset_exists = await eval_js(find_item_js)
+            asset_exists = await _eval_js_internal(client, find_item_js)
 
-            # If not uploaded, upload and reload
             if not asset_exists:
-                await eval_js("""(() => {
+                await _eval_js_internal(client, """(() => {
                     const backdrop = document.querySelector('.cdk-overlay-backdrop');
                     if (backdrop) backdrop.click();
                 })()""")
@@ -567,22 +579,19 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                     with open(ref_img_path, "rb") as f:
                         b64 = base64.b64encode(f.read()).decode()
                     mime = mimetypes.guess_type(ref_img_path)[0] or "image/png"
-                    await client.upload_image(b64, mime_type=mime, project_id=body.project_id, file_name=filename)
-                    # Reload page to sync project assets
-                    await eval_js("window.location.reload();")
+                    await client.upload_image(b64, mime_type=mime, project_id=project_id, file_name=filename)
+                    await _eval_js_internal(client, "window.location.reload();")
                     await asyncio.sleep(4.5)
-                except Exception as up_err:
+                except Exception:
                     pass
 
-                # Re-open, re-filter, and re-search after reload
-                await eval_js(open_menu_js)
+                await _eval_js_internal(client, open_menu_js)
                 await asyncio.sleep(0.6)
-                await eval_js(filter_img_js)
+                await _eval_js_internal(client, filter_img_js)
                 await asyncio.sleep(0.6)
-                await eval_js(search_item_js)
+                await _eval_js_internal(client, search_item_js)
                 await asyncio.sleep(0.4)
 
-            # 2.5 Click target asset item from filtered results
             click_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return {{ error: 'popover not found' }};
@@ -598,10 +607,9 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 }}
                 return {{ error: 'item not found' }};
             }})()"""
-            await eval_js(click_item_js)
+            await _eval_js_internal(client, click_item_js)
             await asyncio.sleep(0.8)
 
-            # 2.5 Click "เพิ่มไปยังพรอมต์" in detail pane if present
             add_prompt_js = """(() => {
                 const addBtn = document.querySelector('flow-add-menu-detail-pane button.detail-add-to-prompt-btn') ||
                                Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => (b.innerText || '').includes('เพิ่มไปยังพรอมต์') || (b.innerText || '').includes('Add to prompt'));
@@ -611,41 +619,297 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 }
                 return { clicked: false };
             })()"""
-            await eval_js(add_prompt_js)
+            await _eval_js_internal(client, add_prompt_js)
             await asyncio.sleep(0.8)
 
-            # 2.6 Close popover if still open
             close_popover_js = """(() => {
                 const backdrop = document.querySelector('.cdk-overlay-backdrop');
                 if (backdrop) backdrop.click();
                 return true;
             })()"""
-            await eval_js(close_popover_js)
+            await _eval_js_internal(client, close_popover_js)
             await asyncio.sleep(0.5)
-
-        # 2.7 Verify chips in prompt box
-        verify_chips_js = """(() => {
-            const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip, flow-prompt-box .chip-container'));
-            return chips.length;
-        })()"""
-        attached_chip_count = await eval_js(verify_chips_js)
-        logger.info("Prompt box ingredient chips attached: %s", attached_chip_count)
 
     # 3. Submit prompt via CDP with aspect ratio
     cdp_res = await client._send("flow_cdp_type_text", {
-        "text": body.prompt,
+        "text": prompt,
         "clickSubmit": True,
         "outputCount": 1,
-        "aspectRatio": body.aspect_ratio
+        "aspectRatio": aspect_ratio
     }, timeout=45)
 
     if not cdp_res.get("clicked"):
-        await eval_js("""(() => {
+        await _eval_js_internal(client, """(() => {
             const btn = document.querySelector('.generate-icon-button') || document.querySelector('button[aria-label="เริ่มสร้าง"]');
             if (btn && !btn.classList.contains('mat-mdc-button-disabled')) btn.click();
         })()""")
 
-    # 4. Monitor rendering until done
+    # 4. Wait for Google Flow to queue the prompt
+    if wait_after_submit > 0:
+        await asyncio.sleep(wait_after_submit)
+
+
+def _match_batch_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
+    """Matches newly generated image tiles to scene requests using keyword scoring + DOM reverse-order fallback."""
+    import re
+    N = len(scenes)
+    M = len(new_tiles)
+    if M == 0 or N == 0:
+        return []
+
+    boilerplate_words = {
+        "vertical", "horizontal", "cinematic", "render", "style", "pixar",
+        "dreamworks", "smooth", "cute", "lighting", "masterpiece", "resolution",
+        "thai", "melodrama", "depth", "field", "sharp", "focus", "characters"
+    }
+
+    scores = []
+    for i, sc in enumerate(scenes):
+        sc_prompt = sc.get("prompt", "")
+        sc_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", sc_prompt.lower())) - boilerplate_words
+        row = []
+        for j, tl in enumerate(new_tiles):
+            tl_footer = tl.get("footer_title", "")
+            tl_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", tl_footer.lower()))
+            overlap = len(sc_words.intersection(tl_words))
+            # Expected DOM index for scene i: Google Flow prepends tiles, so earliest submitted scene (index 0) finishes earlier (higher index)
+            expected_j = max(0, min(M - 1, N - 1 - i))
+            pos_penalty = abs(j - expected_j) * 0.5
+            total_score = overlap * 10 - pos_penalty
+            row.append(total_score)
+        scores.append(row)
+
+    candidates = []
+    for i in range(N):
+        for j in range(M):
+            candidates.append((scores[i][j], i, j))
+    candidates.sort(reverse=True, key=lambda x: x[0])
+
+    matched = []
+    used_scenes = set()
+    used_tiles = set()
+    for score, i, j in candidates:
+        if i not in used_scenes and j not in used_tiles:
+            matched.append((scenes[i], new_tiles[j]))
+            used_scenes.add(i)
+            used_tiles.add(j)
+
+    return matched
+
+
+@router.get("/snapshot-existing-tiles")
+async def snapshot_existing_tiles():
+    """Returns list of currently rendered image URLs and media IDs in Google Flow tab."""
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "FlowKit extension not connected")
+
+    snap_js = """(() => {
+        const tiles = Array.from(document.querySelectorAll('flow-image-tile'));
+        const urls = [];
+        const mediaIds = [];
+        for (const t of tiles) {
+            const img = t.querySelector('img');
+            if (img && img.src) {
+                urls.push(img.src);
+                const mid = img.getAttribute('data-media-id');
+                if (mid) mediaIds.push(mid);
+            }
+        }
+        return { urls: urls, media_ids: mediaIds, count: tiles.length };
+    })()"""
+    res = await _eval_js_internal(client, snap_js)
+    return {
+        "success": True,
+        "urls": res.get("urls", []) if isinstance(res, dict) else [],
+        "media_ids": res.get("media_ids", []) if isinstance(res, dict) else [],
+        "count": res.get("count", 0) if isinstance(res, dict) else 0
+    }
+
+
+@router.post("/dispatch-storyboard-prompt")
+async def dispatch_storyboard_prompt(body: DispatchStoryboardPromptRequest):
+    """Submits a single prompt into Google Flow queue without blocking on render completion."""
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "FlowKit extension not connected")
+
+    await _submit_flow_prompt_internal(
+        client=client,
+        prompt=body.prompt,
+        project_id=body.project_id,
+        aspect_ratio=body.aspect_ratio,
+        reference_images=body.reference_images,
+        wait_after_submit=body.wait_after_submit
+    )
+
+    return {
+        "success": True,
+        "dispatched": True,
+        "prompt_preview": body.prompt[:80]
+    }
+
+
+@router.post("/collect-storyboard-batch")
+async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
+    """Waits for Google Flow pending queue to finish and downloads batch images matched to scenes."""
+    import asyncio, time, httpx, os
+
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "FlowKit extension not connected")
+
+    known_urls = set(body.known_existing_urls or [])
+    known_media_ids = set(body.known_existing_media_ids or [])
+
+    start_time = time.time()
+    consecutive_zero_pending = 0
+    poll_status = {}
+
+    while time.time() - start_time < body.timeout:
+        await asyncio.sleep(body.poll_interval)
+
+        status_js = """(() => {
+            const pending = [...document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]')];
+            const errorToast = document.querySelector('mat-snack-bar-container, .error-message, [class*="error-snackbar"], .cdk-overlay-container [role="alert"], [class*="toast"]');
+            const errorText = errorToast ? (errorToast.innerText || '').trim() : '';
+            const tiles = [...document.querySelectorAll('flow-image-tile')];
+            const tileData = tiles.map(t => {
+                const img = t.querySelector('img');
+                const footer = t.querySelector('.footer-title');
+                return {
+                    src: img ? img.src : '',
+                    media_id: img ? (img.getAttribute('data-media-id') || '') : '',
+                    footer_title: footer ? (footer.innerText || '').trim() : '',
+                    is_outfit: (t.innerText || '').includes('Outfit 1') || (t.innerText || '').includes('Outfit 2') || (t.innerText || '').includes('Outfit 3')
+                };
+            }).filter(t => t.src && !t.is_outfit);
+
+            return {
+                pendingCount: pending.length,
+                pendingPcts: pending.map(p => (p.innerText || '').match(/(\\d+)%/)?.[1]).filter(Boolean),
+                tiles: tileData,
+                errorText: errorText
+            };
+        })()"""
+
+        poll_status = await _eval_js_internal(client, status_js) or {}
+        pending_count = poll_status.get("pendingCount", 0)
+        error_text = poll_status.get("errorText") or ""
+        tiles = poll_status.get("tiles") or []
+
+        if error_text and any(w in error_text.lower() for w in ["policy", "violate", "safety", "guideline", "ละเมิด", "ไม่สามารถสร้าง", "นโยบาย"]):
+            logger.warning("Safety policy error detected during batch render: %s", error_text)
+
+        new_tiles = [
+            t for t in tiles
+            if (t.get("src") not in known_urls) and (not t.get("media_id") or t.get("media_id") not in known_media_ids)
+        ]
+
+        if pending_count == 0:
+            consecutive_zero_pending += 1
+            if len(new_tiles) >= len(body.scenes) or consecutive_zero_pending >= 2:
+                logger.info("Batch rendering complete! Found %d new tiles for %d expected scenes.", len(new_tiles), len(body.scenes))
+                break
+        else:
+            consecutive_zero_pending = 0
+
+    tiles = poll_status.get("tiles") or []
+    new_tiles = [
+        t for t in tiles
+        if (t.get("src") not in known_urls) and (not t.get("media_id") or t.get("media_id") not in known_media_ids)
+    ]
+
+    matched_pairs = _match_batch_tiles_to_scenes([s.dict() for s in body.scenes], new_tiles)
+
+    results = []
+    matched_scene_nums = set()
+
+    async with httpx.AsyncClient(follow_redirects=True) as http_client:
+        for sc, tl in matched_pairs:
+            sc_num = sc.get("scene_num")
+            matched_scene_nums.add(sc_num)
+            out_path = sc.get("output_path")
+            img_url = tl.get("src")
+            footer_title = tl.get("footer_title")
+
+            if out_path and img_url:
+                os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+                try:
+                    resp = await http_client.get(img_url, timeout=30.0)
+                    if resp.status_code == 200:
+                        with open(out_path, "wb") as f:
+                            f.write(resp.content)
+                        logger.info("Saved batch image for Scene %02d to %s", sc_num, out_path)
+                        results.append({
+                            "scene_num": sc_num,
+                            "success": True,
+                            "output_path": out_path,
+                            "footer_title": footer_title,
+                            "image_url": img_url
+                        })
+                    else:
+                        results.append({
+                            "scene_num": sc_num,
+                            "success": False,
+                            "error": f"CDN returned HTTP {resp.status_code}"
+                        })
+                except Exception as dl_err:
+                    results.append({
+                        "scene_num": sc_num,
+                        "success": False,
+                        "error": str(dl_err)
+                    })
+
+    for s in body.scenes:
+        if s.scene_num not in matched_scene_nums:
+            results.append({
+                "scene_num": s.scene_num,
+                "success": False,
+                "error": "No matching generated image found in batch"
+            })
+
+    results.sort(key=lambda x: x.get("scene_num", 0))
+    successful_count = sum(1 for r in results if r.get("success"))
+
+    return {
+        "success": successful_count > 0,
+        "collected_count": successful_count,
+        "total_expected": len(body.scenes),
+        "results": results
+    }
+
+
+@router.post("/generate-storyboard")
+async def generate_storyboard(body: GenerateStoryboardRequest):
+    """Centralized background storyboard image generation via Google Flow CDP automation.
+
+    Reusable by all channels (Lakorn, Stickman, etc.).
+    - Uploads and attaches character sheet reference images as ingredient chips
+    - Sets aspect ratio (9:16 or 16:9)
+    - Submits prompt via CDP
+    - Monitors rendering progress until 100%
+    - Downloads completed image to output_path
+    """
+    import asyncio
+    import os
+    import time
+    import httpx
+
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "FlowKit extension not connected")
+
+    await _submit_flow_prompt_internal(
+        client=client,
+        prompt=body.prompt,
+        project_id=body.project_id,
+        aspect_ratio=body.aspect_ratio,
+        reference_images=body.reference_images,
+        wait_after_submit=1.0
+    )
+
+    # Monitor rendering until done
     start_time = time.time()
     generated_img_url = None
     while time.time() - start_time < body.timeout:
@@ -679,7 +943,7 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 errorText: errorText
             };
         })()"""
-        render_status = await eval_js(status_js)
+        render_status = await _eval_js_internal(client, status_js)
         pending_count = render_status.get("pendingCount", 0)
         latest_img = render_status.get("latestImg")
         error_text = render_status.get("errorText") or ""
@@ -694,7 +958,7 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
     if not generated_img_url:
         raise HTTPException(504, f"Image generation timed out after {body.timeout}s")
 
-    # 5. Download image to output_path if provided
+    # Download image to output_path if provided
     if body.output_path:
         os.makedirs(os.path.dirname(os.path.abspath(body.output_path)), exist_ok=True)
         async with httpx.AsyncClient(follow_redirects=True) as http_client:
