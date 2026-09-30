@@ -153,13 +153,90 @@ def sanitize_prompt(raw_prompt: str) -> str:
     return load_full_prompt(raw_prompt)
 
 
-def upload_storyboard_image(api_base: str, image_path: str, project_id: str) -> str:
-    """Uploads storyboard image to Google Flow library and returns media_id."""
-    log(f"Uploading image to Google Flow: {os.path.basename(image_path)}...")
+def get_existing_flow_assets(api_base: str) -> list[str]:
+    """Retrieves all asset names, scene names, and image labels present on the Google Flow tab."""
+    extract_js = """(() => {
+        const names = new Set();
+        const text = document.body.innerText || '';
+        const lines = text.split('\\n');
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed && trimmed.length < 120) {
+                if (trimmed.match(/\\.(?:jpg|png|webp|mp4)$/i) || trimmed.match(/Scene\\s*\\d+/i)) {
+                    names.add(trimmed);
+                }
+            }
+        }
+        const items = Array.from(document.querySelectorAll('*'))
+            .filter(el => el.children.length === 0 && el.innerText);
+        for (const el of items) {
+            const t = el.innerText.trim();
+            if (t && t.length < 120) {
+                if (t.match(/\\.(?:jpg|png|webp|mp4)$/i) || t.match(/Scene\\s*\\d+/i)) {
+                    names.add(t);
+                }
+            }
+        }
+        return Array.from(names);
+    })()"""
+    try:
+        res = inspect_tab_js(api_base, extract_js)
+        if isinstance(res, list):
+            return res
+        if isinstance(res, dict):
+            return res.get("res", {}).get("result", []) or []
+        return []
+    except Exception:
+        return []
+
+
+def check_asset_exists_in_flow(api_base: str, file_name: str, existing_assets: list[str] = None) -> bool:
+    """Checks if an image file (e.g. 'EP01 - Scene 04.jpg', 'EP01 - Scene 04', or 'Scene 04') already exists in Google Flow library."""
+    base_name = os.path.splitext(file_name)[0]
+    sc_match = re.search(r"Scene\s*(\d+)", file_name, re.IGNORECASE)
+    sc_tag = f"Scene {int(sc_match.group(1)):02d}" if sc_match else ""
+
+    if existing_assets is not None:
+        for asset in existing_assets:
+            if file_name.lower() in asset.lower() or base_name.lower() in asset.lower():
+                return True
+            if sc_tag and sc_tag.lower() in asset.lower():
+                return True
+        return False
+
+    check_js = f"""(() => {{
+        const text = (document.body.innerText || '').toLowerCase();
+        const targetFull = "{file_name}".toLowerCase();
+        const targetBase = "{base_name}".toLowerCase();
+        const scTag = "{sc_tag}".toLowerCase();
+        
+        if (text.includes(targetFull) || text.includes(targetBase)) return true;
+        if (scTag && text.includes(scTag)) return true;
+        return false;
+    }})()"""
+    try:
+        res = inspect_tab_js(api_base, check_js)
+        if isinstance(res, bool):
+            return res
+        if isinstance(res, dict):
+            return bool(res.get("res", {}).get("result", False))
+        return bool(res)
+    except Exception:
+        return False
+
+
+def upload_storyboard_image(api_base: str, image_path: str, project_id: str, force: bool = False) -> str:
+    """Uploads storyboard image to Google Flow library, automatically skipping if already present."""
+    file_name = os.path.basename(image_path)
+    if not force and check_asset_exists_in_flow(api_base, file_name):
+        log(f"Asset '{file_name}' already exists on Google Flow. Skipping duplicate upload.")
+        return "ALREADY_EXISTS"
+
+    log(f"Uploading image to Google Flow: {file_name}...")
     res = http_post(f"{api_base}/api/flow/upload-image", {
         "file_path": os.path.abspath(image_path),
         "project_id": project_id,
-        "file_name": os.path.basename(image_path)
+        "file_name": file_name
     })
     media_id = res.get("media_id") or res.get("raw", {}).get("media", {}).get("name")
     if not media_id:
@@ -229,17 +306,21 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
     inspect_tab_js(api_base, search_js)
     time.sleep(0.4)
 
+    sc_match = re.search(r"Scene\s*(\d+)", file_name, re.IGNORECASE)
+    sc_tag = f"Scene {int(sc_match.group(1)):02d}" if sc_match else ""
+
     # 4. Click matching image asset item
     click_item_js = f"""(() => {{
-        const targetName = "{file_name}";
-        const targetBase = "{os.path.splitext(file_name)[0]}";
+        const targetName = "{file_name}".toLowerCase();
+        const targetBase = "{os.path.splitext(file_name)[0]}".toLowerCase();
+        const scTag = "{sc_tag}".toLowerCase();
         const popover = document.querySelector('flow-add-menu-popover-content');
         if (!popover) return {{ error: "popover not found" }};
         const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
         
         let target = items.find(el => {{
-            const t = el.innerText || '';
-            return t.includes(targetName) || t.includes(targetBase);
+            const t = (el.innerText || '').toLowerCase();
+            return t.includes(targetName) || t.includes(targetBase) || (scTag && t.includes(scTag));
         }}) || items[0];
 
         if (target) {{

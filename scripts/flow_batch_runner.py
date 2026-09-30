@@ -26,7 +26,9 @@ from flow_video_generator import (
     DEFAULT_PROJECT_ID,
     log,
     upload_storyboard_image,
-    inspect_tab_js
+    inspect_tab_js,
+    get_existing_flow_assets,
+    check_asset_exists_in_flow
 )
 
 def parse_range(range_str: str) -> list[int]:
@@ -108,24 +110,26 @@ def main():
             continue
         scenes_to_run.append(sc_idx)
 
-    # 2. Batch pre-upload storyboard images up front (ZERO page reloads)
+    # 2. Pre-check and upload storyboard images (skip duplicate images already on Flow)
     if scenes_to_run and not args.skip_upload:
-        try:
-            body_check = inspect_tab_js(args.api_base, "document.body.innerText")
-            body_text = str(body_check.get("res", {}).get("result", "")) if isinstance(body_check, dict) else ""
-        except Exception:
-            body_text = ""
-
+        log("\n🔍 Checking Google Flow library for existing storyboard assets before upload...")
+        existing_assets = get_existing_flow_assets(args.api_base)
         needed_uploads = []
+        already_present = []
+
         for sc_idx in scenes_to_run:
-            sc_basename = f"Scene {sc_idx:02d}"
-            if sc_basename in body_text:
-                log(f"  Storyboard for {sc_basename} already present in Google Flow library. Skipping upload.")
+            img_path = available_scenes[sc_idx]
+            fname = os.path.basename(img_path)
+            if check_asset_exists_in_flow(args.api_base, fname, existing_assets):
+                already_present.append(sc_idx)
             else:
                 needed_uploads.append(sc_idx)
 
+        if already_present:
+            log(f"  ✅ Found {len(already_present)} scenes already on Google Flow (Skipping upload): {already_present}")
         if needed_uploads:
-            log(f"Pre-uploading {len(needed_uploads)} new storyboard images to library (zero page reloads)...")
+            log(f"  📤 Found {len(needed_uploads)} scenes missing from Google Flow: {needed_uploads}")
+            log(f"Pre-uploading {len(needed_uploads)} missing storyboard images to library (zero page reloads)...")
             for sc_idx in needed_uploads:
                 img_path = available_scenes[sc_idx]
                 try:
@@ -133,7 +137,7 @@ def main():
                 except Exception as e:
                     log(f"Notice on pre-uploading Scene {sc_idx}: {e}")
         else:
-            log("All required storyboard images are already uploaded in Google Flow library.")
+            log("  🎉 All target storyboard images are already present on Google Flow! 100% duplicate uploads avoided.")
     elif args.skip_upload:
         log("Skipping storyboard image upload as requested (--skip-upload).")
 
