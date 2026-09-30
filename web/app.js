@@ -7398,19 +7398,26 @@ function updateFacebookFolderModeUI() {
   const subfoldersLabel = document.getElementById('lbl_facebook_subfolders');
   const subfoldersHint = document.getElementById('hint_facebook_subfolders');
   const subfoldersInput = document.getElementById('cfg_facebook_subfolders');
+  const mainFolderInput = document.getElementById('cfg_facebook_main_folder');
 
   if (mode === 'lakorn') {
     if (prefixGroup) prefixGroup.style.display = 'none';
     if (subfoldersGrid) subfoldersGrid.style.gridTemplateColumns = '1fr';
-    if (subfoldersLabel) subfoldersLabel.textContent = '🎬 ระบุ EP ที่ต้องการรัน (Episode Selection)';
-    if (subfoldersHint) subfoldersHint.textContent = 'เช่น 1-3, 1, 2 (เว้นว่าง = รันทุก EP ที่พบในโฟลเดอร์ 10 - Final)';
-    if (subfoldersInput) subfoldersInput.placeholder = 'เช่น 1-3 หรือเว้นว่างเพื่อดึงทั้งหมด';
+    if (subfoldersLabel) subfoldersLabel.textContent = '🎬 ระบุเลขตอนละครที่ต้องการรัน (Episode Number)';
+    if (subfoldersHint) subfoldersHint.textContent = 'ระบุเลขตอน เช่น 21 หรือ 21, 22 (ระบบจะเข้าไปดึงไฟล์ในโฟลเดอร์ตอนนั้นๆ อัตโนมัติ)';
+    if (subfoldersInput) subfoldersInput.placeholder = 'เช่น 21 หรือ 21, 22';
+    if (mainFolderInput && !mainFolderInput.value.trim()) {
+      mainFolderInput.placeholder = 'เช่น /Users/litarcopperkaikem/.../Channels/2 - ผักกาดการละคร - ละครไทย';
+    }
   } else {
     if (prefixGroup) prefixGroup.style.display = '';
     if (subfoldersGrid) subfoldersGrid.style.gridTemplateColumns = '1fr 1fr';
     if (subfoldersLabel) subfoldersLabel.textContent = 'โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)';
     if (subfoldersHint) subfoldersHint.textContent = 'เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)';
     if (subfoldersInput) subfoldersInput.placeholder = 'เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด';
+    if (mainFolderInput && !mainFolderInput.value.trim()) {
+      mainFolderInput.placeholder = 'เช่น /Users/litar/Downloads/facebook_videos_batch';
+    }
   }
 }
 window.updateFacebookFolderModeUI = updateFacebookFolderModeUI;
