@@ -581,7 +581,12 @@ async def _submit_flow_prompt_internal(
                 if (!popover) return false;
                 const searchInput = popover.querySelector('input.search-input');
                 if (searchInput) {{
-                    searchInput.value = "{c_name}";
+                    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+                    if (setter) {{
+                        setter.call(searchInput, "{filename_no_ext}");
+                    }} else {{
+                        searchInput.value = "{filename_no_ext}";
+                    }}
                     searchInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
                     searchInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
                     return true;
@@ -596,8 +601,8 @@ async def _submit_flow_prompt_internal(
                 if (!popover) return false;
                 const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
                 return items.some(el => {{
-                    const t = el.innerText || '';
-                    return t.includes("{filename}") || t.includes("{filename_no_ext}") || t.includes("{c_name}");
+                    const t = (el.innerText || '').trim();
+                    return t.includes("{filename}") || t.includes("{filename_no_ext}");
                 }});
             }})()"""
             asset_exists = await _eval_js_internal(client, find_item_js)
@@ -629,10 +634,19 @@ async def _submit_flow_prompt_internal(
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return {{ error: 'popover not found' }};
                 const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
-                const target = items.find(el => {{
-                    const t = el.innerText || '';
-                    return t.includes("{filename}") || t.includes("{filename_no_ext}") || t.includes("{c_name}");
-                }}) || items[0];
+                let target = items.find(el => {{
+                    const t = (el.innerText || '').trim();
+                    return t.includes("{filename}") || t.includes("{filename_no_ext}");
+                }});
+                if (!target) {{
+                    target = items.find(el => {{
+                        const t = (el.innerText || '').trim();
+                        return t.includes("{c_name}");
+                    }});
+                }}
+                if (!target && items.length > 0) {{
+                    target = items[0];
+                }}
                 if (target) {{
                     const btn = target.querySelector('button') || target;
                     btn.click();
