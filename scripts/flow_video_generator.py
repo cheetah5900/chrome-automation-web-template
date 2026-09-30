@@ -386,33 +386,48 @@ select_storyboard_image_chip = attach_start_frame
 
 def ensure_video_mode(api_base: str) -> bool:
     """Ensures Google Flow prompt box is toggled to Video mode ('videocam วิดีโอ')."""
-    toggle_js = """(() => {
-        const toggles = Array.from(document.querySelectorAll('mat-button-toggle, button'));
-        const videoBtn = toggles.find(el => {
-            const t = (el.innerText || '').toLowerCase();
-            return (t.includes('videocam') || t.includes('วิดีโอ') || t.includes('video')) && !t.includes('720p');
-        });
-        if (videoBtn) {
-            const isSelected = videoBtn.getAttribute('aria-selected') === 'true' ||
-                               videoBtn.getAttribute('aria-checked') === 'true' ||
-                               videoBtn.classList.contains('mat-button-toggle-checked');
-            if (!isSelected) {
-                const clickTarget = videoBtn.querySelector('button') || videoBtn;
-                clickTarget.click();
-                return { toggled: true, wasSelected: false };
-            }
-            return { toggled: false, wasSelected: true };
+    check_btn_js = """(() => {
+        const btn = document.querySelector('button.settings-trigger-button') ||
+                    document.querySelector('button[aria-label="ทริกเกอร์การตั้งค่า"]');
+        if (!btn) return { error: "settings button not found" };
+        const text = (btn.innerText || '').toLowerCase();
+        if (text.includes('วิดีโอ') || text.includes('video') || text.includes('720p') || text.includes('veo')) {
+            return { alreadyVideo: true, text: btn.innerText.replace(/\\n/g, ' ') };
         }
-        return { error: "video toggle button not found" };
+        btn.click();
+        return { needSwitch: true, text: btn.innerText.replace(/\\n/g, ' ') };
     })()"""
     try:
-        res = inspect_tab_js(api_base, toggle_js)
-        if isinstance(res, dict) and res.get("toggled"):
-            log("Switched Google Flow prompt box to Video mode.")
+        res = inspect_tab_js(api_base, check_btn_js)
+        if isinstance(res, dict) and res.get("alreadyVideo"):
+            log(f"Google Flow prompt box is verified in Video mode: {res.get('text')}")
+            return True
+
+        if isinstance(res, dict) and res.get("needSwitch"):
+            log(f"Prompt box currently in Image mode ({res.get('text')}). Switching to Video mode...")
+            time.sleep(0.8)
+            switch_js = """(() => {
+                const overlay = document.querySelector('.cdk-overlay-container');
+                if (!overlay) return { error: "no overlay" };
+                const toggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button'));
+                const videoBtn = toggles.find(el => {
+                    const t = (el.innerText || '').toLowerCase();
+                    return t.includes('videocam') || t.includes('วิดีโอ');
+                });
+                if (videoBtn) {
+                    const btn = videoBtn.querySelector('button') || videoBtn;
+                    btn.click();
+                    const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                    if (backdrop) backdrop.click();
+                    return { success: true };
+                }
+                return { error: "video button not found in overlay" };
+            })()"""
+            inspect_tab_js(api_base, switch_js)
             time.sleep(1.0)
-        else:
-            log("Google Flow prompt box is verified in Video mode.")
-        return True
+            log("Switched Google Flow prompt box to Video mode successfully.")
+            return True
+        return False
     except Exception as e:
         log(f"Notice on ensuring video mode: {e}")
         return False
