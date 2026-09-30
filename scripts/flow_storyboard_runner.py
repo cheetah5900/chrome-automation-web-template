@@ -138,9 +138,12 @@ def resolve_lakorn_character_sheets(story_path: str, ep_num: int, scene_num: int
                 filepath = os.path.join(char_scene_dir, fname)
                 with open(filepath, "r", encoding="utf-8") as f:
                     content = f.read()
-                    for c_name in ref_map:
-                        if c_name in content:
-                            scene_char_names.append(c_name)
+                    for c_name, rel_path in ref_map.items():
+                        c_base = os.path.splitext(os.path.basename(rel_path))[0]
+                        char_root = c_base.split(' - ')[0]
+                        if c_name in content or c_base.lower() in content.lower() or char_root.lower() in content.lower():
+                            if c_name not in scene_char_names:
+                                scene_char_names.append(c_name)
                 break
 
     # If no specific characters found in scene file, default to main characters in ref map
