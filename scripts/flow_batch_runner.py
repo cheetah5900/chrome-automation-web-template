@@ -199,6 +199,7 @@ def main():
             # 3.3 Concurrently monitor and download rendered video batch
             if batch_items:
                 log(f"\n  ⏳ All {len(batch_items)} video prompts queued with storyboard chips! Waiting for Google Flow concurrent video rendering...")
+                completed_sc_nums = set()
                 try:
                     matched_results = monitor_video_batch(
                         api_base=args.api_base,
@@ -214,14 +215,38 @@ def main():
                             video_url = retrieve_signed_video_url(args.api_base, media_id)
                             size_bytes = download_video(video_url, out_path)
                             results.append({"scene": sc_num, "status": "SUCCESS", "output": out_path, "size": size_bytes})
+                            completed_sc_nums.add(sc_num)
                             log(f"  ✅ [Batch Video OK] Scene {sc_num:02d} saved: {os.path.basename(out_path)} ({size_bytes / (1024*1024):.2f} MB)")
                         except Exception as dl_err:
                             log(f"  ⚠️ Error downloading Scene {sc_num:02d}: {dl_err}")
-                            results.append({"scene": sc_num, "status": "FAILED", "error": str(dl_err)})
                 except Exception as b_err:
-                    log(f"  ⚠️ Batch monitoring error: {b_err}")
-                    for bi in batch_items:
-                        results.append({"scene": bi["scene_num"], "status": "FAILED", "error": str(b_err)})
+                    log(f"  ⚠️ Batch monitoring notice: {b_err}")
+
+                # Automatic retry for any missed or failed scenes in batch
+                missed_items = [b for b in batch_items if b["scene_num"] not in completed_sc_nums]
+                if missed_items:
+                    log(f"\n  🔄 {len(missed_items)} scene(s) missed or flagged in batch {batch}. Initiating single-scene fallback with Policy Filter Sanitizer...")
+                    for m_item in missed_items:
+                        m_sc_idx = m_item["scene_num"]
+                        m_out_mp4 = m_item["output_path"]
+                        m_img_path = m_item["image_path"]
+                        m_prompt = m_item["prompt"]
+                        try:
+                            gen_res = generate_video_flow(
+                                image_path=m_img_path,
+                                prompt=m_prompt,
+                                output_path=m_out_mp4,
+                                api_base=args.api_base,
+                                project_id=args.project_id,
+                                aspect_ratio=args.aspect_ratio,
+                                skip_upload=True
+                            )
+                            results.append({"scene": m_sc_idx, "status": "SUCCESS", "output": m_out_mp4, "size": gen_res.get("file_size_bytes")})
+                            completed_sc_nums.add(m_sc_idx)
+                            log(f"  ✅ [Fallback OK] Scene {m_sc_idx:02d} saved: {os.path.basename(m_out_mp4)}")
+                        except Exception as fb_err:
+                            log(f"  ❌ Fallback failed for Scene {m_sc_idx:02d}: {fb_err}")
+                            results.append({"scene": m_sc_idx, "status": "FAILED", "error": str(fb_err)})
         else:
             # Single-scene sequential fallback
             for sc_idx in batch:
