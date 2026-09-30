@@ -384,6 +384,40 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
 select_storyboard_image_chip = attach_start_frame
 
 
+def ensure_video_mode(api_base: str) -> bool:
+    """Ensures Google Flow prompt box is toggled to Video mode ('videocam วิดีโอ')."""
+    toggle_js = """(() => {
+        const toggles = Array.from(document.querySelectorAll('mat-button-toggle, button'));
+        const videoBtn = toggles.find(el => {
+            const t = (el.innerText || '').toLowerCase();
+            return (t.includes('videocam') || t.includes('วิดีโอ') || t.includes('video')) && !t.includes('720p');
+        });
+        if (videoBtn) {
+            const isSelected = videoBtn.getAttribute('aria-selected') === 'true' ||
+                               videoBtn.getAttribute('aria-checked') === 'true' ||
+                               videoBtn.classList.contains('mat-button-toggle-checked');
+            if (!isSelected) {
+                const clickTarget = videoBtn.querySelector('button') || videoBtn;
+                clickTarget.click();
+                return { toggled: true, wasSelected: false };
+            }
+            return { toggled: false, wasSelected: true };
+        }
+        return { error: "video toggle button not found" };
+    })()"""
+    try:
+        res = inspect_tab_js(api_base, toggle_js)
+        if isinstance(res, dict) and res.get("toggled"):
+            log("Switched Google Flow prompt box to Video mode.")
+            time.sleep(1.0)
+        else:
+            log("Google Flow prompt box is verified in Video mode.")
+        return True
+    except Exception as e:
+        log(f"Notice on ensuring video mode: {e}")
+        return False
+
+
 def set_aspect_ratio(api_base: str, aspect: str = "16:9") -> bool:
     """Sets video aspect ratio to 16:9 or 9:16 in Google Flow settings overlay."""
     is_landscape = (aspect == "16:9" or "landscape" in aspect.lower())
@@ -623,6 +657,10 @@ def dispatch_video_flow(
     select_storyboard_image_chip(api_base, file_name, project_id=project_id)
     time.sleep(0.5)
 
+    # 2.5 Ensure prompt box is in Video mode
+    ensure_video_mode(api_base)
+    time.sleep(0.3)
+
     # 3. Configure aspect ratio
     set_aspect_ratio(api_base, aspect=aspect_ratio)
     time.sleep(0.5)
@@ -805,6 +843,10 @@ def generate_video_flow(
             attach_start_frame(api_base, file_name)
         else:
             raise
+
+    # 3.5 Ensure prompt box is in Video mode
+    ensure_video_mode(api_base)
+    time.sleep(0.3)
 
     # 4. Configure Aspect Ratio
     set_aspect_ratio(api_base, aspect_ratio)
