@@ -134,7 +134,7 @@ def resolve_lakorn_character_sheets(story_path: str, ep_num: int, scene_num: int
     if os.path.isdir(char_scene_dir):
         # find matching file
         for fname in os.listdir(char_scene_dir):
-            if f"Scene {scene_num:02d}" in fname or f"Scene {scene_num}" in fname:
+            if re.search(rf"(?:Scene\s*0*{scene_num}(?:\D|$)|^0*{scene_num}\s*-)", fname, re.IGNORECASE):
                 filepath = os.path.join(char_scene_dir, fname)
                 with open(filepath, "r", encoding="utf-8") as f:
                     content = f.read()

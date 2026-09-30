@@ -499,17 +499,24 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
             if not ref_img_path or not os.path.isfile(ref_img_path):
                 continue
             filename = os.path.basename(ref_img_path)
+            c_name = filename.split(" - ")[0]
+            filename_no_ext = os.path.splitext(filename)[0]
 
-            # Open add menu to check if asset already in project
+            # 2.1 Open add menu if not open
             open_menu_js = """(() => {
-                const trigger = document.querySelector('button.add-menu-trigger') ||
-                                document.querySelector('button[aria-label*="เพิ่มองค์ประกอบ"]');
-                if (trigger) { trigger.click(); return true; }
-                return false;
+                let popover = document.querySelector('flow-add-menu-popover-content');
+                if (!popover) {
+                    const trigger = document.querySelector('button.add-menu-trigger') ||
+                                    Array.from(document.querySelectorAll('button')).find(b => (b.getAttribute('aria-label')||'').includes('เพิ่มองค์ประกอบ'));
+                    if (trigger) { trigger.click(); return true; }
+                    return false;
+                }
+                return true;
             })()"""
             await eval_js(open_menu_js)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.6)
 
+            # 2.2 Filter to 'รูปภาพ' / 'image'
             filter_img_js = """(() => {
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return false;
@@ -519,25 +526,27 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 return false;
             })()"""
             await eval_js(filter_img_js)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.6)
 
+            # 2.3 Check if asset already exists in list
             find_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return false;
                 const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
-                return items.some(el => (el.innerText || '').includes("{filename}"));
+                return items.some(el => {{
+                    const t = el.innerText || '';
+                    return t.includes("{filename}") || t.includes("{filename_no_ext}") || t.includes("{c_name}");
+                }});
             }})()"""
             asset_exists = await eval_js(find_item_js)
 
-            # Close popover
-            await eval_js("""(() => {
-                const backdrop = document.querySelector('.cdk-overlay-backdrop');
-                if (backdrop) backdrop.click();
-            })()""")
-            await asyncio.sleep(0.3)
-
-            # If not uploaded, upload now
+            # If not uploaded, upload and reload
             if not asset_exists:
+                await eval_js("""(() => {
+                    const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                    if (backdrop) backdrop.click();
+                })()""")
+                await asyncio.sleep(0.3)
                 try:
                     with open(ref_img_path, "rb") as f:
                         b64 = base64.b64encode(f.read()).decode()
@@ -549,26 +558,60 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 except Exception as up_err:
                     pass
 
-            # Attach asset chip into prompt box
-            await eval_js(open_menu_js)
-            await asyncio.sleep(0.5)
-            await eval_js(filter_img_js)
-            await asyncio.sleep(0.5)
+                # Re-open and re-filter after reload
+                await eval_js(open_menu_js)
+                await asyncio.sleep(0.6)
+                await eval_js(filter_img_js)
+                await asyncio.sleep(0.6)
 
+            # 2.4 Click target asset item
             click_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return {{ error: 'popover not found' }};
                 const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
-                const target = items.find(el => (el.innerText || '').includes("{filename}")) || items[0];
+                const target = items.find(el => {{
+                    const t = el.innerText || '';
+                    return t.includes("{filename}") || t.includes("{filename_no_ext}") || t.includes("{c_name}");
+                }}) || items[0];
                 if (target) {{
                     const btn = target.querySelector('button') || target;
                     btn.click();
-                    return {{ ok: true, name: target.innerText.trim() }};
+                    return {{ ok: true, name: (target.innerText || '').trim() }};
                 }}
                 return {{ error: 'item not found' }};
             }})()"""
             await eval_js(click_item_js)
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(0.8)
+
+            # 2.5 Click "เพิ่มไปยังพรอมต์" in detail pane if present
+            add_prompt_js = """(() => {
+                const addBtn = document.querySelector('flow-add-menu-detail-pane button.detail-add-to-prompt-btn') ||
+                               Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => (b.innerText || '').includes('เพิ่มไปยังพรอมต์') || (b.innerText || '').includes('Add to prompt'));
+                if (addBtn) {
+                    addBtn.click();
+                    return { clicked: true };
+                }
+                return { clicked: false };
+            })()"""
+            await eval_js(add_prompt_js)
+            await asyncio.sleep(0.8)
+
+            # 2.6 Close popover if still open
+            close_popover_js = """(() => {
+                const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                if (backdrop) backdrop.click();
+                return true;
+            })()"""
+            await eval_js(close_popover_js)
+            await asyncio.sleep(0.5)
+
+        # 2.7 Verify chips in prompt box
+        verify_chips_js = """(() => {
+            const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip, flow-prompt-box .chip-container'));
+            return chips.length;
+        })()"""
+        attached_chip_count = await eval_js(verify_chips_js)
+        logger.info("Prompt box ingredient chips attached: %s", attached_chip_count)
 
     # 3. Submit prompt via CDP with aspect ratio
     cdp_res = await client._send("flow_cdp_type_text", {
@@ -636,7 +679,7 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
     # 5. Download image to output_path if provided
     if body.output_path:
         os.makedirs(os.path.dirname(os.path.abspath(body.output_path)), exist_ok=True)
-        async with httpx.AsyncClient() as http_client:
+        async with httpx.AsyncClient(follow_redirects=True) as http_client:
             resp = await http_client.get(generated_img_url, timeout=30.0)
             if resp.status_code == 200:
                 with open(body.output_path, "wb") as f:
