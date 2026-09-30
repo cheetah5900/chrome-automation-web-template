@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Tuple
 
 DEFAULT_API_BASE = "http://127.0.0.1:6969"
 DEFAULT_PROJECT_ID = "21a1632e-9926-46fa-954c-240d71d78f41"  # ละคร
+DEFAULT_STICKMAN_PROJECT_ID = "527f23e9-8586-4712-934e-dcf0b7d87417"  # Stickman
 
 def log(msg: str):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -151,6 +152,9 @@ def load_stickman_scenes(story_path: str, aspect_ratio: str) -> Dict[int, Dict]:
     if not os.path.isfile(prompts_file):
         return {}
 
+    channel_root = os.path.dirname(os.path.abspath(story_path))
+    bald_sheet = os.path.join(channel_root, "Character Sheet", "stickman_bald_master_sheet.jpg")
+
     scenes = {}
     with open(prompts_file, "r", encoding="utf-8") as f:
         for line in f:
@@ -159,18 +163,21 @@ def load_stickman_scenes(story_path: str, aspect_ratio: str) -> Dict[int, Dict]:
             if m:
                 b_num = int(m.group(1))
                 desc = m.group(2).strip()
-                if "⚪" in desc or "White Background" in desc:
+                is_white_bg = "⚪" in desc or "White Background" in desc
+                if is_white_bg:
                     clean_desc = desc.replace("⚪ White Background 100%.", "").replace("⚪", "").strip()
                     full_prompt = f"Horizontal 16:9 composition on a plain clean solid 100% pure white textured paper background only. In the center, bold black hand-drawn marker typography and doodle, {clean_desc}, with a bold thick red marker X crossed out where applicable, high contrast, clean doodle explainer aesthetic, 100% pure white paper backdrop, no background environment."
+                    ref_imgs = []
                 else:
                     clean_desc = re.sub(r"^Full-bleed 16:9\.?\s*", "", desc).strip()
                     clean_desc = re.sub(r"with comic sound effects\.?", "", clean_desc, flags=re.I).strip()
                     full_prompt = f"Full-bleed 16:9 widescreen composition filling the entire frame from edge to edge, no border, no white margin, no vignette, no comic text bubbles, no sound effect words. Hand-drawn doodle ink explainer style on textured paper, soft muted watercolor wash and gentle gouache shading, fine crosshatching, gentle atmospheric lighting. The minimalist white bald stick figure with completely smooth round head and NO HAIR, {clean_desc}."
+                    ref_imgs = [bald_sheet] if os.path.isfile(bald_sheet) else []
 
                 out_file = os.path.join(out_dir, f"Beat_{b_num:02d}.jpg")
                 scenes[b_num] = {
                     "prompt": full_prompt,
-                    "reference_images": [],
+                    "reference_images": ref_imgs,
                     "output_path": out_file
                 }
     return scenes
@@ -221,6 +228,10 @@ def main():
         scenes_map = load_lakorn_scenes(story_path, ep_num, args.aspect_ratio)
     elif is_stickman:
         log("Detected format: Stickman Explainer")
+        if args.project_id == DEFAULT_PROJECT_ID:
+            args.project_id = DEFAULT_STICKMAN_PROJECT_ID
+        if args.aspect_ratio == "9:16":
+            args.aspect_ratio = "16:9"
         scenes_map = load_stickman_scenes(story_path, args.aspect_ratio)
     else:
         error_exit(f"Could not detect recognized prompt structure in {story_path}")
