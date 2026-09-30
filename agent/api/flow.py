@@ -528,7 +528,23 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
             await eval_js(filter_img_js)
             await asyncio.sleep(0.6)
 
-            # 2.3 Check if asset already exists in list
+            # 2.3 Search for character in search box to filter list with 100% precision
+            search_item_js = f"""(() => {{
+                const popover = document.querySelector('flow-add-menu-popover-content');
+                if (!popover) return false;
+                const searchInput = popover.querySelector('input.search-input');
+                if (searchInput) {{
+                    searchInput.value = "{c_name}";
+                    searchInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    searchInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    return true;
+                }}
+                return false;
+            }})()"""
+            await eval_js(search_item_js)
+            await asyncio.sleep(0.4)
+
+            # 2.4 Check if asset already exists in list
             find_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return false;
@@ -558,13 +574,15 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 except Exception as up_err:
                     pass
 
-                # Re-open and re-filter after reload
+                # Re-open, re-filter, and re-search after reload
                 await eval_js(open_menu_js)
                 await asyncio.sleep(0.6)
                 await eval_js(filter_img_js)
                 await asyncio.sleep(0.6)
+                await eval_js(search_item_js)
+                await asyncio.sleep(0.4)
 
-            # 2.4 Click target asset item
+            # 2.5 Click target asset item from filtered results
             click_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return {{ error: 'popover not found' }};
