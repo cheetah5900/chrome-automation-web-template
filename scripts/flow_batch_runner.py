@@ -45,6 +45,218 @@ def parse_range(range_str: str) -> list[int]:
             result.add(int(part))
     return sorted(list(result))
 
+def run_bulk_video_pipeline(
+    scenes_data: list[dict],
+    api_base: str = DEFAULT_API_BASE,
+    project_id: str = DEFAULT_PROJECT_ID,
+    aspect_ratio: str = "9:16",
+    delay: float = 3.0,
+    timeout: int = 600,
+    auto_retry_filters: bool = True
+) -> dict:
+    """Executes Universal 4-Phase Bulk Video Generation Engine:
+    Phase 1: Full-EP Bulk Dispatch (all prompts queued rapidly without stopping)
+    Phase 2: Bulk Monitor & Collect (concurrent rendering wait & download)
+    Phase 3: Filter Audit & Batch Sanitization (scans for failed/moderated scenes)
+    Phase 4: Bulk Retry Dispatch (re-queues all sanitized scenes in a single pass)
+    """
+    log("="*60)
+    log(f"🚀 [6969 Universal Video Pipeline] Starting bulk generation for {len(scenes_data)} scenes")
+    log("="*60)
+
+    # 1. Lock settings: Video Mode, Aspect Ratio, x1 Output Count
+    log(f"\n🔒 Verifying Google Flow video settings (Video Mode, {aspect_ratio}, x1 single video)...")
+    ensure_video_settings(api_base, aspect=aspect_ratio, output_count=1)
+
+    completed_sc_nums = set()
+    results = []
+
+    # Filter out already existing/verified files
+    pending_scenes = []
+    for sc in scenes_data:
+        out_mp4 = sc.get("output_path", "")
+        sc_num = sc.get("scene_num", 0)
+        if out_mp4 and os.path.exists(out_mp4) and os.path.getsize(out_mp4) > 500000:
+            log(f"  ✅ [Already Exists] Scene {sc_num:02d} verified on disk: {os.path.basename(out_mp4)}")
+            completed_sc_nums.add(sc_num)
+            results.append({"scene": sc_num, "status": "SUCCESS", "output": out_mp4, "size": os.path.getsize(out_mp4)})
+        else:
+            pending_scenes.append(sc)
+
+    if not pending_scenes:
+        log("🎉 All requested scenes already have verified video files! Done.")
+        return {
+            "success": True,
+            "total": len(scenes_data),
+            "completed": len(completed_sc_nums),
+            "completed_scenes": sorted(list(completed_sc_nums)),
+            "failed_scenes": [],
+            "results": results
+        }
+
+    # =========================================================================
+    # PHASE 1: FULL BULK DISPATCH (Queue all scenes consecutively without stopping)
+    # =========================================================================
+    log(f"\n⚡ [Phase 1: Bulk Dispatch] Queueing {len(pending_scenes)} scene(s) into Google Flow...")
+    initial_ids = get_existing_video_ids(api_base)
+    dispatched_items = []
+
+    for q_idx, sc in enumerate(pending_scenes, start=1):
+        sc_num = sc.get("scene_num", 0)
+        img_path = sc.get("image_path", "")
+        raw_prompt = sc.get("prompt", "")
+        out_mp4 = sc.get("output_path", "")
+
+        # Initial Tier 1 sanitization
+        prompt_text = sanitize_prompt_for_safety(raw_prompt, tier=1)
+
+        log(f"  ⚡ [{q_idx}/{len(pending_scenes)}] Dispatching Scene {sc_num:02d} with image: {os.path.basename(img_path)}...")
+        try:
+            dispatch_video_flow(
+                image_path=img_path,
+                prompt=prompt_text,
+                api_base=api_base,
+                project_id=project_id,
+                aspect_ratio=aspect_ratio,
+                wait_after_submit=3.0
+            )
+            dispatched_items.append({
+                "scene_num": sc_num,
+                "prompt": raw_prompt,
+                "output_path": out_mp4,
+                "image_path": img_path
+            })
+            log(f"     ✅ Queued Scene {sc_num:02d} into Google Flow queue!")
+        except Exception as e:
+            log(f"     ⚠️ Dispatch error on Scene {sc_num:02d}: {e}")
+            results.append({"scene": sc_num, "status": "FAILED", "error": str(e)})
+
+        time.sleep(delay)
+
+    # =========================================================================
+    # PHASE 2: BULK MONITOR & DOWNLOAD
+    # =========================================================================
+    if dispatched_items:
+        log(f"\n⏳ [Phase 2: Bulk Monitor] Waiting for Google Flow concurrent video rendering ({len(dispatched_items)} scenes)...")
+        try:
+            matched_results = monitor_video_batch(
+                api_base=api_base,
+                batch_scenes=dispatched_items,
+                timeout_seconds=timeout,
+                initial_ids=initial_ids
+            )
+            for sc, tl in matched_results:
+                media_id = tl.get("media_id")
+                sc_num = sc.get("scene_num")
+                out_path = sc.get("output_path")
+                try:
+                    video_url = retrieve_signed_video_url(api_base, media_id)
+                    size_bytes = download_video(video_url, out_path)
+                    results.append({"scene": sc_num, "status": "SUCCESS", "output": out_path, "size": size_bytes})
+                    completed_sc_nums.add(sc_num)
+                    log(f"  ✅ [Bulk Video OK] Scene {sc_num:02d} saved: {os.path.basename(out_path)} ({size_bytes / (1024*1024):.2f} MB)")
+                except Exception as dl_err:
+                    log(f"  ⚠️ Error downloading Scene {sc_num:02d}: {dl_err}")
+        except Exception as b_err:
+            log(f"  ⚠️ Bulk monitoring notice: {b_err}")
+
+    # =========================================================================
+    # PHASE 3: FILTER AUDIT & BATCH SANITIZATION
+    # =========================================================================
+    missed_items = [b for b in dispatched_items if b["scene_num"] not in completed_sc_nums]
+    # Check if any missed item was actually downloaded
+    real_missed = []
+    for m_item in missed_items:
+        m_out = m_item["output_path"]
+        m_sc = m_item["scene_num"]
+        if os.path.exists(m_out) and os.path.getsize(m_out) > 500000:
+            completed_sc_nums.add(m_sc)
+            results.append({"scene": m_sc, "status": "SUCCESS", "output": m_out, "size": os.path.getsize(m_out)})
+        else:
+            real_missed.append(m_item)
+
+    if real_missed and auto_retry_filters:
+        log(f"\n🔍 [Phase 3: Filter Audit] Detected {len(real_missed)} scene(s) missed or flagged by policy filters: {[m['scene_num'] for m in real_missed]}")
+        log(f"🧹 Sanitizing all {len(real_missed)} prompts (Tier 2 Moderation Bypass)...")
+
+        # =========================================================================
+        # PHASE 4: BULK RETRY DISPATCH (Re-queue all sanitized scenes together)
+        # =========================================================================
+        log(f"\n🔄 [Phase 4: Bulk Retry Dispatch] Dispatching sanitized repair batch...")
+        retry_initial_ids = get_existing_video_ids(api_base)
+        retry_items = []
+
+        for r_idx, r_item in enumerate(real_missed, start=1):
+            r_sc = r_item["scene_num"]
+            r_img = r_item["image_path"]
+            r_out = r_item["output_path"]
+            sanitized_text = sanitize_prompt_for_safety(r_item["prompt"], tier=2)
+
+            log(f"  ⚡ [Retry Queue {r_idx}/{len(real_missed)}] Dispatching Sanitized Scene {r_sc:02d}...")
+            try:
+                dispatch_video_flow(
+                    image_path=r_img,
+                    prompt=sanitized_text,
+                    api_base=api_base,
+                    project_id=project_id,
+                    aspect_ratio=aspect_ratio,
+                    wait_after_submit=3.0
+                )
+                retry_items.append({
+                    "scene_num": r_sc,
+                    "prompt": sanitized_text,
+                    "output_path": r_out,
+                    "image_path": r_img
+                })
+                log(f"     ✅ Re-queued Scene {r_sc:02d} with sanitized prompt!")
+            except Exception as e:
+                log(f"     ⚠️ Retry dispatch error on Scene {r_sc:02d}: {e}")
+
+            time.sleep(delay)
+
+        if retry_items:
+            log(f"\n⏳ [Phase 4: Bulk Retry Monitor] Waiting for repair batch rendering ({len(retry_items)} scenes)...")
+            try:
+                retry_matched = monitor_video_batch(
+                    api_base=api_base,
+                    batch_scenes=retry_items,
+                    timeout_seconds=timeout,
+                    initial_ids=retry_initial_ids
+                )
+                for sc, tl in retry_matched:
+                    media_id = tl.get("media_id")
+                    sc_num = sc.get("scene_num")
+                    out_path = sc.get("output_path")
+                    try:
+                        video_url = retrieve_signed_video_url(api_base, media_id)
+                        size_bytes = download_video(video_url, out_path)
+                        results.append({"scene": sc_num, "status": "SUCCESS", "output": out_path, "size": size_bytes})
+                        completed_sc_nums.add(sc_num)
+                        log(f"  ✅ [Retry Video OK] Scene {sc_num:02d} saved: {os.path.basename(out_path)} ({size_bytes / (1024*1024):.2f} MB)")
+                    except Exception as dl_err:
+                        log(f"  ⚠️ Error downloading retry Scene {sc_num:02d}: {dl_err}")
+            except Exception as r_err:
+                log(f"  ⚠️ Retry batch monitoring notice: {r_err}")
+
+    # Final tally
+    all_target_nums = set(s.get("scene_num", 0) for s in scenes_data)
+    failed_nums = sorted(list(all_target_nums - completed_sc_nums))
+
+    log("\n" + "="*60)
+    log(f"🏁 [6969 Universal Video Pipeline Complete] Success: {len(completed_sc_nums)}/{len(scenes_data)} scenes.")
+    if failed_nums:
+        log(f"⚠️ Failed/Missed scenes: {failed_nums}")
+    log("="*60)
+
+    return {
+        "success": len(failed_nums) == 0,
+        "total": len(scenes_data),
+        "completed": len(completed_sc_nums),
+        "completed_scenes": sorted(list(completed_sc_nums)),
+        "failed_scenes": failed_nums,
+        "results": results
+    }
+
 def main():
     parser = argparse.ArgumentParser(description="Headless Google Flow Batch Video Generator")
     parser.add_argument("--story-path", "-s", required=True, type=str, help="Root path of the Lakorn story folder")
@@ -154,165 +366,40 @@ def main():
     elif args.skip_upload:
         log("Skipping storyboard image upload as requested (--skip-upload).")
 
-    # 3. Process scenes in batches of batch_size (default: 5)
-    # Lock Google Flow video settings: Video Mode, Aspect Ratio, x1 Output Count
-    log(f"\n🔒 Verifying Google Flow video settings (Video Mode, {args.aspect_ratio}, x1 single video)...")
-    ensure_video_settings(args.api_base, aspect=args.aspect_ratio, output_count=1)
+    # 3. Build scenes_data payload
+    scenes_data = []
+    for sc_idx in scenes_to_run:
+        sc_str = f"{sc_idx:02d} - Scene {sc_idx:02d}"
+        img_path = available_scenes[sc_idx]
+        out_mp4 = os.path.join(out_dir, f"{sc_str}.mp4")
+        prompt_file = os.path.join(prompt_dir, f"{sc_str}.md")
+        if not os.path.isfile(prompt_file):
+            log(f"  ⚠️ Warning: Prompt file not found: {prompt_file}, skipping.")
+            continue
+        with open(prompt_file, "r", encoding="utf-8") as pf:
+            prompt_text = pf.read().strip()
+        scenes_data.append({
+            "scene_num": sc_idx,
+            "prompt": prompt_text,
+            "image_path": img_path,
+            "output_path": out_mp4
+        })
 
-    batch_size = max(1, args.batch_size)
-    batches = [scenes_to_run[i:i + batch_size] for i in range(0, len(scenes_to_run), batch_size)]
-
-    log(f"\n🚀 Starting video generation: {len(batches)} batches for {len(scenes_to_run)} scenes (Batch size: {batch_size})")
-
-    for batch_idx, batch in enumerate(batches):
-        log("\n" + "="*50)
-        log(f"📦 VIDEO BATCH {batch_idx + 1}/{len(batches)} : Scenes {batch}")
-        log("="*50)
-
-        if len(batch) > 1 and batch_size > 1:
-            # 3.1 Snapshot existing video IDs before dispatching
-            initial_ids = get_existing_video_ids(args.api_base)
-            log(f"  Recorded {len(initial_ids)} existing video tiles before dispatching.")
-
-            # 3.2 Dispatch all scenes in batch rapidly with storyboard images attached
-            batch_items = []
-            for q_idx, sc_idx in enumerate(batch, 1):
-                sc_str = f"{sc_idx:02d} - Scene {sc_idx:02d}"
-                img_path = available_scenes[sc_idx]
-                out_mp4 = os.path.join(out_dir, f"{sc_str}.mp4")
-
-                prompt_file = os.path.join(prompt_dir, f"{sc_str}.md")
-                if not os.path.isfile(prompt_file):
-                    log(f"  ⚠️ Warning: Prompt file not found: {prompt_file}, skipping.")
-                    results.append({"scene": sc_idx, "status": "FAILED", "error": "Prompt file not found"})
-                    continue
-
-                with open(prompt_file, "r", encoding="utf-8") as pf:
-                    prompt_text = pf.read().strip()
-
-                # Always sanitize upfront to avoid false positive policy filter blocks
-                prompt_text = sanitize_prompt_for_safety(prompt_text, tier=1)
-
-                log(f"\n  ⚡ [Queue {q_idx}/{len(batch)}] Dispatching Scene {sc_idx:02d} with image: {os.path.basename(img_path)}...")
-                try:
-                    dispatch_video_flow(
-                        image_path=img_path,
-                        prompt=prompt_text,
-                        api_base=args.api_base,
-                        project_id=args.project_id,
-                        aspect_ratio=args.aspect_ratio,
-                        wait_after_submit=3.0
-                    )
-                    batch_items.append({
-                        "scene_num": sc_idx,
-                        "prompt": prompt_text,
-                        "output_path": out_mp4,
-                        "image_path": img_path
-                    })
-                    log(f"     ✅ Queued Scene {sc_idx:02d} into Google Flow with storyboard chip attached!")
-                except Exception as e:
-                    log(f"     ⚠️ Dispatch error on Scene {sc_idx:02d}: {e}")
-                    results.append({"scene": sc_idx, "status": "FAILED", "error": str(e)})
-
-                time.sleep(args.delay)
-
-            # 3.3 Concurrently monitor and download rendered video batch
-            if batch_items:
-                log(f"\n  ⏳ All {len(batch_items)} video prompts queued with storyboard chips! Waiting for Google Flow concurrent video rendering...")
-                completed_sc_nums = set()
-                try:
-                    matched_results = monitor_video_batch(
-                        api_base=args.api_base,
-                        batch_scenes=batch_items,
-                        timeout_seconds=args.timeout,
-                        initial_ids=initial_ids
-                    )
-                    for sc, tl in matched_results:
-                        media_id = tl.get("media_id")
-                        sc_num = sc.get("scene_num")
-                        out_path = sc.get("output_path")
-                        try:
-                            video_url = retrieve_signed_video_url(args.api_base, media_id)
-                            size_bytes = download_video(video_url, out_path)
-                            results.append({"scene": sc_num, "status": "SUCCESS", "output": out_path, "size": size_bytes})
-                            completed_sc_nums.add(sc_num)
-                            log(f"  ✅ [Batch Video OK] Scene {sc_num:02d} saved: {os.path.basename(out_path)} ({size_bytes / (1024*1024):.2f} MB)")
-                        except Exception as dl_err:
-                            log(f"  ⚠️ Error downloading Scene {sc_num:02d}: {dl_err}")
-                except Exception as b_err:
-                    log(f"  ⚠️ Batch monitoring notice: {b_err}")
-
-                # Automatic retry for any missed or failed scenes in batch
-                missed_items = [b for b in batch_items if b["scene_num"] not in completed_sc_nums]
-                if missed_items:
-                    log(f"\n  🔄 {len(missed_items)} scene(s) missed or flagged in batch {batch}. Initiating single-scene fallback with Policy Filter Sanitizer...")
-                    for m_item in missed_items:
-                        m_sc_idx = m_item["scene_num"]
-                        m_out_mp4 = m_item["output_path"]
-                        m_img_path = m_item["image_path"]
-                        m_prompt = m_item["prompt"]
-
-                        if os.path.exists(m_out_mp4) and os.path.getsize(m_out_mp4) > 500000:
-                            log(f"  ✅ [Fallback Skip] Scene {m_sc_idx:02d} already downloaded and verified: {os.path.basename(m_out_mp4)}")
-                            completed_sc_nums.add(m_sc_idx)
-                            results.append({"scene": m_sc_idx, "status": "SUCCESS", "output": m_out_mp4, "size": os.path.getsize(m_out_mp4)})
-                            continue
-
-                        try:
-                            gen_res = generate_video_flow(
-                                image_path=m_img_path,
-                                prompt=m_prompt,
-                                output_path=m_out_mp4,
-                                api_base=args.api_base,
-                                project_id=args.project_id,
-                                aspect_ratio=args.aspect_ratio,
-                                skip_upload=True
-                            )
-                            results.append({"scene": m_sc_idx, "status": "SUCCESS", "output": m_out_mp4, "size": gen_res.get("file_size_bytes")})
-                            completed_sc_nums.add(m_sc_idx)
-                            log(f"  ✅ [Fallback OK] Scene {m_sc_idx:02d} saved: {os.path.basename(m_out_mp4)}")
-                        except Exception as fb_err:
-                            log(f"  ❌ Fallback failed for Scene {m_sc_idx:02d}: {fb_err}")
-                            results.append({"scene": m_sc_idx, "status": "FAILED", "error": str(fb_err)})
-        else:
-            # Single-scene sequential fallback
-            for sc_idx in batch:
-                sc_str = f"{sc_idx:02d} - Scene {sc_idx:02d}"
-                img_path = available_scenes[sc_idx]
-                out_mp4 = os.path.join(out_dir, f"{sc_str}.mp4")
-
-                prompt_file = os.path.join(prompt_dir, f"{sc_str}.md")
-                if not os.path.isfile(prompt_file):
-                    log(f"Warning: Prompt file not found: {prompt_file}, skipping.")
-                    results.append({"scene": sc_idx, "status": "FAILED", "error": "Prompt file not found"})
-                    continue
-
-                with open(prompt_file, "r", encoding="utf-8") as pf:
-                    prompt_text = pf.read().strip()
-
-                prompt_text = sanitize_prompt_for_safety(prompt_text, tier=1)
-
-                log(f"\n  🎬 Rendering Scene {sc_idx:02d} ({args.aspect_ratio}) [Single Scene] -> {os.path.basename(img_path)}...")
-                try:
-                    gen_res = generate_video_flow(
-                        image_path=img_path,
-                        prompt=prompt_text,
-                        output_path=out_mp4,
-                        api_base=args.api_base,
-                        project_id=args.project_id,
-                        aspect_ratio=args.aspect_ratio,
-                        skip_upload=True
-                    )
-                    results.append({"scene": sc_idx, "status": "SUCCESS", "output": out_mp4, "size": gen_res.get("file_size_bytes")})
-                    log(f"  ✅ Successfully rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_mp4)}")
-                except Exception as e:
-                    log(f"  ⚠️ ERROR on Scene {sc_idx}: {e}")
-                    results.append({"scene": sc_idx, "status": "FAILED", "error": str(e)})
+    # 4. Run Universal Bulk Pipeline
+    pipeline_res = run_bulk_video_pipeline(
+        scenes_data=scenes_data,
+        api_base=args.api_base,
+        project_id=args.project_id,
+        aspect_ratio=args.aspect_ratio,
+        delay=args.delay,
+        timeout=args.timeout,
+        auto_retry_filters=True
+    )
 
     log("\n==================================================")
     log(" Batch Video Generation Summary")
     log("==================================================")
-    print(json.dumps(results, indent=2, ensure_ascii=False))
+    print(json.dumps(pipeline_res, indent=2, ensure_ascii=False))
 
     # Trigger CapCut automatic project builder
     if args.auto_capcut:

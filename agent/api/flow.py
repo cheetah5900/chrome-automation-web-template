@@ -457,6 +457,22 @@ class CollectStoryboardBatchRequest(BaseModel):
     poll_interval: float = 3.0
 
 
+class VideoBatchSceneInput(BaseModel):
+    scene_num: int
+    prompt: str
+    image_path: str
+    output_path: str
+
+
+class RunVideoBatchRequest(BaseModel):
+    scenes: list[VideoBatchSceneInput]
+    aspect_ratio: str = "9:16"
+    project_id: Optional[str] = "21a1632e-9926-46fa-954c-240d71d78f41"
+    timeout_seconds: int = 600
+    delay_between_dispatches: float = 3.0
+    auto_retry_filters: bool = True
+
+
 async def _eval_js_internal(client, js_code: str, timeout: int = 15):
     raw = await client._send("inspect_tab", {"js": js_code}, timeout=timeout)
     script_res = raw.get("result", {}).get("res", {}) if isinstance(raw, dict) and "result" in raw else (raw.get("res", {}) if isinstance(raw, dict) else {})
@@ -1470,3 +1486,34 @@ def parse_models_from_json(data):
                 
     traverse(data)
     return models
+
+
+@router.post("/generate-video-batch")
+@router.post("/run-video-batch")
+async def run_video_batch_endpoint(body: RunVideoBatchRequest):
+    """Universal 6969 Batch Video Generation Engine:
+    Phase 1: Full-EP Bulk Dispatch (all prompts queued rapidly without stopping)
+    Phase 2: Bulk Monitor & Collect (concurrent rendering wait & download)
+    Phase 3: Filter Audit & Batch Sanitization (scans for failed/moderated scenes)
+    Phase 4: Bulk Retry Dispatch (re-queues all sanitized scenes in a single pass)
+    """
+    import asyncio
+    from scripts.flow_batch_runner import run_bulk_video_pipeline
+
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "FlowKit extension not connected")
+
+    scenes_data = [s.model_dump() for s in body.scenes]
+
+    result = await asyncio.to_thread(
+        run_bulk_video_pipeline,
+        scenes_data=scenes_data,
+        api_base="http://127.0.0.1:6969",
+        project_id=body.project_id or "21a1632e-9926-46fa-954c-240d71d78f41",
+        aspect_ratio=body.aspect_ratio,
+        delay=body.delay_between_dispatches,
+        timeout=body.timeout_seconds,
+        auto_retry_filters=body.auto_retry_filters
+    )
+    return result
