@@ -664,7 +664,7 @@ async def _submit_flow_prompt_internal(
                 if (!popover) return false;
                 const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
                 return items.some(el => {{
-                    const t = (el.innerText || '').trim();
+                    const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim();
                     return t.includes("{filename}") || t.includes("{filename_no_ext}");
                 }});
             }})()"""
@@ -698,12 +698,12 @@ async def _submit_flow_prompt_internal(
                 if (!popover) return {{ error: 'popover not found' }};
                 const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
                 let target = items.find(el => {{
-                    const t = (el.innerText || '').trim();
+                    const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim();
                     return t.includes("{filename}") || t.includes("{filename_no_ext}");
                 }});
                 if (!target) {{
                     target = items.find(el => {{
-                        const t = (el.innerText || '').trim();
+                        const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim();
                         return t.includes("{c_name}");
                     }});
                 }}

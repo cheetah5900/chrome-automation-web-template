@@ -52,7 +52,8 @@ def run_bulk_video_pipeline(
     aspect_ratio: str = "9:16",
     delay: float = 3.0,
     timeout: int = 600,
-    auto_retry_filters: bool = True
+    auto_retry_filters: bool = True,
+    force: bool = False
 ) -> dict:
     """Executes Universal 4-Phase Bulk Video Generation Engine:
     Phase 1: Full-EP Bulk Dispatch (all prompts queued rapidly without stopping)
@@ -76,7 +77,7 @@ def run_bulk_video_pipeline(
     for sc in scenes_data:
         out_mp4 = sc.get("output_path", "")
         sc_num = sc.get("scene_num", 0)
-        if out_mp4 and os.path.exists(out_mp4) and os.path.getsize(out_mp4) > 500000:
+        if not force and out_mp4 and os.path.exists(out_mp4) and os.path.getsize(out_mp4) > 500000:
             log(f"  ✅ [Already Exists] Scene {sc_num:02d} verified on disk: {os.path.basename(out_mp4)}")
             completed_sc_nums.add(sc_num)
             results.append({"scene": sc_num, "status": "SUCCESS", "output": out_mp4, "size": os.path.getsize(out_mp4)})
@@ -403,7 +404,8 @@ def main():
             aspect_ratio=args.aspect_ratio,
             delay=args.delay,
             timeout=args.timeout,
-            auto_retry_filters=True
+            auto_retry_filters=True,
+            force=args.force
         )
         for r in sub_res.get("results", []):
             all_results.append(r)
