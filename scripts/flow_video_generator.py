@@ -492,7 +492,7 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
         return { clicked: false };
     })()"""
     inspect_tab_js(api_base, add_btn_js)
-    time.sleep(1.0)
+    time.sleep(0.3)
 
     # 6. Close backdrop if open
     close_js = """(() => {
@@ -501,7 +501,7 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
         return true;
     })()"""
     inspect_tab_js(api_base, close_js)
-    time.sleep(0.5)
+    time.sleep(0.2)
 
     # 7. STRICT VERIFICATION: ensure image chip is in flow-prompt-box
     verify_js = """(() => {
@@ -812,7 +812,8 @@ def dispatch_video_flow(
     api_base: str = DEFAULT_API_BASE,
     project_id: str = DEFAULT_PROJECT_ID,
     aspect_ratio: str = "9:16",
-    wait_after_submit: float = 3.0
+    wait_after_submit: float = 3.0,
+    check_settings: bool = False
 ) -> bool:
     """Dispatches a single video prompt to Google Flow queue with storyboard image attached as start frame."""
     file_name = os.path.basename(image_path)
@@ -825,20 +826,18 @@ def dispatch_video_flow(
 
     # 2. Attach storyboard image as start frame chip
     select_storyboard_image_chip(api_base, file_name, project_id=project_id)
-    time.sleep(0.5)
 
-    # 2.5 Ensure prompt box is in Video mode
-    ensure_video_mode(api_base)
-    time.sleep(0.3)
+    # 2.5 Only check/adjust settings if explicitly requested (already locked at batch session level)
+    if check_settings:
+        ensure_video_mode(api_base)
+        set_aspect_ratio(api_base, aspect=aspect_ratio)
+    else:
+        time.sleep(0.15)
 
-    # 3. Configure aspect ratio
-    set_aspect_ratio(api_base, aspect=aspect_ratio)
-    time.sleep(0.5)
-
-    # 4. Submit prompt via CDP
+    # 3. Submit prompt immediately via CDP
     submit_prompt_and_generate(api_base, clean_prompt, aspect=aspect_ratio)
 
-    # 5. Wait brief delay for Google Flow to queue the video pending tile
+    # 4. Wait brief delay for Google Flow to queue the video pending tile
     if wait_after_submit > 0:
         time.sleep(wait_after_submit)
 
