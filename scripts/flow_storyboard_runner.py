@@ -452,7 +452,7 @@ def main():
         failed_scenes = []
 
         # 5.2 Pass 1: Initial generation for batch
-        if len(scenes_to_process) > 1:
+        if len(scenes_to_process) >= 1:
             log(f"\n  🚀 [Rapid Batch Dispatch] Queueing {len(scenes_to_process)} scenes into Google Flow...")
 
             # 1. Snapshot existing tiles before dispatching

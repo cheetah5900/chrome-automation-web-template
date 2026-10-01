@@ -103,7 +103,7 @@ _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openro
 _ensure_json(PROMPTS_FILE, {"prompts": [""]})
 _ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2": "", "reference_image_3": "", "reference_image_4": "", "reference_image_5": "", "reference_image_6": "", "reference_image_7": "", "reference_images_dir": ""})
 
-app = FastAPI(title="Chrome Automation Template", version="1.13.18")
+app = FastAPI(title="Chrome Automation Template", version="1.13.19")
 last_submit_time = 0.0
 
 import time
@@ -604,36 +604,8 @@ def sync_ensure_chrome_debug_ready(port: int = 9222) -> bool:
 
 
 def _activate_chrome(driver=None, port: int = 9222):
-    if driver:
-        try:
-            _ = driver.current_window_handle
-        except Exception:
-            try:
-                handles = driver.window_handles
-                if handles:
-                    driver.switch_to.window(handles[0])
-            except Exception:
-                pass
-
-    if sys.platform != "darwin":
-        return
-
-    try:
-        pid_res = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, check=False)
-        pids = [p.strip() for p in pid_res.stdout.strip().split() if p.strip()]
-        if pids:
-            target_pid = pids[0]
-            script = f'''
-            tell application "System Events"
-                try
-                    set p to first process whose unix id is {target_pid}
-                    set frontmost of p to true
-                end try
-            end tell
-            '''
-            subprocess.run(["osascript", "-e", script], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
+    # Pure background execution: do NOT activate or steal OS window focus
+    return
 
 
 def is_driver_alive(driver) -> bool:
@@ -654,7 +626,6 @@ def _physical_switch_to_tab(url_part):
             repeat with t in tabs of w
                 if URL of t contains "{url_part}" then
                     set active tab index of w to tabIndex
-                    set index of w to 1
                     return true
                 end if
                 set tabIndex to tabIndex + 1

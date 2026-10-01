@@ -208,11 +208,7 @@ class HandleFileDialogRequest(BaseModel):
 
 @router.post("/focus-browser")
 async def focus_browser():
-    import subprocess, asyncio
-    as_script = '''
-    tell application "Google Chrome" to activate
-    '''
-    await asyncio.to_thread(subprocess.run, ["osascript", "-e", as_script], check=False)
+    # Background execution: do NOT activate or steal OS window focus
     return {"ok": True}
 
 
@@ -619,9 +615,9 @@ async def _submit_flow_prompt_internal(
 
     # 1. Clear existing chips and prompt text
     clear_js = """(() => {
-        const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip, flow-prompt-box .chip-container'));
+        const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip'));
         for (const chip of chips) {
-            const cancelBtn = chip.querySelector('.hover-icon-overlay, mat-icon, button') || chip;
+            const cancelBtn = chip.querySelector('mat-icon, .hover-icon-overlay') || chip;
             cancelBtn.click();
         }
         const pm = document.querySelector('.ProseMirror');
@@ -631,28 +627,44 @@ async def _submit_flow_prompt_internal(
     await _eval_js_internal(client, clear_js)
     await asyncio.sleep(0.4)
 
-    # 2. Attach reference images if provided
+    # 2. Attach reference images if provided (deduplicated, order preserved)
     if reference_images:
-        for ref_img_path in reference_images:
-            if not ref_img_path or not os.path.isfile(ref_img_path):
-                continue
+        unique_refs = []
+        seen = set()
+        for p in reference_images:
+            if p and os.path.isfile(p) and p not in seen:
+                seen.add(p)
+                unique_refs.append(p)
+
+        for ref_img_path in unique_refs:
             filename = os.path.basename(ref_img_path)
             c_name = filename.split(" - ")[0]
             filename_no_ext = os.path.splitext(filename)[0]
 
+            # A. Ensure previous popover and backdrop are closed cleanly
+            ensure_closed_js = """(() => {
+                const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                if (backdrop) backdrop.click();
+                return true;
+            })()"""
+            await _eval_js_internal(client, ensure_closed_js)
+            await asyncio.sleep(0.3)
+
+            # B. Open the element popover menu
             open_menu_js = """(() => {
                 let popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) {
                     const trigger = document.querySelector('button.add-menu-trigger') ||
-                                    Array.from(document.querySelectorAll('button')).find(b => (b.getAttribute('aria-label')||'').includes('เพิ่มองค์ประกอบ'));
+                                    Array.from(document.querySelectorAll('flow-prompt-box button')).find(b => (b.getAttribute('aria-label')||'').includes('เพิ่มองค์ประกอบ') || (b.innerText||'').includes('add'));
                     if (trigger) { trigger.click(); return true; }
                     return false;
                 }
                 return true;
             })()"""
             await _eval_js_internal(client, open_menu_js)
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(0.5)
 
+            # C. Switch to 'รูปภาพ' (Images) tab
             filter_img_js = """(() => {
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return false;
@@ -662,12 +674,13 @@ async def _submit_flow_prompt_internal(
                 return false;
             })()"""
             await _eval_js_internal(client, filter_img_js)
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(0.4)
 
+            # D. Search for character sheet by full name to bypass CDK virtual scroll limits
             search_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return false;
-                const searchInput = popover.querySelector('input.search-input');
+                const searchInput = popover.querySelector('input.search-input, input[type="search"], input');
                 if (searchInput) {{
                     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
                     if (setter) {{
@@ -682,69 +695,66 @@ async def _submit_flow_prompt_internal(
                 return false;
             }})()"""
             await _eval_js_internal(client, search_item_js)
-            await asyncio.sleep(0.4)
+            await asyncio.sleep(0.6)
 
+            # E. Check if search returned the target item
             find_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return false;
-                const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
+                const items = Array.from(popover.querySelectorAll('button.asset-item'));
                 return items.some(el => {{
-                    const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim();
-                    return t.includes("{filename}") || t.includes("{filename_no_ext}");
+                    const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim().toLowerCase();
+                    return t.includes("{filename_no_ext.lower()}") || t.includes("{c_name.lower()}");
                 }});
             }})()"""
             asset_exists = await _eval_js_internal(client, find_item_js)
 
             if not asset_exists:
-                await _eval_js_internal(client, """(() => {
-                    const backdrop = document.querySelector('.cdk-overlay-backdrop');
-                    if (backdrop) backdrop.click();
-                })()""")
-                await asyncio.sleep(0.3)
+                # Asset not found in project: upload it cleanly via API without reloading the page
                 try:
                     with open(ref_img_path, "rb") as f:
                         b64 = base64.b64encode(f.read()).decode()
                     mime = mimetypes.guess_type(ref_img_path)[0] or "image/png"
                     await client.upload_image(b64, mime_type=mime, project_id=project_id, file_name=filename)
-                    await _eval_js_internal(client, "window.location.reload();")
-                    await asyncio.sleep(4.5)
-                except Exception:
-                    pass
+                    logger.info("Uploaded missing character sheet: %s", filename)
+                except Exception as up_err:
+                    logger.warning("Failed to upload character sheet %s: %s", filename, up_err)
 
+                # Close and reopen popover to refresh asset list
+                await _eval_js_internal(client, ensure_closed_js)
+                await asyncio.sleep(0.5)
                 await _eval_js_internal(client, open_menu_js)
-                await asyncio.sleep(0.6)
+                await asyncio.sleep(0.5)
                 await _eval_js_internal(client, filter_img_js)
-                await asyncio.sleep(0.6)
-                await _eval_js_internal(client, search_item_js)
                 await asyncio.sleep(0.4)
+                await _eval_js_internal(client, search_item_js)
+                await asyncio.sleep(0.6)
 
+            # F. Click the matching asset button (NO blind items[0] fallback)
             click_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return {{ error: 'popover not found' }};
-                const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
+                const items = Array.from(popover.querySelectorAll('button.asset-item'));
                 let target = items.find(el => {{
-                    const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim();
-                    return t.includes("{filename}") || t.includes("{filename_no_ext}");
+                    const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim().toLowerCase();
+                    return t.includes("{filename_no_ext.lower()}");
                 }});
                 if (!target) {{
                     target = items.find(el => {{
-                        const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim();
-                        return t.includes("{c_name}");
+                        const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim().toLowerCase();
+                        return t.includes("{c_name.lower()}");
                     }});
                 }}
-                if (!target && items.length > 0) {{
-                    target = items[0];
-                }}
                 if (target) {{
-                    const btn = target.querySelector('button') || target;
-                    btn.click();
+                    target.click();
                     return {{ ok: true, name: (target.innerText || '').trim() }};
                 }}
-                return {{ error: 'item not found' }};
+                return {{ error: 'item not found', visible: items.map(el => (el.innerText || '').trim()) }};
             }})()"""
             await _eval_js_internal(client, click_item_js)
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(0.4)
 
+            # G. Click 'Add to prompt' button
             add_prompt_js = """(() => {
                 const addBtn = document.querySelector('flow-add-menu-detail-pane button.detail-add-to-prompt-btn') ||
                                Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => (b.innerText || '').includes('เพิ่มไปยังพรอมต์') || (b.innerText || '').includes('Add to prompt'));
@@ -755,17 +765,15 @@ async def _submit_flow_prompt_internal(
                 return { clicked: false };
             })()"""
             await _eval_js_internal(client, add_prompt_js)
-            await asyncio.sleep(0.8)
-
-            close_popover_js = """(() => {
-                const backdrop = document.querySelector('.cdk-overlay-backdrop');
-                if (backdrop) backdrop.click();
-                return true;
-            })()"""
-            await _eval_js_internal(client, close_popover_js)
             await asyncio.sleep(0.5)
 
-    # 3. Submit prompt via CDP with aspect ratio
+            # H. Ensure popover closes and wait for backdrop fade-out
+            await _eval_js_internal(client, ensure_closed_js)
+            await asyncio.sleep(0.4)
+
+    # Submit prompt via CDP with aspect ratio (runs purely in background without activating Chrome)
+
+    # Submit prompt via CDP with aspect ratio
     cdp_res = await client._send("flow_cdp_type_text", {
         "text": prompt,
         "clickSubmit": True,
@@ -773,10 +781,18 @@ async def _submit_flow_prompt_internal(
         "aspectRatio": aspect_ratio
     }, timeout=45)
 
+    logger.info("flow_cdp_type_text response: %s", cdp_res)
     if not cdp_res.get("clicked"):
         await _eval_js_internal(client, """(() => {
-            const btn = document.querySelector('.generate-icon-button') || document.querySelector('button[aria-label="เริ่มสร้าง"]');
-            if (btn && !btn.classList.contains('mat-mdc-button-disabled')) btn.click();
+            const btn = document.querySelector('flow-prompt-box button.generate-icon-button, button.generate-icon-button, button[aria-label="เริ่มสร้าง"], button[aria-label="Start generation"]');
+            if (btn && !btn.disabled && !btn.classList.contains('mat-mdc-button-disabled')) {
+                const opts = { bubbles: true, cancelable: true, view: window };
+                btn.dispatchEvent(new PointerEvent('pointerdown', opts));
+                btn.dispatchEvent(new MouseEvent('mousedown', opts));
+                btn.dispatchEvent(new PointerEvent('pointerup', opts));
+                btn.dispatchEvent(new MouseEvent('mouseup', opts));
+                btn.dispatchEvent(new MouseEvent('click', opts));
+            }
         })()""")
 
     # 4. Wait for Google Flow to queue the prompt
@@ -949,8 +965,8 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
             if len(new_tiles) >= len(body.scenes):
                 logger.info("Batch rendering complete! Found %d new tiles for %d expected scenes.", len(new_tiles), len(body.scenes))
                 break
-            if (has_seen_pending or (time.time() - start_time > 20.0)) and consecutive_zero_pending >= 3:
-                logger.info("Batch rendering finished queue. Found %d new tiles.", len(new_tiles))
+            if has_seen_pending and consecutive_zero_pending >= 15:
+                logger.info("Batch rendering finished queue after seeing pending. Found %d new tiles.", len(new_tiles))
                 break
 
     tiles = poll_status.get("tiles") or []
@@ -975,11 +991,25 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
             if out_path and img_url:
                 os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
                 try:
-                    resp = await http_client.get(img_url, timeout=30.0)
-                    if resp.status_code == 200 and is_valid_image_bytes(resp.content):
-                        with open(out_path, "wb") as f:
-                            f.write(resp.content)
-                        logger.info("Saved batch image for Scene %02d to %s", sc_num, out_path)
+                    fetch_js = f"""(async () => {{
+                        const fullUrl = "{img_url}".replace(/=s\\d+/, '=s2048');
+                        const res = await fetch(fullUrl);
+                        if (!res.ok) return {{ ok: false, status: res.status }};
+                        const blob = await res.blob();
+                        return new Promise(resolve => {{
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve({{ ok: true, b64: reader.result.split(',')[1] }});
+                            reader.readAsDataURL(blob);
+                        }});
+                    }})()"""
+                    b_res = await _eval_js_internal(client, fetch_js) or {}
+                    if b_res.get("ok") and b_res.get("b64"):
+                        import base64, io
+                        from PIL import Image
+                        raw_bytes = base64.b64decode(b_res["b64"])
+                        im = Image.open(io.BytesIO(raw_bytes))
+                        im.convert("RGB").save(out_path, "JPEG", quality=95)
+                        logger.info("Saved batch image for Scene %02d to %s (%dx%d)", sc_num, out_path, im.width, im.height)
                         results.append({
                             "scene_num": sc_num,
                             "success": True,
@@ -987,17 +1017,11 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
                             "footer_title": footer_title,
                             "image_url": img_url
                         })
-                    elif resp.status_code == 200 and not is_valid_image_bytes(resp.content):
-                        results.append({
-                            "scene_num": sc_num,
-                            "success": False,
-                            "error": f"Downloaded content is not a valid image ({len(resp.content)} bytes, HTML redirect or corrupt)"
-                        })
                     else:
                         results.append({
                             "scene_num": sc_num,
                             "success": False,
-                            "error": f"CDN returned HTTP {resp.status_code}"
+                            "error": f"Browser fetch failed: {b_res}"
                         })
                 except Exception as dl_err:
                     results.append({
@@ -1149,8 +1173,8 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                     consecutive_zero_pending = 0
                 else:
                     consecutive_zero_pending += 1
-                    if (has_seen_pending or (time.time() - start_time > 20.0)) and consecutive_zero_pending >= 3:
-                        # Pending tile vanished (e.g. user refreshed the tab or Google Flow dropped the task)
+                    if has_seen_pending and consecutive_zero_pending >= 15:
+                        # Pending tile vanished after being actively rendered
                         if new_tiles:
                             generated_img_url = new_tiles[0].get("src")
                             break
@@ -1162,15 +1186,27 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
             # 4. Download and validate image to output_path if provided
             if body.output_path:
                 os.makedirs(os.path.dirname(os.path.abspath(body.output_path)), exist_ok=True)
-                async with httpx.AsyncClient(follow_redirects=True) as http_client:
-                    resp = await http_client.get(generated_img_url, timeout=30.0)
-                    if resp.status_code == 200:
-                        if not is_valid_image_bytes(resp.content):
-                            raise HTTPException(502, f"Downloaded content from {generated_img_url} is not a valid image file ({len(resp.content)} bytes, HTML redirect or corrupt)")
-                        with open(body.output_path, "wb") as f:
-                            f.write(resp.content)
-                    else:
-                        raise HTTPException(502, f"Failed to download image from CDN: status {resp.status_code}")
+                fetch_js = f"""(async () => {{
+                    const fullUrl = "{generated_img_url}".replace(/=s\\d+/, '=s2048');
+                    const res = await fetch(fullUrl);
+                    if (!res.ok) return {{ ok: false, status: res.status }};
+                    const blob = await res.blob();
+                    return new Promise(resolve => {{
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve({{ ok: true, b64: reader.result.split(',')[1] }});
+                        reader.readAsDataURL(blob);
+                    }});
+                }})()"""
+                b_res = await _eval_js_internal(client, fetch_js) or {}
+                if b_res.get("ok") and b_res.get("b64"):
+                    import base64, io
+                    from PIL import Image
+                    raw_bytes = base64.b64decode(b_res["b64"])
+                    im = Image.open(io.BytesIO(raw_bytes))
+                    im.convert("RGB").save(body.output_path, "JPEG", quality=95)
+                    logger.info("Saved image to %s (%dx%d)", body.output_path, im.width, im.height)
+                else:
+                    raise HTTPException(502, f"Failed to download image via browser session: {b_res}")
 
             return {
                 "success": True,

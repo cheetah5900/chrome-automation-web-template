@@ -349,7 +349,7 @@ def main():
                 img_path = available_scenes[sc_idx]
                 for attempt in range(3):
                     try:
-                        upload_storyboard_image(args.api_base, img_path, args.project_id)
+                        upload_storyboard_image(args.api_base, img_path, args.project_id, force=True)
                         break
                     except Exception as e:
                         if attempt == 2:
@@ -357,8 +357,7 @@ def main():
                         time.sleep(2)
             log("Reloading Google Flow tab once so newly uploaded assets appear in the UI...")
             try:
-                import subprocess
-                subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to reload active tab of front window'], check=False)
+                inspect_tab_js(args.api_base, "window.location.reload()")
                 time.sleep(6)
             except Exception as re_err:
                 log(f"Notice on reload: {re_err}")

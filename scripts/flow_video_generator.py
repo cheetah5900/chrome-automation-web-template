@@ -191,6 +191,10 @@ def sanitize_prompt_for_safety(prompt: str, tier: int = 1) -> str:
         (r"\bokra\s+girl\b", "okra lady"),
         (r"\bOkra\s+girl\b", "Okra lady"),
         (r"\bOkra\s+Girl\b", "Okra Lady"),
+        (r"\bgirls?\b", "lady"),
+        (r"\bGirls?\b", "Lady"),
+        (r"\bfireballs?\b", "bright flame effect"),
+        (r"\bterror\b", "urgency"),
         (r"\bboth\s+boys\b", "both young characters"),
         (r"\bboys?\b", "young characters"),
         (r"\bbinds?\s+the\s+wound\b", "tends to the arm"),
@@ -362,18 +366,25 @@ def upload_storyboard_image(api_base: str, image_path: str, project_id: str, for
     log(f"Uploaded successfully! Media ID: {media_id}")
     return media_id
 
-def attach_start_frame(api_base: str, file_name: str, project_id: str = None) -> bool:
-    """Attaches the uploaded storyboard image into the Google Flow prompt box."""
-    log(f"Attaching {file_name} into Google Flow prompt box...")
+def attach_start_frame(api_base: str, file_name: str, project_id: str = None, image_path: str = None) -> bool:
+    """Attaches the storyboard image matching file_name (e.g. 'EP01 - Scene 05') into Google Flow prompt box.
+    If not found in asset library and image_path is provided, uploads it first.
+    Strictly NO blind fallback to items[0].
+    """
+    target_base = os.path.splitext(file_name)[0].strip()
+    log(f"Attaching storyboard frame '{target_base}' into Google Flow prompt box...")
 
     # 1. Clear any old chips, prompt text, and close any lingering popover/backdrop
     clear_js = """(() => {
         const backdrop = document.querySelector('.cdk-overlay-backdrop');
         if (backdrop) backdrop.click();
-        const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip, flow-prompt-box .chip-container'));
+        const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip'));
         for (const chip of chips) {
-            const cancelBtn = chip.querySelector('.hover-icon-overlay, mat-icon, button') || chip;
-            cancelBtn.click();
+            const cancelBtn = chip.querySelector('mat-icon, .hover-icon-overlay, button');
+            if (cancelBtn) {
+                cancelBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                cancelBtn.click();
+            }
         }
         const pm = document.querySelector('.ProseMirror');
         if (pm) pm.innerText = '';
@@ -382,106 +393,78 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
     inspect_tab_js(api_base, clear_js)
     time.sleep(0.5)
 
-    # 2. Click "เพิ่มองค์ประกอบลงในช่องพรอมต์" (button.add-menu-trigger)
-    open_js = """(() => {
-        const popover = document.querySelector('flow-add-menu-popover-content');
-        if (popover) return { ok: true, alreadyOpen: true };
-        const trigger = document.querySelector('button.add-menu-trigger') ||
-                        document.querySelector('button[aria-label*="เพิ่มองค์ประกอบ"]');
-        if (!trigger) return { error: "add-menu-trigger button not found" };
-        trigger.click();
-        return { ok: true };
-    })()"""
-    res_open = inspect_tab_js(api_base, open_js)
-    if res_open.get("error"):
-        error_exit(f"Failed to open add element menu: {res_open.get('error')}")
-    time.sleep(1.0)
+    def do_search_and_attach():
+        # Open popover if not open
+        open_js = """(() => {
+            const backdrop = document.querySelector('.cdk-overlay-backdrop');
+            if (backdrop) backdrop.click();
+            let popover = document.querySelector('flow-add-menu-popover-content');
+            if (!popover) {
+                const trigger = document.querySelector('button.add-menu-trigger') ||
+                                document.querySelector('button[aria-label*="เพิ่มองค์ประกอบ"]');
+                if (trigger) trigger.click();
+            }
+            return !!document.querySelector('flow-add-menu-popover-content');
+        })()"""
+        inspect_tab_js(api_base, open_js)
+        time.sleep(0.6)
 
-    # 3. Filter to "รูปภาพ" in sidebar
-    filter_js = """(() => {
-        const popover = document.querySelector('flow-add-menu-popover-content');
-        if (!popover) return { error: "popover not found" };
-        const navItems = Array.from(popover.querySelectorAll('mat-list-item, .mat-mdc-list-item'));
-        const imgNav = navItems.find(el => (el.innerText || '').includes('รูปภาพ') || (el.innerText || '').toLowerCase().includes('image'));
-        if (imgNav) {
-            imgNav.click();
-            return { ok: true };
-        }
-        return { error: "รูปภาพ filter item not found" };
-    })()"""
-    inspect_tab_js(api_base, filter_js)
-    time.sleep(0.8)
+        # Switch to รูปภาพ tab and type target_base into search input
+        search_js = f"""(() => {{
+            const popover = document.querySelector('flow-add-menu-popover-content');
+            if (!popover) return {{ ok: false, error: 'popover not open' }};
+            const tabs = Array.from(popover.querySelectorAll('button, [role="tab"], .mdc-tab, .mat-mdc-tab'));
+            const imgTab = tabs.find(el => (el.innerText || '').includes('รูปภาพ'));
+            if (imgTab) imgTab.click();
 
-    ep_match = re.search(r"EP\s*(\d+)", file_name, re.IGNORECASE)
-    ep_tag = f"EP{int(ep_match.group(1)):02d}" if ep_match else ""
-    sc_match = re.search(r"Scene\s*(\d+)", file_name, re.IGNORECASE)
-    sc_tag = f"Scene {int(sc_match.group(1)):02d}" if sc_match else ""
+            const input = popover.querySelector('input.search-input');
+            if (!input) return {{ ok: false, error: 'no search input' }};
 
-    if ep_tag and sc_tag:
-        search_query = f"{ep_tag} - {sc_tag}"
-    elif sc_tag:
-        search_query = sc_tag
-    else:
-        search_query = file_name
-
-    # 3.5 Use search input box to filter directly to target filename
-    search_js = f"""(() => {{
-        const popover = document.querySelector('flow-add-menu-popover-content');
-        if (!popover) return false;
-        const searchInput = popover.querySelector('input.search-input');
-        if (searchInput) {{
             const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            setter.call(searchInput, "{search_query}");
-            searchInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-            searchInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            return true;
-        }}
-        return false;
-    }})()"""
-    inspect_tab_js(api_base, search_js)
+            setter.call(input, "{target_base}");
+            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            return {{ ok: true }};
+        }})()"""
+        inspect_tab_js(api_base, search_js)
+        time.sleep(0.8)
+
+        # Click matching item strictly
+        click_js = f"""(() => {{
+            const targetBase = "{target_base}".toLowerCase();
+            const targetFull = "{file_name}".toLowerCase();
+            const popover = document.querySelector('flow-add-menu-popover-content');
+            if (!popover) return {{ ok: false, error: 'popover not open' }};
+            const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
+            const match = items.find(el => {{
+                const t = (el.innerText || el.getAttribute('aria-label') || '').toLowerCase();
+                return t.includes(targetBase) || t.includes(targetFull);
+            }});
+            if (match) {{
+                const btn = match.querySelector('button') || match;
+                btn.click();
+                return {{ ok: true, text: match.innerText.replace(/\\s+/g, ' ').trim() }};
+            }}
+            return {{ ok: false, error: `No asset found matching '${target_base}'` }};
+        }})()"""
+        return inspect_tab_js(api_base, click_js)
+
+    res = do_search_and_attach()
+    if not res.get("ok"):
+        # Not found in Flow. If image_path is available, upload it and retry!
+        if image_path and os.path.isfile(image_path):
+            log(f"Asset '{target_base}' not found in Google Flow. Uploading {image_path}...")
+            upload_storyboard_image(api_base, image_path, project_id, force=True)
+            time.sleep(2.0)
+            res = do_search_and_attach()
+
+    if not res.get("ok"):
+        error_exit(f"Failed to find or attach storyboard image '{file_name}': {res.get('error')}. Refusing to attach incorrect asset.")
+
+    log(f"Successfully clicked storyboard frame: {res.get('text', file_name)}")
     time.sleep(0.5)
 
-    # 4. Click matching image asset item
-    click_item_js = f"""(() => {{
-        const targetName = "{file_name}".toLowerCase();
-        const targetBase = "{os.path.splitext(file_name)[0]}".toLowerCase();
-        const scTag = "{sc_tag}".toLowerCase();
-        const epTag = "{ep_tag}".toLowerCase();
-        const popover = document.querySelector('flow-add-menu-popover-content');
-        if (!popover) return {{ error: "popover not found" }};
-        const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
-        
-        let target = items.find(el => {{
-            const t = (el.innerText || '').toLowerCase();
-            if (t.includes(targetName) || t.includes(targetBase)) return true;
-            if (epTag && scTag && t.includes(epTag) && t.includes(scTag)) return true;
-            if (!epTag && scTag && t.includes(scTag)) return true;
-            return false;
-        }}) || items[0];
-
-        if (target) {{
-            const btn = target.querySelector('button') || target;
-            btn.click();
-            return {{ ok: true, text: target.innerText.replace(/\\s+/g, ' ').trim() }};
-        }}
-        return {{ error: `Could not find asset item for ${{targetName}}` }};
-    }})()"""
-    res_click = inspect_tab_js(api_base, click_item_js)
-    if res_click.get("error"):
-        log(f"Asset item '{file_name}' not found on first attempt, retrying search without reload...")
-        try:
-            time.sleep(1.0)
-            inspect_tab_js(api_base, search_js)
-            time.sleep(0.8)
-            res_click = inspect_tab_js(api_base, click_item_js)
-        except Exception as e:
-            log(f"Notice during retry: {e}")
-
-    if res_click.get("error"):
-        error_exit(f"Failed to select image asset: {res_click.get('error')}")
-    time.sleep(0.8)
-
-    # 5. Click "เพิ่มไปยังพรอมต์" in detail pane if present
+    # Click detail pane 'เพิ่มไปยังพรอมต์' if present
     add_btn_js = """(() => {
         const addBtn = document.querySelector('flow-add-menu-detail-pane button.detail-add-to-prompt-btn') ||
                        Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => (b.innerText || '').includes('เพิ่มไปยังพรอมต์'));
@@ -494,21 +477,21 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None) ->
     inspect_tab_js(api_base, add_btn_js)
     time.sleep(0.3)
 
-    # 6. Close backdrop if open
+    # Close backdrop if open
     close_js = """(() => {
         const backdrop = document.querySelector('.cdk-overlay-backdrop');
         if (backdrop) backdrop.click();
         return true;
     })()"""
     inspect_tab_js(api_base, close_js)
-    time.sleep(0.2)
+    time.sleep(0.3)
 
-    # 7. STRICT VERIFICATION: ensure image chip is in flow-prompt-box
+    # Verify chip in prompt box
     verify_js = """(() => {
-        const promptBox = document.querySelector('flow-prompt-box');
-        if (!promptBox) return false;
-        const chip = promptBox.querySelector('img.chip-image, flow-image-ingredient-chip img');
-        return !!chip;
+        const pb = document.querySelector('flow-prompt-box');
+        if (!pb) return false;
+        const chips = pb.querySelectorAll('flow-image-ingredient-chip, .chip-container');
+        return chips.length > 0;
     })()"""
     attached = inspect_tab_js(api_base, verify_js)
     if not attached:
@@ -721,7 +704,7 @@ def monitor_video_rendering(api_base: str, prompt_snippet: str, timeout_seconds:
             return completed_ids[:2]
 
         failure_text = status.get("failureText")
-        if failure_text and (time.time() - start_time > 10):
+        if failure_text and not status.get("isRendering") and not new_ids and (time.time() - start_time > 10):
             is_policy = any(kw in failure_text.lower() for kw in ["นโยบาย", "policy", "safety", "harmful", "บุคคลที่สาม", "ละเมิด"])
             if is_policy or "ล้มเหลว" in failure_text or "failed" in failure_text.lower():
                 raise PolicyFilterError(f"Google Flow video rendering failed: {failure_text}", failure_text=failure_text)
@@ -1027,21 +1010,9 @@ def generate_video_flow(
     verify_extension_connection(api_base, project_id=project_id)
     verify_account_and_project(api_base, project_id=project_id, expected_email="dogmoneyplan@gmail.com")
 
-    # 2. Upload Image (skip if pre-uploaded in batch)
+    # 2. Attach Start Frame (searches for exact scene name; auto-uploads if not found)
     file_name = os.path.basename(image_path)
-    if not skip_upload:
-        upload_storyboard_image(api_base, image_path, project_id)
-
-    # 3. Attach Start Frame (with auto-fallback if skipped upload wasn't found)
-    try:
-        attach_start_frame(api_base, file_name)
-    except Exception as e:
-        if skip_upload:
-            log(f"Notice: Asset not found in library directly ({e}). Uploading fallback...")
-            upload_storyboard_image(api_base, image_path, project_id)
-            attach_start_frame(api_base, file_name)
-        else:
-            raise
+    attach_start_frame(api_base, file_name, project_id=project_id, image_path=image_path)
 
     # 3.5 Ensure prompt box is in Video mode
     ensure_video_mode(api_base)
@@ -1062,7 +1033,7 @@ def generate_video_flow(
             current_prompt = sanitize_prompt_for_safety(prompt, tier=tier)
             log(f"Sanitized Prompt (Tier {tier}):\n{current_prompt}")
             # Re-attach start frame chip to ensure clean prompt box state
-            attach_start_frame(api_base, file_name)
+            attach_start_frame(api_base, file_name, project_id=project_id, image_path=image_path)
             ensure_video_mode(api_base)
             set_aspect_ratio(api_base, aspect_ratio)
 
