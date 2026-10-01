@@ -948,6 +948,7 @@ def monitor_video_batch(
         };
     })()"""
 
+    has_seen_pending = False
     consecutive_zero_pending = 0
     poll_status = {}
     last_failure_text = ""
@@ -959,6 +960,10 @@ def monitor_video_batch(
         pending_count = poll_status.get("pendingCount", 0)
         failure_text = poll_status.get("failureText")
         tiles = poll_status.get("tiles") or []
+
+        if pending_count > 0:
+            has_seen_pending = True
+            consecutive_zero_pending = 0
 
         if pcts and str(pcts) != last_pct:
             log(f"  Rendering in progress: {', '.join(pcts[:5])} ({pending_count} pending)")
@@ -978,8 +983,11 @@ def monitor_video_batch(
 
         if not poll_status.get("isRendering"):
             consecutive_zero_pending += 1
-            if consecutive_zero_pending >= 2:
+            if has_seen_pending and consecutive_zero_pending >= 2:
                 log(f"Pending queue cleared with {len(new_tiles)} completed video(s).")
+                break
+            elif not has_seen_pending and (time.time() - start_time > 60.0) and consecutive_zero_pending >= 4:
+                log(f"No pending videos observed within 60s. Queue cleared with {len(new_tiles)} completed video(s).")
                 break
         else:
             consecutive_zero_pending = 0

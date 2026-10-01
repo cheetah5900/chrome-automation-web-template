@@ -41,7 +41,7 @@ async def _check_flow_busy(client, target_project_id: str) -> Optional[JSONRespo
     # 2. Chrome Extension Tab check (live DOM check for pending tiles)
     if client and client.connected:
         tab_busy_js = """(() => {
-            const pending = Array.from(document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]'));
+            const pending = Array.from(document.querySelectorAll('flow-pending-tile:not(.fading-out), [class*="pending-tile"]:not(.fading-out)'));
             const url = window.location.href || '';
             const match = url.match(/\\/project\\/([a-zA-Z0-9_-]+)/);
             const currentProject = match ? match[1] : '';
@@ -435,13 +435,47 @@ async def preload_characters(body: PreloadCharactersRequest):
     await eval_js(filter_img_js)
     await asyncio.sleep(0.5)
 
-    get_existing_js = """(() => {
-        const popover = document.querySelector('flow-add-menu-popover-content');
-        if (!popover) return [];
-        const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
-        return items.map(el => (el.innerText || '').trim()).filter(Boolean);
-    })()"""
-    existing_names = await eval_js(get_existing_js) or []
+    already_exists = []
+    missing_targets = []
+    for p in targets:
+        fname = os.path.basename(p)
+        fname_no_ext = os.path.splitext(fname)[0]
+
+        # Search for this character sheet in the add-menu search input
+        search_item_js = f"""(() => {{
+            const popover = document.querySelector('flow-add-menu-popover-content');
+            if (!popover) return false;
+            const searchInput = popover.querySelector('input.search-input');
+            if (searchInput) {{
+                const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+                if (setter) {{
+                    setter.call(searchInput, "{fname_no_ext}");
+                }} else {{
+                    searchInput.value = "{fname_no_ext}";
+                }}
+                searchInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                searchInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                return true;
+            }}
+            return false;
+        }})()"""
+        await eval_js(search_item_js)
+        await asyncio.sleep(0.5)
+
+        check_exists_js = f"""(() => {{
+            const popover = document.querySelector('flow-add-menu-popover-content');
+            if (!popover) return false;
+            const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
+            return items.some(el => {{
+                const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).toLowerCase();
+                return t.includes("{fname.lower()}") || t.includes("{fname_no_ext.lower()}");
+            }});
+        }})()"""
+        found = await eval_js(check_exists_js)
+        if found:
+            already_exists.append(fname)
+        else:
+            missing_targets.append(p)
 
     # Close popover
     await eval_js("""(() => {
@@ -449,15 +483,6 @@ async def preload_characters(body: PreloadCharactersRequest):
         if (backdrop) backdrop.click();
     })()""")
     await asyncio.sleep(0.3)
-
-    already_exists = []
-    missing_targets = []
-    for p in targets:
-        fname = os.path.basename(p)
-        if any(fname in existing_name for existing_name in existing_names):
-            already_exists.append(fname)
-        else:
-            missing_targets.append(p)
 
     uploaded = []
     for p in missing_targets:
@@ -891,10 +916,9 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
                 return {
                     src: img ? img.src : '',
                     media_id: img ? (img.getAttribute('data-media-id') || '') : '',
-                    footer_title: footer ? (footer.innerText || '').trim() : '',
-                    is_outfit: (t.innerText || '').includes('Outfit 1') || (t.innerText || '').includes('Outfit 2') || (t.innerText || '').includes('Outfit 3')
+                    footer_title: footer ? (footer.innerText || '').trim() : ''
                 };
-            }).filter(t => t.src && !t.is_outfit);
+            }).filter(t => t.src);
 
             return {
                 pendingCount: pending.length,
@@ -1092,10 +1116,9 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                         const img = t.querySelector('img');
                         return {
                             src: img ? img.src : '',
-                            media_id: img ? (img.getAttribute('data-media-id') || '') : '',
-                            is_outfit: (t.innerText || '').includes('Outfit 1') || (t.innerText || '').includes('Outfit 2') || (t.innerText || '').includes('Outfit 3')
+                            media_id: img ? (img.getAttribute('data-media-id') || '') : ''
                         };
-                    }).filter(t => t.src && !t.is_outfit);
+                    }).filter(t => t.src);
                     return {
                         pendingCount: pending.length,
                         pendingPcts: pending.map(p => (p.innerText || '').match(/(\\d+)%/)?.[1]).filter(Boolean),

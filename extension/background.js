@@ -1521,7 +1521,7 @@ function connectToAgent() {
               target: { tabId: tab.id },
               func: async (targetCount, targetAspect) => {
                 try {
-                  const settingsBtn = document.querySelector('button.settings-trigger-button, button[aria-label="Settings trigger"], button[aria-label="ทริกเกอร์การตั้งค่า"], button[aria-label*="Settings"], button[aria-label*="การตั้งค่า"]');
+                  const settingsBtn = document.querySelector('flow-prompt-box button.settings-trigger-button, button.settings-trigger-button, button[aria-label="ทริกเกอร์การตั้งค่า"], button[aria-label="Settings trigger"]');
                   if (!settingsBtn) return;
                   settingsBtn.click();
                   await new Promise(r => setTimeout(r, 400));

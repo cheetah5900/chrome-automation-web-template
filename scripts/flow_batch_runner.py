@@ -170,7 +170,7 @@ def run_bulk_video_pipeline(
     for m_item in missed_items:
         m_out = m_item["output_path"]
         m_sc = m_item["scene_num"]
-        if os.path.exists(m_out) and os.path.getsize(m_out) > 500000:
+        if not force and os.path.exists(m_out) and os.path.getsize(m_out) > 500000:
             completed_sc_nums.add(m_sc)
             results.append({"scene": m_sc, "status": "SUCCESS", "output": m_out, "size": os.path.getsize(m_out)})
         else:
