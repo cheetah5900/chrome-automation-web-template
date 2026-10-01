@@ -874,6 +874,7 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
 
     start_time = time.time()
     consecutive_zero_pending = 0
+    has_seen_pending = False
     poll_status = {}
 
     while time.time() - start_time < body.timeout:
@@ -916,13 +917,17 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
             if (t.get("src") not in known_urls) and (not t.get("media_id") or t.get("media_id") not in known_media_ids)
         ]
 
-        if pending_count == 0:
+        if pending_count > 0:
+            has_seen_pending = True
+            consecutive_zero_pending = 0
+        else:
             consecutive_zero_pending += 1
-            if len(new_tiles) >= len(body.scenes) or consecutive_zero_pending >= 2:
+            if len(new_tiles) >= len(body.scenes):
                 logger.info("Batch rendering complete! Found %d new tiles for %d expected scenes.", len(new_tiles), len(body.scenes))
                 break
-        else:
-            consecutive_zero_pending = 0
+            if (has_seen_pending or (time.time() - start_time > 20.0)) and consecutive_zero_pending >= 3:
+                logger.info("Batch rendering finished queue. Found %d new tiles.", len(new_tiles))
+                break
 
     tiles = poll_status.get("tiles") or []
     new_tiles = [
@@ -1074,6 +1079,7 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
             start_time = time.time()
             generated_img_url = None
             consecutive_zero_pending = 0
+            has_seen_pending = False
 
             while time.time() - start_time < body.timeout:
                 await asyncio.sleep(2.5)
@@ -1115,16 +1121,17 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                     generated_img_url = new_tiles[0].get("src")
                     break
 
-                if pending_count == 0:
+                if pending_count > 0:
+                    has_seen_pending = True
+                    consecutive_zero_pending = 0
+                else:
                     consecutive_zero_pending += 1
-                    if consecutive_zero_pending >= 2:
+                    if (has_seen_pending or (time.time() - start_time > 20.0)) and consecutive_zero_pending >= 3:
                         # Pending tile vanished (e.g. user refreshed the tab or Google Flow dropped the task)
                         if new_tiles:
                             generated_img_url = new_tiles[0].get("src")
                             break
                         raise HTTPException(410, "Pending tile vanished without producing a new image (tab was refreshed or generation aborted). Must re-generate.")
-                else:
-                    consecutive_zero_pending = 0
 
             if not generated_img_url:
                 raise HTTPException(504, f"Image generation timed out after {body.timeout}s without producing a new tile")
