@@ -7394,23 +7394,48 @@ function updateFacebookFolderModeUI() {
   const modeSelect = document.getElementById('cfg_facebook_folder_mode');
   const mode = modeSelect ? modeSelect.value : 'generic';
   const prefixGroup = document.getElementById('group_facebook_video_prefix');
+  const prefixLabel = document.getElementById('lbl_facebook_video_prefix');
+  const prefixHint = document.getElementById('hint_facebook_video_prefix');
+  const prefixInput = document.getElementById('cfg_facebook_video_prefix');
   const subfoldersGrid = document.getElementById('facebook_subfolders_grid');
   const subfoldersLabel = document.getElementById('lbl_facebook_subfolders');
   const subfoldersHint = document.getElementById('hint_facebook_subfolders');
   const subfoldersInput = document.getElementById('cfg_facebook_subfolders');
+  const mainFolderInput = document.getElementById('cfg_facebook_main_folder');
+
+  if (prefixGroup) prefixGroup.style.display = '';
+  if (subfoldersGrid) subfoldersGrid.style.gridTemplateColumns = '1fr 1fr';
 
   if (mode === 'lakorn') {
-    if (prefixGroup) prefixGroup.style.display = 'none';
-    if (subfoldersGrid) subfoldersGrid.style.gridTemplateColumns = '1fr';
-    if (subfoldersLabel) subfoldersLabel.textContent = '🎬 ระบุ EP ที่ต้องการรัน (Episode Selection)';
-    if (subfoldersHint) subfoldersHint.textContent = 'เช่น 1-3, 1, 2 (เว้นว่าง = รันทุก EP ที่พบในโฟลเดอร์ 10 - Final)';
-    if (subfoldersInput) subfoldersInput.placeholder = 'เช่น 1-3 หรือเว้นว่างเพื่อดึงทั้งหมด';
+    if (subfoldersLabel) subfoldersLabel.textContent = '📁 เลขตอนละครที่ต้องการรัน (Story / Folder)';
+    if (subfoldersHint) subfoldersHint.textContent = 'ระบุเลขโฟลเดอร์ตอน เช่น 21 หรือ 21, 22 (เว้นว่าง = ทุกตอน)';
+    if (subfoldersInput) subfoldersInput.placeholder = 'เช่น 21 หรือ 21, 22';
+    if (prefixLabel) prefixLabel.textContent = '🎬 เลข EP ย่อยที่ต้องการดึง (EP Selection)';
+    if (prefixHint) prefixHint.textContent = 'ระบุเลข EP เช่น 1-3, 1, 2 (เว้นว่าง = ดึงทุก EP ในตอน)';
+    if (prefixInput) {
+      prefixInput.placeholder = 'เช่น 1-3 หรือเว้นว่างเพื่อดึงทั้งหมด';
+      if (prefixInput.value.trim().toLowerCase() === 'combined') {
+        prefixInput.value = '';
+      }
+    }
+    if (mainFolderInput && !mainFolderInput.value.trim()) {
+      mainFolderInput.placeholder = 'เช่น /Users/litarcopperkaikem/.../Channels/2 - ผักกาดการละคร - ละครไทย';
+    }
   } else {
-    if (prefixGroup) prefixGroup.style.display = '';
-    if (subfoldersGrid) subfoldersGrid.style.gridTemplateColumns = '1fr 1fr';
     if (subfoldersLabel) subfoldersLabel.textContent = 'โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)';
     if (subfoldersHint) subfoldersHint.textContent = 'เช่น 1-10, 15, 20-25 (เว้นว่าง = ทุกโฟลเดอร์)';
     if (subfoldersInput) subfoldersInput.placeholder = 'เช่น 1-10 หรือเว้นว่างเพื่อดึงทั้งหมด';
+    if (prefixLabel) prefixLabel.textContent = 'คำนำหน้าชื่อวิดีโอ (Video Prefix)';
+    if (prefixHint) prefixHint.textContent = 'ขึ้นต้นด้วยคำนี้เพื่อจับคู่วิดีโอ (ค่าเริ่มต้น: combined)';
+    if (prefixInput) {
+      prefixInput.placeholder = 'เช่น combined หรือ final';
+      if (!prefixInput.value.trim()) {
+        prefixInput.value = 'combined';
+      }
+    }
+    if (mainFolderInput && !mainFolderInput.value.trim()) {
+      mainFolderInput.placeholder = 'เช่น /Users/litar/Downloads/facebook_videos_batch';
+    }
   }
 }
 window.updateFacebookFolderModeUI = updateFacebookFolderModeUI;
@@ -7429,12 +7454,16 @@ async function saveFacebookPreset() {
   }
   const presets = currentConfig.facebook_presets || {};
 
+  const curFolderMode = document.getElementById('cfg_facebook_folder_mode')?.value || 'generic';
+  const rawPrefix = document.getElementById('cfg_facebook_video_prefix')?.value;
+  const resolvedPrefix = rawPrefix !== undefined ? rawPrefix.trim() : (curFolderMode === 'lakorn' ? '' : 'combined');
+
   presets[trimmedName] = {
-    folder_mode: document.getElementById('cfg_facebook_folder_mode')?.value || 'generic',
+    folder_mode: curFolderMode,
     page_url: document.getElementById('cfg_facebook_page_url')?.value || '',
     main_folder: document.getElementById('cfg_facebook_main_folder')?.value || '',
     subfolders: document.getElementById('cfg_facebook_subfolders')?.value || '',
-    video_prefix: document.getElementById('cfg_facebook_video_prefix')?.value || 'combined',
+    video_prefix: resolvedPrefix,
     start_date: document.getElementById('cfg_facebook_start_date')?.value || '',
     start_hour: parseInt(document.getElementById('cfg_facebook_start_hour')?.value, 10) || 18,
     delay_min: parseFloat(document.getElementById('cfg_facebook_delay_min')?.value) || 5,
@@ -7527,11 +7556,23 @@ async function applyFacebookPreset(presetNameOrEvent, presetObj) {
   if (document.getElementById('cfg_facebook_page_url')) document.getElementById('cfg_facebook_page_url').value = preset.page_url || preset.channel_url || '';
   if (document.getElementById('cfg_facebook_main_folder')) document.getElementById('cfg_facebook_main_folder').value = preset.main_folder || '';
   if (document.getElementById('cfg_facebook_subfolders')) document.getElementById('cfg_facebook_subfolders').value = preset.subfolders || '';
+  let mode = preset.folder_mode;
+  if (!mode) {
+    const mf = (preset.main_folder || '').toLowerCase();
+    if (mf.includes('ละคร') || mf.includes('lakorn')) {
+      mode = 'lakorn';
+    } else {
+      mode = 'generic';
+    }
+  }
   if (document.getElementById('cfg_facebook_folder_mode')) {
-    document.getElementById('cfg_facebook_folder_mode').value = preset.folder_mode || 'generic';
+    document.getElementById('cfg_facebook_folder_mode').value = mode;
     updateFacebookFolderModeUI();
   }
-  if (document.getElementById('cfg_facebook_video_prefix')) document.getElementById('cfg_facebook_video_prefix').value = preset.video_prefix || 'combined';
+  if (document.getElementById('cfg_facebook_video_prefix')) {
+    const defaultPrefix = (mode === 'lakorn') ? '' : 'combined';
+    document.getElementById('cfg_facebook_video_prefix').value = (preset.video_prefix !== undefined && preset.video_prefix !== null) ? preset.video_prefix : defaultPrefix;
+  }
   if (document.getElementById('cfg_facebook_start_date')) document.getElementById('cfg_facebook_start_date').value = preset.start_date || '';
   if (document.getElementById('cfg_facebook_start_hour')) {
     const h = preset.start_hour !== undefined ? preset.start_hour : (preset.start_time ? parseInt(preset.start_time.split(':')[0], 10) : 18);

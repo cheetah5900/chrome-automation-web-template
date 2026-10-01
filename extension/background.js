@@ -196,38 +196,9 @@ async function findFlowTabs() {
   }
 }
 
-let _lastEnsureWindowTime = 0;
 async function ensureWindowFrontmost(tab) {
-  const now = Date.now();
-  if (now - _lastEnsureWindowTime < 4000) return;
-  _lastEnsureWindowTime = now;
-
-  try {
-    if (tab?.windowId) {
-      const win = await chrome.windows.get(tab.windowId);
-      if (win.focused && win.state !== 'minimized') {
-        if (tab?.id) {
-          await chrome.tabs.update(tab.id, { active: true });
-        }
-        return;
-      }
-      if (win.state === 'minimized') {
-        await chrome.windows.update(tab.windowId, { state: 'normal', focused: true });
-      } else {
-        await chrome.windows.update(tab.windowId, { focused: true });
-      }
-    }
-  } catch {}
-
-  try {
-    await fetch('http://127.0.0.1:6969/api/flow/focus-browser', { method: 'POST' });
-  } catch {}
-
-  if (tab?.id) {
-    try {
-      await chrome.tabs.update(tab.id, { active: true });
-    } catch {}
-  }
+  // Pure background execution: do NOT activate tab or steal OS window focus
+  return;
 }
 
 async function getOrOpenFlowTab(preferLabs = false) {
@@ -1512,24 +1483,42 @@ function connectToAgent() {
           return;
         }
         const tab = tabs[0];
-        const { text, clickSubmit = false, outputCount = 1, aspectRatio = null } = msg.params || {};
+        // Pure background execution: do NOT activate tab or steal OS window focus
+        const text = msg.params?.text || '';
+        const clickSubmit = msg.params?.clickSubmit ?? msg.params?.click_submit ?? false;
+        const outputCount = msg.params?.outputCount ?? msg.params?.output_count ?? 1;
+        const aspectRatio = msg.params?.aspectRatio ?? msg.params?.aspect_ratio ?? null;
 
         try {
-          // Configure output count and aspect ratio in settings if needed
+          // Configure output count and aspect ratio in settings if needed (ONLY if not already configured)
           if (outputCount > 1 || aspectRatio) {
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               func: async (targetCount, targetAspect) => {
                 try {
-                  const settingsBtn = document.querySelector('button.settings-trigger-button, button[aria-label="Settings trigger"], button[aria-label="ทริกเกอร์การตั้งค่า"], button[aria-label*="Settings"], button[aria-label*="การตั้งค่า"]');
+                  const settingsBtn = document.querySelector('flow-prompt-box button.settings-trigger-button, flow-prompt-box button[aria-label="ทริกเกอร์การตั้งค่า"], flow-prompt-box button[aria-label="Settings trigger"]');
                   if (!settingsBtn) return;
+
+                  const currentText = (settingsBtn.innerText || '').toLowerCase();
+                  const isVertical = targetAspect ? (targetAspect.includes('PORTRAIT') || targetAspect.includes('9:16') || targetAspect.includes('VERTICAL')) : false;
+                  const neededAspect = isVertical ? '9_16' : '16_9';
+                  const neededCount = targetCount ? `x${targetCount}` : 'x1';
+
+                  const alreadyAspect = !targetAspect || currentText.includes(neededAspect) || currentText.includes(isVertical ? '9:16' : '16:9');
+                  const alreadyCount = !targetCount || currentText.includes(neededCount) || currentText.includes(`${targetCount} เอาต์พุต`) || currentText.includes(`${targetCount} output`);
+
+                  if (alreadyAspect && alreadyCount) {
+                    // Already set to target aspect ratio and count! Do NOT open settings menu!
+                    return;
+                  }
+
                   settingsBtn.click();
                   await new Promise(r => setTimeout(r, 400));
 
                   const overlay = document.querySelector('.cdk-overlay-container') || document;
                   
                   // 1. Output count (e.g. 1 vs 2 outputs)
-                  if (targetCount) {
+                  if (targetCount && !alreadyCount) {
                     const countStr = String(targetCount);
                     const countToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
                       const t = el.innerText?.trim();
@@ -1544,8 +1533,7 @@ function connectToAgent() {
                   }
 
                   // 2. Aspect ratio (9:16 vs 16:9)
-                  if (targetAspect) {
-                    const isVertical = targetAspect.includes('PORTRAIT') || targetAspect.includes('9:16') || targetAspect.includes('VERTICAL');
+                  if (targetAspect && !alreadyAspect) {
                     const aspectStr = isVertical ? '9:16' : '16:9';
                     const aspectToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
                       const t = el.innerText?.trim();
@@ -1569,10 +1557,10 @@ function connectToAgent() {
               },
               args: [outputCount, aspectRatio]
             });
-            await sleep(300);
+            await sleep(100);
           }
 
-          // Focus pm
+          // Focus ProseMirror and select all existing text so new prompt replaces it cleanly
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: () => {
@@ -1589,16 +1577,29 @@ function connectToAgent() {
           let canGenerate = false;
           let pmTextAfter = null;
           const dbgTarget = { tabId: tab.id };
+          try { await chrome.debugger.detach(dbgTarget); } catch {}
           await chrome.debugger.attach(dbgTarget, '1.3');
           try {
+            // Re-assert ProseMirror focus and selectAll directly before typing
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => {
+                const pm = document.querySelector('.ProseMirror');
+                if (pm) {
+                  pm.focus();
+                  document.execCommand('selectAll', false, null);
+                }
+              }
+            });
+
             await chrome.debugger.sendCommand(dbgTarget, 'Input.insertText', { text: text || '' });
-            await sleep(400);
+            await sleep(300);
 
             if (clickSubmit) {
               const checkBtn = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 func: () => {
-                  const submitBtn = document.querySelector('button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
+                  const submitBtn = document.querySelector('flow-prompt-box button.generate-icon-button, button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
                   const pm = document.querySelector('.ProseMirror');
                   if (!submitBtn || submitBtn.disabled || submitBtn.classList.contains('mat-mdc-button-disabled')) {
                     return { isEnabled: false, pmText: pm ? pm.innerText?.trim() : null };
@@ -1640,6 +1641,12 @@ function connectToAgent() {
                 // 2. Dispatch real CDP mouse click on button coordinates if available
                 if (res.x && res.y) {
                   await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
+                    type: 'mouseMoved',
+                    x: res.x,
+                    y: res.y
+                  });
+                  await sleep(40);
+                  await chrome.debugger.sendCommand(dbgTarget, 'Input.dispatchMouseEvent', {
                     type: 'mousePressed',
                     x: res.x,
                     y: res.y,
@@ -1655,6 +1662,22 @@ function connectToAgent() {
                     clickCount: 1
                   });
                 }
+
+                // 3. Dispatch full synthetic pointer/mouse events in page context to guarantee Angular Material trigger
+                await chrome.scripting.executeScript({
+                  target: { tabId: tab.id },
+                  func: () => {
+                    const btn = document.querySelector('flow-prompt-box button.generate-icon-button, button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
+                    if (btn && !btn.disabled && !btn.classList.contains('mat-mdc-button-disabled')) {
+                      const opts = { bubbles: true, cancelable: true, view: window };
+                      btn.dispatchEvent(new PointerEvent('pointerdown', opts));
+                      btn.dispatchEvent(new MouseEvent('mousedown', opts));
+                      btn.dispatchEvent(new PointerEvent('pointerup', opts));
+                      btn.dispatchEvent(new MouseEvent('mouseup', opts));
+                      btn.dispatchEvent(new MouseEvent('click', opts));
+                    }
+                  }
+                });
                 clicked = true;
               }
             }
@@ -2463,11 +2486,9 @@ function connectToAgent() {
               requests: recentNetRequests.slice(0, 20)
             };
           } else if (evalCode === 'activate_flow_tab') {
-            await chrome.tabs.update(tab.id, { active: true, selected: true });
+            // Pure background: do not steal window focus
             const flowTab = await chrome.tabs.get(tab.id);
-            if (flowTab.windowId) {
-              await chrome.windows.update(flowTab.windowId, { focused: true });
-            }
+            // await chrome.windows.update(flowTab.windowId, { focused: true });
             scriptResult = {
               success: true,
               flowTab: {
@@ -3237,7 +3258,7 @@ chrome.runtime.onMessage.addListener((msg, _, reply) => {
   if (msg.type === 'OPEN_FLOW_TAB') {
     getOrOpenFlowTab().then((tab) => {
       if (tab) {
-        chrome.tabs.update(tab.id, { active: true });
+        // Pure background: do not steal focus
         reply({ ok: true, tabId: tab.id });
       } else {
         reply({ error: 'FAILED_TO_OPEN_TAB' });

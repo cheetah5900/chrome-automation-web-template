@@ -522,7 +522,11 @@ def step_4_click_share_tab(driver, timeout: float = 60.0) -> bool:
     
     top_share_btn = fast_poll(driver, '''
         const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const shareBtn = allBtns.find(b => b.innerText && b.innerText.trim().startsWith('Share') && b.getBoundingClientRect().y < 120 && b.getAttribute('aria-disabled') !== 'true');
+        const shareBtn = allBtns.find(b => {
+            const txt = (b.innerText || '').trim().toLowerCase();
+            const isShare = txt.startsWith('share') || txt.startsWith('แชร์');
+            return isShare && b.getBoundingClientRect().y < 120 && b.getAttribute('aria-disabled') !== 'true';
+        });
         return shareBtn;
     ''', timeout=timeout, poll_interval=0.3)
 
@@ -536,7 +540,11 @@ def step_4_click_share_tab(driver, timeout: float = 60.0) -> bool:
         log("[Meta Step 4] แท็บ Share ด้านบนยังไม่พร้อม ลองกดปุ่ม Next...")
         step1_next = fast_poll(driver, '''
             const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-            return allBtns.find(b => b.innerText && b.innerText.trim() === 'Next' && b.getBoundingClientRect().x > 1400 && b.getBoundingClientRect().y > 700 && b.getAttribute('aria-disabled') !== 'true');
+            return allBtns.find(b => {
+                const txt = (b.innerText || '').trim().toLowerCase();
+                const isNext = txt === 'next' || txt.startsWith('next') || txt === 'ถัดไป' || txt.startsWith('ถัดไป');
+                return isNext && b.getAttribute('aria-disabled') !== 'true' && b.offsetParent !== null;
+            });
         ''', timeout=10.0, poll_interval=0.3)
         if step1_next:
             try:
@@ -546,7 +554,10 @@ def step_4_click_share_tab(driver, timeout: float = 60.0) -> bool:
 
     # Loop check: verify Step 3 screen is active
     on_step3 = fast_poll(driver, '''
-        return !!Array.from(document.querySelectorAll('div, span, [role="radio"]')).find(el => el.innerText && (el.innerText.trim() === 'Scheduling options' || el.innerText.trim() === 'Share now' || el.innerText.trim() === 'Schedule'));
+        return !!Array.from(document.querySelectorAll('div, span, [role="radio"]')).find(el => {
+            const txt = (el.innerText || '').trim().toLowerCase();
+            return txt === 'scheduling options' || txt === 'share now' || txt.includes('schedule') || txt.includes('กำหนดเวลา') || txt.includes('แชร์เลย');
+        });
     ''', timeout=15.0, poll_interval=0.2)
 
     if not on_step3:
@@ -619,31 +630,200 @@ def detect_schedule_platforms(driver) -> dict[str, Any]:
             "platforms": [{"idx": i, "platform": "facebook" if i == 0 else "instagram"} for i in range(d_len)]
         }
 
+def wait_for_schedule_option_ready(driver, timeout: float = 60.0) -> bool:
+    """Checks whether 'Schedule for later' (or 'Schedule') option is ready and clickable.
+    If the video is still uploading or processing, Facebook keeps this option disabled.
+    Polls continuously until the option becomes enabled, clicks it, and confirms the date input appears.
+    Timeout defaults to 60.0 seconds as requested by the user.
+    """
+    log(f"[Meta Step 5] ⏳ กำลังตรวจสอบความพร้อมของตัวเลือก 'Schedule for later' (Timeout {timeout:.0f}s)...")
+    start_time = time.time()
+    last_log_time = 0.0
+
+    while time.time() - start_time < timeout:
+        if is_meta_stopped():
+            raise RuntimeError("🛑 Force Stop: ผู้ใช้สั่งหยุดการทำงาน")
+
+        res = driver.execute_script('''
+            return (() => {
+                // 1. Check if date input is ALREADY visible and interactable
+                const existingDateInput = document.querySelector('input[placeholder="dd/mm/yyyy"]');
+                if (existingDateInput && existingDateInput.offsetParent !== null && !existingDateInput.disabled && existingDateInput.getAttribute('aria-disabled') !== 'true') {
+                    return {
+                        status: 'date_input_ready',
+                        message: 'ช่องใส่วันที่และเวลาพร้อมใช้งานแล้ว'
+                    };
+                }
+
+                // 2. Detect upload progress from progressbars or status text
+                let uploadText = '';
+                const progressEl = document.querySelector('[role="progressbar"], div[class*="progress" i]');
+                if (progressEl) {
+                    const val = progressEl.getAttribute('aria-valuenow') || progressEl.getAttribute('aria-valuetext');
+                    if (val) uploadText = `ความคืบหน้า ${val}%`;
+                }
+                if (!uploadText) {
+                    const allTextEls = Array.from(document.querySelectorAll('div, span, p'));
+                    const uEl = allTextEls.find(e => {
+                        if (e.children.length > 2) return false;
+                        const t = (e.innerText || '').toLowerCase();
+                        return (t.includes('uploading') || t.includes('กำลังอัปโหลด') || t.includes('processing') || t.includes('กำลังประมวลผล')) && t.length < 80;
+                    });
+                    if (uEl) {
+                        uploadText = (uEl.innerText || '').trim();
+                    }
+                }
+
+                // 3. Find Schedule for later / Schedule radio element
+                // Keywords: 'schedule for later', 'schedule', 'กำหนดเวลาในภายหลัง', 'กำหนดเวลา'
+                const targetKeywords = ['schedule for later', 'schedule', 'กำหนดเวลาในภายหลัง', 'กำหนดเวลา'];
+                const allCandidates = Array.from(document.querySelectorAll('[role="radio"], [role="button"], input[type="radio"], div, span, label'));
+
+                let foundOption = null;
+                for (const el of allCandidates) {
+                    const rect = el.getBoundingClientRect();
+                    // Must be visible and in the Scheduling options area (y between 70 and 550)
+                    if (rect.height === 0 || rect.width === 0) continue;
+                    if (rect.y < 70 || rect.y > 550) continue;
+
+                    // Exclude nav headers and tabs
+                    if (el.closest('nav, [role="tablist"], [role="listitem"]')) continue;
+
+                    const rawText = (el.innerText || el.textContent || '').trim().toLowerCase();
+                    const ariaLabel = (el.getAttribute('aria-label') || '').trim().toLowerCase();
+
+                    const matched = targetKeywords.some(kw => rawText === kw || rawText.startsWith(kw) || ariaLabel === kw || ariaLabel.startsWith(kw));
+                    if (!matched) continue;
+
+                    const clickable = el.closest('[role="radio"], [role="button"], label, div[tabindex]') || el;
+
+                    // Check disabled state on element or ancestors
+                    let isDisabled = false;
+                    let curr = clickable;
+                    for (let depth = 0; depth < 5 && curr && curr !== document.body; depth++) {
+                        if (curr.getAttribute('aria-disabled') === 'true' || curr.disabled === true || curr.classList.contains('disabled')) {
+                            isDisabled = true;
+                            break;
+                        }
+                        curr = curr.parentElement;
+                    }
+
+                    // Check if radio input inside is disabled
+                    const innerInput = clickable.querySelector('input[type="radio"]');
+                    if (innerInput && (innerInput.disabled || innerInput.getAttribute('aria-disabled') === 'true')) {
+                        isDisabled = true;
+                    }
+
+                    const isChecked = clickable.getAttribute('aria-checked') === 'true' || (innerInput && innerInput.checked);
+
+                    foundOption = {
+                        isDisabled: isDisabled,
+                        isChecked: isChecked,
+                        text: (clickable.innerText || rawText).split('\\n')[0].trim()
+                    };
+                    break;
+                }
+
+                if (!foundOption) {
+                    return {
+                        status: 'not_found',
+                        uploadText: uploadText,
+                        message: 'ยังไม่พบตัวเลือก Schedule for later บนหน้าจอ'
+                    };
+                }
+
+                if (foundOption.isDisabled) {
+                    return {
+                        status: 'disabled',
+                        uploadText: uploadText || 'วิดีโอยังอัปโหลดไม่เสร็จ',
+                        text: foundOption.text,
+                        message: `ตัวเลือก '${foundOption.text}' ยังไม่พร้อมใช้งาน (Disabled)`
+                    };
+                }
+
+                return {
+                    status: 'ready',
+                    uploadText: uploadText,
+                    isChecked: foundOption.isChecked,
+                    text: foundOption.text,
+                    message: `ตัวเลือก '${foundOption.text}' พร้อมใช้งานแล้ว`
+                };
+            })();
+        ''')
+
+        status = res.get("status") if isinstance(res, dict) else "unknown"
+        upload_info = res.get("uploadText", "") if isinstance(res, dict) else ""
+        opt_text = res.get("text", "Schedule for later") if isinstance(res, dict) else "Schedule for later"
+
+        # Case 1: Date input already ready!
+        if status == "date_input_ready":
+            log("[Meta Step 5] ✅ ช่องตั้งเวลา (Date & Time) พร้อมใช้งานแล้ว")
+            return True
+
+        # Case 2: Schedule option is enabled / ready to click
+        if status == "ready":
+            elapsed = time.time() - start_time
+            log(f"[Meta Step 5] ✅ ตัวเลือก '{opt_text}' พร้อมใช้งานแล้ว (รอไป {elapsed:.1f}s) -> กำลังคลิกเลือก...")
+            
+            # Click the radio element
+            driver.execute_script('''
+                const targetKeywords = ['schedule for later', 'schedule', 'กำหนดเวลาในภายหลัง', 'กำหนดเวลา'];
+                const allCandidates = Array.from(document.querySelectorAll('[role="radio"], [role="button"], input[type="radio"], div, span, label'));
+                for (const el of allCandidates) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.height === 0 || rect.width === 0 || rect.y < 70 || rect.y > 550) continue;
+                    if (el.closest('nav, [role="tablist"], [role="listitem"]')) continue;
+                    const rawText = (el.innerText || el.textContent || '').trim().toLowerCase();
+                    const ariaLabel = (el.getAttribute('aria-label') || '').trim().toLowerCase();
+                    if (targetKeywords.some(kw => rawText === kw || rawText.startsWith(kw) || ariaLabel === kw || ariaLabel.startsWith(kw))) {
+                        const clickable = el.closest('[role="radio"], [role="button"], label, div[tabindex]') || el;
+                        clickable.click();
+                        const radio = clickable.querySelector('input[type="radio"]');
+                        if (radio && !radio.checked) radio.click();
+                        return true;
+                    }
+                }
+                return false;
+            ''')
+
+            # Wait briefly to see if date input appears
+            date_ready = fast_poll(driver, '''
+                const d = document.querySelector('input[placeholder="dd/mm/yyyy"]');
+                return d && d.offsetParent !== null;
+            ''', timeout=3.0, poll_interval=0.2)
+
+            if date_ready:
+                log(f"[Meta Step 5] ✅ เปิดกล่องใส่วันที่และเวลาของ '{opt_text}' สำเร็จ")
+                return True
+            else:
+                log(f"[Meta Step 5] ⏳ คลิก '{opt_text}' แล้ว แต่ช่องใส่วันที่ยังไม่ปรากฏ กำลังตรวจสอบซ้ำ...")
+
+        # Case 3: Option exists but disabled (waiting for upload to complete)
+        now = time.time()
+        elapsed = now - start_time
+        if now - last_log_time >= 4.0:
+            last_log_time = now
+            if status == "disabled":
+                info_str = f" ({upload_info})" if upload_info else " (วิดีโอยังอัปโหลดไม่เสร็จ)"
+                log(f"[Meta Step 5] ⏳ ปุ่ม '{opt_text}' ยังไม่พร้อมใช้งาน{info_str} -> กำลังรอความพร้อม ({elapsed:.1f}s / {timeout:.0f}s)...")
+            else:
+                log(f"[Meta Step 5] ⏳ กำลังรอตัวเลือก 'Schedule for later' ปรากฏบนหน้าจอ ({elapsed:.1f}s / {timeout:.0f}s)...")
+
+        time.sleep(0.5)
+
+    # If timeout exceeded
+    raise RuntimeError(
+        f"ปุ่ม 'Schedule for later' บน Facebook ยังไม่พร้อมใช้งานภายใน {timeout:.0f} วินาที "
+        f"(วิดีโออาจยังอัปโหลดไม่เสร็จ หรือระบบ Facebook กำลังประมวลผล กรุณาลองใหม่อีกครั้ง)"
+    )
+
 def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
-    """Step 5: Poll for Schedule option, select it, input Date via Calendar & Time via spinbutton, loop verify values.
+    """Step 5: Poll for Schedule option (waiting for video upload if needed), select it, input Date via Calendar & Time via spinbutton, loop verify values.
     Specifically checks if an Instagram schedule box exists; if not, skips Instagram and proceeds to Schedule submit."""
-    log("[Meta Step 5] กำลังรอตัวเลือก 'Schedule'...")
+    log("[Meta Step 5] กำลังรอตัวเลือก 'Schedule for later' พร้อมใช้งาน...")
     
-    sched_tab = fast_poll(driver, '''
-        const allEls = Array.from(document.querySelectorAll('div, span, button, [role="radio"]'));
-        const tab = allEls.find(el => el.innerText && el.innerText.trim() === 'Schedule' && el.getBoundingClientRect().y < 350 && el.getBoundingClientRect().y > 100);
-        return tab ? (tab.closest('[role="button"], [role="radio"]') || tab) : null;
-    ''', timeout=10.0, poll_interval=0.2)
-
-    if sched_tab:
-        try:
-            ActionChains(driver).move_to_element(sched_tab).pause(0.1).click().perform()
-        except Exception:
-            driver.execute_script("arguments[0].click();", sched_tab)
-
-    # Loop check: verify date input appears
-    date_input_ready = fast_poll(driver, '''
-        const d = document.querySelector('input[placeholder="dd/mm/yyyy"]');
-        return d && d.offsetParent !== null;
-    ''', timeout=10.0, poll_interval=0.2)
-
-    if not date_input_ready:
-        raise RuntimeError("ไม่พบช่องใส่วันที่และเวลาของ Schedule หลังคลิกเลือก")
+    # 1. Wait for "Schedule for later" / "Schedule" to be enabled and click it (Timeout 60 seconds)
+    wait_for_schedule_option_ready(driver, timeout=60.0)
 
     if scheduled_dt_str:
         try:
