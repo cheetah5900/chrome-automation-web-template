@@ -7,13 +7,48 @@ Batch processes scenes across an entire episode or scene range in Google Flow.
 import argparse
 import json
 import os
+import random
 import re
 import sys
 import time
 from pathlib import Path
 
+import urllib.request
+
 # Add script directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+def notify_status_server(story_num, ep_str, current_scene=None, action="", status="RUNNING", fixing_scene=None, failed_scenes=None):
+    payload = {
+        "story": story_num,
+        "ep": ep_str,
+        "current_scene": current_scene,
+        "current_action": action,
+        "current_status": status,
+        "fixing_scene": fixing_scene,
+    }
+    if failed_scenes is not None:
+        payload["failed_scenes"] = failed_scenes
+    state_file = os.path.join(os.path.dirname(__file__), "generation_status.json")
+    try:
+        cur = {}
+        if os.path.exists(state_file):
+            with open(state_file, "r", encoding="utf-8") as f:
+                cur = json.load(f)
+        cur.update(payload)
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(cur, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:8181/api/status/update",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req, timeout=1)
+    except Exception:
+        pass
 from flow_video_generator import (
     generate_video_flow,
     dispatch_video_flow,
@@ -30,7 +65,8 @@ from flow_video_generator import (
     upload_storyboard_image,
     inspect_tab_js,
     get_existing_flow_assets,
-    check_asset_exists_in_flow
+    check_asset_exists_in_flow,
+    clear_prompt_box_completely
 )
 
 def parse_range(range_str: str) -> list[int]:
@@ -50,7 +86,7 @@ def run_bulk_video_pipeline(
     api_base: str = DEFAULT_API_BASE,
     project_id: str = DEFAULT_PROJECT_ID,
     aspect_ratio: str = "9:16",
-    delay: float = 3.0,
+    delay: float = None,
     timeout: int = 600,
     auto_retry_filters: bool = True,
     force: bool = False
@@ -64,6 +100,10 @@ def run_bulk_video_pipeline(
     log("="*60)
     log(f"🚀 [6969 Universal Video Pipeline] Starting bulk generation for {len(scenes_data)} scenes")
     log("="*60)
+
+    # 0. Clean slate purge of prompt box
+    log("\n🧹 Purging prompt box to guarantee clean state before video batch dispatch...")
+    clear_prompt_box_completely(api_base)
 
     # 1. Lock settings: Video Mode, Aspect Ratio, x1 Output Count
     log(f"\n🔒 Verifying Google Flow video settings (Video Mode, {aspect_ratio}, x1 single video)...")
@@ -119,7 +159,7 @@ def run_bulk_video_pipeline(
                 api_base=api_base,
                 project_id=project_id,
                 aspect_ratio=aspect_ratio,
-                wait_after_submit=3.0
+                wait_after_submit=0.5
             )
             dispatched_items.append({
                 "scene_num": sc_num,
@@ -132,7 +172,8 @@ def run_bulk_video_pipeline(
             log(f"     ⚠️ Dispatch error on Scene {sc_num:02d}: {e}")
             results.append({"scene": sc_num, "status": "FAILED", "error": str(e)})
 
-        time.sleep(delay)
+        actual_delay = random.uniform(0.5, 1.0) if delay is None else delay
+        time.sleep(actual_delay)
 
     # =========================================================================
     # PHASE 2: BULK MONITOR & DOWNLOAD
@@ -213,7 +254,7 @@ def run_bulk_video_pipeline(
             except Exception as e:
                 log(f"     ⚠️ Retry dispatch error on Scene {r_sc:02d}: {e}")
 
-            time.sleep(delay)
+            time.sleep(random.uniform(0.5, 1.0) if delay is None else delay)
 
         if retry_items:
             log(f"\n⏳ [Phase 4: Bulk Retry Monitor] Waiting for repair batch rendering ({len(retry_items)} scenes)...")
@@ -265,10 +306,10 @@ def main():
     parser.add_argument("--scenes", "-sc", type=str, help="Scene range (e.g. '1-5' or '1,3,7' or 'all')")
     parser.add_argument("--prompt-dir", type=str, help="Custom directory containing animation prompt markdown files")
     parser.add_argument("--aspect-ratio", "-a", type=str, default="9:16", choices=["16:9", "9:16"], help="Aspect ratio (default: 9:16 for Lakorn)")
-    parser.add_argument("--batch-size", "-b", type=int, default=5, help="Number of scenes to queue concurrently (default: 5)")
+    parser.add_argument("--batch-size", "-b", type=int, default=25, help="Number of scenes to queue concurrently (default: 25)")
     parser.add_argument("--skip-existing", action="store_true", default=True, help="Skip scenes where MP4 already exists in Videos folder")
     parser.add_argument("--force", action="store_true", help="Force regenerate even if MP4 exists")
-    parser.add_argument("--delay", "-d", type=int, default=3, help="Delay between prompt submissions in seconds")
+    parser.add_argument("--delay", "-d", type=float, default=None, help="Delay between prompt submissions in seconds (default: randomized 0.5-1.0s)")
     parser.add_argument("--timeout", type=int, default=600, help="Max timeout for batch video generation in seconds")
     parser.add_argument("--project-id", type=str, default=DEFAULT_PROJECT_ID, help="Google Flow project ID")
     parser.add_argument("--api-base", type=str, default=DEFAULT_API_BASE, help="FlowKit API base URL")
@@ -280,6 +321,7 @@ def main():
 
     ep_num = int(re.search(r'\d+', args.ep).group(0)) if re.search(r'\d+', args.ep) else 1
     ep_str = f"EP{ep_num:02d}"
+    story_num = os.path.basename(os.path.normpath(args.story_path))
 
     sb_dir = os.path.join(args.story_path, "6 - Storyboards", ep_str)
     base_prompt_dir = args.prompt_dir or os.path.join(args.story_path, "4 - Animation Prompt")
@@ -358,7 +400,7 @@ def main():
             log("Reloading Google Flow tab once so newly uploaded assets appear in the UI...")
             try:
                 inspect_tab_js(args.api_base, "window.location.reload()")
-                time.sleep(6)
+                time.sleep(8)
             except Exception as re_err:
                 log(f"Notice on reload: {re_err}")
         else:
@@ -386,13 +428,15 @@ def main():
         })
 
     # 4. Run Universal Bulk Pipeline in Chunks (respecting batch_size to prevent Flow queue overload)
-    batch_size = max(1, args.batch_size) if hasattr(args, 'batch_size') and args.batch_size else 4
+    batch_size = max(1, args.batch_size) if hasattr(args, 'batch_size') and args.batch_size else 25
     all_results = []
     completed_sc_nums = set()
     failed_sc_nums = set()
 
     chunks = [scenes_data[i:i + batch_size] for i in range(0, len(scenes_data), batch_size)]
     for chunk_idx, chunk in enumerate(chunks, start=1):
+        scenes_in_chunk = [s['scene_num'] for s in chunk]
+        notify_status_server(story_num, ep_str, current_scene=scenes_in_chunk[0] if scenes_in_chunk else None, action=f"กำลังสร้างวิดีโอ Batch {chunk_idx}/{len(chunks)} (ฉาก {scenes_in_chunk})", status="RUNNING")
         log(f"\n{'='*60}")
         log(f" 🚀 Processing Batch {chunk_idx}/{len(chunks)} ({len(chunk)} scenes: {[s['scene_num'] for s in chunk]})")
         log(f"{'='*60}")
@@ -413,9 +457,14 @@ def main():
             else:
                 failed_sc_nums.add(r.get("scene"))
 
+        notify_status_server(story_num, ep_str, current_scene=None, action=f"สร้างวิดีโอสำเร็จแล้ว {len(completed_sc_nums)}/{len(scenes_data)} ฉาก", status="RUNNING")
+
         if chunk_idx < len(chunks):
             log("Cooling down 4 seconds between batches...")
             time.sleep(4.0)
+
+    final_status = "COMPLETED" if len(completed_sc_nums) == len(scenes_data) else "FAILED"
+    notify_status_server(story_num, ep_str, current_scene=None, action=f"สร้างวิดีโอเสร็จสิ้น ({len(completed_sc_nums)}/{len(scenes_data)} ฉาก)", status=final_status)
 
     pipeline_res = {
         "success": len(completed_sc_nums) == len(scenes_data),

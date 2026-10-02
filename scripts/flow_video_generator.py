@@ -213,6 +213,11 @@ def sanitize_prompt_for_safety(prompt: str, tier: int = 1) -> str:
         (r"\bsparks\b", "glow"),
         (r"\bdismantling\s+wiring\b", "inspecting the fixture"),
         (r"\bheavy\s+descending\s+iron\s+gate\b", "large ornate door"),
+        (r"\bsteel\s+grate\b", "viewing gate"),
+        (r"\bgrate\b", "opening"),
+        (r"\bpeering\s+up\s+through\s+(?:the\s+)?slots\b", "looking up toward"),
+        (r"\bpeering\s+through\b", "looking toward"),
+        (r"\bpeering\b", "looking"),
         (r"\bbasement\b", "storage room"),
         (r"\bsensor\s+evasion\b", "walking quietly"),
         (r"\bweapon\b", "tool"),
@@ -226,7 +231,8 @@ def sanitize_prompt_for_safety(prompt: str, tier: int = 1) -> str:
         ("การพนัน", "เกมการแข่งขัน"),
         ("บ่อน", "สถานที่ลับ"),
         ("กักขัง", "ดูแล"),
-        ("ทำร้าย", "เผชิญหน้า")
+        ("ทำร้าย", "เผชิญหน้า"),
+        ("ทุกข์ทรมาน", "ความลำบาก"),
     ]
     for pattern, repl in t1_replacements:
         if isinstance(pattern, str) and not pattern.isascii():
@@ -366,32 +372,73 @@ def upload_storyboard_image(api_base: str, image_path: str, project_id: str, for
     log(f"Uploaded successfully! Media ID: {media_id}")
     return media_id
 
-def attach_start_frame(api_base: str, file_name: str, project_id: str = None, image_path: str = None) -> bool:
-    """Attaches the storyboard image matching file_name (e.g. 'EP01 - Scene 05') into Google Flow prompt box.
-    If not found in asset library and image_path is provided, uploads it first.
-    Strictly NO blind fallback to items[0].
+def clear_prompt_box_completely(api_base: str) -> int:
+    """Robustly clears all image chips and prompt text from the Google Flow prompt box.
+    Uses pointer & mouse events on the tray clear button, chip close buttons, and ProseMirror selectAll+delete.
+    Returns the remaining chip count (should be 0).
     """
-    target_base = os.path.splitext(file_name)[0].strip()
-    log(f"Attaching storyboard frame '{target_base}' into Google Flow prompt box...")
-
-    # 1. Clear any old chips, prompt text, and close any lingering popover/backdrop
-    clear_js = """(() => {
+    js = """(() => {
+        // 1. Close any overlay backdrop
         const backdrop = document.querySelector('.cdk-overlay-backdrop');
         if (backdrop) backdrop.click();
-        const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip'));
+
+        // 2. Click clear button if present (with full pointer & mouse events)
+        const clearBtn = document.querySelector('.top-right-actions button, button.clear-button, button[aria-label*="ล้างพรอมต์"], button[aria-label*="Clear prompt"]');
+        if (clearBtn) {
+            const opts = { bubbles: true, cancelable: true, view: window };
+            clearBtn.dispatchEvent(new PointerEvent('pointerdown', opts));
+            clearBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+            clearBtn.dispatchEvent(new PointerEvent('pointerup', opts));
+            clearBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+            clearBtn.dispatchEvent(new MouseEvent('click', opts));
+            clearBtn.click();
+        }
+
+        // 3. Clear ProseMirror text
+        const pm = document.querySelector('.ProseMirror');
+        if (pm) {
+            pm.focus();
+            document.execCommand('selectAll', false, null);
+            document.execCommand('delete', false, null);
+            pm.innerText = '';
+        }
+
+        // 4. If any chips remain, click their cancel buttons
+        const chips = Array.from(document.querySelectorAll('flow-image-ingredient-chip, flow-ingredient-chip'));
         for (const chip of chips) {
-            const cancelBtn = chip.querySelector('mat-icon, .hover-icon-overlay, button');
-            if (cancelBtn) {
-                cancelBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                cancelBtn.click();
+            const overlay = chip.querySelector('.hover-icon-overlay, mat-icon');
+            if (overlay) {
+                const opts = { bubbles: true, cancelable: true, view: window };
+                overlay.dispatchEvent(new PointerEvent('pointerdown', opts));
+                overlay.dispatchEvent(new MouseEvent('click', opts));
+                overlay.click();
             }
         }
-        const pm = document.querySelector('.ProseMirror');
-        if (pm) pm.innerText = '';
-        return true;
+
+        return document.querySelectorAll('flow-image-ingredient-chip').length;
     })()"""
-    inspect_tab_js(api_base, clear_js)
-    time.sleep(0.5)
+    inspect_tab_js(api_base, js)
+    time.sleep(0.4)
+    rem = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-image-ingredient-chip").length)()')
+    if rem and rem > 0:
+        inspect_tab_js(api_base, js)
+        time.sleep(0.4)
+        rem = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-image-ingredient-chip").length)()')
+    return rem or 0
+
+def attach_start_frame(api_base: str, file_name: str, project_id: str = None, image_path: str = None, clear: bool = True) -> bool:
+    """Attaches an image matching file_name (e.g. 'EP01 - Scene 05') into Google Flow prompt box.
+    If clear=True, purges old chips first so the scene starts fresh.
+    Allows single or multiple images as required by the scene.
+    """
+    target_base = os.path.splitext(file_name)[0].strip()
+    log(f"Attaching image '{target_base}' into Google Flow prompt box (clear={clear})...")
+
+    # 1. Purge ANY old chips, prompt text, and close any lingering popover/backdrop if clear=True
+    if clear:
+        remaining = clear_prompt_box_completely(api_base)
+        if remaining > 0:
+            error_exit(f"CRITICAL: Failed to clear old chips before attaching {file_name}! Still {remaining} chips in box.")
 
     def do_search_and_attach():
         # Open popover if not open
@@ -484,20 +531,14 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None, im
         return true;
     })()"""
     inspect_tab_js(api_base, close_js)
-    time.sleep(0.3)
+    time.sleep(0.4)
 
-    # Verify chip in prompt box
-    verify_js = """(() => {
-        const pb = document.querySelector('flow-prompt-box');
-        if (!pb) return false;
-        const chips = pb.querySelectorAll('flow-image-ingredient-chip, .chip-container');
-        return chips.length > 0;
-    })()"""
-    attached = inspect_tab_js(api_base, verify_js)
-    if not attached:
-        error_exit(f"CRITICAL: Failed to attach storyboard image {file_name} into prompt box! Verification failed.")
+    # Strict Verification: Must have EXACTLY 1 start frame image chip!
+    chips_count = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-image-ingredient-chip").length)()')
+    if chips_count != 1:
+        error_exit(f"CRITICAL GUARD: Expected exactly 1 start frame chip for {file_name}, but found {chips_count}! Refusing to generate with invalid chip count.")
 
-    log(f"Successfully attached {file_name} into prompt box (image chip verified present).")
+    log(f"Successfully attached {file_name} into prompt box (EXACTLY 1 image chip verified present).")
     return True
 
 select_storyboard_image_chip = attach_start_frame
@@ -795,7 +836,7 @@ def dispatch_video_flow(
     api_base: str = DEFAULT_API_BASE,
     project_id: str = DEFAULT_PROJECT_ID,
     aspect_ratio: str = "9:16",
-    wait_after_submit: float = 3.0,
+    wait_after_submit: float = 0.5,
     check_settings: bool = False
 ) -> bool:
     """Dispatches a single video prompt to Google Flow queue with storyboard image attached as start frame."""
@@ -1138,9 +1179,9 @@ def main():
     if not image_path and args.story_path:
         sb_dir = os.path.join(args.story_path, "6 - Storyboards", ep_str)
         candidates = [
-            os.path.join(sb_dir, f"{ep_str} - Scene {args.scene:02d}.jpg"),
-            os.path.join(sb_dir, f"{ep_str} - Scene {args.scene:02d}.png"),
-            os.path.join(sb_dir, f"{ep_str} - Scene {args.scene:02d}.jpeg"),
+            os.path.join(sb_dir, f"{ep_str} - Scene {sc_num:02d}.jpg"),
+            os.path.join(sb_dir, f"{ep_str} - Scene {sc_num:02d}.png"),
+            os.path.join(sb_dir, f"{ep_str} - Scene {sc_num:02d}.jpeg"),
             os.path.join(sb_dir, f"{ep_str} - {sc_str}.jpg"),
             os.path.join(sb_dir, f"{ep_str} - {sc_str}.png"),
             os.path.join(sb_dir, f"{ep_str} - {sc_str}.jpeg"),

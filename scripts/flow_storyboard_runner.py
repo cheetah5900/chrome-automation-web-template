@@ -9,6 +9,7 @@ import argparse
 import glob
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -81,6 +82,38 @@ def parse_range(range_str: str) -> List[int]:
         elif part.isdigit():
             result.add(int(part))
     return sorted(list(result))
+
+def notify_status_server(story_num, ep_str, current_scene=None, action="", status="RUNNING", fixing_scene=None, failed_scenes=None):
+    payload = {
+        "story": story_num,
+        "ep": ep_str,
+        "current_scene": current_scene,
+        "current_action": action,
+        "current_status": status,
+        "fixing_scene": fixing_scene,
+    }
+    if failed_scenes is not None:
+        payload["failed_scenes"] = failed_scenes
+    state_file = os.path.join(os.path.dirname(__file__), "generation_status.json")
+    try:
+        cur = {}
+        if os.path.exists(state_file):
+            with open(state_file, "r", encoding="utf-8") as f:
+                cur = json.load(f)
+        cur.update(payload)
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(cur, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:8181/api/status/update",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req, timeout=1)
+    except Exception:
+        pass
 
 def is_valid_image_file(filepath: str) -> bool:
     """Verifies that the file exists, is non-empty, and is a valid image (not HTML redirect)."""
@@ -238,7 +271,7 @@ def load_lakorn_scenes(story_path: str, ep_num: int, aspect_ratio: str) -> Dict[
     return scenes
 
 def load_stickman_scenes(story_path: str, aspect_ratio: str) -> Dict[int, Dict]:
-    """Loads Stickman beat prompts and target output paths."""
+    """Loads Stickman beat prompts and target output paths with 9:16 / 16:9 support."""
     prompts_file = os.path.join(story_path, "3 - Image Prompt", "Image_Prompts.md")
     out_dir = os.path.join(story_path, "5 - Storyboards")
     os.makedirs(out_dir, exist_ok=True)
@@ -246,8 +279,15 @@ def load_stickman_scenes(story_path: str, aspect_ratio: str) -> Dict[int, Dict]:
     if not os.path.isfile(prompts_file):
         return {}
 
-    channel_root = os.path.dirname(os.path.abspath(story_path))
-    bald_sheet = os.path.join(channel_root, "Character Sheet", "stickman_bald_master_sheet.jpg")
+    # Robust multi-level lookup for Character Sheet
+    cur = os.path.abspath(story_path)
+    bald_sheet = None
+    for _ in range(4):
+        candidate = os.path.join(cur, "Character Sheet", "stickman_bald_master_sheet.jpg")
+        if os.path.isfile(candidate):
+            bald_sheet = candidate
+            break
+        cur = os.path.dirname(cur)
 
     scenes = {}
     with open(prompts_file, "r", encoding="utf-8") as f:
@@ -258,17 +298,38 @@ def load_stickman_scenes(story_path: str, aspect_ratio: str) -> Dict[int, Dict]:
                 b_num = int(m.group(1))
                 desc = m.group(2).strip()
                 is_white_bg = "⚪" in desc or "White Background" in desc
-                if is_white_bg:
-                    clean_desc = desc.replace("⚪ White Background 100%.", "").replace("⚪", "").strip()
-                    full_prompt = f"Horizontal 16:9 composition on a plain clean solid 100% pure white textured paper background only. In the center, bold black hand-drawn marker typography and doodle, {clean_desc}, with a bold thick red marker X crossed out where applicable, high contrast, clean doodle explainer aesthetic, 100% pure white paper backdrop, no background environment."
-                    ref_imgs = []
-                else:
-                    clean_desc = re.sub(r"^Full-bleed 16:9\.?\s*", "", desc).strip()
-                    clean_desc = re.sub(r"with comic sound effects\.?", "", clean_desc, flags=re.I).strip()
-                    full_prompt = f"Full-bleed 16:9 widescreen composition filling the entire frame from edge to edge, no border, no white margin, no vignette, no comic text bubbles, no sound effect words. Hand-drawn doodle ink explainer style on textured paper, soft muted watercolor wash and gentle gouache shading, fine crosshatching, gentle atmospheric lighting. The minimalist white bald stick figure with completely smooth round head and NO HAIR, {clean_desc}."
-                    ref_imgs = [bald_sheet] if os.path.isfile(bald_sheet) else []
 
-                out_file = os.path.join(out_dir, f"Beat_{b_num:02d}.jpg")
+                # Extract filename if defined in beat line, e.g. Beat_01_cozy_bed.jpg
+                fn_match = re.search(r'`(Beat_\d+[^`]+)`', line)
+                if fn_match:
+                    out_filename = fn_match.group(1)
+                    if not out_filename.lower().endswith((".jpg", ".jpeg", ".png")):
+                        out_filename += ".jpg"
+                else:
+                    out_filename = f"Beat_{b_num:02d}.jpg"
+
+                if aspect_ratio == "9:16":
+                    if is_white_bg:
+                        clean_desc = desc.replace("⚪ White Background 100%.", "").replace("⚪", "").strip()
+                        full_prompt = f"Vertical 9:16 tall vertical composition on a plain clean solid 100% pure white textured paper background only. In the center, bold black hand-drawn marker typography and doodle, {clean_desc}, with a bold thick red marker X crossed out where applicable, high contrast, clean doodle explainer aesthetic, 100% pure white paper backdrop, no background environment."
+                        ref_imgs = []
+                    else:
+                        clean_desc = re.sub(r"^Full-bleed (?:16:9|9:16)\.?\s*", "", desc, flags=re.I).strip()
+                        clean_desc = re.sub(r"with comic sound effects\.?", "", clean_desc, flags=re.I).strip()
+                        full_prompt = f"Vertical 9:16 tall vertical composition filling the entire frame from top to bottom, no border, no white margin, no vignette, no comic text bubbles, no sound effect words. Hand-drawn doodle ink explainer style on textured paper, soft muted watercolor wash and gentle gouache shading, fine crosshatching, gentle atmospheric lighting. The minimalist white bald stick figure with completely smooth round head and NO HAIR, {clean_desc}."
+                        ref_imgs = [bald_sheet] if (bald_sheet and os.path.isfile(bald_sheet)) else []
+                else:
+                    if is_white_bg:
+                        clean_desc = desc.replace("⚪ White Background 100%.", "").replace("⚪", "").strip()
+                        full_prompt = f"Horizontal 16:9 composition on a plain clean solid 100% pure white textured paper background only. In the center, bold black hand-drawn marker typography and doodle, {clean_desc}, with a bold thick red marker X crossed out where applicable, high contrast, clean doodle explainer aesthetic, 100% pure white paper backdrop, no background environment."
+                        ref_imgs = []
+                    else:
+                        clean_desc = re.sub(r"^Full-bleed (?:16:9|9:16)\.?\s*", "", desc, flags=re.I).strip()
+                        clean_desc = re.sub(r"with comic sound effects\.?", "", clean_desc, flags=re.I).strip()
+                        full_prompt = f"Full-bleed 16:9 widescreen composition filling the entire frame from edge to edge, no border, no white margin, no vignette, no comic text bubbles, no sound effect words. Hand-drawn doodle ink explainer style on textured paper, soft muted watercolor wash and gentle gouache shading, fine crosshatching, gentle atmospheric lighting. The minimalist white bald stick figure with completely smooth round head and NO HAIR, {clean_desc}."
+                        ref_imgs = [bald_sheet] if (bald_sheet and os.path.isfile(bald_sheet)) else []
+
+                out_file = os.path.join(out_dir, out_filename)
                 scenes[b_num] = {
                     "prompt": full_prompt,
                     "reference_images": ref_imgs,
@@ -276,9 +337,41 @@ def load_stickman_scenes(story_path: str, aspect_ratio: str) -> Dict[int, Dict]:
                 }
     return scenes
 
+def ensure_main_project_view(api_base: str) -> bool:
+    """Ensures Google Flow is on the main project page (closes any tile inspector/editor)."""
+    try:
+        check_js = """(() => {
+            const url = window.location.href || '';
+            const inEdit = url.includes('/edit/') || !!document.querySelector('flow-image-editor, flow-edit-image-prompt-box');
+            if (inEdit) {
+                const backBtn = document.querySelector('button.back-button, [aria-label*="กลับ"], [aria-label*="Back"]');
+                if (backBtn) {
+                    backBtn.click();
+                    return { action: 'clicked_back', from: url };
+                }
+                const base = url.split('/edit/')[0];
+                window.location.href = base;
+                return { action: 'navigated', target: base };
+            }
+            return { action: 'already_main_page', url: url };
+        })()"""
+        encoded = urllib.parse.quote(check_js)
+        res = http_get(f"{api_base}/api/flow/inspect-tab?js={encoded}")
+        script_res = res.get("result", {}).get("res", {}).get("result")
+        if isinstance(script_res, dict) and script_res.get("action") in ("clicked_back", "navigated"):
+            log(f"  🔙 Navigated from tile detail/editor back to main project page ({script_res.get('action')}).")
+            time.sleep(1.5)
+            return True
+        return True
+    except Exception as e:
+        log(f"  Notice on ensuring main project view: {e}")
+        return False
+
+
 def ensure_image_mode(api_base: str) -> bool:
     """Ensures Google Flow prompt box is toggled to Image mode ('🍌 Nano Banana 2' / 'รูปภาพ')."""
     try:
+        ensure_main_project_view(api_base)
         check_js = """(() => {
             const btn = document.querySelector('button.settings-trigger-button') ||
                         document.querySelector('button[aria-label="ทริกเกอร์การตั้งค่า"]');
@@ -338,9 +431,9 @@ def main():
     parser.add_argument("--api-base", type=str, default=DEFAULT_API_BASE, help="FlowKit API server base URL")
     parser.add_argument("--skip-existing", action="store_true", default=True, help="Skip scenes that already have a completed image file")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing images")
-    parser.add_argument("--batch-size", "-b", type=int, default=5, help="Number of scenes to process per batch (default: 5)")
+    parser.add_argument("--batch-size", "-b", type=int, default=25, help="Number of scenes to process per batch (default: 25 for continuous pipeline)")
     parser.add_argument("--max-retries", "-r", type=int, default=2, help="Max retry attempts for failed scenes with softened prompts (default: 2)")
-    parser.add_argument("--delay", "-d", type=float, default=3.0, help="Delay between scene submissions in seconds")
+    parser.add_argument("--delay", "-d", type=float, default=None, help="Delay between scene submissions in seconds (default: randomized 0.5-1.0s)")
     parser.add_argument("--timeout", type=int, default=60, help="Max timeout per scene generation in seconds (default: 60)")
 
     args = parser.parse_args()
@@ -360,6 +453,12 @@ def main():
 
     # 2. Parse episode number
     ep_num = int(re.search(r'\d+', args.ep).group(0)) if re.search(r'\d+', args.ep) else 1
+    story_dir_name = os.path.basename(os.path.normpath(args.story_path))
+    try:
+        story_num = int(story_dir_name)
+    except ValueError:
+        story_num = 26
+    ep_str = f"EP{ep_num:02d}"
 
     # 3. Detect Channel / Story Structure
     story_path = os.path.abspath(args.story_path)
@@ -377,8 +476,6 @@ def main():
         log("Detected format: Stickman Explainer")
         if args.project_id == DEFAULT_PROJECT_ID:
             args.project_id = DEFAULT_STICKMAN_PROJECT_ID
-        if args.aspect_ratio == "9:16":
-            args.aspect_ratio = "16:9"
         scenes_map = load_stickman_scenes(story_path, args.aspect_ratio)
     else:
         error_exit(f"Could not detect recognized prompt structure in {story_path}")
@@ -402,11 +499,13 @@ def main():
             "project_id": args.project_id,
             "story_path": story_path
         }
-        preload_res = http_post(f"{args.api_base}/api/flow/preload-characters", preload_payload, timeout=60)
+        preload_res = post_with_busy_retry(f"{args.api_base}/api/flow/preload-characters", preload_payload, timeout=60)
         if preload_res.get("success"):
             exists = preload_res.get("already_exists", [])
             up = preload_res.get("uploaded", [])
             log(f"  Character Sheets verified! Already in project: {len(exists)}, Newly uploaded: {len(up)}")
+        else:
+            log(f"  Character preload notice: {preload_res.get('message') or preload_res.get('detail')}")
     except Exception as e:
         log(f"  Character preload check warning: {e}")
 
@@ -422,6 +521,14 @@ def main():
     total_scenes_to_run = len(target_scene_nums)
 
     log(f"\n🚀 Starting batch processing: {len(batches)} batches (Batch size: {batch_size}, Max retries: {args.max_retries})")
+
+    # Clear server-side dispatch order queue before this batch session
+    try:
+        clear_res = http_post(f"{args.api_base}/api/flow/clear-dispatch-queue", {}, timeout=10)
+        log(f"  🗑️ Server dispatch queue cleared (removed {clear_res.get('cleared', 0)} stale entries).")
+    except Exception as e:
+        log(f"  ⚠️ Could not clear dispatch queue (non-fatal): {e}")
+
 
     for batch_idx, batch in enumerate(batches):
         log("\n" + "="*50)
@@ -455,6 +562,9 @@ def main():
         if len(scenes_to_process) >= 1:
             log(f"\n  🚀 [Rapid Batch Dispatch] Queueing {len(scenes_to_process)} scenes into Google Flow...")
 
+            # 0. Ensure main project page (exit any tile detail/editor view)
+            ensure_main_project_view(args.api_base)
+
             # 1. Snapshot existing tiles before dispatching
             snap = http_get(f"{args.api_base}/api/flow/snapshot-existing-tiles")
             known_urls = snap.get("urls", [])
@@ -465,6 +575,7 @@ def main():
             dispatched_scenes = []
             for q_idx, sc_idx in enumerate(scenes_to_process, 1):
                 item = scenes_map[sc_idx]
+                notify_status_server(story_num, ep_str, current_scene=sc_idx, action=f"กำลังส่งสร้างภาพฉาก {sc_idx:02d} เข้า Google Flow...", status="RUNNING")
                 log(f"\n  ⚡ [Queue {q_idx}/{len(scenes_to_process)}] Dispatching Scene {sc_idx:02d} ({args.aspect_ratio})...")
                 log(f"     Prompt: {item['prompt'][:85]}...")
                 if item["reference_images"]:
@@ -475,14 +586,21 @@ def main():
                     "project_id": args.project_id,
                     "aspect_ratio": args.aspect_ratio,
                     "reference_images": item["reference_images"],
-                    "wait_after_submit": 2.0
+                    "wait_after_submit": 0.5,
+                    "scene_num": sc_idx,
+                    "output_path": item["output_path"]
                 }
 
                 try:
-                    res = http_post(f"{args.api_base}/api/flow/dispatch-storyboard-prompt", dispatch_payload, timeout=60)
+                    res = post_with_busy_retry(f"{args.api_base}/api/flow/dispatch-storyboard-prompt", dispatch_payload, timeout=60)
                     if res.get("success"):
                         dispatched_scenes.append(sc_idx)
-                        log(f"     ✅ Queued Scene {sc_idx:02d} successfully into Google Flow queue!")
+                        mid = res.get("media_id")
+                        item["media_id"] = mid
+                        if mid:
+                            log(f"     ✅ Queued Scene {sc_idx:02d} successfully! (media_id: {mid})")
+                        else:
+                            log(f"     ✅ Queued Scene {sc_idx:02d} successfully into Google Flow queue!")
                     else:
                         err_msg = res.get("detail") or res.get("message") or str(res)
                         log(f"     ⚠️ Dispatch failed for Scene {sc_idx:02d}: {err_msg}")
@@ -491,10 +609,13 @@ def main():
                     log(f"     ⚠️ Dispatch error for Scene {sc_idx:02d}: {e}")
                     failed_scenes.append((sc_idx, str(e)))
 
-                time.sleep(args.delay)
+                actual_delay = random.uniform(0.5, 1.0) if args.delay is None else args.delay
+                log(f"     ⏱️ Inter-scene delay: {actual_delay:.2f}s")
+                time.sleep(actual_delay)
 
             # 3. Concurrently collect rendered batch
             if dispatched_scenes:
+                notify_status_server(story_num, ep_str, current_scene=None, action=f"กำลังรอ Google Flow เรนเดอร์ {len(dispatched_scenes)} ภาพพร้อมกัน...", status="RUNNING")
                 log(f"\n  ⏳ All {len(dispatched_scenes)} prompts queued! Waiting for Google Flow concurrent rendering & collection...")
                 collect_payload = {
                     "scenes": [
@@ -502,7 +623,8 @@ def main():
                             "scene_num": sc_idx,
                             "prompt": scenes_map[sc_idx]["prompt"],
                             "output_path": scenes_map[sc_idx]["output_path"],
-                            "reference_images": scenes_map[sc_idx]["reference_images"]
+                            "reference_images": scenes_map[sc_idx]["reference_images"],
+                            "media_id": scenes_map[sc_idx].get("media_id")
                         }
                         for sc_idx in dispatched_scenes
                     ],
@@ -520,10 +642,12 @@ def main():
                             if r.get("success") and is_valid_image_file(target_out):
                                 log(f"  ✅ [Batch OK] Scene {sc_num:02d} rendered & saved: {os.path.basename(r.get('output_path', ''))} ({r.get('footer_title', '')})")
                                 completed_count += 1
+                                notify_status_server(story_num, ep_str, current_scene=None, action=f"สร้างภาพฉาก {sc_num:02d} สำเร็จแล้ว", status="RUNNING")
                             else:
                                 err_msg = r.get("error", "Collection failed or corrupt image")
                                 log(f"  ⚠️ Scene {sc_num:02d} generation failed: {err_msg}")
                                 failed_scenes.append((sc_num, err_msg))
+                                notify_status_server(story_num, ep_str, current_scene=None, action=f"ฉาก {sc_num:02d} ติดปัญหา: {err_msg}", status="FIXING", fixing_scene=sc_num, failed_scenes=[{"scene_num": s[0], "error": s[1]} for s in failed_scenes])
                                 if os.path.isfile(target_out) and not is_valid_image_file(target_out):
                                     try:
                                         os.remove(target_out)
@@ -577,7 +701,7 @@ def main():
                     log(f"  ⚠️ Error rendering Scene {sc_idx:02d}: {e}")
                     failed_scenes.append((sc_idx, str(e)))
 
-                time.sleep(args.delay)
+                time.sleep(random.uniform(0.5, 1.0) if args.delay is None else args.delay)
 
         # 5.3 Retry Pass for failed scenes in this batch with prompt softening
         retry_round = 1
@@ -591,6 +715,7 @@ def main():
 
                 # Soften prompt according to safety rules
                 softened_prompt = soften_prompt_for_safety(item["prompt"], round_num=retry_round)
+                notify_status_server(story_num, ep_str, current_scene=sc_idx, action=f"กำลังปรับแก้และลองใหม่ฉาก {sc_idx:02d} (รอบ {retry_round}/{args.max_retries})...", status="FIXING", fixing_scene=sc_idx, failed_scenes=[{"scene_num": s[0], "error": s[1]} for s in failed_scenes])
                 log(f"\n  🛡️ Retrying Scene {sc_idx:02d} with softened prompt:")
                 log(f"     Original : {item['prompt'][:70]}...")
                 log(f"     Softened : {softened_prompt[:70]}...")
@@ -609,6 +734,7 @@ def main():
                     if res.get("success") and is_valid_image_file(out_path):
                         log(f"  ✅ [Retry {retry_round} OK] Rendered Scene {sc_idx:02d}! Saved to: {os.path.basename(out_path)}")
                         completed_count += 1
+                        notify_status_server(story_num, ep_str, current_scene=None, action=f"แก้ไขและสร้างภาพฉาก {sc_idx:02d} สำเร็จแล้ว", status="RUNNING", fixing_scene=None)
                     else:
                         err_msg = res.get("detail") or res.get("message") or "Corrupt image or download failed"
                         log(f"  ⚠️ [Retry {retry_round} Failed] Scene {sc_idx:02d}: {err_msg}")
@@ -622,7 +748,7 @@ def main():
                     log(f"  ⚠️ [Retry {retry_round} Error] Scene {sc_idx:02d}: {e}")
                     still_failed.append((sc_idx, str(e)))
 
-                time.sleep(args.delay)
+                time.sleep(random.uniform(0.5, 1.0) if args.delay is None else args.delay)
 
             failed_scenes = still_failed
             retry_round += 1
@@ -642,6 +768,9 @@ def main():
     log(f"  Skipped         : {skipped_count}")
     log(f"  Failed          : {failed_count}")
     log("="*50)
+    final_status = "COMPLETED" if failed_count == 0 else "PARTIAL"
+    notify_status_server(story_num, ep_str, current_scene=None, action=f"สร้างภาพสตอรี่บอร์ดเสร็จสิ้น (สำเร็จ {completed_count}/{len(target_scene_nums)} ฉาก)", status=final_status, fixing_scene=None, failed_scenes=[{"scene_num": s[0], "error": s[1]} for s in failed_scenes])
+
 
 if __name__ == "__main__":
     main()

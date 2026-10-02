@@ -179,6 +179,10 @@ async function findFlowTabs() {
     flowTabs.sort((a, b) => {
       const uA = a.url || a.pendingUrl || '';
       const uB = b.url || b.pendingUrl || '';
+      const isProjA = uA.includes('/project/');
+      const isProjB = uB.includes('/project/');
+      if (isProjA && !isProjB) return -1;
+      if (!isProjA && isProjB) return 1;
       const isAboutA = uA.includes('/about');
       const isAboutB = uB.includes('/about');
       if (isAboutA && !isAboutB) return 1;
@@ -1483,7 +1487,7 @@ function connectToAgent() {
           return;
         }
         const tab = tabs[0];
-        // Pure background execution: do NOT activate tab or steal OS window focus
+        try { await chrome.tabs.update(tab.id, { active: true }); } catch {}
         const text = msg.params?.text || '';
         const clickSubmit = msg.params?.clickSubmit ?? msg.params?.click_submit ?? false;
         const outputCount = msg.params?.outputCount ?? msg.params?.output_count ?? 1;
@@ -1675,6 +1679,7 @@ function connectToAgent() {
                       btn.dispatchEvent(new PointerEvent('pointerup', opts));
                       btn.dispatchEvent(new MouseEvent('mouseup', opts));
                       btn.dispatchEvent(new MouseEvent('click', opts));
+                      btn.click();
                     }
                   }
                 });
