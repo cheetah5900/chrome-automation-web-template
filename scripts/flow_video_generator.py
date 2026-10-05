@@ -549,95 +549,153 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None, im
 select_storyboard_image_chip = attach_start_frame
 
 
-def ensure_video_settings(api_base: str, aspect: str = "9:16", output_count: int = 1) -> bool:
-    """Strictly verifies and locks Google Flow settings before any generation:
+def ensure_video_settings(
+    api_base: str,
+    aspect: str = "9:16",
+    duration: int = 6,
+    submode: str = "เฟรม",
+    output_count: int = 1
+) -> bool:
+    """Strictly verifies and locks Google Flow video settings before any generation:
     1. Video mode ('videocam วิดีโอ')
-    2. Aspect ratio ('9:16' or '16:9')
-    3. Output count ('x1' single video per prompt)
+    2. Submode: Frame ('crop_free เฟรม')
+    3. Aspect ratio ('9:16' or '16:9')
+    4. Duration: 6 seconds ('6 วินาที')
+    5. Output count: 1 video ('x1')
     """
     is_landscape = (aspect == "16:9" or "landscape" in aspect.lower())
     target_crop = "crop_16_9" if is_landscape else "crop_9_16"
     target_label = "16:9" if is_landscape else "9:16"
     target_count = f"x{output_count}"
+    target_dur = f"{duration} วินาที"
 
     check_js = f"""(() => {{
         const btn = document.querySelector('button.settings-trigger-button') ||
-                    document.querySelector('button[aria-label="ทริกเกอร์การตั้งค่า"]');
+                    document.querySelector('button[aria-label*="ตั้งค่า"]');
+        const pb = document.querySelector('flow-prompt-box');
         if (!btn) return {{ error: "settings button not found" }};
         const text = (btn.innerText || '').toLowerCase();
-        const hasVideo = text.includes('วิดีโอ') || text.includes('video') || text.includes('720p');
-        const hasCrop = text.includes('{target_crop}');
+        const pbText = pb ? (pb.innerText || '') : '';
+
+        const hasVideo = (text.includes('วิดีโอ') || text.includes('video') || text.includes('720p')) &&
+                         !text.includes('banana') && !text.includes('รูปภาพ') && !text.includes('image');
+        const hasCrop = text.includes('{target_crop}') || text.includes('{target_label}');
+        const hasDur = text.includes('{duration} วินาที') || text.includes('{duration}s');
         const hasCount = text.includes('{target_count.lower()}');
-        if (hasVideo && hasCrop && hasCount) {{
-            return {{ alreadyConfigured: true, text: btn.innerText.replace(/\\n/g, ' ') }};
+        const hasFrame = "{submode}" !== "เฟรม" || pbText.includes('เริ่ม') || pbText.includes('Start');
+
+        if (hasVideo && hasCrop && hasDur && hasCount && hasFrame) {{
+            return {{ alreadyConfigured: true, text: btn.innerText.split(String.fromCharCode(10)).join(' | ') }};
         }}
-        btn.click();
-        return {{ opened: true, text: btn.innerText.replace(/\\n/g, ' ') }};
+        return {{ alreadyConfigured: false, text: btn.innerText.split(String.fromCharCode(10)).join(' | ') }};
     }})()"""
     try:
         res = inspect_tab_js(api_base, check_js)
         if isinstance(res, dict) and res.get("alreadyConfigured"):
-            log(f"Verified Google Flow settings locked: {res.get('text')}")
+            log(f"🎯 Google Flow video settings verified: {res.get('text')} (Submode: {submode})")
             return True
 
-        log(f"Adjusting settings (Target: Video, {target_label}, {target_count})...")
-        time.sleep(0.8)
+        curr = res.get('text') if isinstance(res, dict) else 'Unknown'
+        log(f"⚙️ Adjusting video settings (Current: {curr} -> Target: Video | {submode} | {target_label} | {target_dur} | {target_count})...")
 
-        adjust_js = f"""(() => {{
-            const overlay = document.querySelector('.cdk-overlay-container');
-            if (!overlay) return {{ error: "no overlay" }};
-            
-            // 1. Video mode toggle
-            const spans = Array.from(overlay.querySelectorAll('span'));
-            const vSpan = spans.find(s => s.innerText && s.innerText.trim() === 'วิดีโอ');
-            if (vSpan) {{
-                const vBtn = vSpan.closest('button') || vSpan.closest('mat-button-toggle') || vSpan;
+        adjust_js = f"""(async () => {{
+            let settingsBox = document.querySelector('flow-prompt-box-settings');
+            if (!settingsBox) {{
+                let btn = document.querySelector('button.settings-trigger-button') ||
+                          document.querySelector('button[aria-label*="ตั้งค่า"]');
+                if (!btn) return {{ error: "settings button not found" }};
+                btn.click();
+                await new Promise(r => setTimeout(r, 400));
+            }}
+
+            const overlay = document.querySelector('.cdk-overlay-container') || document;
+            const allRadios = Array.from(overlay.querySelectorAll('button[role="radio"], button'));
+
+            // 1. Mode -> วิดีโอ
+            const vBtn = allRadios.find(b => {{
+                const t = (b.innerText || '').trim();
+                return t.includes('วิดีโอ') || t.includes('video');
+            }});
+            if (vBtn && vBtn.getAttribute('aria-checked') !== 'true') {{
                 vBtn.click();
+                await new Promise(r => setTimeout(r, 200));
             }}
 
-            // 2. Aspect ratio toggle
-            const aToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]'));
-            const aBtn = aToggles.find(el => (el.innerText || '').includes('{target_label}'));
-            if (aBtn) {{
-                const b = aBtn.querySelector('button') || aBtn;
-                b.click();
+            // 2. Submode -> เฟรม
+            if ("{submode}".includes("เฟรม")) {{
+                const frameBtn = allRadios.find(b => (b.innerText || '').includes('เฟรม'));
+                if (frameBtn && frameBtn.getAttribute('aria-checked') !== 'true') {{
+                    frameBtn.click();
+                    await new Promise(r => setTimeout(r, 200));
+                }}
             }}
 
-            // 3. Output count toggle (x1)
-            const countButtons = Array.from(overlay.querySelectorAll('button, mat-button-toggle, [role="radio"]')).filter(el => (el.innerText || '').trim() === '{target_count}');
-            if (countButtons.length > 0) {{
-                const cBtn = countButtons[0].querySelector('button') || countButtons[0];
-                cBtn.click();
+            // 3. Aspect ratio
+            const isVertical = "{target_label}".includes("9:16");
+            const aspectStr = isVertical ? "9:16" : "16:9";
+            const aspectBtn = allRadios.find(b => (b.innerText || '').includes(aspectStr));
+            if (aspectBtn && aspectBtn.getAttribute('aria-checked') !== 'true') {{
+                aspectBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+
+            // 4. Duration ({duration} วินาที)
+            const durBtn = allRadios.find(b => {{
+                const t = (b.innerText || '').trim();
+                return t.includes(String({duration})) && !t.includes('16') && (t.includes('วิ') || t.includes('s'));
+            }});
+            if (durBtn && durBtn.getAttribute('aria-checked') !== 'true') {{
+                durBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+
+            // 5. Output count (x{output_count})
+            const countStr = "x{output_count}";
+            const countBtn = allRadios.find(b => {{
+                const t = (b.innerText || '').trim();
+                return t === countStr || t === "{output_count}";
+            }});
+            if (countBtn && countBtn.getAttribute('aria-checked') !== 'true') {{
+                countBtn.click();
+                await new Promise(r => setTimeout(r, 200));
             }}
 
             // Close overlay
             const backdrop = document.querySelector('.cdk-overlay-backdrop');
             if (backdrop) backdrop.click();
-            return {{ success: true }};
+            await new Promise(r => setTimeout(r, 400));
+
+            const finalBtn = document.querySelector('button.settings-trigger-button') ||
+                             document.querySelector('button[aria-label*="ตั้งค่า"]');
+            return {{
+                success: true,
+                summary: finalBtn ? finalBtn.innerText.split(String.fromCharCode(10)).join(' | ') : ''
+            }};
         }})()"""
         inspect_tab_js(api_base, adjust_js)
-        time.sleep(1.0)
+        time.sleep(0.5)
 
         verify_btn_js = """(() => {
-            const btn = document.querySelector('button.settings-trigger-button');
-            return btn ? btn.innerText.replace(/\\n/g, ' ') : 'none';
+            const btn = document.querySelector('button.settings-trigger-button') ||
+                        document.querySelector('button[aria-label*="ตั้งค่า"]');
+            return btn ? btn.innerText.split(String.fromCharCode(10)).join(' | ') : 'none';
         })()"""
         v_text = inspect_tab_js(api_base, verify_btn_js)
-        log(f"Settings successfully locked: {v_text}")
+        log(f"✅ Video settings successfully locked: {v_text}")
         return True
     except Exception as e:
-        log(f"Notice on adjusting settings: {e}")
+        log(f"Notice on adjusting video settings: {e}")
         return False
 
 
-def ensure_video_mode(api_base: str) -> bool:
-    """Ensures Google Flow prompt box is toggled to Video mode, 9:16, x1 output count."""
-    return ensure_video_settings(api_base, aspect="9:16", output_count=1)
+def ensure_video_mode(api_base: str, aspect: str = "9:16", duration: int = 6, submode: str = "เฟรม") -> bool:
+    """Ensures Google Flow prompt box is toggled to Video mode, เฟรม, 9:16, 6 วินาที, x1 output count."""
+    return ensure_video_settings(api_base, aspect=aspect, duration=duration, submode=submode, output_count=1)
 
 
 def set_aspect_ratio(api_base: str, aspect: str = "16:9") -> bool:
-    """Sets video aspect ratio to 16:9 or 9:16, preserving x1 output count."""
-    return ensure_video_settings(api_base, aspect=aspect, output_count=1)
+    """Sets video aspect ratio to 16:9 or 9:16, preserving x1 output count and 6s duration."""
+    return ensure_video_settings(api_base, aspect=aspect, duration=6, submode="เฟรม", output_count=1)
 
 def submit_prompt_and_generate(api_base: str, prompt: str, aspect: str = "16:9") -> bool:
     """Types prompt and triggers generation using FlowKit CDP endpoint."""

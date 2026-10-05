@@ -1493,66 +1493,101 @@ function connectToAgent() {
         const outputCount = msg.params?.outputCount ?? msg.params?.output_count ?? 1;
         const aspectRatio = msg.params?.aspectRatio ?? msg.params?.aspect_ratio ?? '9:16';
         const targetModel = msg.params?.model || msg.params?.image_model || 'nano banana pro';
+        const isVideo = msg.params?.mode === 'video' || msg.params?.is_video || false;
+        const targetDuration = msg.params?.duration ?? (isVideo ? 6 : null);
+        const targetSubmode = msg.params?.submode ?? (isVideo ? 'เฟรม' : null);
 
         try {
-          // Configure output count, aspect ratio, and model in settings if needed (ONLY if not already configured)
+          // Configure output count, aspect ratio, model, duration, and mode in settings if needed (ONLY if not already configured)
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
-            func: async (targetCount, targetAspect, targetModel) => {
+            func: async (targetCount, targetAspect, targetModel, isVideo, targetDuration, targetSubmode) => {
               try {
-                const settingsBtn = document.querySelector('flow-prompt-box button.settings-trigger-button, flow-prompt-box button[aria-label="ทริกเกอร์การตั้งค่า"], flow-prompt-box button[aria-label="Settings trigger"]');
-                if (!settingsBtn) return;
+                let settingsBox = document.querySelector('flow-prompt-box-settings');
+                const settingsBtn = document.querySelector('flow-prompt-box button.settings-trigger-button, flow-prompt-box button[aria-label*="ตั้งค่า"]');
+                if (!settingsBtn && !settingsBox) return;
 
-                const currentText = (settingsBtn.innerText || '').toLowerCase();
+                const currentText = (settingsBtn ? (settingsBtn.innerText || '') : '').toLowerCase();
                 const isVertical = targetAspect ? (targetAspect.includes('PORTRAIT') || targetAspect.includes('9:16') || targetAspect.includes('VERTICAL')) : false;
                 const neededAspect = isVertical ? '9_16' : '16_9';
                 const neededCount = targetCount ? `x${targetCount}` : 'x1';
 
                 const alreadyAspect = !targetAspect || currentText.includes(neededAspect) || currentText.includes(isVertical ? '9:16' : '16:9');
                 const alreadyCount = !targetCount || currentText.includes(neededCount) || currentText.includes(`${targetCount} เอาต์พุต`) || currentText.includes(`${targetCount} output`);
-                const alreadyModel = !targetModel || currentText.includes(targetModel.toLowerCase());
+                const alreadyModel = isVideo || !targetModel || currentText.includes(targetModel.toLowerCase());
+                const alreadyDuration = !isVideo || !targetDuration || currentText.includes(`${targetDuration} วินาที`) || currentText.includes(`${targetDuration}s`);
+                const pb = document.querySelector('flow-prompt-box');
+                const pbText = pb ? (pb.innerText || '') : '';
+                const alreadySubmode = !isVideo || !targetSubmode || (targetSubmode === 'เฟรม' ? (pbText.includes('เริ่ม') || pbText.includes('Start')) : true);
 
-                if (alreadyAspect && alreadyCount && alreadyModel) {
-                  // Already set to target aspect ratio, count, and model! Do NOT open settings menu!
+                if (alreadyAspect && alreadyCount && alreadyModel && alreadyDuration && alreadySubmode) {
+                  // Already set to target aspect ratio, count, model, duration, and submode!
                   return;
                 }
 
-                settingsBtn.click();
-                await new Promise(r => setTimeout(r, 400));
+                if (!settingsBox && settingsBtn) {
+                  settingsBtn.click();
+                  await new Promise(r => setTimeout(r, 400));
+                }
 
                 const overlay = document.querySelector('.cdk-overlay-container') || document;
+                const allRadios = Array.from(overlay.querySelectorAll('button[role="radio"], button'));
                 
-                // 1. Output count (e.g. 1 vs 2 outputs)
-                if (targetCount && !alreadyCount) {
-                  const countStr = String(targetCount);
-                  const countToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
-                    const t = el.innerText?.trim();
-                    const aria = el.getAttribute('aria-label') || '';
-                    return t === countStr || aria.includes(`${countStr} output`) || aria.includes(`${countStr} เอาต์พุต`);
-                  });
-                  if (countToggles.length > 0) {
-                    const btn = countToggles[0].querySelector('button') || countToggles[0];
-                    btn.click();
+                // 1. Mode switch
+                if (isVideo) {
+                  const vBtn = allRadios.find(b => (b.innerText || '').includes('วิดีโอ'));
+                  if (vBtn && vBtn.getAttribute('aria-checked') !== 'true') {
+                    vBtn.click();
                     await new Promise(r => setTimeout(r, 200));
                   }
                 }
 
-                // 2. Aspect ratio (9:16 vs 16:9)
+                // 2. Submode (เฟรม)
+                if (isVideo && targetSubmode && targetSubmode.includes('เฟรม')) {
+                  const fBtn = allRadios.find(b => (b.innerText || '').includes('เฟรม'));
+                  if (fBtn && fBtn.getAttribute('aria-checked') !== 'true') {
+                    fBtn.click();
+                    await new Promise(r => setTimeout(r, 200));
+                  }
+                }
+
+                // 3. Output count (e.g. 1 vs 2 outputs)
+                if (targetCount && !alreadyCount) {
+                  const countStr = `x${targetCount}`;
+                  const countBtn = allRadios.find(b => {
+                    const t = (b.innerText || '').trim();
+                    return t === countStr || t === String(targetCount);
+                  });
+                  if (countBtn && countBtn.getAttribute('aria-checked') !== 'true') {
+                    countBtn.click();
+                    await new Promise(r => setTimeout(r, 200));
+                  }
+                }
+
+                // 4. Aspect ratio (9:16 vs 16:9)
                 if (targetAspect && !alreadyAspect) {
                   const aspectStr = isVertical ? '9:16' : '16:9';
-                  const aspectToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
-                    const t = el.innerText?.trim();
-                    return t && t.includes(aspectStr);
-                  });
-                  if (aspectToggles.length > 0) {
-                    const btn = aspectToggles[0].querySelector('button') || aspectToggles[0];
-                    btn.click();
+                  const aspectBtn = allRadios.find(b => (b.innerText || '').includes(aspectStr));
+                  if (aspectBtn && aspectBtn.getAttribute('aria-checked') !== 'true') {
+                    aspectBtn.click();
                     await new Promise(r => setTimeout(r, 200));
                   }
                 }
 
-                // 3. Model selection (e.g. Nano Banana Pro)
-                if (targetModel && !alreadyModel) {
+                // 5. Duration (e.g. 6 วินาที)
+                if (isVideo && targetDuration && !alreadyDuration) {
+                  const durBtn = allRadios.find(b => {
+                    const t = (b.innerText || '').trim();
+                    return t.includes(String(targetDuration)) && !t.includes('16') && (t.includes('วิ') || t.includes('s'));
+                  });
+                  if (durBtn && durBtn.getAttribute('aria-checked') !== 'true') {
+                    durBtn.click();
+                    await new Promise(r => setTimeout(r, 200));
+                  }
+                }
+
+                // 6. Model selection (e.g. Nano Banana Pro for image)
+                if (!isVideo && targetModel && !alreadyModel) {
                   const modelTrigger = overlay.querySelector('button[aria-label*="เลือกกลุ่มผลิตภัณฑ์โมเดล"]') ||
                                        overlay.querySelector('.mat-mdc-menu-trigger');
                   if (modelTrigger) {
@@ -1570,13 +1605,13 @@ function connectToAgent() {
                 // Close settings overlay
                 const backdrop = document.querySelector('.cdk-overlay-backdrop');
                 if (backdrop) backdrop.click();
-                else settingsBtn.click();
+                else if (settingsBtn) settingsBtn.click();
                 await new Promise(r => setTimeout(r, 300));
               } catch (e) {
                 console.warn('[flow_cdp_type_text] settings adjust error:', e);
               }
             },
-            args: [outputCount, aspectRatio, targetModel]
+            args: [outputCount, aspectRatio, targetModel, isVideo, targetDuration, targetSubmode]
           });
           await sleep(100);
         }
