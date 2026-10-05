@@ -176,9 +176,9 @@ def run_bulk_video_pipeline(
     log("\n🧹 Purging prompt box to guarantee clean state before video batch dispatch...")
     clear_prompt_box_completely(api_base)
 
-    # 1. Lock settings: Video Mode, Aspect Ratio, x1 Output Count
-    log(f"\n🔒 Verifying Google Flow video settings (Video Mode, {aspect_ratio}, x1 single video)...")
-    ensure_video_settings(api_base, aspect=aspect_ratio, output_count=1)
+    # 1. Lock settings: Video Mode, เฟรม Submode, Aspect Ratio, 6 วินาที Duration, x1 Output Count, Lower Priority
+    log(f"\n🔒 Verifying Google Flow video settings (Video -> เฟรม -> {aspect_ratio} -> 6 วินาที -> x1 -> Lower Priority)...")
+    ensure_video_settings(api_base, aspect=aspect_ratio, duration=6, submode="เฟรม", output_count=1, model="lower priority")
 
     completed_sc_nums = set()
     results = []
