@@ -1,0 +1,369 @@
+# Suno Lyric Downloader End User License Agreement
+
+Effective date: 10 August 2026
+
+Product owner approval: Henry Zhang (zhanghe.dev / hello@zhanghe.dev)
+approved this text for use with Suno Lyric Downloader version 3.0.0 and later.
+This file is the approved path required by the source-transition process. It is
+based on the product-owner-reviewed text prepared on 27 July 2026 and completed
+with product-identity facts known to the publisher.
+
+## 1. Parties and Acceptance
+
+This End User License Agreement ("Agreement") is between the person or entity
+using the Software ("you") and Henry Zhang, an individual operating the Suno Lyric Downloader product under
+zhanghe.dev ("Licensor").
+
+This Agreement applies to Suno Lyric Downloader extension version 3.0.0 and
+later, including its free functionality and the optional Creator Pro
+functionality (collectively, the "Software"). It does not change the license
+terms that applied to source code publicly released before the final public
+source cutoff described in Section 12.
+
+You accept this Agreement by installing, accessing, activating, purchasing, or
+using the Software after being given a reasonable opportunity to review it. If
+you use the Software for an organization, you represent that you have authority
+to bind that organization, and "you" includes that organization. If you do not
+agree, do not install, activate, purchase, or use the Software.
+
+The effective date of this Agreement is 10 August 2026.
+
+## 2. Definitions
+
+"Creator Pro" means the optional paid functionality made available through a
+valid entitlement.
+
+"Creator Pro Generation 1" or "Creator Pro G1" means the paid feature
+generation identified by the entitlement code `creator_pro_g1`. It is separate
+from the Software's semantic version.
+
+"Free Features" means the functionality that Licensor makes available without
+a Creator Pro entitlement. The Free Features include LRC download, SRT
+download, and automatic timing repair.
+
+"Installation" means one Chrome installation or Chrome profile identified by a
+random identifier generated and stored locally by the Software. An Installation
+does not necessarily correspond to a physical device. A reinstall or a
+different Chrome profile may count as another Installation.
+
+"Output" means a lyric, subtitle, project export, image, video, or other file
+that you create with the Software.
+
+"User Content" means lyrics, prompts, audio, images, song information, project
+data, and other content that you import, access, edit, or process with the
+Software.
+
+## 3. License Grant
+
+Subject to this Agreement, Licensor grants you a limited, non-exclusive,
+non-transferable, non-sublicensable license to install and use the object-code
+form of the Software for your personal or internal business purposes.
+
+The Free Features may be used without purchasing Creator Pro.
+
+If you purchase Creator Pro G1 and maintain a valid entitlement, Licensor also
+grants you a perpetual license to use the Creator Pro G1 capabilities included
+in compatible Software releases, subject to the activation limit and the other
+terms of this Agreement. "Perpetual" describes the duration of the license to
+the purchased Creator Pro G1 capabilities. It does not promise that every
+future browser, operating system, Suno service, third-party service, or Software
+release will remain compatible, and it does not include a future paid feature
+generation unless Licensor expressly says otherwise.
+
+You may use Outputs for personal or commercial purposes to the extent that you
+have the necessary rights in the underlying User Content. Licensor does not
+claim ownership of your Outputs merely because they were created with the
+Software.
+
+No source-code license is granted for Software version 3.0.0 or later.
+
+## 4. Creator Pro Purchase and Activations
+
+Creator Pro G1 is offered as a one-time purchase, not a subscription. The
+checkout page controls the price, currency, taxes, and transaction details
+shown at the time of purchase.
+
+One Creator Pro G1 license may be activated on up to two Installations at a
+time. Two Chrome profiles on one physical device may count as two
+Installations. Uninstalling and reinstalling may generate a new Installation.
+The Software may allow you to rename, deactivate, release, or replace an
+Installation. Licensor may reasonably rate-limit activation and replacement
+operations to prevent fraud or abuse.
+
+The license key and entitlement are for the purchaser or purchasing
+organization. You may not sell, rent, lease, sublicense, publish, or share them
+with unrelated third parties. You are responsible for keeping the license key
+confidential and for promptly reporting suspected unauthorized use.
+
+## 5. Payments, Taxes, and Refunds
+
+Lemon Squeezy acts as merchant of record for Creator Pro transactions and
+handles checkout, payment processing, applicable transaction taxes, receipts,
+refund processing, and chargebacks under its buyer terms. Lemon Squeezy's buyer
+terms apply to the transaction in addition to this Agreement.
+
+Licensor offers a voluntary 14-day refund period beginning on the purchase
+date. You may request a refund through the support channel identified in
+Section 20 or through the process made available by Lemon Squeezy. This
+voluntary policy is in addition to, and does not limit, any non-waivable rights
+or remedies provided by applicable law.
+
+If a purchase is refunded, charged back, reversed, fraudulent, or otherwise
+invalidated, Licensor may revoke the related Creator Pro entitlement after the
+Software receives a valid signed license-status update. Refund or revocation
+does not transfer ownership of, delete, or prevent access to files you
+previously exported. Local project files remain yours, but paid editing or
+export functions may cease to be available.
+
+## 6. License Validation and Offline Use
+
+The Software may contact Licensor's licensing service over HTTPS to activate,
+validate, refresh, release, or replace an entitlement. The licensing service
+may process only the license and product identifiers, a hash of the random
+Installation identifier, license state and timestamps, product variant, and
+Software version needed for compatibility, support, fraud prevention, and
+license administration.
+
+The Software is designed not to send User Content, Suno session credentials,
+browsing history, precise location, or a hardware fingerprint to Licensor's
+licensing service.
+
+After successful activation, a last-known-valid perpetual Creator Pro G1
+entitlement is intended to continue enabling purchased local capabilities
+without a hard offline expiration. Temporary unavailability of the licensing
+service should not disable a last-known-valid entitlement. A refund, chargeback,
+disabled license, compromised entitlement, or other invalid license state may
+take effect after a later successful signed status refresh.
+
+The detailed collection, use, retention, and sharing practices are described in
+the Privacy Policy at https://downloads.zhanghe.dev/get-suno-lyric/PRIVACY.md.
+
+## 7. User Content, Suno, and Third-Party Services
+
+You retain your rights in User Content. You are solely responsible for ensuring
+that you have all permissions needed to access, copy, edit, synchronize,
+publish, distribute, and commercially use User Content and Outputs.
+
+At your request, the Software may communicate directly with Suno using your
+existing browser session to obtain content needed for a user-facing feature.
+Suno is an independent third party. Your use of Suno and its content is subject
+to Suno's terms and policies. Licensor does not control Suno and does not
+guarantee continued access to Suno pages, APIs, content, or synchronization
+data.
+
+Song data, lyrics, audio, projects, and rendered videos are designed to be
+processed locally and not relayed through Licensor's checkout or licensing
+services. Payment and customer records are processed by Lemon Squeezy. Other
+third-party services you choose to use with an Output are governed by their own
+terms.
+
+You must not use the Software to infringe copyright, privacy, publicity,
+contractual, or other rights, or to violate applicable law.
+
+## 8. Restrictions
+
+Except to the extent a restriction is prohibited by applicable law, you may not:
+
+- copy or distribute the Software except for a reasonable backup;
+- modify, translate, adapt, or create derivative works of the Software;
+- reverse engineer, decompile, disassemble, or attempt to derive proprietary
+  source code, algorithms, signing keys, or security mechanisms;
+- bypass, disable, tamper with, or circumvent license validation, activation
+  limits, access controls, or usage restrictions;
+- remove or alter proprietary, copyright, attribution, or legal notices;
+- provide the Software as a hosted, rental, service-bureau, or time-sharing
+  service;
+- use the Software, its licensing service, or a license key to introduce
+  malware, interfere with systems, probe vulnerabilities without authorization,
+  or facilitate fraud; or
+- use automated means to scrape or bulk-process Suno libraries in a way not
+  expressly supported by the Software's user interface.
+
+This Section does not restrict rights that cannot lawfully be excluded,
+including any mandatory right to achieve interoperability. Where law requires
+Licensor to provide information for interoperability, you must first request it
+from Licensor unless the law permits otherwise.
+
+## 9. Updates, Changes, and Availability
+
+Licensor may provide bug fixes, compatibility updates, security updates, or new
+versions. Some updates may be delivered automatically through the Chrome Web
+Store. Updates may change the user interface or technical implementation, but
+Licensor will not intentionally remove or degrade the Free Features solely to
+force a Creator Pro purchase.
+
+Licensor may discontinue support, stop distributing a release, or change
+third-party integrations when reasonably necessary for security, legal,
+platform, or compatibility reasons. Licensor does not guarantee that Suno,
+Chrome, codecs, operating systems, or other third-party dependencies will remain
+available or compatible.
+
+A future Creator Pro feature generation may be sold separately. Purchasing
+Creator Pro G1 does not require you to purchase a later generation, and a later
+paid generation does not retroactively terminate your license to Creator Pro G1
+capabilities in compatible releases.
+
+## 10. Ownership
+
+As between you and Licensor, Licensor and its licensors own the Software,
+documentation, branding, and all related intellectual property rights, except
+for User Content, Outputs, historical public source, and third-party components
+as described in this Agreement. The Software is licensed, not sold. No rights
+are granted except those expressly stated.
+
+"Suno" and other third-party names and marks belong to their respective owners.
+This Agreement does not state or imply that Suno endorses, sponsors, or is
+affiliated with the Software.
+
+## 11. Third-Party Components
+
+The Software may include third-party components governed by separate license
+terms. Those terms are identified in the third-party notices distributed with
+the Software. This Agreement does not replace, restrict, or claim ownership of
+rights granted under applicable third-party licenses. If this Agreement
+conflicts with a third-party license for a component, the third-party license
+controls for that component.
+
+## 12. Historical Public Source
+
+Suno Lyric Downloader 2.0.9 is the final open-source product release. Source
+code publicly made available through the annotated `oss-source-cutoff` tag
+remains subject to the permissions and representations under which it was
+published. This Agreement applies prospectively to Software version 3.0.0 and
+later and does not revoke, narrow, or retroactively alter rights already
+received in historical public source, copies, or forks.
+
+The historical source archive and provenance information are available at:
+
+https://downloads.zhanghe.dev/get-suno-lyric/v2.0.9/get-suno-lyric-2.0.9-source.zip
+
+## 13. Feedback
+
+If you voluntarily provide suggestions or feedback that do not contain User
+Content or confidential information, you grant Licensor a worldwide,
+perpetual, irrevocable, royalty-free license to use and incorporate that
+feedback without obligation to you. You are not required to provide feedback.
+
+## 14. Suspension and Termination
+
+This Agreement remains effective until terminated. You may terminate it at any
+time by uninstalling the Software and ceasing use.
+
+Licensor may suspend licensing-service access or terminate your license if you
+materially breach this Agreement and, where the breach can be cured, fail to
+cure it within a reasonable period after notice. Licensor may act immediately
+when reasonably necessary to address fraud, compromised license credentials,
+malware, unlawful conduct, or a material security risk.
+
+Upon termination, you must stop using the affected Software and delete copies
+in your control, except that:
+
+- termination does not change rights in historical public source;
+- termination does not transfer ownership of your User Content or Outputs;
+- third-party license terms continue according to their own provisions; and
+- provisions that by their nature should survive will survive, including
+  Sections 7, 8, 10 through 17, and 19 through 21.
+
+## 15. Disclaimer of Warranties
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE, DOCUMENTATION,
+LICENSING SERVICE, AND SUPPORT ARE PROVIDED "AS IS" AND "AS AVAILABLE," WITH
+ALL FAULTS. LICENSOR DISCLAIMS ALL EXPRESS, IMPLIED, AND STATUTORY WARRANTIES,
+INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE,
+NON-INFRINGEMENT, ACCURACY, QUIET ENJOYMENT, AND WARRANTIES ARISING FROM COURSE
+OF DEALING OR USAGE OF TRADE.
+
+LICENSOR DOES NOT WARRANT THAT THE SOFTWARE WILL BE UNINTERRUPTED, ERROR-FREE,
+SECURE, COMPATIBLE WITH EVERY DEVICE OR THIRD-PARTY SERVICE, OR THAT OUTPUTS
+WILL MEET THE REQUIREMENTS OF A PLATFORM, PUBLISHER, OR EDITOR.
+
+Nothing in this Agreement excludes a warranty, guarantee, remedy, or consumer
+right that cannot lawfully be excluded or limited.
+
+## 16. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, LICENSOR WILL NOT BE LIABLE
+FOR INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL
+DAMAGES; LOSS OF PROFITS, REVENUE, BUSINESS, GOODWILL, OR DATA; LOSS OR
+CORRUPTION OF USER CONTENT; OR THE COST OF SUBSTITUTE GOODS OR SERVICES, ARISING
+OUT OF OR RELATING TO THE SOFTWARE OR THIS AGREEMENT, EVEN IF ADVISED OF THE
+POSSIBILITY.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, LICENSOR'S TOTAL AGGREGATE
+LIABILITY ARISING OUT OF OR RELATING TO CREATOR PRO, THE SOFTWARE, OR THIS
+AGREEMENT WILL NOT EXCEED THE AMOUNT YOU PAID FOR THE CREATOR PRO LICENSE GIVING
+RISE TO THE CLAIM.
+
+These limitations do not apply to liability that cannot lawfully be excluded or
+limited. Some jurisdictions do not allow certain exclusions or limitations, so
+some of this Section may not apply to you.
+
+## 17. Your Responsibility for Backups and Publication
+
+You are responsible for reviewing Outputs, maintaining backups of User Content
+and project files, and confirming that an Output is accurate and suitable
+before publication. The Software is a production aid, not a substitute for
+legal clearance, professional editing, accessibility review, or platform
+compliance.
+
+## 18. Export Controls and Sanctions
+
+You may not use, export, re-export, transfer, or make the Software available in
+violation of applicable export-control, trade-sanctions, or import laws. You
+represent that you are not prohibited from receiving the Software under laws
+that apply to you or Licensor.
+
+## 19. Governing Law and Disputes
+
+Except where mandatory consumer law provides otherwise, this Agreement is
+governed by the laws of the Hong Kong Special Administrative Region of the
+People's Republic of China, without regard to conflict-of-laws principles.
+
+Before filing a formal claim, you agree to first attempt informal resolution by
+sending a written notice to hello@zhanghe.dev and allowing thirty (30) days for
+a response, unless waiting would cause irreparable harm or applicable law
+forbids that pre-dispute step.
+
+Subject to any non-waivable consumer rights, the courts of Hong Kong have
+exclusive jurisdiction over disputes arising out of or relating to this
+Agreement. Nothing in this Agreement deprives a consumer of mandatory
+protections or the right to bring a claim in a forum that applicable law
+requires to remain available.
+
+## 20. Notices and Support
+
+Questions, support requests, refund requests, and legal notices may be sent to:
+
+Henry Zhang / zhanghe.dev
+
+Email: hello@zhanghe.dev
+
+Legal notice address: Email to hello@zhanghe.dev is the designated method for legal notices. A physical postal address may be provided on request for formal service where required by law.
+
+Licensor may send operational notices through the Software, the Chrome Web
+Store listing, the purchase email address held by Lemon Squeezy where permitted,
+or the product website.
+
+## 21. General Terms
+
+This Agreement, the Privacy Policy, the applicable checkout disclosures, and
+the third-party notices constitute the agreement concerning your use of the
+Software. Lemon Squeezy's buyer terms separately govern the payment
+transaction.
+
+If a provision is unenforceable, it will be enforced to the maximum extent
+permitted and the remaining provisions will remain effective. Failure to
+enforce a provision is not a waiver. You may not assign this Agreement without
+Licensor's prior written consent; Licensor may assign it in connection with a
+merger, acquisition, corporate reorganization, or sale of substantially all
+related assets, subject to applicable law.
+
+Headings are for convenience only. "Including" means "including without
+limitation." The English version controls only if applicable law permits and
+the localized version says so.
+
+Licensor may update this Agreement prospectively for future Software versions
+or material new services. A change will not retroactively revoke a perpetual
+Creator Pro G1 license or historical public-source rights. If applicable law
+requires notice or consent for a change, Licensor will provide it before the
+change takes effect.

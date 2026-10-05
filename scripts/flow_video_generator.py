@@ -210,6 +210,9 @@ def sanitize_prompt_for_safety(prompt: str, tier: int = 1) -> str:
         (r"\bbailiffs\b", "attendants"),
         (r"\bassembly\s+chairman\b", "meeting host"),
         # Physical hazards & entrapment
+        (r"\bwrists?\b", "hands"),
+        (r"\bhurling\b", "tossing"),
+        (r"\brestraints\b", "security measures"),
         (r"\bsparks\b", "glow"),
         (r"\bdismantling\s+wiring\b", "inspecting the fixture"),
         (r"\bheavy\s+descending\s+iron\s+gate\b", "large ornate door"),
@@ -224,6 +227,8 @@ def sanitize_prompt_for_safety(prompt: str, tier: int = 1) -> str:
         (r"\bgun\b", "device"),
         (r"\bknife\b", "prop"),
         # Thai sensitive terms
+        ("ผมของหนู", "ผมของฉัน"),
+        ("แตะต้องตัว", "เข้าใกล้"),
         ("คลิปหลุด", "คลิปหลักฐาน"),
         ("โพยพนัน", "เอกสารสำคัญ"),
         ("โดนเก็บ", "โดนจัดการ"),

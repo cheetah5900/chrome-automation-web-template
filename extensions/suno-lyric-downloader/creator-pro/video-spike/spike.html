@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Creator Pro Video Feasibility Spike</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #0b1220;
+        color: #e5e7eb;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 8px;
+      }
+      p {
+        margin: 0 0 16px;
+        color: #9ca3af;
+        max-width: 70ch;
+      }
+      #status {
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+      #preview {
+        max-width: min(100%, 640px);
+        border: 1px solid #374151;
+        border-radius: 8px;
+        background: #111827;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 12px;
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 960px) {
+        .grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Creator Pro — Video Feasibility Spike</h1>
+    <p>
+      Bounded local composition spike for 3-minute 1080p schedules (horizontal +
+      vertical). Measures OffscreenCanvas cost, capability matrix, and design
+      gates (512&nbsp;MiB peak additional memory, ≤50&nbsp;ms A/V end drift on the
+      synthetic timeline). Full WebCodecs encode matrix still requires manual
+      device runs documented in
+      <code>docs/creator-pro/video-feasibility-spike.md</code>.
+    </p>
+    <div id="status">Starting…</div>
+    <div class="grid">
+      <div>
+        <h2>First frame preview</h2>
+        <img id="preview" alt="First composed frame preview" />
+      </div>
+      <div>
+        <h2>Log</h2>
+        <pre id="log"></pre>
+      </div>
+    </div>
+    <h2>JSON report</h2>
+    <pre id="report">{}</pre>
+    <script src="spike-runner.js"></script>
+  </body>
+</html>

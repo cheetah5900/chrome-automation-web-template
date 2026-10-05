@@ -72,16 +72,96 @@ def post_with_busy_retry(endpoint: str, payload: dict, timeout: int, max_busy_re
 
 
 def parse_range(range_str: str) -> List[int]:
-    """Parses range strings like '1-20', '1,2,5', '1-5,8' into sorted list of ints."""
+    """Parses range strings like '1-20', '1,2,5', '1-5,8', 'EP01,EP02' into sorted list of ints."""
     result = set()
     for part in range_str.split(','):
         part = part.strip()
+        if not part:
+            continue
         if '-' in part:
             sub = part.split('-')
-            result.update(range(int(sub[0]), int(sub[1]) + 1))
-        elif part.isdigit():
-            result.add(int(part))
+            m1 = re.search(r'\d+', sub[0])
+            m2 = re.search(r'\d+', sub[1])
+            if m1 and m2:
+                result.update(range(int(m1.group(0)), int(m2.group(0)) + 1))
+        else:
+            m = re.search(r'\d+', part)
+            if m:
+                result.add(int(m.group(0)))
     return sorted(list(result))
+
+def find_all_episodes(story_path: str) -> List[int]:
+    """Scans 4 - Image Prompt directory to find all available EP numbers."""
+    prompt_base = os.path.join(story_path, "4 - Image Prompt")
+    if not os.path.isdir(prompt_base):
+        return [1]
+    eps = []
+    for d in os.listdir(prompt_base):
+        m = re.search(r'EP0*(\d+)', d, re.IGNORECASE)
+        if m and os.path.isdir(os.path.join(prompt_base, d)):
+            eps.append(int(m.group(1)))
+    return sorted(list(set(eps))) if eps else [1]
+
+def parse_episodes_and_scenes(story_path: str, ep_arg: str, scenes_arg: Optional[str]) -> List[Tuple[int, Optional[str]]]:
+    """
+    Parses episode and scene specifications into a list of (ep_num, scenes_filter_str).
+    Supported syntaxes:
+    1. Per-episode mapping in ep:
+       --ep "1:4-10,18-19; 2:11-15,19-25"
+    2. Per-episode mapping in scenes:
+       --ep "1,2" --scenes "1:4-10,18-19; 2:11-15,19-25"
+    3. Comma or range separated episodes:
+       --ep "1,2", --ep "1-3", --ep "all"
+       paired with standard scenes="1-10" or scenes="all"
+    Returns:
+       [(1, "4-10,18-19"), (2, "11-15,19-25")]
+    """
+    # 1. Check if per-ep scenes syntax is embedded directly in ep_arg
+    if ep_arg and (':' in ep_arg or ';' in ep_arg):
+        parsed = []
+        for chunk in ep_arg.split(';'):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            if ':' in chunk:
+                ep_part, sc_part = chunk.split(':', 1)
+                m = re.search(r'\d+', ep_part)
+                ep_n = int(m.group(0)) if m else 1
+                parsed.append((ep_n, sc_part.strip()))
+            else:
+                m = re.search(r'\d+', chunk)
+                ep_n = int(m.group(0)) if m else 1
+                parsed.append((ep_n, scenes_arg))
+        return parsed
+
+    # 2. Determine list of episodes
+    if ep_arg.strip().lower() == 'all':
+        ep_list = find_all_episodes(story_path)
+    else:
+        ep_list = parse_range(ep_arg)
+        if not ep_list:
+            m = re.search(r'\d+', ep_arg)
+            ep_list = [int(m.group(0))] if m else [1]
+
+    # 3. Check if scenes_arg contains per-episode mapping
+    if scenes_arg and (':' in scenes_arg or ';' in scenes_arg):
+        sc_map = {}
+        for chunk in scenes_arg.split(';'):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            if ':' in chunk:
+                ep_part, sc_part = chunk.split(':', 1)
+                m = re.search(r'\d+', ep_part)
+                if m:
+                    sc_map[int(m.group(0))] = sc_part.strip()
+        parsed = []
+        for ep_n in ep_list:
+            parsed.append((ep_n, sc_map.get(ep_n, None)))
+        return parsed
+
+    # 4. Standard case: same scenes_arg for each episode in ep_list
+    return [(ep_n, scenes_arg) for ep_n in ep_list]
 
 def notify_status_server(story_num, ep_str, current_scene=None, action="", status="RUNNING", fixing_scene=None, failed_scenes=None):
     payload = {
@@ -368,159 +448,176 @@ def ensure_main_project_view(api_base: str) -> bool:
         return False
 
 
-def ensure_image_mode(api_base: str) -> bool:
-    """Ensures Google Flow prompt box is toggled to Image mode ('🍌 Nano Banana 2' / 'รูปภาพ')."""
+def ensure_storyboard_settings(api_base: str, aspect_ratio: str = "9:16", model: str = "nano banana pro", count: int = 1) -> bool:
+    """Pre-checks and enforces Google Flow settings: Mode=Image, Model=Nano Banana Pro, Aspect=9:16/16:9, Count=1."""
     try:
         ensure_main_project_view(api_base)
-        check_js = """(() => {
+        
+        # 1. Pre-check current settings from button label directly
+        check_js = f"""(() => {{
             const btn = document.querySelector('button.settings-trigger-button') ||
-                        document.querySelector('button[aria-label="ทริกเกอร์การตั้งค่า"]');
-            if (!btn) return { error: "settings button not found" };
+                        document.querySelector('button[aria-label*="ตั้งค่า"]');
+            if (!btn) return {{ error: "settings button not found" }};
             const text = (btn.innerText || '').toLowerCase();
-            if (text.includes('รูปภาพ') || text.includes('image') || text.includes('banana') || text.includes('imagen')) {
-                return { alreadyImage: true, text: btn.innerText.replace(/\\n/g, ' ') };
-            }
-            btn.click();
-            return { needSwitch: true, text: btn.innerText.replace(/\\n/g, ' ') };
-        })()"""
+            const neededAspect = "{aspect_ratio}" === "9:16" ? ["9:16", "9_16", "crop_9_16"] : ["16:9", "16_9", "crop_16_9"];
+            const matchAspect = neededAspect.some(a => text.indexOf(a) !== -1);
+            const matchModel = text.indexOf("{model.lower()}") !== -1;
+            const matchCount = text.indexOf("x{count}") !== -1 || text.indexOf("{count} เอาต์พุต") !== -1 || text.indexOf("{count} output") !== -1;
+            const isImage = text.indexOf("วิดีโอ") === -1 && text.indexOf("video") === -1 && (text.indexOf("banana") !== -1 || text.indexOf("image") !== -1 || text.indexOf("รูปภาพ") !== -1);
+
+            return {{
+                alreadyConfigured: matchAspect && matchModel && matchCount && isImage,
+                matchAspect,
+                matchModel,
+                matchCount,
+                isImage,
+                currentText: btn.innerText.split(String.fromCharCode(10)).join(" | ")
+            }};
+        }})()"""
         encoded = urllib.parse.quote(check_js)
         res = http_get(f"{api_base}/api/flow/inspect-tab?js={encoded}")
         script_res = res.get("result", {}).get("res", {}).get("result")
-        if isinstance(script_res, dict) and script_res.get("alreadyImage"):
-            log(f"Prompt box verified in Image mode: {script_res.get('text')}")
+        
+        if isinstance(script_res, dict) and script_res.get("alreadyConfigured"):
+            log(f"🎯 Google Flow settings verified: {script_res.get('currentText')}")
             return True
 
-        if isinstance(script_res, dict) and script_res.get("needSwitch"):
-            log(f"Prompt box currently in Video mode ({script_res.get('text')}). Switching to Image mode...")
-            time.sleep(0.8)
-            switch_js = """(() => {
-                const overlay = document.querySelector('.cdk-overlay-container');
-                if (!overlay) return { error: "no overlay" };
-                const spans = Array.from(overlay.querySelectorAll('span'));
-                const imgSpan = spans.find(s => s.innerText && s.innerText.trim() === 'รูปภาพ');
-                if (imgSpan) {
-                    const clickable = imgSpan.closest('button') || imgSpan.closest('mat-button-toggle') || imgSpan;
-                    clickable.click();
-                    const backdrop = document.querySelector('.cdk-overlay-backdrop');
-                    if (backdrop) backdrop.click();
-                    return { success: true };
-                }
-                return { error: "imgSpan not found" };
-            })()"""
-            encoded_sw = urllib.parse.quote(switch_js)
-            http_get(f"{api_base}/api/flow/inspect-tab?js={encoded_sw}")
-            time.sleep(1.0)
-            log("Switched Google Flow prompt box to Image mode successfully.")
+        curr = script_res.get("currentText", "Unknown") if isinstance(script_res, dict) else "Unknown"
+        log(f"⚙️ Flow settings need adjustment (Current: {curr}). Setting to Image | {model} | {aspect_ratio} | x{count}...")
+
+        # 2. Open overlay, adjust settings, and close
+        adjust_js = f"""(async () => {{
+            let btn = document.querySelector('button.settings-trigger-button') ||
+                      document.querySelector('button[aria-label*="ตั้งค่า"]');
+            if (!btn) return {{ error: "settings button not found" }};
+            btn.click();
+            await new Promise(r => setTimeout(r, 400));
+
+            const overlay = document.querySelector('.cdk-overlay-container') || document;
+            
+            // Mode -> Image
+            const spans = Array.from(overlay.querySelectorAll('span, button, mat-button-toggle'));
+            const imgBtn = spans.find(s => s.innerText && s.innerText.trim() === 'รูปภาพ');
+            if (imgBtn) {{
+                const clickable = imgBtn.closest('button') || imgBtn.closest('mat-button-toggle') || imgBtn;
+                clickable.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+            
+            // Model -> Nano Banana Pro
+            const modelTrigger = overlay.querySelector('button[aria-label*="เลือกกลุ่มผลิตภัณฑ์โมเดล"]') ||
+                                 overlay.querySelector('.mat-mdc-menu-trigger');
+            if (modelTrigger && (!modelTrigger.innerText || modelTrigger.innerText.toLowerCase().indexOf('pro') === -1)) {{
+                modelTrigger.click();
+                await new Promise(r => setTimeout(r, 300));
+                const menuItems = Array.from(document.querySelectorAll('.cdk-overlay-container [role="menuitem"], .cdk-overlay-container button'));
+                const targetItem = menuItems.find(m => m.innerText && m.innerText.toLowerCase().indexOf('{model.lower()}') !== -1);
+                if (targetItem) {{
+                    targetItem.click();
+                    await new Promise(r => setTimeout(r, 200));
+                }}
+            }}
+            
+            // Aspect ratio
+            const isVertical = "{aspect_ratio}".indexOf('9:16') !== -1;
+            const aspectStr = isVertical ? '9:16' : '16:9';
+            const aspectToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {{
+                return el.innerText && el.innerText.indexOf(aspectStr) !== -1;
+            }});
+            if (aspectToggles.length > 0) {{
+                const toggleBtn = aspectToggles[0].querySelector('button') || aspectToggles[0];
+                toggleBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+            
+            // Output count
+            const countStr = 'x{count}';
+            const countToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {{
+                const t = el.innerText ? el.innerText.trim() : '';
+                return t === countStr || t === '{count}';
+            }});
+            if (countToggles.length > 0) {{
+                const toggleBtn = countToggles[0].querySelector('button') || countToggles[0];
+                toggleBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+            
+            // Close settings overlay
+            const backdrop = document.querySelector('.cdk-overlay-backdrop');
+            if (backdrop) backdrop.click();
+            await new Promise(r => setTimeout(r, 300));
+            
+            const finalBtn = document.querySelector('button.settings-trigger-button') ||
+                             document.querySelector('button[aria-label*="ตั้งค่า"]');
+            return {{
+                success: true,
+                finalText: finalBtn ? finalBtn.innerText.split(String.fromCharCode(10)).join(" | ") : ''
+            }};
+        }})()"""
+        encoded_adj = urllib.parse.quote(adjust_js)
+        res_adj = http_get(f"{api_base}/api/flow/inspect-tab?js={encoded_adj}")
+        adj_res = res_adj.get("result", {}).get("res", {}).get("result")
+        if isinstance(adj_res, dict) and adj_res.get("success"):
+            log(f"✅ Successfully configured Flow settings: {adj_res.get('finalText')}")
             return True
         return False
     except Exception as e:
-        log(f"Notice on ensuring image mode: {e}")
+        log(f"Notice on ensuring storyboard settings: {e}")
         return False
 
-# ─────────────────────────────────────────────────────────────
-# Main Runner Loop
-# ─────────────────────────────────────────────────────────────
 
-def main():
-    parser = argparse.ArgumentParser(description="Centralized FlowKit Storyboard Image Generator")
-    parser.add_argument("--story-path", "-s", required=True, type=str, help="Root path of the story/episode folder")
-    parser.add_argument("--ep", "-e", type=str, default="1", help="Episode number (e.g. 1 or EP01)")
-    parser.add_argument("--scenes", "-sc", type=str, help="Scene range to generate (e.g. '1-20', '1,3,5' or 'all')")
-    parser.add_argument("--aspect-ratio", "-a", type=str, default="9:16", choices=["9:16", "16:9"], help="Aspect ratio (9:16 for Lakorn, 16:9 for Stickman)")
-    parser.add_argument("--project-id", type=str, default=DEFAULT_PROJECT_ID, help="Google Flow project UUID")
-    parser.add_argument("--api-base", type=str, default=DEFAULT_API_BASE, help="FlowKit API server base URL")
-    parser.add_argument("--skip-existing", action="store_true", default=True, help="Skip scenes that already have a completed image file")
-    parser.add_argument("--force", action="store_true", help="Force overwrite existing images")
-    parser.add_argument("--batch-size", "-b", type=int, default=25, help="Number of scenes to process per batch (default: 25 for continuous pipeline)")
-    parser.add_argument("--max-retries", "-r", type=int, default=2, help="Max retry attempts for failed scenes with softened prompts (default: 2)")
-    parser.add_argument("--delay", "-d", type=float, default=None, help="Delay between scene submissions in seconds (default: randomized 0.5-1.0s)")
-    parser.add_argument("--timeout", type=int, default=60, help="Max timeout per scene generation in seconds (default: 60)")
+def ensure_image_mode(api_base: str, aspect_ratio: str = "9:16") -> bool:
+    """Backwards-compatible alias for ensure_storyboard_settings."""
+    return ensure_storyboard_settings(api_base, aspect_ratio=aspect_ratio, model="nano banana pro", count=1)
 
-    args = parser.parse_args()
-
-    # 1. Health check FlowKit server
-    log(f"Checking FlowKit server at {args.api_base}...")
-    try:
-        status = http_get(f"{args.api_base}/api/flow/status")
-        if not status.get("connected"):
-            error_exit("FlowKit Chrome extension is not connected! Ensure Chrome is running with Google Flow open.")
-        log("FlowKit server and Chrome extension are CONNECTED.")
-    except Exception as e:
-        error_exit(f"Could not connect to FlowKit server at {args.api_base}: {e}")
-
-    # Ensure Google Flow prompt box is in Image mode
-    ensure_image_mode(args.api_base)
-
-    # 2. Parse episode number
-    ep_num = int(re.search(r'\d+', args.ep).group(0)) if re.search(r'\d+', args.ep) else 1
-    story_dir_name = os.path.basename(os.path.normpath(args.story_path))
-    try:
-        story_num = int(story_dir_name)
-    except ValueError:
-        story_num = 26
+def process_single_episode(
+    story_path: str,
+    ep_num: int,
+    scenes_spec: Optional[str],
+    args,
+    round_idx: int = 1,
+    total_rounds: int = 1,
+    story_num: int = 26,
+    is_lakorn: bool = True
+) -> dict:
+    """Processes storyboard image generation for a single episode."""
     ep_str = f"EP{ep_num:02d}"
 
-    # 3. Detect Channel / Story Structure
-    story_path = os.path.abspath(args.story_path)
-    if not os.path.isdir(story_path):
-        error_exit(f"Story path does not exist: {story_path}")
-
-    scenes_map = {}
-    is_lakorn = os.path.isdir(os.path.join(story_path, "4 - Image Prompt"))
-    is_stickman = os.path.isfile(os.path.join(story_path, "3 - Image Prompt", "Image_Prompts.md"))
-
     if is_lakorn:
-        log("Detected format: ผักกาดการละคร (Lakorn Drama)")
         scenes_map = load_lakorn_scenes(story_path, ep_num, args.aspect_ratio)
-    elif is_stickman:
-        log("Detected format: Stickman Explainer")
-        if args.project_id == DEFAULT_PROJECT_ID:
-            args.project_id = DEFAULT_STICKMAN_PROJECT_ID
-        scenes_map = load_stickman_scenes(story_path, args.aspect_ratio)
     else:
-        error_exit(f"Could not detect recognized prompt structure in {story_path}")
+        scenes_map = load_stickman_scenes(story_path, args.aspect_ratio)
 
     if not scenes_map:
-        error_exit(f"No scene prompts found in {story_path}")
+        log(f"⚠️ No scene prompts found for {ep_str} in {story_path}")
+        return {"ep": ep_num, "ep_str": ep_str, "round": round_idx, "total": 0, "completed": 0, "skipped": 0, "failed": 0, "failed_scenes": []}
 
-    # 4. Filter target scenes
-    if not args.scenes or args.scenes.lower() == 'all':
+    # Filter target scenes for this episode
+    if not scenes_spec or scenes_spec.lower() == 'all':
         target_scene_nums = sorted(list(scenes_map.keys()))
     else:
-        requested = parse_range(args.scenes)
+        requested = parse_range(scenes_spec)
         target_scene_nums = [n for n in requested if n in scenes_map]
 
-    log(f"Total scenes found: {len(scenes_map)}. Target scenes to process: {target_scene_nums}")
+    total_scenes_to_run = len(target_scene_nums)
+    log(f"\n{'='*60}")
+    log(f"🎬 [{ep_str} | Round {round_idx}/{total_rounds}] Found {len(scenes_map)} scenes. Target to process: {target_scene_nums}")
+    log(f"{'='*60}")
 
-    # 4.5 Pre-upload story characters to Google Flow project
-    log(f"Pre-syncing Character Sheets for {os.path.basename(story_path)}...")
-    try:
-        preload_payload = {
-            "project_id": args.project_id,
-            "story_path": story_path
-        }
-        preload_res = post_with_busy_retry(f"{args.api_base}/api/flow/preload-characters", preload_payload, timeout=60)
-        if preload_res.get("success"):
-            exists = preload_res.get("already_exists", [])
-            up = preload_res.get("uploaded", [])
-            log(f"  Character Sheets verified! Already in project: {len(exists)}, Newly uploaded: {len(up)}")
-        else:
-            log(f"  Character preload notice: {preload_res.get('message') or preload_res.get('detail')}")
-    except Exception as e:
-        log(f"  Character preload check warning: {e}")
+    if not target_scene_nums:
+        log(f"No target scenes to process for {ep_str}.")
+        return {"ep": ep_num, "ep_str": ep_str, "round": round_idx, "total": 0, "completed": 0, "skipped": 0, "failed": 0, "failed_scenes": []}
 
-    # 5. Process scenes in batches with auto-retry & safety prompt softening
     completed_count = 0
     skipped_count = 0
     failed_count = 0
+    all_failed_scenes = []
 
     endpoint = f"{args.api_base}/api/flow/generate-storyboard"
-
     batch_size = max(1, args.batch_size)
     batches = [target_scene_nums[i:i + batch_size] for i in range(0, len(target_scene_nums), batch_size)]
-    total_scenes_to_run = len(target_scene_nums)
 
-    log(f"\n🚀 Starting batch processing: {len(batches)} batches (Batch size: {batch_size}, Max retries: {args.max_retries})")
+    log(f"🚀 Starting {ep_str} batch processing: {len(batches)} batches (Batch size: {batch_size}, Max retries: {args.max_retries})")
 
     # Clear server-side dispatch order queue before this batch session
     try:
@@ -529,13 +626,12 @@ def main():
     except Exception as e:
         log(f"  ⚠️ Could not clear dispatch queue (non-fatal): {e}")
 
-
     for batch_idx, batch in enumerate(batches):
         log("\n" + "="*50)
-        log(f"📦 BATCH {batch_idx + 1}/{len(batches)} : Scenes {batch}")
+        log(f"📦 [{ep_str}] BATCH {batch_idx + 1}/{len(batches)} : Scenes {batch}")
         log("="*50)
 
-        # 5.1 Check skip existing first
+        # 1. Check skip existing first
         scenes_to_process = []
         for sc_idx in batch:
             item = scenes_map[sc_idx]
@@ -558,7 +654,7 @@ def main():
 
         failed_scenes = []
 
-        # 5.2 Pass 1: Initial generation for batch
+        # 2. Initial generation for batch
         if len(scenes_to_process) >= 1:
             log(f"\n  🚀 [Rapid Batch Dispatch] Queueing {len(scenes_to_process)} scenes into Google Flow...")
 
@@ -703,7 +799,7 @@ def main():
 
                 time.sleep(random.uniform(0.5, 1.0) if args.delay is None else args.delay)
 
-        # 5.3 Retry Pass for failed scenes in this batch with prompt softening
+        # 3. Retry Pass for failed scenes in this batch with prompt softening
         retry_round = 1
         while failed_scenes and retry_round <= args.max_retries:
             log(f"\n  🔄 [Batch {batch_idx + 1}] Retrying {len(failed_scenes)} failed scene(s) (Attempt {retry_round}/{args.max_retries}) with softened prompts...")
@@ -713,7 +809,6 @@ def main():
                 item = scenes_map[sc_idx]
                 out_path = item["output_path"]
 
-                # Soften prompt according to safety rules
                 softened_prompt = soften_prompt_for_safety(item["prompt"], round_num=retry_round)
                 notify_status_server(story_num, ep_str, current_scene=sc_idx, action=f"กำลังปรับแก้และลองใหม่ฉาก {sc_idx:02d} (รอบ {retry_round}/{args.max_retries})...", status="FIXING", fixing_scene=sc_idx, failed_scenes=[{"scene_num": s[0], "error": s[1]} for s in failed_scenes])
                 log(f"\n  🛡️ Retrying Scene {sc_idx:02d} with softened prompt:")
@@ -753,23 +848,141 @@ def main():
             failed_scenes = still_failed
             retry_round += 1
 
-        # 5.4 Count any scene still failed after all retries
         if failed_scenes:
             for sc_idx, err in failed_scenes:
                 log(f"  ❌ Permanently failed Scene {sc_idx:02d} after {args.max_retries} retries: {err}")
                 failed_count += 1
+                all_failed_scenes.append((sc_idx, err))
 
         log(f"📦 Finished Batch {batch_idx + 1}/{len(batches)}. Current Progress: {completed_count}/{total_scenes_to_run} completed, {skipped_count} skipped, {failed_count} failed.")
 
-    log("\n" + "="*50)
-    log(f"🎉 Storyboard Generation Finished!")
-    log(f"  Total Processed : {len(target_scene_nums)}")
-    log(f"  Completed       : {completed_count}")
-    log(f"  Skipped         : {skipped_count}")
-    log(f"  Failed          : {failed_count}")
-    log("="*50)
     final_status = "COMPLETED" if failed_count == 0 else "PARTIAL"
-    notify_status_server(story_num, ep_str, current_scene=None, action=f"สร้างภาพสตอรี่บอร์ดเสร็จสิ้น (สำเร็จ {completed_count}/{len(target_scene_nums)} ฉาก)", status=final_status, fixing_scene=None, failed_scenes=[{"scene_num": s[0], "error": s[1]} for s in failed_scenes])
+    notify_status_server(story_num, ep_str, current_scene=None, action=f"สร้างภาพสตอรี่บอร์ด {ep_str} เสร็จสิ้น (สำเร็จ {completed_count}/{total_scenes_to_run} ฉาก)", status=final_status, fixing_scene=None, failed_scenes=[{"scene_num": s[0], "error": s[1]} for s in all_failed_scenes])
+
+    return {
+        "ep": ep_num,
+        "ep_str": ep_str,
+        "round": round_idx,
+        "total": total_scenes_to_run,
+        "completed": completed_count,
+        "skipped": skipped_count,
+        "failed": failed_count,
+        "failed_scenes": all_failed_scenes
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Centralized FlowKit Storyboard Image Generator")
+    parser.add_argument("--story-path", "-s", required=True, type=str, help="Root path of the story/episode folder")
+    parser.add_argument("--ep", "-e", type=str, default="1", help="Episode number(s) to process. E.g. '1', '1,2', '1-3', 'all', or per-EP scenes: '1:4-10; 2:11-20'")
+    parser.add_argument("--scenes", "-sc", type=str, help="Scene range to generate. E.g. '1-20', '1,3,5', 'all', or per-EP scenes: '1:4-10,18-19; 2:11,13-15,19-25'")
+    parser.add_argument("--rounds", type=int, default=1, help="Number of continuous passes/rounds to execute across all specified episodes (default: 1, e.g. 2 for two continuous passes)")
+    parser.add_argument("--aspect-ratio", "-a", type=str, default="9:16", choices=["9:16", "16:9"], help="Aspect ratio (9:16 for Lakorn, 16:9 for Stickman)")
+    parser.add_argument("--project-id", type=str, default=DEFAULT_PROJECT_ID, help="Google Flow project UUID")
+    parser.add_argument("--api-base", type=str, default=DEFAULT_API_BASE, help="FlowKit API server base URL")
+    parser.add_argument("--skip-existing", action="store_true", default=True, help="Skip scenes that already have a completed image file")
+    parser.add_argument("--force", action="store_true", help="Force overwrite existing images")
+    parser.add_argument("--batch-size", "-b", type=int, default=25, help="Number of scenes to process per batch (default: 25 for continuous pipeline)")
+    parser.add_argument("--max-retries", "-r", type=int, default=2, help="Max retry attempts for failed scenes with softened prompts (default: 2)")
+    parser.add_argument("--delay", "-d", type=float, default=None, help="Delay between scene submissions in seconds (default: randomized 0.5-1.0s)")
+    parser.add_argument("--timeout", type=int, default=60, help="Max timeout per scene generation in seconds (default: 60)")
+
+    args = parser.parse_args()
+
+    # 1. Health check FlowKit server
+    log(f"Checking FlowKit server at {args.api_base}...")
+    try:
+        status = http_get(f"{args.api_base}/api/flow/status")
+        if not status.get("connected"):
+            error_exit("FlowKit Chrome extension is not connected! Ensure Chrome is running with Google Flow open.")
+        log("FlowKit server and Chrome extension are CONNECTED.")
+    except Exception as e:
+        error_exit(f"Could not connect to FlowKit server at {args.api_base}: {e}")
+
+    # Pre-check and enforce Google Flow storyboard settings (Image mode, Nano Banana Pro, aspect ratio, count=1)
+    ensure_storyboard_settings(args.api_base, aspect_ratio=args.aspect_ratio, model="nano banana pro", count=1)
+
+    story_path = os.path.abspath(args.story_path)
+    if not os.path.isdir(story_path):
+        error_exit(f"Story path does not exist: {story_path}")
+
+    story_dir_name = os.path.basename(os.path.normpath(args.story_path))
+    try:
+        story_num = int(story_dir_name)
+    except ValueError:
+        story_num = 26
+
+    # 2. Detect Channel / Story Structure
+    is_lakorn = os.path.isdir(os.path.join(story_path, "4 - Image Prompt"))
+    is_stickman = os.path.isfile(os.path.join(story_path, "3 - Image Prompt", "Image_Prompts.md"))
+
+    if is_lakorn:
+        log("Detected format: ผักกาดการละคร (Lakorn Drama)")
+    elif is_stickman:
+        log("Detected format: Stickman Explainer")
+        if args.project_id == DEFAULT_PROJECT_ID:
+            args.project_id = DEFAULT_STICKMAN_PROJECT_ID
+    else:
+        error_exit(f"Could not detect recognized prompt structure in {story_path}")
+
+    # 3. Pre-sync Character Sheets for story
+    log(f"Pre-syncing Character Sheets for {os.path.basename(story_path)}...")
+    try:
+        preload_payload = {
+            "project_id": args.project_id,
+            "story_path": story_path
+        }
+        preload_res = post_with_busy_retry(f"{args.api_base}/api/flow/preload-characters", preload_payload, timeout=60)
+        if preload_res.get("success"):
+            exists = preload_res.get("already_exists", [])
+            up = preload_res.get("uploaded", [])
+            log(f"  Character Sheets verified! Already in project: {len(exists)}, Newly uploaded: {len(up)}")
+        else:
+            log(f"  Character preload notice: {preload_res.get('message') or preload_res.get('detail')}")
+    except Exception as e:
+        log(f"  Character preload check warning: {e}")
+
+    # 4. Parse episode plan
+    episodes_to_run = parse_episodes_and_scenes(story_path, args.ep, args.scenes)
+    plan_desc = [f"EP{ep:02d} ({sc if sc else 'all'})" for ep, sc in episodes_to_run]
+    log(f"📋 Generation Execution Plan: {plan_desc} across {args.rounds} continuous round(s).")
+
+    all_round_results = []
+    for r_idx in range(1, args.rounds + 1):
+        if args.rounds > 1:
+            log("\n" + "#"*60)
+            log(f"🔁 EXECUTING CONTINUOUS ROUND {r_idx}/{args.rounds}")
+            log("#"*60)
+
+        for ep_num, ep_scenes in episodes_to_run:
+            res = process_single_episode(
+                story_path=story_path,
+                ep_num=ep_num,
+                scenes_spec=ep_scenes,
+                args=args,
+                round_idx=r_idx,
+                total_rounds=args.rounds,
+                story_num=story_num,
+                is_lakorn=is_lakorn
+            )
+            all_round_results.append(res)
+
+    # 5. Final Summary Table
+    log("\n" + "="*60)
+    log("🏁 ALL ROUNDS & EPISODES PROCESSED! FINAL SUMMARY:")
+    log(f"{'Episode':<10} | {'Round':<6} | {'Target':<8} | {'Completed':<10} | {'Skipped':<8} | {'Failed':<8}")
+    log("-" * 60)
+    total_completed = 0
+    total_skipped = 0
+    total_failed = 0
+    for r in all_round_results:
+        log(f"{r['ep_str']:<10} | {r['round']:<6} | {r['total']:<8} | {r['completed']:<10} | {r['skipped']:<8} | {r['failed']:<8}")
+        total_completed += r['completed']
+        total_skipped += r['skipped']
+        total_failed += r['failed']
+    log("-" * 60)
+    log(f"TOTAL: Completed={total_completed}, Skipped={total_skipped}, Failed={total_failed}")
+    log("="*60)
 
 
 if __name__ == "__main__":

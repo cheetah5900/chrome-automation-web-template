@@ -1,4 +1,5 @@
 import asyncio
+import os
 import logging
 from typing import Optional, Any
 from fastapi import APIRouter, HTTPException
@@ -623,10 +624,7 @@ async def _eval_js_internal(client, js_code: str, timeout: int = 15):
 FLOW_CHIP_SELECTORS = (
     "flow-base-prompt-box flow-ingredient-chip, "
     "flow-prompt-box flow-ingredient-chip, "
-    "flow-base-prompt-box flow-image-ingredient-chip, "
-    "flow-prompt-box flow-image-ingredient-chip, "
-    "flow-base-prompt-box [class*='ingredient-chip'], "
-    "[class*='ingredient-chip']"
+    "flow-ingredient-chip"
 )
 
 
@@ -1029,41 +1027,9 @@ async def _submit_flow_prompt_internal(
     return captured_media_id
 
 
-def _prompt_similarity_score(scene_prompt: str, tile_prompt_text: str) -> float:
-    """Returns a similarity score [0.0–1.0] between a local prompt and the tile's DOM prompt text.
-    Uses normalized word-overlap to handle partial/truncated DOM text from Google Flow."""
-    import re
-    if not tile_prompt_text:
-        return 0.0
-    boilerplate = {
-        "vertical", "horizontal", "cinematic", "render", "style", "pixar",
-        "dreamworks", "smooth", "cute", "lighting", "masterpiece", "resolution",
-        "thai", "melodrama", "depth", "field", "sharp", "focus", "characters",
-        "scene", "episode", "background", "texture", "photorealistic", "stylized"
-    }
-    sc_words = set(re.findall(r"\b[a-zA-Z\u0e00-\u0e7f]{3,}\b", scene_prompt.lower())) - boilerplate
-    tl_words = set(re.findall(r"\b[a-zA-Z\u0e00-\u0e7f]{3,}\b", tile_prompt_text.lower())) - boilerplate
-    if not sc_words or not tl_words:
-        return 0.0
-    overlap = len(sc_words & tl_words)
-    # Jaccard-like score weighted towards smaller tile vocab (truncated prompts)
-    denom = min(len(sc_words), len(tl_words))
-    return overlap / denom if denom > 0 else 0.0
-
-
 def _match_batch_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
-    """Matches newly generated image tiles to scene requests.
-
-    Strategy (priority order):
-    1. PROMPT MATCH (primary): If Google Flow exposes prompt_text in tile DOM,
-       compute similarity against local prompt. Score >= 0.15 is considered a
-       confident match and wins over positional fallback.
-    2. KEYWORD + POSITIONAL FALLBACK: When no prompt_text is available from DOM,
-       falls back to footer_title keyword overlap + expected DOM-order position.
-
-    This prevents wrong image assignment when the user switches browser tabs or
-    windows mid-generation (which can cause tiles to appear out of order).
-    """
+    """Matches newly generated image tiles to scene requests using expected FIFO order.
+    Removes fuzzy prompt similarity scoring to prevent false matches."""
     import re
     N = len(scenes)
     M = len(new_tiles)
@@ -1076,35 +1042,19 @@ def _match_batch_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
         "thai", "melodrama", "depth", "field", "sharp", "focus", "characters"
     }
 
-    # Check if any tiles have DOM prompt_text
-    tiles_with_prompt = [tl for tl in new_tiles if tl.get("prompt_text", "").strip()]
-    use_prompt_matching = len(tiles_with_prompt) > 0
-
     scores = []
     for i, sc in enumerate(scenes):
         sc_prompt = sc.get("prompt", "")
         row = []
         for j, tl in enumerate(new_tiles):
-            if use_prompt_matching:
-                # --- Primary: prompt text similarity from DOM ---
-                tl_prompt_text = tl.get("prompt_text", "")
-                sim = _prompt_similarity_score(sc_prompt, tl_prompt_text)
-                # Scale to large score range: 0.0–1.0 → 0–200 (dominates positional penalty)
-                prompt_score = sim * 200.0
-
-                # --- Secondary: positional penalty as tiebreaker ---
-                expected_j = max(0, min(M - 1, N - 1 - i))
-                pos_penalty = abs(j - expected_j) * 0.5
-                total_score = prompt_score - pos_penalty
-            else:
-                # --- Fallback: footer keyword + positional (original logic) ---
-                sc_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", sc_prompt.lower())) - boilerplate_words
-                tl_footer = tl.get("footer_title", "")
-                tl_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", tl_footer.lower()))
-                overlap = len(sc_words.intersection(tl_words))
-                expected_j = max(0, min(M - 1, N - 1 - i))
-                pos_penalty = abs(j - expected_j) * 0.5
-                total_score = overlap * 10 - pos_penalty
+            # Positional matching: Google Flow prepends newly finished tiles to the front
+            expected_j = max(0, min(M - 1, N - 1 - i))
+            pos_penalty = abs(j - expected_j) * 0.5
+            sc_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", sc_prompt.lower())) - boilerplate_words
+            tl_footer = tl.get("footer_title", "")
+            tl_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", tl_footer.lower()))
+            overlap = len(sc_words.intersection(tl_words))
+            total_score = overlap * 10 - pos_penalty
             row.append(total_score)
         scores.append(row)
 
@@ -1126,6 +1076,7 @@ def _match_batch_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
     return matched
 
 
+
 @router.get("/snapshot-existing-tiles")
 async def snapshot_existing_tiles():
     """Returns list of currently rendered image URLs and media IDs in Google Flow tab."""
@@ -1134,7 +1085,7 @@ async def snapshot_existing_tiles():
         raise HTTPException(503, "FlowKit extension not connected")
 
     snap_js = """(() => {
-        const tiles = Array.from(document.querySelectorAll('flow-grid-tile-container, flow-tile, [class*="tile"]:has(img)'));
+        const tiles = Array.from(document.querySelectorAll('flow-image-tile, flow-grid-tile-container, flow-tile, [class*="tile"]:has(img)'));
         const urls = [];
         const mediaIds = [];
         for (const t of tiles) {
@@ -1143,6 +1094,8 @@ async def snapshot_existing_tiles():
                 urls.push(img.src);
                 const mid = img.getAttribute('data-media-id');
                 if (mid) mediaIds.push(mid);
+                const m = img.src.match(/\\/image\\/([a-f0-9\\-]{36})/);
+                if (m && !mediaIds.includes(m[1])) mediaIds.push(m[1]);
             }
         }
         return { urls: urls, media_ids: mediaIds, count: tiles.length };
@@ -1218,9 +1171,39 @@ async def dispatch_storyboard_prompt(body: DispatchStoryboardPromptRequest):
     }
 
 
+async def _download_tile_image_internal(client, img_url: str, out_path: str) -> bool:
+    """Helper to fetch image from browser context at full resolution and save locally."""
+    import os, base64, io
+    from PIL import Image
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        fetch_js = f"""(async () => {{
+            const fullUrl = "{img_url}".replace(/=s\\d+/, '=s2048');
+            const res = await fetch(fullUrl);
+            if (!res.ok) return {{ ok: false, status: res.status }};
+            const blob = await res.blob();
+            return new Promise(resolve => {{
+                const reader = new FileReader();
+                reader.onloadend = () => resolve({{ ok: true, b64: reader.result.split(',')[1] }});
+                reader.readAsDataURL(blob);
+            }});
+        }})()"""
+        b_res = await _eval_js_internal(client, fetch_js) or {}
+        if b_res.get("ok") and b_res.get("b64"):
+            raw_bytes = base64.b64decode(b_res["b64"])
+            im = Image.open(io.BytesIO(raw_bytes))
+            im.convert("RGB").save(out_path, "JPEG", quality=95)
+            logger.info("Saved batch image to %s (%dx%d)", out_path, im.width, im.height)
+            return True
+    except Exception as dl_err:
+        logger.error("Download tile image error for %s: %s", out_path, dl_err)
+    return False
+
+
 @router.post("/collect-storyboard-batch")
 async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
-    """Waits for Google Flow pending queue to finish and downloads batch images matched to scenes."""
+    """Waits for Google Flow pending queue to finish and downloads batch images.
+    Matches media_id in real-time and downloads immediately upon tile completion."""
     import asyncio, time, httpx, os
 
     client = get_flow_client()
@@ -1235,6 +1218,10 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
     has_seen_pending = False
     poll_status = {}
 
+    completed_scene_nums = set()
+    realtime_results = []
+    used_tile_srcs = set()
+
     while time.time() - start_time < body.timeout:
         await asyncio.sleep(body.poll_interval)
 
@@ -1246,7 +1233,6 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
             const tileData = tiles.map(t => {
                 const img = t.querySelector('img');
                 const footer = t.querySelector('.footer-title');
-                // Extract the prompt text Google Flow stores on the tile (try multiple DOM locations)
                 const promptText = (
                     t.getAttribute('data-prompt') ||
                     t.getAttribute('aria-label') ||
@@ -1258,9 +1244,11 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
                     t.querySelector('[aria-label]')?.getAttribute('aria-label') ||
                     ''
                 ).trim();
+                const midAttr = img ? (img.getAttribute('data-media-id') || '') : '';
+                const midRegex = (img?.src || '').match(/\/image\/([a-f0-9\-]{36})/)?.[1] || '';
                 return {
                     src: img ? img.src : '',
-                    media_id: img ? (img.getAttribute('data-media-id') || '') : '',
+                    media_id: midAttr || midRegex,
                     footer_title: footer ? (footer.innerText || '').trim() : '',
                     prompt_text: promptText
                 };
@@ -1287,16 +1275,56 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
             if (t.get("src") not in known_urls) and (not t.get("media_id") or t.get("media_id") not in known_media_ids)
         ]
 
+        # ── Step 1: Real-time Immediate Download on Media ID Match ────────────
+        for sc_obj in body.scenes:
+            sc_dict = sc_obj.dict()
+            sc_num = sc_dict.get("scene_num")
+            if sc_num in completed_scene_nums:
+                continue
+            target_mid = sc_dict.get("media_id")
+            if not target_mid:
+                for q in _dispatch_order_queue:
+                    if q.get("prompt") == sc_dict.get("prompt") and q.get("media_id"):
+                        target_mid = q.get("media_id")
+                        break
+            if target_mid:
+                for tl in new_tiles:
+                    tl_src = tl.get("src") or ""
+                    tl_mid = tl.get("media_id") or ""
+                    if tl_src in used_tile_srcs:
+                        continue
+                    if target_mid == tl_mid or f"/image/{target_mid}" in tl_src:
+                        out_path = sc_dict.get("output_path")
+                        logger.info("🎯 [REALTIME MEDIA_ID MATCH] Scene %02d matched media_id %s -> Downloading immediately to %s", sc_num, target_mid, out_path)
+                        dl_ok = False
+                        if out_path:
+                            dl_ok = await _download_tile_image_internal(client, tl_src, out_path)
+                        realtime_results.append({
+                            "scene_num": sc_num,
+                            "success": dl_ok,
+                            "output_path": out_path,
+                            "footer_title": tl.get("footer_title"),
+                            "image_url": tl_src,
+                            "media_id": target_mid
+                        })
+                        completed_scene_nums.add(sc_num)
+                        used_tile_srcs.add(tl_src)
+                        break
+
+        if len(completed_scene_nums) >= len(body.scenes):
+            logger.info("⚡ All %d batch scenes matched by media_id and downloaded in real-time!", len(body.scenes))
+            break
+
         if pending_count > 0:
             has_seen_pending = True
             consecutive_zero_pending = 0
         else:
             consecutive_zero_pending += 1
-            if len(new_tiles) >= len(body.scenes):
-                logger.info("Batch rendering complete! Found %d new tiles for %d expected scenes.", len(new_tiles), len(body.scenes))
+            if has_seen_pending and consecutive_zero_pending >= 2:
+                logger.info("Batch rendering complete after seeing pending. Found %d new tiles.", len(new_tiles))
                 break
-            if has_seen_pending and consecutive_zero_pending >= 15:
-                logger.info("Batch rendering finished queue after seeing pending. Found %d new tiles.", len(new_tiles))
+            if time.time() - start_time >= 8 and len(new_tiles) >= len(body.scenes) and not has_seen_pending:
+                logger.info("Batch rendering complete (found %d new tiles for %d expected scenes).", len(new_tiles), len(body.scenes))
                 break
 
     tiles = poll_status.get("tiles") or []
@@ -1304,42 +1332,12 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
         t for t in tiles
         if (t.get("src") not in known_urls) and (not t.get("media_id") or t.get("media_id") not in known_media_ids)
     ]
-    # ── Multi-Tier Scene-to-Tile Matching Engine ────────────────────────────────
-    # Tier 0 (Definitive): Exact media_id match via network response interception
-    # Tier 1 (Strong): Server-side FIFO dispatch order matching
-    # Tier 2 (Fallback): Keyword + positional scoring
+
+    # Remaining fallback matching for any scenes not downloaded via real-time media_id
     scenes_by_prompt = {s.prompt: s.dict() for s in body.scenes}
     matched_pairs = []
-    matched_scene_nums = set()
-    used_tile_srcs = set()
 
-    # ── Tier 0: 100% Deterministic media_id match (Network Intercepted) ──────
-    for sc_obj in body.scenes:
-        sc_dict = sc_obj.dict()
-        target_mid = sc_dict.get("media_id")
-        if not target_mid:
-            # Check if recorded in _dispatch_order_queue
-            for q in _dispatch_order_queue:
-                if q.get("prompt") == sc_dict.get("prompt") and q.get("media_id"):
-                    target_mid = q.get("media_id")
-                    break
-
-        if target_mid:
-            for tl in new_tiles:
-                tl_src = tl.get("src") or ""
-                tl_mid = tl.get("media_id") or ""
-                if tl_src in used_tile_srcs:
-                    continue
-                # Match either by data-media-id or by mediaId in image URL (/image/<uuid>)
-                if target_mid == tl_mid or f"/image/{target_mid}" in tl_src:
-                    matched_pairs.append((sc_dict, tl))
-                    matched_scene_nums.add(sc_dict.get("scene_num"))
-                    used_tile_srcs.add(tl_src)
-                    logger.info("🎯 [EXACT MEDIA_ID MATCH] Scene %02d -> media_id %s", sc_dict.get("scene_num"), target_mid)
-                    break
-
-    # ── Tier 1: Dispatch-order matching for remaining unmatched scenes ───────
-    unmatched_scenes = [s.dict() for s in body.scenes if s.scene_num not in matched_scene_nums]
+    unmatched_scenes = [s.dict() for s in body.scenes if s.scene_num not in completed_scene_nums]
     remaining_tiles = [tl for tl in new_tiles if tl.get("src") not in used_tile_srcs]
 
     if unmatched_scenes and _dispatch_order_queue:
@@ -1347,86 +1345,55 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
         queue_entries = [e for e in _dispatch_order_queue if e["prompt"] in batch_prompts]
         if queue_entries and len(remaining_tiles) >= len(queue_entries):
             N = len(queue_entries)
-            ordered_tiles = list(reversed(remaining_tiles[-N:]))
+            ordered_tiles = remaining_tiles[:N]
             for q_entry, tile in zip(queue_entries, ordered_tiles):
                 sc_dict = scenes_by_prompt.get(q_entry["prompt"])
-                if sc_dict and sc_dict.get("scene_num") not in matched_scene_nums:
+                if sc_dict and sc_dict.get("scene_num") not in completed_scene_nums:
                     matched_pairs.append((sc_dict, tile))
-                    matched_scene_nums.add(sc_dict.get("scene_num"))
+                    completed_scene_nums.add(sc_dict.get("scene_num"))
                     used_tile_srcs.add(tile.get("src"))
                     logger.info("Dispatch-order match: Scene %02d -> tile %s", sc_dict.get("scene_num"), tile.get("media_id", "?"))
 
-    # ── Tier 2: Fallback to keyword + positional scoring ─────────────────────
-    remaining_unmatched = [s for s in unmatched_scenes if s.get("scene_num") not in matched_scene_nums]
+    # Fallback to positional scoring
+    remaining_unmatched = [s for s in unmatched_scenes if s.get("scene_num") not in completed_scene_nums]
     final_tiles = [tl for tl in remaining_tiles if tl.get("src") not in used_tile_srcs]
     if remaining_unmatched and final_tiles:
         logger.warning("Falling back to keyword+positional matching for %d scene(s)", len(remaining_unmatched))
         fallback_pairs = _match_batch_tiles_to_scenes(remaining_unmatched, final_tiles)
         for sc_dict, tl in fallback_pairs:
             matched_pairs.append((sc_dict, tl))
-            matched_scene_nums.add(sc_dict.get("scene_num"))
+            completed_scene_nums.add(sc_dict.get("scene_num"))
             used_tile_srcs.add(tl.get("src"))
 
-    # Remove consumed entries from global queue
-    consumed_prompts = {sc["prompt"] for sc, _ in matched_pairs}
+    consumed_prompts = {sc["prompt"] for sc, _ in matched_pairs} | {s.prompt for s in body.scenes if s.scene_num in completed_scene_nums}
     _dispatch_order_queue[:] = [e for e in _dispatch_order_queue if e["prompt"] not in consumed_prompts]
-    logger.info("Dispatch queue after matching: %d matched, %d entries remaining", len(matched_pairs), len(_dispatch_order_queue))
 
-    results = []
-    matched_scene_nums = set()
+    results = list(realtime_results)
 
-    async with httpx.AsyncClient(follow_redirects=True) as http_client:
-        for sc, tl in matched_pairs:
-            sc_num = sc.get("scene_num")
-            matched_scene_nums.add(sc_num)
-            out_path = sc.get("output_path")
-            img_url = tl.get("src")
-            footer_title = tl.get("footer_title")
+    for sc, tl in matched_pairs:
+        sc_num = sc.get("scene_num")
+        out_path = sc.get("output_path")
+        img_url = tl.get("src")
+        footer_title = tl.get("footer_title")
 
-            if out_path and img_url:
-                os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
-                try:
-                    fetch_js = f"""(async () => {{
-                        const fullUrl = "{img_url}".replace(/=s\\d+/, '=s2048');
-                        const res = await fetch(fullUrl);
-                        if (!res.ok) return {{ ok: false, status: res.status }};
-                        const blob = await res.blob();
-                        return new Promise(resolve => {{
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve({{ ok: true, b64: reader.result.split(',')[1] }});
-                            reader.readAsDataURL(blob);
-                        }});
-                    }})()"""
-                    b_res = await _eval_js_internal(client, fetch_js) or {}
-                    if b_res.get("ok") and b_res.get("b64"):
-                        import base64, io
-                        from PIL import Image
-                        raw_bytes = base64.b64decode(b_res["b64"])
-                        im = Image.open(io.BytesIO(raw_bytes))
-                        im.convert("RGB").save(out_path, "JPEG", quality=95)
-                        logger.info("Saved batch image for Scene %02d to %s (%dx%d)", sc_num, out_path, im.width, im.height)
-                        results.append({
-                            "scene_num": sc_num,
-                            "success": True,
-                            "output_path": out_path,
-                            "footer_title": footer_title,
-                            "image_url": img_url
-                        })
-                    else:
-                        results.append({
-                            "scene_num": sc_num,
-                            "success": False,
-                            "error": f"Browser fetch failed: {b_res}"
-                        })
-                except Exception as dl_err:
-                    results.append({
-                        "scene_num": sc_num,
-                        "success": False,
-                        "error": str(dl_err)
-                    })
+        if out_path and img_url:
+            dl_ok = await _download_tile_image_internal(client, img_url, out_path)
+            results.append({
+                "scene_num": sc_num,
+                "success": dl_ok,
+                "output_path": out_path,
+                "footer_title": footer_title,
+                "image_url": img_url
+            })
+        else:
+            results.append({
+                "scene_num": sc_num,
+                "success": False,
+                "error": "Missing out_path or img_url"
+            })
 
     for s in body.scenes:
-        if s.scene_num not in matched_scene_nums:
+        if s.scene_num not in completed_scene_nums:
             results.append({
                 "scene_num": s.scene_num,
                 "success": False,

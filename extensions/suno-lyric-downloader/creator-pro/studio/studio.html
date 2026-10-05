@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Creator Pro Studio</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --radius: 14px;
+        --radius-sm: 10px;
+        --font: "SF Pro Text", "Segoe UI", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        /* Dark (default when preference unknown) */
+        --bg: #070b14;
+        --bg-glow-a: rgba(94, 177, 255, 0.14);
+        --bg-glow-b: rgba(139, 123, 255, 0.1);
+        --bg-elevated: #0d1424;
+        --panel: #111a2c;
+        --panel-2: #182338;
+        --panel-rgb: 17, 26, 44;
+        --border: #2a3650;
+        --border-soft: rgba(42, 54, 80, 0.65);
+        --border-strong: #3d4f73;
+        --text: #eef2ff;
+        --muted: #93a0bd;
+        --faint: #6b7796;
+        --accent: #5eb1ff;
+        --accent-2: #8b7bff;
+        --accent-soft: rgba(94, 177, 255, 0.14);
+        --ok: #3ddea5;
+        --warn: #f5c15a;
+        --error: #ff7b8a;
+        --pro: #c4b5fd;
+        --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+        --topbar-bg: rgba(9, 13, 24, 0.86);
+        --subbar-bg: rgba(10, 14, 24, 0.55);
+        --input-bg: #0a101c;
+        --hover-bg: #1d2b44;
+        --canvas-checker-a: var(--canvas-checker-a);
+        --canvas-checker-b: var(--canvas-checker-b);
+        --lock-bg: rgba(76, 29, 149, 0.18);
+        --lock-border: rgba(196, 181, 253, 0.35);
+        --lock-text: #e9e0ff;
+        --btn-hover-border: #3d4f73;
+        --primary-text: #ffffff;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f4f6fb;
+          --bg-glow-a: rgba(37, 99, 235, 0.1);
+          --bg-glow-b: rgba(124, 58, 237, 0.08);
+          --bg-elevated: #ffffff;
+          --panel: #ffffff;
+          --panel-2: #f0f3f9;
+          --panel-rgb: 255, 255, 255;
+          --border: #d5dbe8;
+          --border-soft: rgba(15, 23, 42, 0.1);
+          --border-strong: #b6c0d4;
+          --text: #0f172a;
+          --muted: #5b6b86;
+          --faint: #8494ad;
+          --accent: #2563eb;
+          --accent-2: #7c3aed;
+          --accent-soft: rgba(37, 99, 235, 0.12);
+          --ok: #059669;
+          --warn: #d97706;
+          --error: #dc2626;
+          --pro: #6d28d9;
+          --shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+          --topbar-bg: rgba(255, 255, 255, 0.9);
+          --subbar-bg: rgba(244, 246, 251, 0.85);
+          --input-bg: #ffffff;
+          --hover-bg: #e8eef8;
+          --canvas-checker-a: #e8edf5;
+          --canvas-checker-b: #f4f6fb;
+          --lock-bg: rgba(109, 40, 217, 0.08);
+          --lock-border: rgba(109, 40, 217, 0.28);
+          --lock-text: #4c1d95;
+          --btn-hover-border: #b6c0d4;
+          --primary-text: #ffffff;
+        }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+        }
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          color-scheme: light;
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        color: var(--text);
+        background:
+          radial-gradient(900px 420px at 12% -8%, var(--bg-glow-a), transparent 55%),
+          radial-gradient(700px 360px at 88% 0%, var(--bg-glow-b), transparent 50%),
+          var(--bg);
+        line-height: 1.45;
+      }
+
+      button, input, select, textarea { font: inherit; color: inherit; }
+      button {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: var(--panel-2);
+        border-radius: 999px;
+        padding: 0.5rem 0.95rem;
+        font-size: 0.86rem;
+        font-weight: 650;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+      }
+      button:hover:not(:disabled) { border-color: var(--btn-hover-border); background: var(--hover-bg); }
+      button:active:not(:disabled) { transform: translateY(1px); }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      button.primary {
+        border: none;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        color: var(--primary-text);
+        box-shadow: 0 8px 24px var(--accent-soft);
+      }
+      button.primary:hover:not(:disabled) { filter: brightness(1.05); }
+      button.ghost { background: transparent; }
+      button.danger { border-color: rgba(255, 123, 138, 0.45); color: var(--error); }
+
+      .app {
+        min-height: 100%;
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+      }
+
+      /* —— Top bar —— */
+      .topbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px 20px;
+        align-items: center;
+        padding: 14px 18px 12px;
+        border-bottom: 1px solid var(--border-soft);
+        background: var(--topbar-bg);
+        backdrop-filter: blur(14px);
+        position: sticky;
+        top: 0;
+        z-index: 20;
+      }
+      .brand-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; min-width: 0; }
+      .brand {
+        margin: 0;
+        font-size: 1.02rem;
+        font-weight: 750;
+        letter-spacing: -0.02em;
+      }
+      .song-title {
+        color: var(--muted);
+        font-size: 0.9rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: min(52vw, 420px);
+      }
+      .meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-top: 6px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 0.22rem 0.65rem;
+        font-size: 0.75rem;
+        font-weight: 650;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--muted);
+      }
+      .pill.ok { color: var(--ok); border-color: rgba(61, 222, 165, 0.35); }
+      .pill.warn { color: var(--warn); border-color: rgba(245, 193, 90, 0.35); }
+      .pill.pro { color: var(--pro); border-color: rgba(196, 181, 253, 0.4); }
+      .pill.error { color: var(--error); border-color: rgba(255, 123, 138, 0.4); }
+
+      .top-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+      }
+      .license-box {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        padding: 4px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--panel-2);
+      }
+      .license-box input {
+        border: none;
+        background: transparent;
+        min-width: 11rem;
+        padding: 0.35rem 0.7rem;
+        outline: none;
+      }
+      .license-box input::placeholder { color: var(--faint); }
+
+      /* —— Mode switch + status —— */
+      .subbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 18px;
+        border-bottom: 1px solid var(--border-soft);
+        background: var(--subbar-bg);
+      }
+      .tabs {
+        display: inline-flex;
+        padding: 4px;
+        gap: 4px;
+        border-radius: 999px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+      .tabs button {
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        min-width: 7.5rem;
+      }
+      .tabs button[aria-selected="true"] {
+        background: linear-gradient(135deg, rgba(94, 177, 255, 0.22), rgba(139, 123, 255, 0.2));
+        color: var(--text);
+        box-shadow: inset 0 0 0 1px rgba(94, 177, 255, 0.25);
+      }
+      #status {
+        min-height: 1.25em;
+        font-size: 0.86rem;
+        color: var(--muted);
+      }
+      #status[data-tone="ok"] { color: var(--ok); }
+      #status[data-tone="error"] { color: var(--error); }
+      #status[data-tone="warn"] { color: var(--warn); }
+
+      /* —— Views —— */
+      .view { display: none; min-height: 0; }
+      .view.active { display: grid; }
+
+      #view-lyrics {
+        grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px 16px 20px;
+        height: calc(100vh - 132px);
+      }
+      #view-video {
+        grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px 16px 20px;
+        height: calc(100vh - 132px);
+      }
+      @media (max-width: 960px) {
+        #view-lyrics, #view-video {
+          grid-template-columns: 1fr;
+          height: auto;
+        }
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .panel-head h2 {
+        margin: 0;
+        font-size: 0.92rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .panel-body {
+        padding: 12px;
+        overflow: auto;
+        flex: 1;
+        min-height: 0;
+      }
+      .panel-foot {
+        padding: 10px 12px 12px;
+        border-top: 1px solid var(--border-soft);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .empty {
+        color: var(--muted);
+        font-size: 0.9rem;
+        padding: 18px 10px;
+        text-align: center;
+      }
+      .empty strong { color: var(--text); display: block; margin-bottom: 6px; }
+
+      /* QA */
+      .qa-summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .qa-stat {
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-soft);
+        background: color-mix(in srgb, var(--input-bg) 88%, var(--text) 4%);
+        padding: 10px 8px;
+        text-align: center;
+      }
+      .qa-stat .n { font-size: 1.15rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+      .qa-stat .l { font-size: 0.72rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+      .qa-stat[data-kind="error"] .n { color: var(--error); }
+      .qa-stat[data-kind="warning"] .n { color: var(--warn); }
+      .qa-stat[data-kind="info"] .n { color: var(--accent); }
+
+      .qa-item {
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-sm);
+        padding: 10px 11px;
+        margin-bottom: 8px;
+        background: color-mix(in srgb, var(--input-bg) 92%, transparent);
+        cursor: pointer;
+        transition: border-color 0.12s ease, background 0.12s ease;
+      }
+      .qa-item:hover { border-color: var(--btn-hover-border); background: var(--hover-bg); }
+      .qa-item[data-severity="error"] { border-left: 3px solid var(--error); }
+      .qa-item[data-severity="warning"] { border-left: 3px solid var(--warn); }
+      .qa-item[data-severity="info"] { border-left: 3px solid var(--accent); }
+      .qa-code {
+        font-size: 0.72rem;
+        color: var(--faint);
+        margin-bottom: 4px;
+        font-family: var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .qa-msg { font-size: 0.88rem; }
+
+      /* Lyrics editor */
+      .lyrics-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .search {
+        flex: 1;
+        min-width: 10rem;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--input-bg);
+        padding: 0.5rem 0.9rem;
+        outline: none;
+      }
+      .search:focus { border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+      .line-row {
+        display: grid;
+        grid-template-columns: 7.2rem minmax(0, 1fr);
+        gap: 10px;
+        padding: 10px;
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        margin-bottom: 6px;
+        background: color-mix(in srgb, var(--text) 4%, var(--panel));
+      }
+      .line-row:hover { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+      .line-row.selected {
+        border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+        background: var(--accent-soft);
+      }
+      .line-row.locked textarea,
+      .line-row.locked input { opacity: 0.85; }
+      .time-col { display: grid; gap: 6px; }
+      .time-col label {
+        display: block;
+        font-size: 0.65rem;
+        color: var(--faint);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .time-col input {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--input-bg);
+        padding: 0.35rem 0.4rem;
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .line-body { display: grid; gap: 6px; }
+      .line-index {
+        font-size: 0.72rem;
+        color: var(--faint);
+        font-variant-numeric: tabular-nums;
+      }
+      textarea {
+        width: 100%;
+        min-height: 58px;
+        resize: vertical;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--input-bg);
+        padding: 8px 10px;
+        line-height: 1.4;
+      }
+      textarea:focus, .time-col input:focus {
+        outline: none;
+        border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      .lock-banner {
+        display: none;
+        margin-bottom: 10px;
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--lock-border);
+        background: var(--lock-bg);
+        color: var(--lock-text);
+        font-size: 0.86rem;
+      }
+      .lock-banner.visible { display: block; }
+
+      /* Export strip */
+      .export-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .export-row select {
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--input-bg);
+        padding: 0.48rem 0.85rem;
+        min-width: 11rem;
+      }
+
+      /* Video */
+      .field { margin-bottom: 14px; }
+      .field label {
+        display: block;
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-bottom: 6px;
+        font-weight: 600;
+      }
+      .field select, .field input[type="range"] {
+        width: 100%;
+      }
+      .field select {
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--input-bg);
+        padding: 0.55rem 0.7rem;
+      }
+      .template-grid {
+        display: grid;
+        gap: 8px;
+      }
+      .template-card {
+        text-align: left;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--input-bg);
+        padding: 10px 12px;
+        border-radius: 12px;
+        width: 100%;
+      }
+      .template-card[aria-pressed="true"] {
+        border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+        background: rgba(94, 177, 255, 0.1);
+        box-shadow: inset 0 0 0 1px rgba(94, 177, 255, 0.2);
+      }
+      .template-card .name { font-weight: 700; font-size: 0.9rem; }
+      .template-card .desc { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+
+      .gate-note {
+        font-size: 0.84rem;
+        color: var(--muted);
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--input-bg) 88%, var(--text) 4%);
+        border: 1px solid var(--border-soft);
+        margin: 0 0 12px;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .stat {
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-sm);
+        padding: 8px 10px;
+        background: rgba(8, 12, 22, 0.4);
+      }
+      .stat .k { font-size: 0.7rem; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+      .stat .v { font-size: 0.92rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+      .preview-stage {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        height: 100%;
+        min-height: 0;
+      }
+      .canvas-wrap {
+        flex: 1;
+        min-height: 280px;
+        display: grid;
+        place-items: center;
+        border-radius: var(--radius);
+        background:
+          linear-gradient(180deg, rgba(8, 12, 22, 0.4), rgba(8, 12, 22, 0.85)),
+          repeating-conic-gradient(var(--canvas-checker-a) 0% 25%, var(--canvas-checker-b) 0% 50%) 50% / 18px 18px;
+        border: 1px solid var(--border-soft);
+        padding: 16px;
+        overflow: auto;
+      }
+      #preview-canvas {
+        width: min(100%, 720px);
+        max-height: min(58vh, 640px);
+        height: auto;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+        background: #000;
+      }
+      #preview-canvas.vertical {
+        width: min(100%, 360px);
+      }
+
+      .transport {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        border-radius: var(--radius);
+        border: 1px solid var(--border-soft);
+        background: var(--panel);
+      }
+      .transport-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .transport-row .grow { flex: 1; min-width: 8rem; }
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+      .time-readout {
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        min-width: 9.5rem;
+      }
+
+      .progress {
+        height: 8px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--text) 12%, var(--panel));
+        overflow: hidden;
+      }
+      .progress > span {
+        display: block;
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        transition: width 0.12s linear;
+      }
+      #render-progress-text {
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+
+      .hint {
+        font-size: 0.8rem;
+        color: var(--faint);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * { transition: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <div class="brand-row">
+            <h1 class="brand">Creator Pro Studio</h1>
+            <div class="song-title" id="project-title">Loading…</div>
+          </div>
+          <div class="meta-row">
+            <span class="pill" id="license-badge">License · Free preview</span>
+            <span class="pill" id="line-count-pill">0 lines</span>
+            <span class="pill" id="duration-pill">0:00</span>
+            <span class="pill" id="qa-pill">QA · —</span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <div class="license-box" title="Activate Creator Pro">
+            <input id="license-key" type="password" placeholder="License key" autocomplete="off" />
+            <button type="button" id="btn-activate">Activate</button>
+          </div>
+          <button type="button" id="btn-undo" disabled title="Undo">Undo</button>
+          <button type="button" id="btn-redo" disabled title="Redo">Redo</button>
+          <button type="button" id="btn-diagnostics" class="ghost">Diagnostics</button>
+        </div>
+      </header>
+
+      <div class="subbar">
+        <div class="tabs" role="tablist" aria-label="Studio mode">
+          <button type="button" role="tab" id="tab-lyrics" aria-selected="true" aria-controls="view-lyrics">Lyrics</button>
+          <button type="button" role="tab" id="tab-video" aria-selected="false" aria-controls="view-video">Video</button>
+        </div>
+        <div id="status" role="status">Open Studio from a Suno song page to load lyrics.</div>
+      </div>
+
+      <main id="view-lyrics" class="view active" role="tabpanel" aria-labelledby="tab-lyrics">
+        <section class="panel" aria-labelledby="qa-heading">
+          <div class="panel-head">
+            <h2 id="qa-heading">QA report</h2>
+            <button type="button" id="btn-rerun-qa" class="ghost">Re-run</button>
+          </div>
+          <div class="panel-body">
+            <div class="qa-summary" aria-hidden="false">
+              <div class="qa-stat" data-kind="error"><div class="n" id="qa-count-error">0</div><div class="l">Errors</div></div>
+              <div class="qa-stat" data-kind="warning"><div class="n" id="qa-count-warning">0</div><div class="l">Warnings</div></div>
+              <div class="qa-stat" data-kind="info"><div class="n" id="qa-count-info">0</div><div class="l">Info</div></div>
+            </div>
+            <div id="qa-list"></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="lyrics-heading">
+          <div class="panel-head">
+            <h2 id="lyrics-heading">Lyric lines</h2>
+            <span class="hint" id="edit-hint">Free: read-only · Pro: edit + save</span>
+          </div>
+          <div class="panel-body">
+            <div class="lock-banner" id="lock-banner">
+              Editing is locked on Free. Activate Creator Pro to change text/timing and export professional formats.
+            </div>
+            <div class="lyrics-toolbar">
+              <input class="search" id="line-filter" type="search" placeholder="Filter lines…" />
+            </div>
+            <div id="line-list"></div>
+          </div>
+          <div class="panel-foot">
+            <div class="export-row">
+              <select id="export-format" aria-label="Export format">
+                <option value="lrc">LRC (free)</option>
+                <option value="srt">SRT (free)</option>
+                <option value="enhanced_lrc">Enhanced LRC (Pro)</option>
+                <option value="vtt">VTT (Pro)</option>
+                <option value="ass">ASS (Pro)</option>
+              </select>
+              <button type="button" class="primary" id="btn-export">Export file</button>
+            </div>
+            <span class="hint">Exports stay on this device.</span>
+          </div>
+        </section>
+      </main>
+
+      <section id="view-video" class="view" role="tabpanel" aria-labelledby="tab-video">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Render settings</h2>
+          </div>
+          <div class="panel-body">
+            <p class="gate-note" id="video-gate-note">Free: 15s watermarked preview. Pro: full length, no watermark.</p>
+
+            <div class="stats-grid">
+              <div class="stat"><div class="k">Song length</div><div class="v" id="stat-duration">—</div></div>
+              <div class="stat"><div class="k">Output length</div><div class="v" id="stat-output">—</div></div>
+              <div class="stat"><div class="k">Resolution</div><div class="v" id="stat-resolution">—</div></div>
+              <div class="stat"><div class="k">Frames @ 30fps</div><div class="v" id="stat-frames">—</div></div>
+            </div>
+
+            <div class="field">
+              <label>Template</label>
+              <div class="template-grid" id="template-grid" role="listbox" aria-label="Video template"></div>
+              <select id="video-template" hidden></select>
+            </div>
+
+            <div class="field">
+              <label for="video-orientation">Orientation</label>
+              <select id="video-orientation">
+                <option value="horizontal">Horizontal · 1920×1080</option>
+                <option value="vertical">Vertical · 1080×1920</option>
+              </select>
+            </div>
+
+            <div class="transport-row" style="margin-top: 4px;">
+              <button type="button" class="primary" id="btn-render">Render WebM</button>
+              <button type="button" id="btn-cancel-render" disabled>Cancel</button>
+            </div>
+            <div class="progress" aria-hidden="true" style="margin-top:12px;"><span id="render-progress-bar"></span></div>
+            <div id="render-progress-text">Ready to render</div>
+            <p class="hint" style="margin-top:10px;">
+              Full-length encodes run near real-time (a 3‑minute song ≈ 3 minutes to encode). Keep this tab open until the download starts.
+            </p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Preview</h2>
+            <span class="hint">Local only · no upload</span>
+          </div>
+          <div class="panel-body preview-stage">
+            <div class="canvas-wrap">
+              <canvas id="preview-canvas" width="960" height="540" aria-label="Lyric video preview"></canvas>
+            </div>
+            <div class="transport">
+              <div class="transport-row">
+                <button type="button" id="btn-preview-play">Play</button>
+                <button type="button" id="btn-preview-frame" class="ghost">Refresh frame</button>
+                <span class="time-readout" id="preview-time">00:00.000 / 00:00.000</span>
+              </div>
+              <div class="transport-row">
+                <input class="grow" id="preview-scrub" type="range" min="0" max="1000" value="0" step="1" aria-label="Preview timeline" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script src="studio.js"></script>
+  </body>
+</html>
