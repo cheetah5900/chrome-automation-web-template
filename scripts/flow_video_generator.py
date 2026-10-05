@@ -554,7 +554,8 @@ def ensure_video_settings(
     aspect: str = "9:16",
     duration: int = 6,
     submode: str = "เฟรม",
-    output_count: int = 1
+    output_count: int = 1,
+    model: str = "lower priority"
 ) -> bool:
     """Strictly verifies and locks Google Flow video settings before any generation:
     1. Video mode ('videocam วิดีโอ')
@@ -562,6 +563,7 @@ def ensure_video_settings(
     3. Aspect ratio ('9:16' or '16:9')
     4. Duration: 6 seconds ('6 วินาที')
     5. Output count: 1 video ('x1')
+    6. Model: Lower Priority ('Veo 3.1 - Lite [Lower Priority]')
     """
     is_landscape = (aspect == "16:9" or "landscape" in aspect.lower())
     target_crop = "crop_16_9" if is_landscape else "crop_9_16"
@@ -583,8 +585,9 @@ def ensure_video_settings(
         const hasDur = text.includes('{duration} วินาที') || text.includes('{duration}s');
         const hasCount = text.includes('{target_count.lower()}');
         const hasFrame = "{submode}" !== "เฟรม" || pbText.includes('เริ่ม') || pbText.includes('Start');
+        const hasPriority = window.__flow_video_model === "{model.lower()}";
 
-        if (hasVideo && hasCrop && hasDur && hasCount && hasFrame) {{
+        if (hasVideo && hasCrop && hasDur && hasCount && hasFrame && hasPriority) {{
             return {{ alreadyConfigured: true, text: btn.innerText.split(String.fromCharCode(10)).join(' | ') }};
         }}
         return {{ alreadyConfigured: false, text: btn.innerText.split(String.fromCharCode(10)).join(' | ') }};
@@ -592,11 +595,11 @@ def ensure_video_settings(
     try:
         res = inspect_tab_js(api_base, check_js)
         if isinstance(res, dict) and res.get("alreadyConfigured"):
-            log(f"🎯 Google Flow video settings verified: {res.get('text')} (Submode: {submode})")
+            log(f"🎯 Google Flow video settings verified: {res.get('text')} (Submode: {submode}, Model: Lower Priority)")
             return True
 
         curr = res.get('text') if isinstance(res, dict) else 'Unknown'
-        log(f"⚙️ Adjusting video settings (Current: {curr} -> Target: Video | {submode} | {target_label} | {target_dur} | {target_count})...")
+        log(f"⚙️ Adjusting video settings (Current: {curr} -> Target: Video | {submode} | {target_label} | {target_dur} | {target_count} | Lower Priority)...")
 
         adjust_js = f"""(async () => {{
             let settingsBox = document.querySelector('flow-prompt-box-settings');
@@ -660,6 +663,25 @@ def ensure_video_settings(
                 await new Promise(r => setTimeout(r, 200));
             }}
 
+            // 6. Model selection (Lower Priority / Last Option)
+            const modelTrigger = Array.from(overlay.querySelectorAll('button')).find(b => {{
+                const t = (b.innerText || '').toLowerCase();
+                return t.indexOf('veo') !== -1 || t.indexOf('priority') !== -1 || t.indexOf('lower') !== -1 || t.indexOf('omni') !== -1;
+            }});
+            if (modelTrigger) {{
+                if (!modelTrigger.innerText || modelTrigger.innerText.toLowerCase().indexOf('lower priority') === -1) {{
+                    modelTrigger.click();
+                    await new Promise(r => setTimeout(r, 400));
+                    const menuItems = Array.from(document.querySelectorAll('.cdk-overlay-container [role="menuitem"], .cdk-overlay-container button')).filter(x => x.getAttribute('role') === 'menuitem');
+                    const targetItem = menuItems.find(m => (m.innerText || '').toLowerCase().indexOf('lower priority') !== -1) || menuItems[menuItems.length - 1];
+                    if (targetItem) {{
+                        targetItem.click();
+                        await new Promise(r => setTimeout(r, 300));
+                    }}
+                }}
+            }}
+            window.__flow_video_model = "{model.lower()}";
+
             // Close overlay
             const backdrop = document.querySelector('.cdk-overlay-backdrop');
             if (backdrop) backdrop.click();
@@ -681,16 +703,16 @@ def ensure_video_settings(
             return btn ? btn.innerText.split(String.fromCharCode(10)).join(' | ') : 'none';
         })()"""
         v_text = inspect_tab_js(api_base, verify_btn_js)
-        log(f"✅ Video settings successfully locked: {v_text}")
+        log(f"✅ Video settings successfully locked: {v_text} (Lower Priority)")
         return True
     except Exception as e:
         log(f"Notice on adjusting video settings: {e}")
         return False
 
 
-def ensure_video_mode(api_base: str, aspect: str = "9:16", duration: int = 6, submode: str = "เฟรม") -> bool:
-    """Ensures Google Flow prompt box is toggled to Video mode, เฟรม, 9:16, 6 วินาที, x1 output count."""
-    return ensure_video_settings(api_base, aspect=aspect, duration=duration, submode=submode, output_count=1)
+def ensure_video_mode(api_base: str, aspect: str = "9:16", duration: int = 6, submode: str = "เฟรม", model: str = "lower priority") -> bool:
+    """Ensures Google Flow prompt box is toggled to Video mode, เฟรม, 9:16, 6 วินาที, x1 output count, Lower Priority."""
+    return ensure_video_settings(api_base, aspect=aspect, duration=duration, submode=submode, output_count=1, model=model)
 
 
 def set_aspect_ratio(api_base: str, aspect: str = "16:9") -> bool:
