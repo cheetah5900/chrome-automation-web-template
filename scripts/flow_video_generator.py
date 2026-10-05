@@ -409,6 +409,11 @@ def clear_prompt_box_completely(api_base: str) -> int:
         }
 
         // 4. If any chips remain, click their cancel buttons
+        const frameCancelBtn = document.querySelector('.chip-container button, button.chip-container');
+        if (frameCancelBtn) {
+            frameCancelBtn.click();
+        }
+
         const chips = Array.from(document.querySelectorAll('flow-image-ingredient-chip, flow-ingredient-chip'));
         for (const chip of chips) {
             const overlay = chip.querySelector('.hover-icon-overlay, mat-icon');
@@ -420,15 +425,15 @@ def clear_prompt_box_completely(api_base: str) -> int:
             }
         }
 
-        return document.querySelectorAll('flow-image-ingredient-chip').length;
+        return document.querySelectorAll('flow-prompt-box .chip-image, flow-prompt-box flow-image-ingredient-chip img').length;
     })()"""
     inspect_tab_js(api_base, js)
     time.sleep(0.4)
-    rem = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-image-ingredient-chip").length)()')
+    rem = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-prompt-box .chip-image, flow-prompt-box flow-image-ingredient-chip img").length)()')
     if rem and rem > 0:
         inspect_tab_js(api_base, js)
         time.sleep(0.4)
-        rem = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-image-ingredient-chip").length)()')
+        rem = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-prompt-box .chip-image, flow-prompt-box flow-image-ingredient-chip img").length)()')
     return rem or 0
 
 def attach_start_frame(api_base: str, file_name: str, project_id: str = None, image_path: str = None, clear: bool = True) -> bool:
@@ -448,25 +453,30 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None, im
     def do_search_and_attach():
         # Open popover if not open
         open_js = """(() => {
-            const backdrop = document.querySelector('.cdk-overlay-backdrop');
-            if (backdrop) backdrop.click();
             let popover = document.querySelector('flow-add-menu-popover-content');
             if (!popover) {
-                const trigger = document.querySelector('button.add-menu-trigger') ||
+                const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                if (backdrop) backdrop.click();
+                const trigger = Array.from(document.querySelectorAll('button.empty-chip, button')).find(b => ['เริ่ม', 'Start'].includes((b.innerText || '').trim())) ||
+                                document.querySelector('button.empty-chip') ||
+                                document.querySelector('button.add-menu-trigger') ||
                                 document.querySelector('button[aria-label*="เพิ่มองค์ประกอบ"]');
                 if (trigger) trigger.click();
             }
             return !!document.querySelector('flow-add-menu-popover-content');
         })()"""
         inspect_tab_js(api_base, open_js)
-        time.sleep(0.6)
+        time.sleep(0.8)
 
         # Switch to รูปภาพ tab and type target_base into search input
         search_js = f"""(() => {{
             const popover = document.querySelector('flow-add-menu-popover-content');
             if (!popover) return {{ ok: false, error: 'popover not open' }};
             const tabs = Array.from(popover.querySelectorAll('button, [role="tab"], .mdc-tab, .mat-mdc-tab'));
-            const imgTab = tabs.find(el => (el.innerText || '').includes('รูปภาพ'));
+            const imgTab = tabs.find(el => {{
+                const t = (el.innerText || '').toLowerCase();
+                return t.includes('รูปภาพ') || t.includes('image');
+            }});
             if (imgTab) imgTab.click();
 
             const input = popover.querySelector('input.search-input');
@@ -516,10 +526,13 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None, im
     log(f"Successfully clicked storyboard frame: {res.get('text', file_name)}")
     time.sleep(0.5)
 
-    # Click detail pane 'เพิ่มไปยังพรอมต์' if present
+    # Click detail pane 'เพิ่มไปยังพรอมต์' / 'Add to prompt' if present
     add_btn_js = """(() => {
         const addBtn = document.querySelector('flow-add-menu-detail-pane button.detail-add-to-prompt-btn') ||
-                       Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => (b.innerText || '').includes('เพิ่มไปยังพรอมต์'));
+                       Array.from(document.querySelectorAll('.cdk-overlay-container button, flow-add-menu-detail-pane button')).find(b => {
+                           const t = (b.innerText || '').toLowerCase();
+                           return t.includes('เพิ่มไปยังพรอมต์') || t.includes('add to prompt') || t.trim() === 'add';
+                       });
         if (addBtn) {
             addBtn.click();
             return { clicked: true };
@@ -531,15 +544,20 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None, im
 
     # Close backdrop if open
     close_js = """(() => {
-        const backdrop = document.querySelector('.cdk-overlay-backdrop');
-        if (backdrop) backdrop.click();
+        if (document.querySelector('flow-add-menu-popover-content')) {
+            const backdrop = document.querySelector('.cdk-overlay-backdrop');
+            if (backdrop) backdrop.click();
+        }
         return true;
     })()"""
     inspect_tab_js(api_base, close_js)
     time.sleep(0.4)
 
     # Strict Verification: Must have EXACTLY 1 start frame image chip!
-    chips_count = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-image-ingredient-chip").length)()')
+    chips_count = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-prompt-box .chip-image, flow-prompt-box flow-image-ingredient-chip img").length)()')
+    if chips_count != 1:
+        time.sleep(0.5)
+        chips_count = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-prompt-box .chip-image, flow-prompt-box flow-image-ingredient-chip img").length)()')
     if chips_count != 1:
         error_exit(f"CRITICAL GUARD: Expected exactly 1 start frame chip for {file_name}, but found {chips_count}! Refusing to generate with invalid chip count.")
 
@@ -557,156 +575,25 @@ def ensure_video_settings(
     output_count: int = 1,
     model: str = "lower priority"
 ) -> bool:
-    """Strictly verifies and locks Google Flow video settings before any generation:
-    1. Video mode ('videocam วิดีโอ')
-    2. Submode: Frame ('crop_free เฟรม')
-    3. Aspect ratio ('9:16' or '16:9')
-    4. Duration: 6 seconds ('6 วินาที')
-    5. Output count: 1 video ('x1')
-    6. Model: Lower Priority ('Veo 3.1 - Lite [Lower Priority]')
-    """
-    is_landscape = (aspect == "16:9" or "landscape" in aspect.lower())
-    target_crop = "crop_16_9" if is_landscape else "crop_9_16"
-    target_label = "16:9" if is_landscape else "9:16"
-    target_count = f"x{output_count}"
-    target_dur = f"{duration} วินาที"
-
-    check_js = f"""(() => {{
-        const btn = document.querySelector('button.settings-trigger-button') ||
-                    document.querySelector('button[aria-label*="ตั้งค่า"]');
-        const pb = document.querySelector('flow-prompt-box');
-        if (!btn) return {{ error: "settings button not found" }};
-        const text = (btn.innerText || '').toLowerCase();
-        const pbText = pb ? (pb.innerText || '') : '';
-
-        const hasVideo = (text.includes('วิดีโอ') || text.includes('video') || text.includes('720p')) &&
-                         !text.includes('banana') && !text.includes('รูปภาพ') && !text.includes('image');
-        const hasCrop = text.includes('{target_crop}') || text.includes('{target_label}');
-        const hasDur = text.includes('{duration} วินาที') || text.includes('{duration}s');
-        const hasCount = text.includes('{target_count.lower()}');
-        const hasFrame = "{submode}" !== "เฟรม" || pbText.includes('เริ่ม') || pbText.includes('Start');
-        const hasPriority = window.__flow_video_model === "{model.lower()}";
-
-        if (hasVideo && hasCrop && hasDur && hasCount && hasFrame && hasPriority) {{
-            return {{ alreadyConfigured: true, text: btn.innerText.split(String.fromCharCode(10)).join(' | ') }};
-        }}
-        return {{ alreadyConfigured: false, text: btn.innerText.split(String.fromCharCode(10)).join(' | ') }};
-    }})()"""
+    """Strictly verifies and locks Google Flow video settings via 6969 backend."""
     try:
-        res = inspect_tab_js(api_base, check_js)
-        if isinstance(res, dict) and res.get("alreadyConfigured"):
-            log(f"🎯 Google Flow video settings verified: {res.get('text')} (Submode: {submode}, Model: Lower Priority)")
+        payload = {
+            "mode": "video",
+            "aspect_ratio": aspect,
+            "duration": duration,
+            "submode": submode,
+            "output_count": output_count,
+            "model": model
+        }
+        res = http_post(f"{api_base}/api/flow/settings", payload, timeout=30)
+        if isinstance(res, dict) and res.get("success"):
+            log(f"🎯 Google Flow video settings verified via 6969: {res.get('summary')} (Submode: {submode}, Model: {model})")
             return True
-
-        curr = res.get('text') if isinstance(res, dict) else 'Unknown'
-        log(f"⚙️ Adjusting video settings (Current: {curr} -> Target: Video | {submode} | {target_label} | {target_dur} | {target_count} | Lower Priority)...")
-
-        adjust_js = f"""(async () => {{
-            let settingsBox = document.querySelector('flow-prompt-box-settings');
-            if (!settingsBox) {{
-                let btn = document.querySelector('button.settings-trigger-button') ||
-                          document.querySelector('button[aria-label*="ตั้งค่า"]');
-                if (!btn) return {{ error: "settings button not found" }};
-                btn.click();
-                await new Promise(r => setTimeout(r, 400));
-            }}
-
-            const overlay = document.querySelector('.cdk-overlay-container') || document;
-            const allRadios = Array.from(overlay.querySelectorAll('button[role="radio"], button'));
-
-            // 1. Mode -> วิดีโอ
-            const vBtn = allRadios.find(b => {{
-                const t = (b.innerText || '').trim();
-                return t.includes('วิดีโอ') || t.includes('video');
-            }});
-            if (vBtn && vBtn.getAttribute('aria-checked') !== 'true') {{
-                vBtn.click();
-                await new Promise(r => setTimeout(r, 200));
-            }}
-
-            // 2. Submode -> เฟรม
-            if ("{submode}".includes("เฟรม")) {{
-                const frameBtn = allRadios.find(b => (b.innerText || '').includes('เฟรม'));
-                if (frameBtn && frameBtn.getAttribute('aria-checked') !== 'true') {{
-                    frameBtn.click();
-                    await new Promise(r => setTimeout(r, 200));
-                }}
-            }}
-
-            // 3. Aspect ratio
-            const isVertical = "{target_label}".includes("9:16");
-            const aspectStr = isVertical ? "9:16" : "16:9";
-            const aspectBtn = allRadios.find(b => (b.innerText || '').includes(aspectStr));
-            if (aspectBtn && aspectBtn.getAttribute('aria-checked') !== 'true') {{
-                aspectBtn.click();
-                await new Promise(r => setTimeout(r, 200));
-            }}
-
-            // 4. Duration ({duration} วินาที)
-            const durBtn = allRadios.find(b => {{
-                const t = (b.innerText || '').trim();
-                return t.includes(String({duration})) && !t.includes('16') && (t.includes('วิ') || t.includes('s'));
-            }});
-            if (durBtn && durBtn.getAttribute('aria-checked') !== 'true') {{
-                durBtn.click();
-                await new Promise(r => setTimeout(r, 200));
-            }}
-
-            // 5. Output count (x{output_count})
-            const countStr = "x{output_count}";
-            const countBtn = allRadios.find(b => {{
-                const t = (b.innerText || '').trim();
-                return t === countStr || t === "{output_count}";
-            }});
-            if (countBtn && countBtn.getAttribute('aria-checked') !== 'true') {{
-                countBtn.click();
-                await new Promise(r => setTimeout(r, 200));
-            }}
-
-            // 6. Model selection (Lower Priority / Last Option)
-            const modelTrigger = Array.from(overlay.querySelectorAll('button')).find(b => {{
-                const t = (b.innerText || '').toLowerCase();
-                return t.indexOf('veo') !== -1 || t.indexOf('priority') !== -1 || t.indexOf('lower') !== -1 || t.indexOf('omni') !== -1;
-            }});
-            if (modelTrigger) {{
-                if (!modelTrigger.innerText || modelTrigger.innerText.toLowerCase().indexOf('lower priority') === -1) {{
-                    modelTrigger.click();
-                    await new Promise(r => setTimeout(r, 400));
-                    const menuItems = Array.from(document.querySelectorAll('.cdk-overlay-container [role="menuitem"], .cdk-overlay-container button')).filter(x => x.getAttribute('role') === 'menuitem');
-                    const targetItem = menuItems.find(m => (m.innerText || '').toLowerCase().indexOf('lower priority') !== -1) || menuItems[menuItems.length - 1];
-                    if (targetItem) {{
-                        targetItem.click();
-                        await new Promise(r => setTimeout(r, 300));
-                    }}
-                }}
-            }}
-            window.__flow_video_model = "{model.lower()}";
-
-            // Close overlay
-            const backdrop = document.querySelector('.cdk-overlay-backdrop');
-            if (backdrop) backdrop.click();
-            await new Promise(r => setTimeout(r, 400));
-
-            const finalBtn = document.querySelector('button.settings-trigger-button') ||
-                             document.querySelector('button[aria-label*="ตั้งค่า"]');
-            return {{
-                success: true,
-                summary: finalBtn ? finalBtn.innerText.split(String.fromCharCode(10)).join(' | ') : ''
-            }};
-        }})()"""
-        inspect_tab_js(api_base, adjust_js)
-        time.sleep(0.5)
-
-        verify_btn_js = """(() => {
-            const btn = document.querySelector('button.settings-trigger-button') ||
-                        document.querySelector('button[aria-label*="ตั้งค่า"]');
-            return btn ? btn.innerText.split(String.fromCharCode(10)).join(' | ') : 'none';
-        })()"""
-        v_text = inspect_tab_js(api_base, verify_btn_js)
-        log(f"✅ Video settings successfully locked: {v_text} (Lower Priority)")
-        return True
+        else:
+            log(f"⚠️ Failed to configure video settings via 6969: {res.get('error') or res}")
+            return False
     except Exception as e:
-        log(f"Notice on adjusting video settings: {e}")
+        log(f"Notice on adjusting video settings via 6969: {e}")
         return False
 
 
@@ -1136,13 +1023,13 @@ def generate_video_flow(
     verify_extension_connection(api_base, project_id=project_id)
     verify_account_and_project(api_base, project_id=project_id, expected_email="dogmoneyplan@gmail.com")
 
-    # 2. Attach Start Frame (searches for exact scene name; auto-uploads if not found)
+    # 2. Ensure prompt box is in Video mode FIRST (Video -> เฟรม/Frames -> Aspect Ratio -> 6s -> x1 -> Lower Priority)
+    ensure_video_mode(api_base, aspect=aspect_ratio, duration=6, submode="เฟรม", model="lower priority")
+    time.sleep(0.3)
+
+    # 3. Attach Start Frame (searches for exact scene name; auto-uploads if not found)
     file_name = os.path.basename(image_path)
     attach_start_frame(api_base, file_name, project_id=project_id, image_path=image_path)
-
-    # 3.5 Ensure prompt box is in Video mode
-    ensure_video_mode(api_base)
-    time.sleep(0.3)
 
     # 4. Configure Aspect Ratio
     set_aspect_ratio(api_base, aspect_ratio)

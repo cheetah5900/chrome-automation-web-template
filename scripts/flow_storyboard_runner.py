@@ -265,11 +265,23 @@ def resolve_lakorn_character_sheets(story_path: str, ep_num: int, scene_num: int
     if not os.path.isfile(ref_map_file):
         return []
 
-    # 1. Parse Reference Image Map
+    # 1. Parse Reference Image Map (supports both Markdown table and bullet list)
     ref_map = {}
     with open(ref_map_file, "r", encoding="utf-8") as f:
         for line in f:
-            m = re.match(r"^-\s*([^:]+):\s*(.+)$", line.strip())
+            line_s = line.strip()
+            # 1.1 Markdown Table format: | Col1 | Col2 | Col3 |
+            if line_s.startswith("|") and not re.search(r"^\|\s*[-:]+\s*\|", line_s):
+                cols = [c.strip() for c in line_s.split("|") if c.strip()]
+                if len(cols) >= 3 and not any(h in cols[0].lower() for h in ["thai", "ชื่อ", "character"]):
+                    th_name, en_name, rel_path = cols[0], cols[1], cols[2]
+                    ref_map[th_name] = rel_path
+                    ref_map[en_name] = rel_path
+                elif len(cols) == 2 and not any(h in cols[0].lower() for h in ["thai", "ชื่อ", "character"]):
+                    name, rel_path = cols[0], cols[1]
+                    ref_map[name] = rel_path
+            # 1.2 Bullet list format: - Name: Path
+            m = re.match(r"^-\s*([^:]+):\s*(.+)$", line_s)
             if m:
                 c_name = m.group(1).strip()
                 rel_path = m.group(2).strip()
@@ -289,8 +301,8 @@ def resolve_lakorn_character_sheets(story_path: str, ep_num: int, scene_num: int
                     for c_name, rel_path in ref_map.items():
                         c_base = os.path.splitext(os.path.basename(rel_path))[0]
                         char_root = c_base.split(' - ')[0]
-                        if c_name in content or c_base.lower() in content.lower() or char_root.lower() in content.lower():
-                            if c_name not in scene_char_names:
+                        if c_name.lower() in content.lower() or c_base.lower() in content.lower() or char_root.lower() in content.lower():
+                            if rel_path not in [ref_map.get(x) for x in scene_char_names]:
                                 scene_char_names.append(c_name)
                 break
 
@@ -314,6 +326,7 @@ def resolve_lakorn_character_sheets(story_path: str, ep_num: int, scene_num: int
             found_paths.append(cand2)
 
     return found_paths[:2]  # Flow allows 1-2 clean chips
+
 
 def load_lakorn_scenes(story_path: str, ep_num: int, aspect_ratio: str) -> Dict[int, Dict]:
     """Loads Lakorn scene prompts and target output paths."""
@@ -449,121 +462,26 @@ def ensure_main_project_view(api_base: str) -> bool:
 
 
 def ensure_storyboard_settings(api_base: str, aspect_ratio: str = "9:16", model: str = "nano banana pro", count: int = 1) -> bool:
-    """Pre-checks and enforces Google Flow settings: Mode=Image, Model=Nano Banana Pro, Aspect=9:16/16:9, Count=1."""
+    """Pre-checks and enforces Google Flow settings via 6969 backend."""
     try:
         ensure_main_project_view(api_base)
-        
-        # 1. Pre-check current settings from button label directly
-        check_js = f"""(() => {{
-            const btn = document.querySelector('button.settings-trigger-button') ||
-                        document.querySelector('button[aria-label*="ตั้งค่า"]');
-            if (!btn) return {{ error: "settings button not found" }};
-            const text = (btn.innerText || '').toLowerCase();
-            const neededAspect = "{aspect_ratio}" === "9:16" ? ["9:16", "9_16", "crop_9_16"] : ["16:9", "16_9", "crop_16_9"];
-            const matchAspect = neededAspect.some(a => text.indexOf(a) !== -1);
-            const matchModel = text.indexOf("{model.lower()}") !== -1;
-            const matchCount = text.indexOf("x{count}") !== -1 || text.indexOf("{count} เอาต์พุต") !== -1 || text.indexOf("{count} output") !== -1;
-            const isImage = text.indexOf("วิดีโอ") === -1 && text.indexOf("video") === -1 && (text.indexOf("banana") !== -1 || text.indexOf("image") !== -1 || text.indexOf("รูปภาพ") !== -1);
-
-            return {{
-                alreadyConfigured: matchAspect && matchModel && matchCount && isImage,
-                matchAspect,
-                matchModel,
-                matchCount,
-                isImage,
-                currentText: btn.innerText.split(String.fromCharCode(10)).join(" | ")
-            }};
-        }})()"""
-        encoded = urllib.parse.quote(check_js)
-        res = http_get(f"{api_base}/api/flow/inspect-tab?js={encoded}")
-        script_res = res.get("result", {}).get("res", {}).get("result")
-        
-        if isinstance(script_res, dict) and script_res.get("alreadyConfigured"):
-            log(f"🎯 Google Flow settings verified: {script_res.get('currentText')}")
+        payload = {
+            "mode": "image",
+            "aspect_ratio": aspect_ratio,
+            "model": model,
+            "output_count": count
+        }
+        res = http_post(f"{api_base}/api/flow/settings", payload, timeout=30)
+        if isinstance(res, dict) and res.get("success"):
+            log(f"🎯 Google Flow image settings verified via 6969: {res.get('summary')}")
             return True
-
-        curr = script_res.get("currentText", "Unknown") if isinstance(script_res, dict) else "Unknown"
-        log(f"⚙️ Flow settings need adjustment (Current: {curr}). Setting to Image | {model} | {aspect_ratio} | x{count}...")
-
-        # 2. Open overlay, adjust settings, and close
-        adjust_js = f"""(async () => {{
-            let btn = document.querySelector('button.settings-trigger-button') ||
-                      document.querySelector('button[aria-label*="ตั้งค่า"]');
-            if (!btn) return {{ error: "settings button not found" }};
-            btn.click();
-            await new Promise(r => setTimeout(r, 400));
-
-            const overlay = document.querySelector('.cdk-overlay-container') || document;
-            
-            // Mode -> Image
-            const spans = Array.from(overlay.querySelectorAll('span, button, mat-button-toggle'));
-            const imgBtn = spans.find(s => s.innerText && s.innerText.trim() === 'รูปภาพ');
-            if (imgBtn) {{
-                const clickable = imgBtn.closest('button') || imgBtn.closest('mat-button-toggle') || imgBtn;
-                clickable.click();
-                await new Promise(r => setTimeout(r, 200));
-            }}
-            
-            // Model -> Nano Banana Pro
-            const modelTrigger = overlay.querySelector('button[aria-label*="เลือกกลุ่มผลิตภัณฑ์โมเดล"]') ||
-                                 overlay.querySelector('.mat-mdc-menu-trigger');
-            if (modelTrigger && (!modelTrigger.innerText || modelTrigger.innerText.toLowerCase().indexOf('pro') === -1)) {{
-                modelTrigger.click();
-                await new Promise(r => setTimeout(r, 300));
-                const menuItems = Array.from(document.querySelectorAll('.cdk-overlay-container [role="menuitem"], .cdk-overlay-container button'));
-                const targetItem = menuItems.find(m => m.innerText && m.innerText.toLowerCase().indexOf('{model.lower()}') !== -1);
-                if (targetItem) {{
-                    targetItem.click();
-                    await new Promise(r => setTimeout(r, 200));
-                }}
-            }}
-            
-            // Aspect ratio
-            const isVertical = "{aspect_ratio}".indexOf('9:16') !== -1;
-            const aspectStr = isVertical ? '9:16' : '16:9';
-            const aspectToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {{
-                return el.innerText && el.innerText.indexOf(aspectStr) !== -1;
-            }});
-            if (aspectToggles.length > 0) {{
-                const toggleBtn = aspectToggles[0].querySelector('button') || aspectToggles[0];
-                toggleBtn.click();
-                await new Promise(r => setTimeout(r, 200));
-            }}
-            
-            // Output count
-            const countStr = 'x{count}';
-            const countToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {{
-                const t = el.innerText ? el.innerText.trim() : '';
-                return t === countStr || t === '{count}';
-            }});
-            if (countToggles.length > 0) {{
-                const toggleBtn = countToggles[0].querySelector('button') || countToggles[0];
-                toggleBtn.click();
-                await new Promise(r => setTimeout(r, 200));
-            }}
-            
-            // Close settings overlay
-            const backdrop = document.querySelector('.cdk-overlay-backdrop');
-            if (backdrop) backdrop.click();
-            await new Promise(r => setTimeout(r, 300));
-            
-            const finalBtn = document.querySelector('button.settings-trigger-button') ||
-                             document.querySelector('button[aria-label*="ตั้งค่า"]');
-            return {{
-                success: true,
-                finalText: finalBtn ? finalBtn.innerText.split(String.fromCharCode(10)).join(" | ") : ''
-            }};
-        }})()"""
-        encoded_adj = urllib.parse.quote(adjust_js)
-        res_adj = http_get(f"{api_base}/api/flow/inspect-tab?js={encoded_adj}")
-        adj_res = res_adj.get("result", {}).get("res", {}).get("result")
-        if isinstance(adj_res, dict) and adj_res.get("success"):
-            log(f"✅ Successfully configured Flow settings: {adj_res.get('finalText')}")
-            return True
-        return False
+        else:
+            log(f"⚠️ Failed to configure image settings via 6969: {res.get('error') or res}")
+            return False
     except Exception as e:
-        log(f"Notice on ensuring storyboard settings: {e}")
+        log(f"Notice on ensuring storyboard settings via 6969: {e}")
         return False
+
 
 
 def ensure_image_mode(api_base: str, aspect_ratio: str = "9:16") -> bool:

@@ -100,6 +100,21 @@ def load_scene_context(story_path: str, ep: int, scene_num: int) -> dict:
             if line and not line.startswith("#"):
                 characters.append(line)
 
+    # Animation Prompt (Parity Check)
+    anim_file = os.path.join(story_path, "4 - Animation Prompt", ep_str, f"{sc_str} - Scene {sc_str}.md")
+    anim_text = ""
+    anim_warnings = []
+    if os.path.isfile(anim_file):
+        anim_text = open(anim_file, encoding="utf-8").read().strip()
+        lower_anim = anim_text.lower()
+        if len(characters) == 1:
+            if any(w in lower_anim for w in ["friends", "companions", "group of", "crowd", "พวกพ้อง", "เพื่อนๆ", "กลุ่มเพื่อน"]):
+                anim_warnings.append("Anim ระบุเพื่อน/กลุ่มคน (แต่ CES มีคนเดียว)")
+        # Check if more dialogue speakers than characters
+        speakers = re.findall(r"-\s*\[.*?\]\s*([^:]+?)(?:\s*(?:says|shouts|whispers|speaks|exclaims)|:)", anim_text, re.IGNORECASE)
+        if len(speakers) > len(characters) and len(characters) > 0:
+            anim_warnings.append(f"Anim มีผู้พูด {len(speakers)} คน (เกิน CES ที่มี {len(characters)} คน)")
+
     # Storyboard image
     img_file = os.path.join(story_path, "6 - Storyboards", ep_str, f"{ep_str} - Scene {sc_str}.jpg")
     img_exists = os.path.isfile(img_file)
@@ -110,6 +125,9 @@ def load_scene_context(story_path: str, ep: int, scene_num: int) -> dict:
         "prompt_text": prompt_text,
         "characters": characters,
         "expected_count": len(characters),
+        "anim_file": anim_file,
+        "anim_exists": os.path.isfile(anim_file),
+        "anim_warnings": anim_warnings,
         "img_file": img_file,
         "img_exists": img_exists,
         "img_size_kb": img_size_kb
@@ -172,12 +190,16 @@ def generate_vision_audit_checklist(story_path: str, ep: int, target_scenes: lis
                     char_mandates.append(f"{veg_data['th_name']}: สี{veg_data['required_color']}")
                     break
 
+        anim_warn = ctx["anim_warnings"]
+        anim_status = "⚠️ " + "; ".join(anim_warn) if anim_warn else "✅ ตรง 1:1"
+
         checklist.append({
             "scene": f"EP{ep:02d} - Scene {sc:02d}",
             "scene_num": sc,
             "characters": ", ".join(chars) or "ไม่มีตัวละครหลัก",
             "expected_count": exp_count,
             "color_mandates": "; ".join(char_mandates) if char_mandates else "ฉากสิ่งแวดล้อม/ประกอบ",
+            "anim_status": anim_status,
             "img_file": ctx["img_file"],
             "img_exists": ctx["img_exists"],
             "img_size_kb": ctx["img_size_kb"]
@@ -211,13 +233,13 @@ def main():
     log(f"\n🎨 [Step 2.2] Generating Vision Semantic & Character Audit Checklist...")
     checklist = generate_vision_audit_checklist(args.story_path, args.ep, target_scenes)
 
-    print("\n" + "=" * 90)
-    print(f"| {'ฉาก (Scene)':<18} | {'จำนวนตัวละคร':<12} | {'สีผักและตัวละครที่ต้องตรงตามกฎ':<35} | {'ไฟล์ภาพ':<15} |")
-    print("-" * 90)
+    print("\n" + "=" * 115)
+    print(f"| {'ฉาก (Scene)':<18} | {'จำนวน':<8} | {'Anim Prompt เช็ค':<25} | {'สีผัก/ตัวละคร':<32} | {'ไฟล์ภาพ':<15} |")
+    print("-" * 115)
     for item in checklist:
         status = f"✅ {item['img_size_kb']} KB" if item["img_exists"] and item["img_size_kb"] > 50 else "❌ MISSING"
-        print(f"| {item['scene']:<18} | {item['expected_count']:^12} ตัว | {item['color_mandates'][:35]:<35} | {status:<15} |")
-    print("=" * 90)
+        print(f"| {item['scene']:<18} | {item['expected_count']:^8} | {item['anim_status'][:25]:<25} | {item['color_mandates'][:32]:<32} | {status:<15} |")
+    print("=" * 115)
 
     log("\n✨ Dual-Verification preparation complete. Ready for Vision Auditor Subagent review!")
 

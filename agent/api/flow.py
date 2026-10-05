@@ -819,26 +819,36 @@ async def _submit_flow_prompt_internal(
 
             # A. Ensure previous popover and backdrop are closed cleanly
             ensure_closed_js = """(() => {
-                const backdrop = document.querySelector('.cdk-overlay-backdrop');
-                if (backdrop) backdrop.click();
-                return true;
+                const popover = document.querySelector('flow-add-menu-popover-content');
+                if (popover) {
+                    const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                    if (backdrop) backdrop.click();
+                    return true;
+                }
+                return false;
             })()"""
             await _eval_js_internal(client, ensure_closed_js)
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.4)
 
-            # B. Open the element popover menu
+            # B. Open the element popover menu with retry loop
             open_menu_js = """(() => {
                 let popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) {
                     const trigger = document.querySelector('button.add-menu-trigger') ||
-                                    Array.from(document.querySelectorAll('flow-prompt-box button')).find(b => (b.getAttribute('aria-label')||'').includes('เพิ่มองค์ประกอบ') || (b.innerText||'').includes('add'));
-                    if (trigger) { trigger.click(); return true; }
-                    return false;
+                                    Array.from(document.querySelectorAll('flow-prompt-box button, button')).find(b => {
+                                        const l = ((b.getAttribute('aria-label')||'') + ' ' + (b.innerText||'')).toLowerCase();
+                                        return l.includes('เพิ่มองค์ประกอบ') || l.includes('add') || l.includes('media');
+                                    });
+                    if (trigger) { trigger.click(); }
                 }
-                return true;
+                return !!document.querySelector('flow-add-menu-popover-content');
             })()"""
-            await _eval_js_internal(client, open_menu_js)
-            await asyncio.sleep(0.5)
+            for _ in range(4):
+                is_open = await _eval_js_internal(client, open_menu_js)
+                if is_open:
+                    break
+                await asyncio.sleep(0.4)
+            await asyncio.sleep(0.4)
 
             # C. Switch to 'รูปภาพ' (Images) tab
             filter_img_js = """(() => {
@@ -911,9 +921,18 @@ async def _submit_flow_prompt_internal(
 
             # Click the matching asset button
             click_item_js = f"""(() => {{
-                const popover = document.querySelector('flow-add-menu-popover-content');
+                let popover = document.querySelector('flow-add-menu-popover-content');
+                if (!popover) {{
+                    const trigger = document.querySelector('button.add-menu-trigger') ||
+                                    Array.from(document.querySelectorAll('flow-prompt-box button, button')).find(b => {{
+                                        const l = ((b.getAttribute('aria-label')||'') + ' ' + (b.innerText||'')).toLowerCase();
+                                        return l.includes('เพิ่มองค์ประกอบ') || l.includes('add');
+                                    }});
+                    if (trigger) trigger.click();
+                    popover = document.querySelector('flow-add-menu-popover-content');
+                }}
                 if (!popover) return {{ error: 'popover not found' }};
-                const items = Array.from(popover.querySelectorAll('button.asset-item'));
+                const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item, button'));
                 let target = items.find(el => {{
                     const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '')).trim().toLowerCase();
                     return t.includes("{filename_no_ext.lower()}");
@@ -2107,3 +2126,349 @@ async def run_video_batch_endpoint(body: RunVideoBatchRequest):
         auto_retry_filters=body.auto_retry_filters
     )
     return result
+
+
+class FlowSettingsRequest(BaseModel):
+    mode: str = "image"
+    aspect_ratio: str = "9:16"
+    model: Optional[str] = None
+    output_count: int = 1
+    duration: Optional[int] = 6
+    submode: Optional[str] = "เฟรม"
+    project_id: Optional[str] = None
+
+
+@router.get("/settings")
+async def get_flow_settings_endpoint(project_id: Optional[str] = None):
+    """Inspects and returns active settings directly from Google Flow UI."""
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "FlowKit extension not connected")
+    if project_id:
+        await _ensure_project_id(client, project_id)
+
+    js_code = """(() => {
+        const btn = document.querySelector('button.settings-trigger-button') ||
+                    document.querySelector('flow-prompt-box button.settings-trigger-button') ||
+                    document.querySelector('button[aria-label*="ตั้งค่า"]') ||
+                    document.querySelector('button[aria-label*="Settings trigger"]') ||
+                    document.querySelector('button[aria-label*="Settings"]');
+        if (!btn) return { success: false, error: "Settings trigger button not found" };
+
+        const text = (btn.innerText || '').toLowerCase();
+        const pb = document.querySelector('flow-prompt-box');
+        const pbText = pb ? (pb.innerText || '').toLowerCase() : '';
+        const isVideo = text.includes('video') || text.includes('วิดีโอ') || text.includes('720p') || text.includes('1080p');
+
+        return {
+            success: true,
+            mode: isVideo ? "video" : "image",
+            raw_text: btn.innerText.split(String.fromCharCode(10)).join(" | "),
+            prompt_box_hint: pbText.slice(0, 100),
+            active_video_model: window.__flow_video_model || null,
+            active_image_model: window.__flow_model || null
+        };
+    })()"""
+    try:
+        res = await _eval_js_internal(client, js_code, timeout=10)
+        return res
+    except Exception as e:
+        raise HTTPException(500, f"Failed to inspect settings: {e}")
+
+
+@router.post("/settings")
+@router.post("/configure-settings")
+async def configure_flow_settings_endpoint(body: FlowSettingsRequest):
+    """Unified Flow Settings Engine:
+    Configures and locks any settings combination for Google Flow (both Image and Video).
+    Supports aspect ratios (9:16, 16:9, 1:1, 4:3, 3:4), models, duration, output count, and submodes.
+    """
+    client = get_flow_client()
+    if not client.connected:
+        raise HTTPException(503, "FlowKit extension not connected")
+
+    if body.project_id:
+        await _ensure_project_id(client, body.project_id)
+
+    raw_mode = (body.mode or "image").strip().lower()
+    if any(w in raw_mode for w in ["video", "vid", "วิดีโอ", "คลิป"]):
+        target_mode = "video"
+    else:
+        target_mode = "image"
+
+    raw_aspect = (body.aspect_ratio or "9:16").strip()
+    if "16:9" in raw_aspect or "landscape" in raw_aspect.lower() or "แนวนอน" in raw_aspect:
+        target_aspect = "16:9"
+        target_crop = "crop_16_9"
+    elif "1:1" in raw_aspect or "square" in raw_aspect.lower() or "สี่เหลี่ยม" in raw_aspect:
+        target_aspect = "1:1"
+        target_crop = "crop_square"
+    elif "4:3" in raw_aspect:
+        target_aspect = "4:3"
+        target_crop = "crop_4_3"
+    elif "3:4" in raw_aspect:
+        target_aspect = "3:4"
+        target_crop = "crop_3_4"
+    else:
+        target_aspect = "9:16"
+        target_crop = "crop_9_16"
+
+    target_count = max(1, min(4, int(body.output_count or 1)))
+    target_dur = int(body.duration) if body.duration else (6 if target_mode == "video" else 0)
+
+    raw_sub = (body.submode or "เฟรม").strip().lower()
+    if any(w in raw_sub for w in ["text", "ข้อความ", "txt"]):
+        target_submode = "ข้อความ"
+    elif any(w in raw_sub for w in ["ingredient", "ส่วนผสม"]):
+        target_submode = "ส่วนผสม"
+    else:
+        target_submode = "เฟรม"
+
+    if body.model:
+        target_model = body.model.strip().lower()
+    else:
+        target_model = "lower priority" if target_mode == "video" else "nano banana pro"
+
+    js_code = f"""(async () => {{
+        const btn = document.querySelector('button.settings-trigger-button') ||
+                    document.querySelector('flow-prompt-box button.settings-trigger-button') ||
+                    document.querySelector('button[aria-label*="ตั้งค่า"]') ||
+                    document.querySelector('button[aria-label*="Settings trigger"]') ||
+                    document.querySelector('button[aria-label*="Settings"]') ||
+                    document.querySelector('button[aria-label*="ทริกเกอร์การตั้งค่า"]');
+        if (!btn) return {{ success: false, error: "Settings trigger button not found" }};
+
+        const targetMode = "{target_mode}";
+        const targetAspect = "{target_aspect}";
+        const targetCrop = "{target_crop}";
+        const targetCount = {target_count};
+        const targetDur = {target_dur};
+        const targetSubmode = "{target_submode}".toLowerCase();
+        const targetModel = "{target_model}".toLowerCase();
+
+        // 1. Pre-check if already configured
+        const btnText = (btn.innerText || '').toLowerCase();
+        const pb = document.querySelector('flow-prompt-box');
+        const pbText = pb ? (pb.innerText || '').toLowerCase() : '';
+
+        let isModeMatch = false;
+        if (targetMode === 'image') {{
+            isModeMatch = !btnText.includes('วิดีโอ') && !btnText.includes('video') && !btnText.includes('720p') && !btnText.includes('1080p');
+        }} else {{
+            isModeMatch = btnText.includes('วิดีโอ') || btnText.includes('video') || btnText.includes('720p') || btnText.includes('1080p');
+        }}
+
+        const isAspectMatch = btnText.includes(targetAspect.toLowerCase()) || (targetCrop && btnText.includes(targetCrop.toLowerCase()));
+        const countStr = 'x' + targetCount;
+        const isCountMatch = btnText.includes(countStr) || btnText.includes(targetCount + ' เอาต์พุต') || btnText.includes(targetCount + ' output') || targetCount === 1;
+
+        let isSubmodeMatch = true;
+        let isDurationMatch = true;
+        let isModelMatch = true;
+
+        if (targetMode === 'video') {{
+            if (targetSubmode.includes('เฟรม') || targetSubmode.includes('frame') || targetSubmode.includes('crop_free')) {{
+                isSubmodeMatch = pbText.includes('เริ่ม') || pbText.includes('start') || pbText.includes('เฟรม') || pbText.includes('frames') || (pb && !!pb.querySelector('.chip-container, .start-frame, img'));
+            }} else if (targetSubmode.includes('ข้อความ') || targetSubmode.includes('text')) {{
+                isSubmodeMatch = !pbText.includes('เริ่ม') && !pbText.includes('start');
+            }}
+            if (targetDur) {{
+                isDurationMatch = btnText.includes(targetDur + ' วินาที') || btnText.includes(targetDur + 's') || btnText.includes(targetDur + ' s');
+            }}
+            if (targetModel) {{
+                isModelMatch = (window.__flow_video_model === targetModel) || btnText.includes(targetModel);
+            }}
+        }} else {{
+            if (targetModel) {{
+                isModelMatch = btnText.includes(targetModel) || (window.__flow_model === targetModel);
+            }}
+        }}
+
+        if (isModeMatch && isAspectMatch && isCountMatch && isSubmodeMatch && isDurationMatch && isModelMatch) {{
+            return {{
+                success: true,
+                alreadyConfigured: true,
+                summary: btn.innerText.split(String.fromCharCode(10)).join(" | "),
+                mode: targetMode,
+                aspect_ratio: targetAspect,
+                output_count: targetCount,
+                duration: targetDur,
+                submode: targetSubmode,
+                model: targetModel
+            }};
+        }}
+
+        // 2. Open settings overlay
+        let settings = document.querySelector('flow-prompt-box-settings');
+        if (!settings) {{
+            btn.click();
+            await new Promise(r => setTimeout(r, 400));
+            settings = document.querySelector('flow-prompt-box-settings') || document.querySelector('.cdk-overlay-container') || document;
+        }}
+
+        const getButtons = () => {{
+            return Array.from(settings.querySelectorAll('mat-button-toggle button, button'));
+        }};
+
+        // A. Switch Mode (Image vs Video)
+        const modeButtons = getButtons();
+        if (targetMode === 'image') {{
+            const imgBtn = modeButtons.find(el => {{
+                const t = (el.innerText || '').toLowerCase();
+                return (t.includes('image') || t.includes('รูปภาพ')) && !t.includes('video') && !t.includes('วิดีโอ');
+            }});
+            if (imgBtn && imgBtn.getAttribute('aria-checked') !== 'true') {{
+                imgBtn.click();
+                await new Promise(r => setTimeout(r, 300));
+            }}
+        }} else {{
+            const vidBtn = modeButtons.find(el => {{
+                const t = (el.innerText || '').toLowerCase();
+                return (t.includes('video') || t.includes('วิดีโอ')) && !t.includes('image') && !t.includes('รูปภาพ');
+            }});
+            if (vidBtn && vidBtn.getAttribute('aria-checked') !== 'true') {{
+                vidBtn.click();
+                await new Promise(r => setTimeout(r, 300));
+            }}
+        }}
+
+        // B. Submode (Video only)
+        if (targetMode === 'video' && targetSubmode) {{
+            const subButtons = getButtons();
+            const subBtn = subButtons.find(el => {{
+                const t = (el.innerText || '').toLowerCase();
+                if (targetSubmode.includes('เฟรม') || targetSubmode.includes('frame') || targetSubmode.includes('crop_free')) {{
+                    return t.includes('เฟรม') || t.includes('frames') || t.includes('crop_free');
+                }}
+                if (targetSubmode.includes('ข้อความ') || targetSubmode.includes('text')) {{
+                    return t.includes('ข้อความ') || t.includes('text') || t.includes('text_fields');
+                }}
+                if (targetSubmode.includes('ส่วนผสม') || targetSubmode.includes('ingredient')) {{
+                    return t.includes('ส่วนผสม') || t.includes('ingredients') || t.includes('chrome_extension');
+                }}
+                return false;
+            }});
+            if (subBtn && subBtn.getAttribute('aria-checked') !== 'true') {{
+                subBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+        }}
+
+        // C. Aspect Ratio
+        if (targetAspect) {{
+            const aspectButtons = getButtons();
+            const aspectBtn = aspectButtons.find(el => {{
+                const t = (el.innerText || '').toLowerCase();
+                return t.includes(targetAspect.toLowerCase()) || (targetCrop && t.includes(targetCrop.toLowerCase()));
+            }});
+            if (aspectBtn && aspectBtn.getAttribute('aria-checked') !== 'true') {{
+                aspectBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+        }}
+
+        // D. Duration (Video only)
+        if (targetMode === 'video' && targetDur) {{
+            const durButtons = getButtons();
+            const durBtn = durButtons.find(el => {{
+                const t = (el.innerText || '').trim();
+                return (t === targetDur + 's' || t.includes(targetDur + 's') || t.includes(targetDur + ' วินาที')) && !t.includes('16');
+            }});
+            if (durBtn && durBtn.getAttribute('aria-checked') !== 'true') {{
+                durBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+        }}
+
+        // E. Output Count
+        if (targetCount) {{
+            const countButtons = getButtons();
+            const countBtn = countButtons.find(el => {{
+                const t = (el.innerText || '').trim().toLowerCase();
+                return t === countStr.toLowerCase() || t === String(targetCount) || t.includes(countStr.toLowerCase());
+            }});
+            if (countBtn && countBtn.getAttribute('aria-checked') !== 'true') {{
+                countBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }}
+        }}
+
+        // F. Model Selection
+        if (targetModel) {{
+            if (targetMode === 'image') {{
+                const modelTrigger = settings.querySelector('button[aria-label*="เลือกกลุ่มผลิตภัณฑ์โมเดล"]') ||
+                                     settings.querySelector('button[aria-label*="Select model family"]') ||
+                                     settings.querySelector('.mat-mdc-menu-trigger');
+                if (modelTrigger && (!modelTrigger.innerText || !modelTrigger.innerText.toLowerCase().includes(targetModel))) {{
+                    modelTrigger.click();
+                    await new Promise(r => setTimeout(r, 300));
+                    const menuItems = Array.from(document.querySelectorAll('.cdk-overlay-container [role="menuitem"], .cdk-overlay-container button'));
+                    const targetItem = menuItems.find(m => (m.innerText || '').toLowerCase().includes(targetModel));
+                    if (targetItem) {{
+                        targetItem.click();
+                        await new Promise(r => setTimeout(r, 200));
+                    }}
+                }}
+                window.__flow_model = targetModel;
+            }} else if (targetMode === 'video') {{
+                const modelTrigger = Array.from(settings.querySelectorAll('button')).find(b => {{
+                    const t = (b.innerText || '').toLowerCase();
+                    return t.indexOf('veo') !== -1 || t.indexOf('priority') !== -1 || t.indexOf('lower') !== -1 || t.indexOf('omni') !== -1;
+                }});
+                if (modelTrigger) {{
+                    const isLower = targetModel.includes('lower');
+                    if (!modelTrigger.innerText || (isLower && !modelTrigger.innerText.toLowerCase().includes('lower priority'))) {{
+                        modelTrigger.click();
+                        await new Promise(r => setTimeout(r, 350));
+                        const menuItems = Array.from(document.querySelectorAll('.cdk-overlay-container [role="menuitem"], .cdk-overlay-container button')).filter(x => x.getAttribute('role') === 'menuitem');
+                        const targetItem = isLower ?
+                            (menuItems.find(m => (m.innerText || '').toLowerCase().includes('lower priority')) || menuItems[menuItems.length - 1]) :
+                            menuItems.find(m => (m.innerText || '').toLowerCase().includes(targetModel));
+                        if (targetItem) {{
+                            targetItem.click();
+                            await new Promise(r => setTimeout(r, 300));
+                        }}
+                    }}
+                }}
+                window.__flow_video_model = targetModel;
+            }}
+        }}
+
+        // G. Close Overlay
+        const backdrop = document.querySelector('.cdk-overlay-backdrop');
+        if (backdrop) backdrop.click();
+        else btn.click();
+        await new Promise(r => setTimeout(r, 350));
+
+        // H. Final Verification
+        const finalBtn = document.querySelector('button.settings-trigger-button') ||
+                         document.querySelector('flow-prompt-box button.settings-trigger-button') ||
+                         document.querySelector('button[aria-label*="ตั้งค่า"]') ||
+                         document.querySelector('button[aria-label*="Settings"]');
+        const finalText = finalBtn ? finalBtn.innerText.split(String.fromCharCode(10)).join(" | ") : '';
+
+        return {{
+            success: true,
+            alreadyConfigured: false,
+            summary: finalText,
+            mode: targetMode,
+            aspect_ratio: targetAspect,
+            output_count: targetCount,
+            duration: targetDur,
+            submode: targetSubmode,
+            model: targetModel
+        }};
+    }})()"""
+
+    try:
+        res = await _eval_js_internal(client, js_code, timeout=25)
+        if isinstance(res, dict) and res.get("success"):
+            return res
+        return {
+            "success": False,
+            "error": res.get("error") if isinstance(res, dict) else "Unknown script error",
+            "details": res
+        }
+    except Exception as e:
+        logger.error("Failed to configure Flow settings: %s", e)
+        raise HTTPException(500, f"Failed to configure Flow settings: {e}")
