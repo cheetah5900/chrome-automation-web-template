@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extension_name__",
+  "version": "3.1.1",
+  "description": "__MSG_extension_description__",
+  "minimum_chrome_version": "114",
+  "default_locale": "en",
+  "icons": {
+    "16": "public/icon16.png",
+    "32": "public/icon32.png",
+    "48": "public/icon48.png",
+    "128": "public/icon128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "action": {
+    "default_title": "__MSG_extension_name__",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "public/icon16.png",
+      "32": "public/icon32.png",
+      "48": "public/icon48.png",
+      "128": "public/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://suno.com/*"
+      ],
+      "js": [
+        "contentScript.js"
+      ]
+    }
+  ],
+  "host_permissions": [
+    "https://suno.com/*",
+    "https://studio-api.prod.suno.com/*",
+    "https://*.suno.ai/*",
+    "https://cdn1.suno.ai/*",
+    "https://cdn2.suno.ai/*"
+  ]
+}

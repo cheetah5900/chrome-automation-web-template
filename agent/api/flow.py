@@ -1,4 +1,5 @@
 import asyncio
+import os
 import logging
 from typing import Optional, Any
 from fastapi import APIRouter, HTTPException
@@ -18,8 +19,13 @@ _storyboard_active_state: dict[str, Any] = {
     "prompt": None
 }
 
+# Server-side FIFO dispatch order tracker
+# Each entry: {"prompt": str, "scene_num": int|None, "output_path": str|None}
+# Cleared by the runner per batch session via /clear-dispatch-queue
+_dispatch_order_queue: list[dict] = []
 
-async def _check_flow_busy(client, target_project_id: str) -> Optional[JSONResponse]:
+
+async def _check_flow_busy(client, target_project_id: str, allow_same_project_queue: bool = False, max_queue: int = 15) -> Optional[JSONResponse]:
     """Checks both the in-process concurrency lock and the active Chrome tab.
     If either the server is executing another generation or the Google Flow tab has pending tiles rendering,
     returns an HTTP 429 (Too Many Requests / Busy) JSONResponse.
@@ -53,19 +59,53 @@ async def _check_flow_busy(client, target_project_id: str) -> Optional[JSONRespo
         })()"""
         try:
             tab_status = await _eval_js_internal(client, tab_busy_js, timeout=4) or {}
-            if tab_status.get("isBusy"):
-                curr_proj = tab_status.get("currentProject") or target_project_id or ""
-                logger.warning("Google Flow tab has %d pending tile(s) rendering (project %s). Returning HTTP 429.",
-                               tab_status.get("pendingCount", 0), curr_proj)
-                return JSONResponse(
-                    status_code=429,
-                    content={
-                        "success": False,
-                        "status": "busy",
-                        "message": "Google Flow is currently busy rendering another task",
-                        "current_project": curr_proj
-                    }
-                )
+            pending_count = tab_status.get("pendingCount", 0)
+            current_project = tab_status.get("currentProject", "")
+
+            # If the active tab is on a DIFFERENT project and has pending renders
+            if current_project and target_project_id and current_project != target_project_id:
+                if pending_count > 0:
+                    logger.warning(
+                        "Google Flow tab is on project %s with %d pending render(s). Cannot switch to %s. Returning HTTP 429.",
+                        current_project, pending_count, target_project_id
+                    )
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "success": False,
+                            "status": "busy",
+                            "message": "Google Flow is currently busy rendering another task",
+                            "current_project": current_project
+                        }
+                    )
+
+            if allow_same_project_queue:
+                if pending_count >= max_queue:
+                    logger.warning("Google Flow queue full (%d pending tiles in project %s). Returning HTTP 429.",
+                                   pending_count, current_project)
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "success": False,
+                            "status": "busy",
+                            "message": f"Google Flow render queue is full ({pending_count}/{max_queue})",
+                            "current_project": current_project
+                        }
+                    )
+            else:
+                if pending_count > 0:
+                    curr_proj = current_project or target_project_id or ""
+                    logger.warning("Google Flow tab has %d pending tile(s) rendering (project %s). Returning HTTP 429.",
+                                   pending_count, curr_proj)
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "success": False,
+                            "status": "busy",
+                            "message": "Google Flow is currently busy rendering another task",
+                            "current_project": curr_proj
+                        }
+                    )
         except Exception as e:
             logger.debug("Non-critical error checking tab busy state: %s", e)
 
@@ -371,19 +411,14 @@ async def preload_characters(body: PreloadCharactersRequest):
             raise HTTPException(500, f"Browser script error: {err}")
         return script_res.get("result")
 
+    # 0. Concurrency Lock & Tab Busy Check
+    busy_response = await _check_flow_busy(client, body.project_id)
+    if busy_response is not None:
+        return busy_response
+
     # 1. Ensure tab is at the requested project_id
     if body.project_id:
-        try:
-            current_url = str(await eval_js("window.location.href") or "")
-            if body.project_id not in current_url:
-                m = re.match(r"(https?://[^/]+(?:/u/\d+)?/(?:project/|tools/flow/project/))", current_url)
-                prefix = m.group(1) if m else "https://flow.google.com/project/"
-                target_url = prefix + body.project_id
-                logger.info("Switching Google Flow project to: %s", target_url)
-                await eval_js(f"window.location.href = '{target_url}';")
-                await asyncio.sleep(5.0)
-        except Exception as e:
-            logger.warning("Project lock check warning: %s", e)
+        await _ensure_project_id(client, body.project_id)
 
     # 2. Gather image paths to check
     targets = []
@@ -540,7 +575,9 @@ class DispatchStoryboardPromptRequest(BaseModel):
     project_id: str = "21a1632e-9926-46fa-954c-240d71d78f41"
     aspect_ratio: str = "9:16"
     reference_images: Optional[list[str]] = None
-    wait_after_submit: float = 2.0
+    wait_after_submit: float = 0.5
+    scene_num: Optional[int] = None
+    output_path: Optional[str] = None
 
 
 class ExpectedBatchScene(BaseModel):
@@ -548,6 +585,7 @@ class ExpectedBatchScene(BaseModel):
     prompt: str
     output_path: str
     reference_images: Optional[list[str]] = None
+    media_id: Optional[str] = None
 
 
 class CollectStoryboardBatchRequest(BaseModel):
@@ -583,21 +621,83 @@ async def _eval_js_internal(client, js_code: str, timeout: int = 15):
     return script_res.get("result")
 
 
+FLOW_CHIP_SELECTORS = (
+    "flow-base-prompt-box flow-ingredient-chip, "
+    "flow-prompt-box flow-ingredient-chip, "
+    "flow-ingredient-chip"
+)
+
+
 async def _ensure_project_id(client, project_id: str):
     if not project_id:
         return
     import asyncio, re
     try:
         current_url = str(await _eval_js_internal(client, "window.location.href") or "")
-        if project_id not in current_url:
-            m = re.match(r"(https?://[^/]+(?:/u/\d+)?/(?:project/|tools/flow/project/))", current_url)
-            prefix = m.group(1) if m else "https://flow.google.com/project/"
-            target_url = prefix + project_id
-            logger.info("Switching Google Flow project to: %s", target_url)
-            await _eval_js_internal(client, f"window.location.href = '{target_url}';")
-            await asyncio.sleep(5.0)
+        in_edit = "/edit/" in current_url or "/editor/" in current_url
+        if project_id not in current_url or in_edit:
+            # Check if active tab is busy rendering another project before switching
+            busy_js = """(() => {
+                const pending = Array.from(document.querySelectorAll('flow-pending-tile:not(.fading-out), [class*="pending-tile"]:not(.fading-out)'));
+                const url = window.location.href || '';
+                const match = url.match(/\\/project\\/([a-zA-Z0-9_-]+)/);
+                return {
+                    pendingCount: pending.length,
+                    currentProject: match ? match[1] : ''
+                };
+            })()"""
+            tab_status = await _eval_js_internal(client, busy_js, timeout=4) or {}
+            pending_count = tab_status.get("pendingCount", 0)
+            active_proj = tab_status.get("currentProject") or "active project"
+            if (project_id not in current_url) and (pending_count > 0 or _storyboard_lock.locked() or _storyboard_active_state.get("busy")):
+                logger.warning(
+                    "Cannot switch Google Flow project to %s: project %s is currently rendering (%d pending tiles).",
+                    project_id, active_proj, pending_count
+                )
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Cannot switch Google Flow project while project '{active_proj}' is rendering ({pending_count} pending tiles)"
+                )
+
+            if in_edit and project_id in current_url:
+                logger.info("Google Flow tab in tile edit/detail view (%s). Returning to main project page...", current_url)
+                exit_js = """(() => {
+                    const backBtn = document.querySelector('button.back-button, [aria-label*="กลับ"], [aria-label*="Back"]');
+                    if (backBtn) { backBtn.click(); return 'clicked_back'; }
+                    const base = window.location.href.split('/edit/')[0];
+                    window.location.href = base;
+                    return 'navigated';
+                })()"""
+                await _eval_js_internal(client, exit_js)
+                for _ in range(8):
+                    await asyncio.sleep(0.5)
+                    u = str(await _eval_js_internal(client, "window.location.href") or "")
+                    if "/edit/" not in u and "/editor/" not in u:
+                        break
+            else:
+                m = re.match(r"(https?://[^/]+(?:/u/\d+)?/(?:project/|tools/flow/project/))", current_url)
+                prefix = m.group(1) if m else "https://flow.google.com/project/"
+                target_url = prefix + project_id
+                logger.info("Switching Google Flow project to: %s", target_url)
+                await _eval_js_internal(client, f"window.location.href = '{target_url}';")
+                await asyncio.sleep(5.0)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning("Project lock check warning: %s", e)
+
+
+def flow_audit_log(action: str, status: str, details: dict = None):
+    import time, json
+    t_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    payload = details or {}
+    line = f"[{t_str}] [{action}] [{status}] {json.dumps(payload, ensure_ascii=False)}\n"
+    logger.info("AUDIT_LOG: %s", line.strip())
+    try:
+        with open("flow_action_audit.log", "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass
 
 
 async def _submit_flow_prompt_internal(
@@ -606,26 +706,89 @@ async def _submit_flow_prompt_internal(
     project_id: str,
     aspect_ratio: str = "9:16",
     reference_images: Optional[list[str]] = None,
-    wait_after_submit: float = 2.0
+    wait_after_submit: float = 0.5
 ):
     import asyncio, os, base64, mimetypes
 
-    # 0. Ensure project lock
+    flow_audit_log("SUBMIT_START", "BEGIN", {
+        "project_id": project_id,
+        "aspect_ratio": aspect_ratio,
+        "prompt_preview": prompt[:70],
+        "expected_refs": [os.path.basename(p) for p in reference_images] if reference_images else []
+    })
+
+    # 0. Ensure project lock and return to main project page if in edit mode
     await _ensure_project_id(client, project_id)
 
-    # 1. Clear existing chips and prompt text
-    clear_js = """(() => {
-        const chips = Array.from(document.querySelectorAll('flow-prompt-box flow-image-ingredient-chip'));
-        for (const chip of chips) {
-            const cancelBtn = chip.querySelector('mat-icon, .hover-icon-overlay') || chip;
-            cancelBtn.click();
+    # 0.1 Explicit safety check: ensure main project page & close any modals/dialogs
+    ensure_main_page_js = """(() => {
+        const url = window.location.href || '';
+        const inEdit = url.includes('/edit/') || !!document.querySelector('flow-image-editor, flow-edit-image-prompt-box');
+        let action = 'ok';
+        if (inEdit) {
+            const backBtn = document.querySelector('button.back-button, [aria-label*="กลับ"], [aria-label*="Back"]');
+            if (backBtn) {
+                backBtn.click();
+                action = 'clicked_back';
+            } else {
+                const base = url.split('/edit/')[0];
+                window.location.href = base;
+                action = 'navigated';
+            }
         }
+        // Dismiss any lingering dialogs, popovers, or modal backdrops
+        const closeBtn = document.querySelector('mat-dialog-container button.close-button, .cdk-overlay-pane button[aria-label*="close" i], .cdk-overlay-pane button[aria-label*="ปิด" i]');
+        if (closeBtn) closeBtn.click();
+        const backdrop = document.querySelector('.cdk-overlay-backdrop');
+        if (backdrop && !document.querySelector('flow-add-menu-popover-content')) {
+            backdrop.click();
+        }
+        return { action, url: window.location.href };
+    })()"""
+    page_check = await _eval_js_internal(client, ensure_main_page_js)
+    if page_check and page_check.get("action") in ("clicked_back", "navigated"):
+        logger.info("Exited tile edit mode back to main project page (%s)", page_check)
+        for _ in range(8):
+            await asyncio.sleep(0.5)
+            ready = await _eval_js_internal(client, """(() => {
+                const u = window.location.href || '';
+                return !u.includes('/edit/') && !!document.querySelector('flow-base-prompt-box, flow-prompt-box');
+            })()""")
+            if ready:
+                break
+
+    # 1. Clear existing chips and prompt text — with post-clear verification loop
+    clear_js = f"""(() => {{
+        const chips = Array.from(document.querySelectorAll("{FLOW_CHIP_SELECTORS}"));
+        for (const chip of chips) {{
+            // Try multiple targets for the cancel/remove action
+            const cancelBtn = chip.querySelector('.cancel-button, [aria-label*="remove" i], [aria-label*="delete" i], [aria-label*="ลบ" i], [aria-label*="ยกเลิก" i], .hover-icon-overlay')
+                           || chip.querySelector('button')
+                           || chip.querySelector('mat-icon');
+            if (cancelBtn) {{
+                cancelBtn.dispatchEvent(new PointerEvent('pointerdown', {{ bubbles: true, cancelable: true }}));
+                cancelBtn.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true, cancelable: true }}));
+                cancelBtn.click();
+            }} else {{
+                chip.click();
+            }}
+        }}
         const pm = document.querySelector('.ProseMirror');
         if (pm) pm.innerText = '';
-        return true;
-    })()"""
+        return document.querySelectorAll("{FLOW_CHIP_SELECTORS}").length;
+    }})()"""
     await _eval_js_internal(client, clear_js)
-    await asyncio.sleep(0.4)
+    await asyncio.sleep(0.3)
+
+    # Verify chips are fully cleared — retry up to 5 times
+    verify_clear_js = f"(() => document.querySelectorAll(\"{FLOW_CHIP_SELECTORS}\").length)()"
+    for _attempt in range(5):
+        chip_count = await _eval_js_internal(client, verify_clear_js) or 0
+        if chip_count == 0:
+            break
+        logger.debug("Chips still present (%d), re-clearing (attempt %d)...", chip_count, _attempt + 1)
+        await _eval_js_internal(client, clear_js)
+        await asyncio.sleep(0.4)
 
     # 2. Attach reference images if provided (deduplicated, order preserved)
     if reference_images:
@@ -640,6 +803,19 @@ async def _submit_flow_prompt_internal(
             filename = os.path.basename(ref_img_path)
             c_name = filename.split(" - ")[0]
             filename_no_ext = os.path.splitext(filename)[0]
+
+            # Guard: skip if this character chip is already attached (prevents duplicates)
+            already_attached_js = f"""(() => {{
+                const chips = Array.from(document.querySelectorAll("{FLOW_CHIP_SELECTORS}"));
+                return chips.some(chip => {{
+                    const t = (chip.innerText || chip.getAttribute('aria-label') || chip.getAttribute('title') || '').toLowerCase();
+                    return t.includes("{filename_no_ext.lower()}") || t.includes("{c_name.lower()}");
+                }});
+            }})()"""
+            already_attached = await _eval_js_internal(client, already_attached_js)
+            if already_attached:
+                logger.info("Chip for '%s' already attached — skipping duplicate.", filename_no_ext)
+                continue
 
             # A. Ensure previous popover and backdrop are closed cleanly
             ensure_closed_js = """(() => {
@@ -730,7 +906,10 @@ async def _submit_flow_prompt_internal(
                 await _eval_js_internal(client, search_item_js)
                 await asyncio.sleep(0.6)
 
-            # F. Click the matching asset button (NO blind items[0] fallback)
+            # F. Check chips before click
+            chips_before = await _eval_js_internal(client, f"(() => document.querySelectorAll('{FLOW_CHIP_SELECTORS}').length)()") or 0
+
+            # Click the matching asset button
             click_item_js = f"""(() => {{
                 const popover = document.querySelector('flow-add-menu-popover-content');
                 if (!popover) return {{ error: 'popover not found' }};
@@ -751,27 +930,57 @@ async def _submit_flow_prompt_internal(
                 }}
                 return {{ error: 'item not found', visible: items.map(el => (el.innerText || '').trim()) }};
             }})()"""
-            await _eval_js_internal(client, click_item_js)
-            await asyncio.sleep(0.4)
-
-            # G. Click 'Add to prompt' button
-            add_prompt_js = """(() => {
-                const addBtn = document.querySelector('flow-add-menu-detail-pane button.detail-add-to-prompt-btn') ||
-                               Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => (b.innerText || '').includes('เพิ่มไปยังพรอมต์') || (b.innerText || '').includes('Add to prompt'));
-                if (addBtn) {
-                    addBtn.click();
-                    return { clicked: true };
-                }
-                return { clicked: false };
-            })()"""
-            await _eval_js_internal(client, add_prompt_js)
+            click_res = await _eval_js_internal(client, click_item_js)
+            if not click_res or not click_res.get("ok"):
+                flow_audit_log("CLICK_ASSET_CARD", "FAILED", {"file": filename, "result": click_res})
+                raise HTTPException(422, f"Could not find or click Character Sheet '{filename_no_ext}' in Google Flow popover!")
+            flow_audit_log("CLICK_ASSET_CARD", "SUCCESS", {"file": filename, "name": click_res.get("name")})
             await asyncio.sleep(0.5)
+
+            # G. Check if direct click added the chip, or if detail pane 'Add to prompt' button is needed
+            chips_after = await _eval_js_internal(client, f"(() => document.querySelectorAll('{FLOW_CHIP_SELECTORS}').length)()") or 0
+            if chips_after > chips_before:
+                flow_audit_log("ADD_TO_PROMPT", "SUCCESS", {"file": filename, "method": "direct_click", "chips": chips_after})
+            else:
+                # Try clicking detail pane 'Add to prompt' button if opened
+                add_prompt_js = """(() => {
+                    const addBtn = document.querySelector('flow-add-menu-detail-pane button.detail-add-to-prompt-btn') ||
+                                   Array.from(document.querySelectorAll('.cdk-overlay-container button')).find(b => (b.innerText || '').includes('เพิ่มไปยังพรอมต์') || (b.innerText || '').includes('Add to prompt'));
+                    if (addBtn) {
+                        addBtn.click();
+                        return { clicked: true };
+                    }
+                    return { clicked: false };
+                })()"""
+                add_res = await _eval_js_internal(client, add_prompt_js)
+                await asyncio.sleep(0.5)
+                chips_after = await _eval_js_internal(client, f"(() => document.querySelectorAll('{FLOW_CHIP_SELECTORS}').length)()") or 0
+                if chips_after > chips_before:
+                    flow_audit_log("ADD_TO_PROMPT", "SUCCESS", {"file": filename, "method": "detail_pane_button", "chips": chips_after})
+                else:
+                    flow_audit_log("ADD_TO_PROMPT", "FAILED", {"file": filename, "chips_before": chips_before, "chips_after": chips_after, "add_res": add_res})
+                    raise HTTPException(422, f"Could not attach Character Sheet '{filename_no_ext}': chip count did not increase (before: {chips_before}, after: {chips_after})!")
 
             # H. Ensure popover closes and wait for backdrop fade-out
             await _eval_js_internal(client, ensure_closed_js)
             await asyncio.sleep(0.4)
 
-    # Submit prompt via CDP with aspect ratio (runs purely in background without activating Chrome)
+    # 2.5 Hard Gate: Strict Chip Count Assertion before generation
+    expected_ref_count = len(unique_refs) if reference_images else 0
+    final_chips = await _eval_js_internal(client, f"(() => document.querySelectorAll('{FLOW_CHIP_SELECTORS}').length)()")
+    flow_audit_log("HARD_GATE_CHECK", "PASS" if final_chips == expected_ref_count else "FAIL", {
+        "expected": expected_ref_count,
+        "actual": final_chips,
+        "reference_images": [os.path.basename(p) for p in reference_images] if reference_images else []
+    })
+    if final_chips != expected_ref_count:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Character Sheet Hard Gate Failed: Expected {expected_ref_count} chip(s) but found {final_chips} in prompt box! Aborting to prevent image without character sheet."
+        )
+
+    import time
+    submit_start_ts = int(time.time() * 1000)
 
     # Submit prompt via CDP with aspect ratio
     cdp_res = await client._send("flow_cdp_type_text", {
@@ -795,13 +1004,32 @@ async def _submit_flow_prompt_internal(
             }
         })()""")
 
-    # 4. Wait for Google Flow to queue the prompt
-    if wait_after_submit > 0:
-        await asyncio.sleep(wait_after_submit)
+    # 4. Wait for Google Flow to queue the prompt and capture intercepted media_id
+    captured_media_id = None
+    poll_start = time.time()
+    max_wait = max(wait_after_submit, 3.5)
+    while time.time() - poll_start < max_wait:
+        await asyncio.sleep(0.4)
+        check_js = f"""(() => {{
+            const list = window.__FLOW_MEDIA_CAPTURES__ || [];
+            const recent = list.filter(item => item.timestamp >= {submit_start_ts - 1000});
+            if (recent.length > 0) {{
+                return recent[recent.length - 1];
+            }}
+            return null;
+        }})()"""
+        cap = await _eval_js_internal(client, check_js)
+        if cap and cap.get("mediaId"):
+            captured_media_id = cap.get("mediaId")
+            logger.info("🎯 [Network Intercept] Captured media_id: %s for prompt: %.50s...", captured_media_id, prompt)
+            break
+
+    return captured_media_id
 
 
 def _match_batch_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
-    """Matches newly generated image tiles to scene requests using keyword scoring + DOM reverse-order fallback."""
+    """Matches newly generated image tiles to scene requests using expected FIFO order.
+    Removes fuzzy prompt similarity scoring to prevent false matches."""
     import re
     N = len(scenes)
     M = len(new_tiles)
@@ -817,15 +1045,15 @@ def _match_batch_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
     scores = []
     for i, sc in enumerate(scenes):
         sc_prompt = sc.get("prompt", "")
-        sc_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", sc_prompt.lower())) - boilerplate_words
         row = []
         for j, tl in enumerate(new_tiles):
+            # Positional matching: Google Flow prepends newly finished tiles to the front
+            expected_j = max(0, min(M - 1, N - 1 - i))
+            pos_penalty = abs(j - expected_j) * 0.5
+            sc_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", sc_prompt.lower())) - boilerplate_words
             tl_footer = tl.get("footer_title", "")
             tl_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", tl_footer.lower()))
             overlap = len(sc_words.intersection(tl_words))
-            # Expected DOM index for scene i: Google Flow prepends tiles, so earliest submitted scene (index 0) finishes earlier (higher index)
-            expected_j = max(0, min(M - 1, N - 1 - i))
-            pos_penalty = abs(j - expected_j) * 0.5
             total_score = overlap * 10 - pos_penalty
             row.append(total_score)
         scores.append(row)
@@ -848,6 +1076,7 @@ def _match_batch_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
     return matched
 
 
+
 @router.get("/snapshot-existing-tiles")
 async def snapshot_existing_tiles():
     """Returns list of currently rendered image URLs and media IDs in Google Flow tab."""
@@ -856,7 +1085,7 @@ async def snapshot_existing_tiles():
         raise HTTPException(503, "FlowKit extension not connected")
 
     snap_js = """(() => {
-        const tiles = Array.from(document.querySelectorAll('flow-image-tile'));
+        const tiles = Array.from(document.querySelectorAll('flow-image-tile, flow-grid-tile-container, flow-tile, [class*="tile"]:has(img)'));
         const urls = [];
         const mediaIds = [];
         for (const t of tiles) {
@@ -865,6 +1094,8 @@ async def snapshot_existing_tiles():
                 urls.push(img.src);
                 const mid = img.getAttribute('data-media-id');
                 if (mid) mediaIds.push(mid);
+                const m = img.src.match(/\\/image\\/([a-f0-9\\-]{36})/);
+                if (m && !mediaIds.includes(m[1])) mediaIds.push(m[1]);
             }
         }
         return { urls: urls, media_ids: mediaIds, count: tiles.length };
@@ -878,6 +1109,27 @@ async def snapshot_existing_tiles():
     }
 
 
+@router.post("/clear-dispatch-queue")
+async def clear_dispatch_queue():
+    """Clears the server-side dispatch order queue. Call this before each new batch session."""
+    cleared = len(_dispatch_order_queue)
+    _dispatch_order_queue.clear()
+    logger.info("Dispatch order queue cleared (%d entries removed).", cleared)
+    return {"success": True, "cleared": cleared}
+
+
+@router.get("/dispatch-queue-status")
+async def dispatch_queue_status():
+    """Returns current state of the server-side dispatch order queue for debugging."""
+    return {
+        "queue_length": len(_dispatch_order_queue),
+        "entries": [
+            {"prompt_preview": e["prompt"][:60], "scene_num": e.get("scene_num")}
+            for e in _dispatch_order_queue
+        ]
+    }
+
+
 @router.post("/dispatch-storyboard-prompt")
 async def dispatch_storyboard_prompt(body: DispatchStoryboardPromptRequest):
     """Submits a single prompt into Google Flow queue without blocking on render completion."""
@@ -885,7 +1137,12 @@ async def dispatch_storyboard_prompt(body: DispatchStoryboardPromptRequest):
     if not client.connected:
         raise HTTPException(503, "FlowKit extension not connected")
 
-    await _submit_flow_prompt_internal(
+    # Concurrency Lock & Tab Busy Check (allow up to 15 queued tiles in same project)
+    busy_response = await _check_flow_busy(client, body.project_id, allow_same_project_queue=True, max_queue=15)
+    if busy_response is not None:
+        return busy_response
+
+    captured_media_id = await _submit_flow_prompt_internal(
         client=client,
         prompt=body.prompt,
         project_id=body.project_id,
@@ -894,16 +1151,59 @@ async def dispatch_storyboard_prompt(body: DispatchStoryboardPromptRequest):
         wait_after_submit=body.wait_after_submit
     )
 
+    # Track dispatch order server-side with media_id for deterministic matching
+    _dispatch_order_queue.append({
+        "prompt": body.prompt,
+        "media_id": captured_media_id,
+        "scene_num": body.scene_num,
+        "output_path": body.output_path,
+        "reference_images": body.reference_images,
+    })
+    logger.info("Dispatch queue: recorded prompt #%d (scene: %s, media_id: %s, preview: %.50s...)",
+                len(_dispatch_order_queue), body.scene_num, captured_media_id, body.prompt)
+
     return {
         "success": True,
         "dispatched": True,
+        "media_id": captured_media_id,
+        "dispatch_queue_len": len(_dispatch_order_queue),
         "prompt_preview": body.prompt[:80]
     }
 
 
+async def _download_tile_image_internal(client, img_url: str, out_path: str) -> bool:
+    """Helper to fetch image from browser context at full resolution and save locally."""
+    import os, base64, io
+    from PIL import Image
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        fetch_js = f"""(async () => {{
+            const fullUrl = "{img_url}".replace(/=s\\d+/, '=s2048');
+            const res = await fetch(fullUrl);
+            if (!res.ok) return {{ ok: false, status: res.status }};
+            const blob = await res.blob();
+            return new Promise(resolve => {{
+                const reader = new FileReader();
+                reader.onloadend = () => resolve({{ ok: true, b64: reader.result.split(',')[1] }});
+                reader.readAsDataURL(blob);
+            }});
+        }})()"""
+        b_res = await _eval_js_internal(client, fetch_js) or {}
+        if b_res.get("ok") and b_res.get("b64"):
+            raw_bytes = base64.b64decode(b_res["b64"])
+            im = Image.open(io.BytesIO(raw_bytes))
+            im.convert("RGB").save(out_path, "JPEG", quality=95)
+            logger.info("Saved batch image to %s (%dx%d)", out_path, im.width, im.height)
+            return True
+    except Exception as dl_err:
+        logger.error("Download tile image error for %s: %s", out_path, dl_err)
+    return False
+
+
 @router.post("/collect-storyboard-batch")
 async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
-    """Waits for Google Flow pending queue to finish and downloads batch images matched to scenes."""
+    """Waits for Google Flow pending queue to finish and downloads batch images.
+    Matches media_id in real-time and downloads immediately upon tile completion."""
     import asyncio, time, httpx, os
 
     client = get_flow_client()
@@ -918,6 +1218,10 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
     has_seen_pending = False
     poll_status = {}
 
+    completed_scene_nums = set()
+    realtime_results = []
+    used_tile_srcs = set()
+
     while time.time() - start_time < body.timeout:
         await asyncio.sleep(body.poll_interval)
 
@@ -929,16 +1233,30 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
             const tileData = tiles.map(t => {
                 const img = t.querySelector('img');
                 const footer = t.querySelector('.footer-title');
+                const promptText = (
+                    t.getAttribute('data-prompt') ||
+                    t.getAttribute('aria-label') ||
+                    img?.getAttribute('alt') ||
+                    img?.getAttribute('title') ||
+                    img?.getAttribute('aria-label') ||
+                    t.querySelector('[data-prompt]')?.getAttribute('data-prompt') ||
+                    t.querySelector('[title]')?.getAttribute('title') ||
+                    t.querySelector('[aria-label]')?.getAttribute('aria-label') ||
+                    ''
+                ).trim();
+                const midAttr = img ? (img.getAttribute('data-media-id') || '') : '';
+                const midRegex = (img?.src || '').match(/\/image\/([a-f0-9\-]{36})/)?.[1] || '';
                 return {
                     src: img ? img.src : '',
-                    media_id: img ? (img.getAttribute('data-media-id') || '') : '',
-                    footer_title: footer ? (footer.innerText || '').trim() : ''
+                    media_id: midAttr || midRegex,
+                    footer_title: footer ? (footer.innerText || '').trim() : '',
+                    prompt_text: promptText
                 };
             }).filter(t => t.src);
 
             return {
                 pendingCount: pending.length,
-                pendingPcts: pending.map(p => (p.innerText || '').match(/(\\d+)%/)?.[1]).filter(Boolean),
+                pendingPcts: pending.map(p => (p.innerText || '').match(/(\d+)%/)?.[1]).filter(Boolean),
                 tiles: tileData,
                 errorText: errorText
             };
@@ -957,16 +1275,56 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
             if (t.get("src") not in known_urls) and (not t.get("media_id") or t.get("media_id") not in known_media_ids)
         ]
 
+        # ── Step 1: Real-time Immediate Download on Media ID Match ────────────
+        for sc_obj in body.scenes:
+            sc_dict = sc_obj.dict()
+            sc_num = sc_dict.get("scene_num")
+            if sc_num in completed_scene_nums:
+                continue
+            target_mid = sc_dict.get("media_id")
+            if not target_mid:
+                for q in _dispatch_order_queue:
+                    if q.get("prompt") == sc_dict.get("prompt") and q.get("media_id"):
+                        target_mid = q.get("media_id")
+                        break
+            if target_mid:
+                for tl in new_tiles:
+                    tl_src = tl.get("src") or ""
+                    tl_mid = tl.get("media_id") or ""
+                    if tl_src in used_tile_srcs:
+                        continue
+                    if target_mid == tl_mid or f"/image/{target_mid}" in tl_src:
+                        out_path = sc_dict.get("output_path")
+                        logger.info("🎯 [REALTIME MEDIA_ID MATCH] Scene %02d matched media_id %s -> Downloading immediately to %s", sc_num, target_mid, out_path)
+                        dl_ok = False
+                        if out_path:
+                            dl_ok = await _download_tile_image_internal(client, tl_src, out_path)
+                        realtime_results.append({
+                            "scene_num": sc_num,
+                            "success": dl_ok,
+                            "output_path": out_path,
+                            "footer_title": tl.get("footer_title"),
+                            "image_url": tl_src,
+                            "media_id": target_mid
+                        })
+                        completed_scene_nums.add(sc_num)
+                        used_tile_srcs.add(tl_src)
+                        break
+
+        if len(completed_scene_nums) >= len(body.scenes):
+            logger.info("⚡ All %d batch scenes matched by media_id and downloaded in real-time!", len(body.scenes))
+            break
+
         if pending_count > 0:
             has_seen_pending = True
             consecutive_zero_pending = 0
         else:
             consecutive_zero_pending += 1
-            if len(new_tiles) >= len(body.scenes):
-                logger.info("Batch rendering complete! Found %d new tiles for %d expected scenes.", len(new_tiles), len(body.scenes))
+            if has_seen_pending and consecutive_zero_pending >= 2:
+                logger.info("Batch rendering complete after seeing pending. Found %d new tiles.", len(new_tiles))
                 break
-            if has_seen_pending and consecutive_zero_pending >= 15:
-                logger.info("Batch rendering finished queue after seeing pending. Found %d new tiles.", len(new_tiles))
+            if time.time() - start_time >= 8 and len(new_tiles) >= len(body.scenes) and not has_seen_pending:
+                logger.info("Batch rendering complete (found %d new tiles for %d expected scenes).", len(new_tiles), len(body.scenes))
                 break
 
     tiles = poll_status.get("tiles") or []
@@ -975,63 +1333,67 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
         if (t.get("src") not in known_urls) and (not t.get("media_id") or t.get("media_id") not in known_media_ids)
     ]
 
-    matched_pairs = _match_batch_tiles_to_scenes([s.dict() for s in body.scenes], new_tiles)
+    # Remaining fallback matching for any scenes not downloaded via real-time media_id
+    scenes_by_prompt = {s.prompt: s.dict() for s in body.scenes}
+    matched_pairs = []
 
-    results = []
-    matched_scene_nums = set()
+    unmatched_scenes = [s.dict() for s in body.scenes if s.scene_num not in completed_scene_nums]
+    remaining_tiles = [tl for tl in new_tiles if tl.get("src") not in used_tile_srcs]
 
-    async with httpx.AsyncClient(follow_redirects=True) as http_client:
-        for sc, tl in matched_pairs:
-            sc_num = sc.get("scene_num")
-            matched_scene_nums.add(sc_num)
-            out_path = sc.get("output_path")
-            img_url = tl.get("src")
-            footer_title = tl.get("footer_title")
+    if unmatched_scenes and _dispatch_order_queue:
+        batch_prompts = {s["prompt"] for s in unmatched_scenes}
+        queue_entries = [e for e in _dispatch_order_queue if e["prompt"] in batch_prompts]
+        if queue_entries and len(remaining_tiles) >= len(queue_entries):
+            N = len(queue_entries)
+            ordered_tiles = remaining_tiles[:N]
+            for q_entry, tile in zip(queue_entries, ordered_tiles):
+                sc_dict = scenes_by_prompt.get(q_entry["prompt"])
+                if sc_dict and sc_dict.get("scene_num") not in completed_scene_nums:
+                    matched_pairs.append((sc_dict, tile))
+                    completed_scene_nums.add(sc_dict.get("scene_num"))
+                    used_tile_srcs.add(tile.get("src"))
+                    logger.info("Dispatch-order match: Scene %02d -> tile %s", sc_dict.get("scene_num"), tile.get("media_id", "?"))
 
-            if out_path and img_url:
-                os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
-                try:
-                    fetch_js = f"""(async () => {{
-                        const fullUrl = "{img_url}".replace(/=s\\d+/, '=s2048');
-                        const res = await fetch(fullUrl);
-                        if (!res.ok) return {{ ok: false, status: res.status }};
-                        const blob = await res.blob();
-                        return new Promise(resolve => {{
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve({{ ok: true, b64: reader.result.split(',')[1] }});
-                            reader.readAsDataURL(blob);
-                        }});
-                    }})()"""
-                    b_res = await _eval_js_internal(client, fetch_js) or {}
-                    if b_res.get("ok") and b_res.get("b64"):
-                        import base64, io
-                        from PIL import Image
-                        raw_bytes = base64.b64decode(b_res["b64"])
-                        im = Image.open(io.BytesIO(raw_bytes))
-                        im.convert("RGB").save(out_path, "JPEG", quality=95)
-                        logger.info("Saved batch image for Scene %02d to %s (%dx%d)", sc_num, out_path, im.width, im.height)
-                        results.append({
-                            "scene_num": sc_num,
-                            "success": True,
-                            "output_path": out_path,
-                            "footer_title": footer_title,
-                            "image_url": img_url
-                        })
-                    else:
-                        results.append({
-                            "scene_num": sc_num,
-                            "success": False,
-                            "error": f"Browser fetch failed: {b_res}"
-                        })
-                except Exception as dl_err:
-                    results.append({
-                        "scene_num": sc_num,
-                        "success": False,
-                        "error": str(dl_err)
-                    })
+    # Fallback to positional scoring
+    remaining_unmatched = [s for s in unmatched_scenes if s.get("scene_num") not in completed_scene_nums]
+    final_tiles = [tl for tl in remaining_tiles if tl.get("src") not in used_tile_srcs]
+    if remaining_unmatched and final_tiles:
+        logger.warning("Falling back to keyword+positional matching for %d scene(s)", len(remaining_unmatched))
+        fallback_pairs = _match_batch_tiles_to_scenes(remaining_unmatched, final_tiles)
+        for sc_dict, tl in fallback_pairs:
+            matched_pairs.append((sc_dict, tl))
+            completed_scene_nums.add(sc_dict.get("scene_num"))
+            used_tile_srcs.add(tl.get("src"))
+
+    consumed_prompts = {sc["prompt"] for sc, _ in matched_pairs} | {s.prompt for s in body.scenes if s.scene_num in completed_scene_nums}
+    _dispatch_order_queue[:] = [e for e in _dispatch_order_queue if e["prompt"] not in consumed_prompts]
+
+    results = list(realtime_results)
+
+    for sc, tl in matched_pairs:
+        sc_num = sc.get("scene_num")
+        out_path = sc.get("output_path")
+        img_url = tl.get("src")
+        footer_title = tl.get("footer_title")
+
+        if out_path and img_url:
+            dl_ok = await _download_tile_image_internal(client, img_url, out_path)
+            results.append({
+                "scene_num": sc_num,
+                "success": dl_ok,
+                "output_path": out_path,
+                "footer_title": footer_title,
+                "image_url": img_url
+            })
+        else:
+            results.append({
+                "scene_num": sc_num,
+                "success": False,
+                "error": "Missing out_path or img_url"
+            })
 
     for s in body.scenes:
-        if s.scene_num not in matched_scene_nums:
+        if s.scene_num not in completed_scene_nums:
             results.append({
                 "scene_num": s.scene_num,
                 "success": False,
@@ -1096,7 +1458,7 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
         try:
             # 1. Snapshot existing tiles before submitting prompt to guarantee only newly generated tiles are accepted
             snap_js = """(() => {
-                const tiles = Array.from(document.querySelectorAll('flow-image-tile'));
+                const tiles = Array.from(document.querySelectorAll('flow-grid-tile-container, flow-tile, [class*="tile"]:has(img)'));
                 const urls = [];
                 const mediaIds = [];
                 for (const t of tiles) {

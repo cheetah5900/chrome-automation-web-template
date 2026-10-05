@@ -1498,7 +1498,15 @@ def main():
             build_lakorn_project(story, ep, args.project)
         return
 
-    episodes = [args.ep] if args.ep else ["EP01", "EP02", "EP03"]
+    if args.ep:
+        episodes = [args.ep]
+    else:
+        videos_base = os.path.join(BASE_CHANNEL_DIR, str(args.story), "7 - Videos")
+        if os.path.isdir(videos_base):
+            found_eps = sorted([d for d in os.listdir(videos_base) if d.upper().startswith("EP") and os.path.isdir(os.path.join(videos_base, d))])
+            episodes = found_eps if found_eps else ["EP01", "EP02"]
+        else:
+            episodes = ["EP01", "EP02"]
     
     for ep in episodes:
         # Format target project name, e.g. '21-1' for Story 21 EP01

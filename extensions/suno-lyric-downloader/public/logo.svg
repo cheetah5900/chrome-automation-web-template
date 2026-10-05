@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Get Lyric">
+  <defs>
+    <clipPath id="body">
+      <rect x="0" y="443" width="1024" height="581" rx="222" ry="222"/>
+    </clipPath>
+  </defs>
+  <path fill="#51A73E" d="M253 2
+    C214 36 208 110 211 170
+    C216 240 244 310 320 372
+    C372 408 430 416 502 400
+    C504 320 500 230 456 150
+    C410 70 332 18 253 2Z"/>
+  <path fill="#51A73E" d="M771 2
+    C810 36 816 110 813 170
+    C808 240 780 310 704 372
+    C652 408 594 416 522 400
+    C520 320 524 230 568 150
+    C614 70 692 18 771 2Z"/>
+  <g clip-path="url(#body)">
+    <rect x="0" y="443" width="1024" height="581" fill="#F1D125"/>
+    <rect x="0" y="572" width="1024" height="103" fill="#000"/>
+    <rect x="0" y="792" width="1024" height="102" fill="#000"/>
+  </g>
+</svg>

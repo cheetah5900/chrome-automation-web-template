@@ -179,6 +179,10 @@ async function findFlowTabs() {
     flowTabs.sort((a, b) => {
       const uA = a.url || a.pendingUrl || '';
       const uB = b.url || b.pendingUrl || '';
+      const isProjA = uA.includes('/project/');
+      const isProjB = uB.includes('/project/');
+      if (isProjA && !isProjB) return -1;
+      if (!isProjA && isProjB) return 1;
       const isAboutA = uA.includes('/about');
       const isAboutB = uB.includes('/about');
       if (isAboutA && !isAboutB) return 1;
@@ -1483,82 +1487,99 @@ function connectToAgent() {
           return;
         }
         const tab = tabs[0];
-        // Pure background execution: do NOT activate tab or steal OS window focus
+        try { await chrome.tabs.update(tab.id, { active: true }); } catch {}
         const text = msg.params?.text || '';
         const clickSubmit = msg.params?.clickSubmit ?? msg.params?.click_submit ?? false;
         const outputCount = msg.params?.outputCount ?? msg.params?.output_count ?? 1;
-        const aspectRatio = msg.params?.aspectRatio ?? msg.params?.aspect_ratio ?? null;
+        const aspectRatio = msg.params?.aspectRatio ?? msg.params?.aspect_ratio ?? '9:16';
+        const targetModel = msg.params?.model || msg.params?.image_model || 'nano banana pro';
 
         try {
-          // Configure output count and aspect ratio in settings if needed (ONLY if not already configured)
-          if (outputCount > 1 || aspectRatio) {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              func: async (targetCount, targetAspect) => {
-                try {
-                  const settingsBtn = document.querySelector('flow-prompt-box button.settings-trigger-button, flow-prompt-box button[aria-label="ทริกเกอร์การตั้งค่า"], flow-prompt-box button[aria-label="Settings trigger"]');
-                  if (!settingsBtn) return;
+          // Configure output count, aspect ratio, and model in settings if needed (ONLY if not already configured)
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: async (targetCount, targetAspect, targetModel) => {
+              try {
+                const settingsBtn = document.querySelector('flow-prompt-box button.settings-trigger-button, flow-prompt-box button[aria-label="ทริกเกอร์การตั้งค่า"], flow-prompt-box button[aria-label="Settings trigger"]');
+                if (!settingsBtn) return;
 
-                  const currentText = (settingsBtn.innerText || '').toLowerCase();
-                  const isVertical = targetAspect ? (targetAspect.includes('PORTRAIT') || targetAspect.includes('9:16') || targetAspect.includes('VERTICAL')) : false;
-                  const neededAspect = isVertical ? '9_16' : '16_9';
-                  const neededCount = targetCount ? `x${targetCount}` : 'x1';
+                const currentText = (settingsBtn.innerText || '').toLowerCase();
+                const isVertical = targetAspect ? (targetAspect.includes('PORTRAIT') || targetAspect.includes('9:16') || targetAspect.includes('VERTICAL')) : false;
+                const neededAspect = isVertical ? '9_16' : '16_9';
+                const neededCount = targetCount ? `x${targetCount}` : 'x1';
 
-                  const alreadyAspect = !targetAspect || currentText.includes(neededAspect) || currentText.includes(isVertical ? '9:16' : '16:9');
-                  const alreadyCount = !targetCount || currentText.includes(neededCount) || currentText.includes(`${targetCount} เอาต์พุต`) || currentText.includes(`${targetCount} output`);
+                const alreadyAspect = !targetAspect || currentText.includes(neededAspect) || currentText.includes(isVertical ? '9:16' : '16:9');
+                const alreadyCount = !targetCount || currentText.includes(neededCount) || currentText.includes(`${targetCount} เอาต์พุต`) || currentText.includes(`${targetCount} output`);
+                const alreadyModel = !targetModel || currentText.includes(targetModel.toLowerCase());
 
-                  if (alreadyAspect && alreadyCount) {
-                    // Already set to target aspect ratio and count! Do NOT open settings menu!
-                    return;
-                  }
-
-                  settingsBtn.click();
-                  await new Promise(r => setTimeout(r, 400));
-
-                  const overlay = document.querySelector('.cdk-overlay-container') || document;
-                  
-                  // 1. Output count (e.g. 1 vs 2 outputs)
-                  if (targetCount && !alreadyCount) {
-                    const countStr = String(targetCount);
-                    const countToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
-                      const t = el.innerText?.trim();
-                      const aria = el.getAttribute('aria-label') || '';
-                      return t === countStr || aria.includes(`${countStr} output`) || aria.includes(`${countStr} เอาต์พุต`);
-                    });
-                    if (countToggles.length > 0) {
-                      const btn = countToggles[0].querySelector('button') || countToggles[0];
-                      btn.click();
-                      await new Promise(r => setTimeout(r, 200));
-                    }
-                  }
-
-                  // 2. Aspect ratio (9:16 vs 16:9)
-                  if (targetAspect && !alreadyAspect) {
-                    const aspectStr = isVertical ? '9:16' : '16:9';
-                    const aspectToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
-                      const t = el.innerText?.trim();
-                      return t && t.includes(aspectStr);
-                    });
-                    if (aspectToggles.length > 0) {
-                      const btn = aspectToggles[0].querySelector('button') || aspectToggles[0];
-                      btn.click();
-                      await new Promise(r => setTimeout(r, 200));
-                    }
-                  }
-
-                  // Close settings overlay
-                  const backdrop = document.querySelector('.cdk-overlay-backdrop');
-                  if (backdrop) backdrop.click();
-                  else settingsBtn.click();
-                  await new Promise(r => setTimeout(r, 300));
-                } catch (e) {
-                  console.warn('[flow_cdp_type_text] settings adjust error:', e);
+                if (alreadyAspect && alreadyCount && alreadyModel) {
+                  // Already set to target aspect ratio, count, and model! Do NOT open settings menu!
+                  return;
                 }
-              },
-              args: [outputCount, aspectRatio]
-            });
-            await sleep(100);
-          }
+
+                settingsBtn.click();
+                await new Promise(r => setTimeout(r, 400));
+
+                const overlay = document.querySelector('.cdk-overlay-container') || document;
+                
+                // 1. Output count (e.g. 1 vs 2 outputs)
+                if (targetCount && !alreadyCount) {
+                  const countStr = String(targetCount);
+                  const countToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
+                    const t = el.innerText?.trim();
+                    const aria = el.getAttribute('aria-label') || '';
+                    return t === countStr || aria.includes(`${countStr} output`) || aria.includes(`${countStr} เอาต์พุต`);
+                  });
+                  if (countToggles.length > 0) {
+                    const btn = countToggles[0].querySelector('button') || countToggles[0];
+                    btn.click();
+                    await new Promise(r => setTimeout(r, 200));
+                  }
+                }
+
+                // 2. Aspect ratio (9:16 vs 16:9)
+                if (targetAspect && !alreadyAspect) {
+                  const aspectStr = isVertical ? '9:16' : '16:9';
+                  const aspectToggles = Array.from(overlay.querySelectorAll('mat-button-toggle, button, [role="radio"]')).filter(el => {
+                    const t = el.innerText?.trim();
+                    return t && t.includes(aspectStr);
+                  });
+                  if (aspectToggles.length > 0) {
+                    const btn = aspectToggles[0].querySelector('button') || aspectToggles[0];
+                    btn.click();
+                    await new Promise(r => setTimeout(r, 200));
+                  }
+                }
+
+                // 3. Model selection (e.g. Nano Banana Pro)
+                if (targetModel && !alreadyModel) {
+                  const modelTrigger = overlay.querySelector('button[aria-label*="เลือกกลุ่มผลิตภัณฑ์โมเดล"]') ||
+                                       overlay.querySelector('.mat-mdc-menu-trigger');
+                  if (modelTrigger) {
+                    modelTrigger.click();
+                    await new Promise(r => setTimeout(r, 300));
+                    const menuItems = Array.from(document.querySelectorAll('.cdk-overlay-container [role="menuitem"], .cdk-overlay-container button'));
+                    const targetItem = menuItems.find(m => m.innerText && m.innerText.toLowerCase().includes(targetModel.toLowerCase()));
+                    if (targetItem) {
+                      targetItem.click();
+                      await new Promise(r => setTimeout(r, 200));
+                    }
+                  }
+                }
+
+                // Close settings overlay
+                const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                if (backdrop) backdrop.click();
+                else settingsBtn.click();
+                await new Promise(r => setTimeout(r, 300));
+              } catch (e) {
+                console.warn('[flow_cdp_type_text] settings adjust error:', e);
+              }
+            },
+            args: [outputCount, aspectRatio, targetModel]
+          });
+          await sleep(100);
+        }
 
           // Focus ProseMirror and select all existing text so new prompt replaces it cleanly
           await chrome.scripting.executeScript({
@@ -1675,6 +1696,7 @@ function connectToAgent() {
                       btn.dispatchEvent(new PointerEvent('pointerup', opts));
                       btn.dispatchEvent(new MouseEvent('mouseup', opts));
                       btn.dispatchEvent(new MouseEvent('click', opts));
+                      btn.click();
                     }
                   }
                 });

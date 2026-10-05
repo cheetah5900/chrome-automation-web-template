@@ -567,10 +567,21 @@ def sync_ensure_chrome_debug_ready(port: int = 9222) -> bool:
         profile_path = str(BASE_DIR / "runtime" / "chrome-profiles" / profile.get("name", "Default"))
     os.makedirs(profile_path, exist_ok=True)
 
+    def _get_extension_args():
+        ext_dir = str(Path(__file__).resolve().parent.parent / "extension")
+        import shutil
+        shutil.rmtree(os.path.join(ext_dir, "_metadata"), ignore_errors=True)
+        ext_dirs = [ext_dir]
+        exts_parent = Path(__file__).resolve().parent.parent / "extensions"
+        if exts_parent.is_dir():
+            for sub in exts_parent.iterdir():
+                if sub.is_dir() and (sub / "manifest.json").is_file():
+                    shutil.rmtree(sub / "_metadata", ignore_errors=True)
+                    ext_dirs.append(str(sub))
+        return ",".join(ext_dirs)
+
     chrome_binary = _get_active_browser_binary(profile.get("browser_type", "chrome"))
-    ext_dir = str(Path(__file__).resolve().parent.parent / "extension")
-    import shutil
-    shutil.rmtree(os.path.join(ext_dir, "_metadata"), ignore_errors=True)
+    all_ext_dirs = _get_extension_args()
     startup_urls = _normalize_urls(profile.get("startup_urls", []))
     if not startup_urls:
         startup_urls = ["https://affiliate.shopee.co.th/offer/product_offer"]
@@ -581,8 +592,8 @@ def sync_ensure_chrome_debug_ready(port: int = 9222) -> bool:
         f"--user-data-dir={profile_path}",
         "--disable-blink-features=AutomationControlled",
         "--remote-allow-origins=*",
-        f"--load-extension={ext_dir}",
-        f"--disable-extensions-except={ext_dir}",
+        f"--load-extension={all_ext_dirs}",
+        f"--disable-extensions-except={all_ext_dirs}",
         *startup_urls
     ]
     log(f"[Chrome Manager] Automatically launching Chrome debug profile ({profile.get('name')}) on port {port}...")
@@ -972,8 +983,15 @@ async def launch_profile(payload: LaunchProfilePayload):
     if not profile_path or profile_path == "/Users/litar/Library/Application Support/Google/Chrome" or profile_path == everyday_profile:
         profile_path = str(BASE_DIR / "runtime" / "chrome-profiles" / profile.get("name", "AutomationChrome"))
 
-    import shutil
-    shutil.rmtree(os.path.join(ext_dir, "_metadata"), ignore_errors=True)
+    ext_dirs = [ext_dir]
+    exts_parent = Path(__file__).resolve().parent.parent / "extensions"
+    if exts_parent.is_dir():
+        for sub in exts_parent.iterdir():
+            if sub.is_dir() and (sub / "manifest.json").is_file():
+                shutil.rmtree(sub / "_metadata", ignore_errors=True)
+                ext_dirs.append(str(sub))
+    all_ext_dirs = ",".join(ext_dirs)
+
     os.makedirs(profile_path, exist_ok=True)
     cmd = [
         chrome_binary,
@@ -981,8 +999,8 @@ async def launch_profile(payload: LaunchProfilePayload):
         f"--user-data-dir={profile_path}",
         "--disable-blink-features=AutomationControlled",
         "--remote-allow-origins=*",
-        f"--load-extension={ext_dir}",
-        f"--disable-extensions-except={ext_dir}",
+        f"--load-extension={all_ext_dirs}",
+        f"--disable-extensions-except={all_ext_dirs}",
         *startup_urls,
     ]
 

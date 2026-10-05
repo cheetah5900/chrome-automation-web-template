@@ -1,0 +1,146 @@
+{
+  "extension_name": {
+    "message": "Scaricatore Testi Suno",
+    "description": "The name of the extension"
+  },
+  "extension_description": {
+    "message": "Un'estensione Chrome che scarica testi sincronizzati da Suno.com nei formati LRC o SRT.",
+    "description": "The description of the extension"
+  },
+  "download_lyric": {
+    "message": "Scarica Testi $type$",
+    "description": "Testo del pulsante di download per testi sincronizzati",
+    "placeholders": {
+      "type": {
+        "content": "$1",
+        "example": "LRC"
+      }
+    }
+  },
+  "toggle_type": {
+    "message": "Passa al Formato $type$",
+    "description": "Testo del pulsante di cambio formato",
+    "placeholders": {
+      "type": {
+        "content": "$1",
+        "example": "LRC"
+      }
+    }
+  },
+  "popup_subtitle": {
+    "message": "Apri una pagina brano di Suno e scarica testi sincronizzati dalla copertina.",
+    "description": "Short popup onboarding subtitle"
+  },
+  "popup_demo_alt": {
+    "message": "Demo che mostra dove appaiono i pulsanti LRC e SRT sulla copertina di un brano Suno.",
+    "description": "Alt text for the popup demo image"
+  },
+  "popup_status_loading": {
+    "message": "Controllo della scheda corrente...",
+    "description": "Popup status while checking the active tab"
+  },
+  "popup_status_not_suno": {
+    "message": "Apri Suno e scegli una pagina dettaglio brano per iniziare.",
+    "description": "Popup status when the active tab is not Suno"
+  },
+  "popup_status_suno_page": {
+    "message": "Sei su Suno. Apri una pagina brano con URL che inizia con /song/.",
+    "description": "Popup status when the active tab is Suno but not a song page"
+  },
+  "popup_status_song_page": {
+    "message": "Pagina del brano rilevata. Se i pulsanti non compaiono, accedi a Suno e aggiorna questa pagina.",
+    "description": "Popup status when the active tab is a Suno song page"
+  },
+  "popup_status_unknown": {
+    "message": "Apri una pagina dettaglio brano di Suno per usare questa estensione.",
+    "description": "Popup status when the active tab cannot be identified"
+  },
+  "popup_button_open_suno": {
+    "message": "Apri Suno",
+    "description": "Button label for opening Suno"
+  },
+  "popup_button_find_buttons": {
+    "message": "Trova pulsanti download",
+    "description": "Button label for manually finding injected download buttons"
+  },
+  "popup_feedback_triggered": {
+    "message": "Fatto. Se LRC e SRT non compaiono sulla copertina, accedi a Suno e aggiorna la pagina.",
+    "description": "Feedback after manually triggering the content script"
+  },
+  "popup_feedback_trigger_failed": {
+    "message": "Impossibile raggiungere la pagina Suno. Aggiorna la scheda e riprova.",
+    "description": "Feedback when the popup cannot message the Suno tab"
+  },
+  "popup_feedback_no_tab": {
+    "message": "Nessuna scheda attiva trovata.",
+    "description": "Feedback when there is no active tab"
+  },
+  "popup_steps_heading": {
+    "message": "Come si usa",
+    "description": "Heading for the popup usage steps"
+  },
+  "popup_step_login_title": {
+    "message": "Accedi a Suno",
+    "description": "Step title for signing in to Suno"
+  },
+  "popup_step_login_body": {
+    "message": "Usa il tuo account Suno già presente in questo browser.",
+    "description": "Step body for signing in to Suno"
+  },
+  "popup_step_open_title": {
+    "message": "Apri una pagina brano",
+    "description": "Step title for opening a song page"
+  },
+  "popup_step_open_body": {
+    "message": "L’URL dovrebbe essere simile a https://suno.com/song/...",
+    "description": "Step body for opening a Suno song page"
+  },
+  "popup_step_download_title": {
+    "message": "Clicca LRC o SRT",
+    "description": "Step title for downloading lyrics"
+  },
+  "popup_step_download_body": {
+    "message": "I pulsanti appaiono in alto sulla copertina dopo aver trovato i testi.",
+    "description": "Step body for downloading lyrics"
+  },
+  "popup_login_hint_title": {
+    "message": "Ancora nessun pulsante?",
+    "description": "Title for the song page login hint in popup"
+  },
+  "popup_login_hint_body": {
+    "message": "Se non hai effettuato l’accesso a Suno, l’estensione non può leggere i dati dei testi. Accedi, aggiorna la pagina del brano e riprova.",
+    "description": "Body text explaining that Suno login is required before buttons can appear"
+  },
+  "popup_troubleshooting_heading": {
+    "message": "Se non vedi i pulsanti",
+    "description": "Heading for popup troubleshooting tips"
+  },
+  "popup_troubleshooting_login": {
+    "message": "Se non hai effettuato l’accesso a Suno, i pulsanti di download non appariranno.",
+    "description": "Troubleshooting tip for Suno login"
+  },
+  "popup_troubleshooting_song_page": {
+    "message": "Usa una pagina brano, non home, crea o playlist.",
+    "description": "Troubleshooting tip for song pages"
+  },
+  "popup_troubleshooting_cover": {
+    "message": "Attendi il caricamento della copertina o aggiorna la pagina.",
+    "description": "Troubleshooting tip for cover loading"
+  },
+  "popup_troubleshooting_aligned": {
+    "message": "Alcuni brani non forniscono dati di sincronizzazione dei testi.",
+    "description": "Troubleshooting tip for songs without synchronized timing data"
+  },
+  "popup_report_issue": {
+    "message": "Invia feedback",
+    "description": "Popup button that opens the Telegram feedback group"
+  },
+  "popup_report_issue_hint": {
+    "message": "Segnala i problemi nel nostro gruppo Telegram.",
+    "description": "Short hint that feedback is collected in the Telegram group"
+  },
+  "popup_footer_tip": {
+    "message": "Suggerimento: LRC è per i lettori musicali. SRT è per sottotitoli e video editor.",
+    "description": "Popup footer tip explaining LRC and SRT formats"
+  }
+}

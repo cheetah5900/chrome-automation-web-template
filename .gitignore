@@ -35,6 +35,7 @@ stdout.txt
 web/project_data.json
 web/projects.txt
 web/schema.txt
+scripts/generation_status.json
 
 # Test and regression scripts
 test_*.py
