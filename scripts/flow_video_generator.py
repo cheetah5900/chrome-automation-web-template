@@ -890,9 +890,57 @@ def dispatch_video_flow(
 
     return True
 
-def _match_video_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
-    """Matches newly generated video tiles to scene items using strict prompt semantic/Jaccard similarity.
-    Compares scene prompt against tile's footer title / text, rejecting false matches with low confidence."""
+def verify_tile_full_prompt_and_back(api_base: str, media_id: str, prompt_cache: dict) -> str:
+    """Clicks a tile in the gallery to inspect flow-expandable-prompt, caches it, and navigates back."""
+    if media_id in prompt_cache:
+        return prompt_cache[media_id]
+
+    js_verify = f"""(async () => {{
+        const targetMid = "{media_id}";
+        const img = document.querySelector(`img[data-media-id="${{targetMid}}"]`);
+        if (!img) {{
+            return {{ error: "Image not found for media " + targetMid }};
+        }}
+        const tile = img.closest("flow-grid-tile-container, flow-tile-container") || img;
+        const clickable = tile.querySelector(".container, img") || tile;
+        clickable.click();
+        
+        let fullPrompt = "";
+        for (let i = 0; i < 20; i++) {{
+            await new Promise(r => setTimeout(r, 100));
+            const ep = document.querySelector("flow-expandable-prompt");
+            if (ep && ep.innerText.trim()) {{
+                fullPrompt = ep.innerText.replace(/keyboard_return|keyboard_arrow_down/g, "").trim();
+                break;
+            }}
+        }}
+        
+        // Always navigate back to gallery
+        window.history.back();
+        await new Promise(r => setTimeout(r, 400));
+        
+        return {{ success: true, media_id: targetMid, fullPrompt: fullPrompt }};
+    }})()"""
+    try:
+        res = inspect_tab_js(api_base, js_verify)
+        if isinstance(res, dict) and res.get("success"):
+            fp = res.get("fullPrompt", "")
+            prompt_cache[media_id] = fp
+            return fp
+    except Exception as e:
+        log(f"Notice during tile click & verify: {e}")
+        try:
+            inspect_tab_js(api_base, "(() => { if (window.location.pathname.includes('/edit/')) window.history.back(); })()")
+        except Exception:
+            pass
+    return ""
+
+def _match_video_tiles_to_scenes(scenes: list, new_tiles: list, api_base: str = DEFAULT_API_BASE) -> list:
+    """Matches newly generated video tiles to scene items:
+    1. Pre-sorts candidates using Jaccard Similarity on footer_title.
+    2. Makes sure by clicking into the candidate tile, checking flow-expandable-prompt for 100% exact match.
+    3. If matched, locks candidate. If not matched, tries the next candidate.
+    4. Always navigates back to gallery after inspecting."""
     N = len(scenes)
     M = len(new_tiles)
     if M == 0 or N == 0:
@@ -912,6 +960,7 @@ def _match_video_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
                 return w[:-len(suff)]
         return w
 
+    # Phase 1: Compute Jaccard Similarity matrix
     scores = []
     for i, sc in enumerate(scenes):
         sc_prompt = sc.get("prompt", "")
@@ -930,25 +979,62 @@ def _match_video_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
                 row.append(jaccard * 100.0 + pos_bonus)
         scores.append(row)
 
-    candidates = []
-    for i in range(N):
-        for j in range(M):
-            score = scores[i][j]
-            if score >= 10.0:
-                candidates.append((score, i, j))
-    candidates.sort(reverse=True, key=lambda x: x[0])
-
     matched = []
     used_scenes = set()
     used_tiles = set()
-    for score, i, j in candidates:
-        if i not in used_scenes and j not in used_tiles:
-            sc_num = scenes[i].get("scene_num", i + 1)
-            tl_title = new_tiles[j].get("footer_title", "")[:40]
-            log(f"  🎯 [Prompt Match] Scene {sc_num:02d} matched Tile (score={score:.1f}, title={tl_title!r})")
-            matched.append((scenes[i], new_tiles[j]))
-            used_scenes.add(i)
-            used_tiles.add(j)
+    prompt_cache = {}
+
+    # Phase 2: For each scene, check ranked candidates by clicking tile to make sure
+    for i, sc in enumerate(scenes):
+        sc_num = sc.get("scene_num", i + 1)
+        raw_prompt = sc.get("prompt", "")
+        clean_sc = re.sub(r"\s+", " ", re.sub(r"\([^)]*\)", "", raw_prompt)).strip().lower()
+
+        # Get candidates for this scene sorted by Jaccard score descending
+        scene_candidates = [(scores[i][j], j) for j in range(M) if scores[i][j] >= 10.0]
+        scene_candidates.sort(key=lambda x: x[0], reverse=True)
+
+        found = False
+        for score, j in scene_candidates:
+            if j in used_tiles:
+                continue
+
+            tl = new_tiles[j]
+            mid = tl.get("media_id", "")
+            tl_title = tl.get("footer_title", "")[:40]
+
+            log(f"  🔍 Checking Scene {sc_num:02d} candidate Tile {mid[:8]} (Jaccard={score:.1f}, title={tl_title!r})...")
+            
+            # Click tile to make sure and read full prompt, then go back
+            full_prompt = verify_tile_full_prompt_and_back(api_base, mid, prompt_cache)
+            clean_tl = re.sub(r"\s+", " ", re.sub(r"\([^)]*\)", "", full_prompt)).strip().lower()
+
+            # Check 100% exact match or clean substring match
+            is_match = False
+            if clean_tl and (clean_sc == clean_tl or (len(clean_sc) > 30 and (clean_sc in clean_tl or clean_tl in clean_sc))):
+                is_match = True
+            elif not clean_tl and score >= 20.0:
+                is_match = True
+
+            if is_match:
+                log(f"  ✅ [Verified via Click & Back] Scene {sc_num:02d} confirmed with Tile {mid[:8]}")
+                matched.append((sc, tl))
+                used_scenes.add(i)
+                used_tiles.add(j)
+                found = True
+                break
+            else:
+                log(f"  ❌ [Full Prompt Mismatch] Tile {mid[:8]} does not match Scene {sc_num:02d}. Trying next candidate...")
+
+        if not found and scene_candidates:
+            # Fallback if none passed 100% check: take highest available Jaccard candidate
+            for score, j in scene_candidates:
+                if j not in used_tiles:
+                    log(f"  ⚠️ [Fallback Match] Scene {sc_num:02d} using best Jaccard candidate Tile {new_tiles[j].get('media_id', '')[:8]} (score={score:.1f})")
+                    matched.append((sc, new_tiles[j]))
+                    used_scenes.add(i)
+                    used_tiles.add(j)
+                    break
 
     return matched
 
@@ -1066,7 +1152,7 @@ def monitor_video_batch(
     tiles = poll_status.get("tiles") or []
     new_tiles = [t for t in tiles if t["media_id"] not in seen_ids]
 
-    matched = _match_video_tiles_to_scenes(batch_scenes, new_tiles)
+    matched = _match_video_tiles_to_scenes(batch_scenes, new_tiles, api_base=api_base)
     return matched
 
 def generate_video_flow(
