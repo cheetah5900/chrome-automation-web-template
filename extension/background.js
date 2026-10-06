@@ -1719,22 +1719,6 @@ function connectToAgent() {
                   });
                 }
 
-                // 3. Dispatch full synthetic pointer/mouse events in page context to guarantee Angular Material trigger
-                await chrome.scripting.executeScript({
-                  target: { tabId: tab.id },
-                  func: () => {
-                    const btn = document.querySelector('flow-prompt-box button.generate-icon-button, button.generate-icon-button, button[aria-label="Start generation"], button[aria-label="เริ่มสร้าง"]');
-                    if (btn && !btn.disabled && !btn.classList.contains('mat-mdc-button-disabled')) {
-                      const opts = { bubbles: true, cancelable: true, view: window };
-                      btn.dispatchEvent(new PointerEvent('pointerdown', opts));
-                      btn.dispatchEvent(new MouseEvent('mousedown', opts));
-                      btn.dispatchEvent(new PointerEvent('pointerup', opts));
-                      btn.dispatchEvent(new MouseEvent('mouseup', opts));
-                      btn.dispatchEvent(new MouseEvent('click', opts));
-                      btn.click();
-                    }
-                  }
-                });
                 clicked = true;
               }
             }
