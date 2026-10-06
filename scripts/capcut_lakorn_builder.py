@@ -22,13 +22,20 @@ import argparse
 import subprocess
 from pythainlp import word_tokenize
 
-CAPCUT_DRAFTS_ROOT = "/Users/litarcopperkaikem/Movies/CapCut/User Data/Projects/com.lveditor.draft"
-TEMPLATE_PROJECT_NAME = "ละคร template"
-BASE_CHANNEL_DIR = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย"
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from app.env_config import get_channel_dir, get_capcut_drafts_dir, get_whisper_model_path
+    CAPCUT_DRAFTS_ROOT = get_capcut_drafts_dir()
+    BASE_CHANNEL_DIR = get_channel_dir()
+    WHISPER_MODEL_PATH = get_whisper_model_path()
+except Exception:
+    CAPCUT_DRAFTS_ROOT = os.environ.get("CAPCUT_DRAFTS_ROOT", os.path.expanduser("~/Movies/CapCut/User Data/Projects/com.lveditor.draft"))
+    BASE_CHANNEL_DIR = os.environ.get("LAKORN_CHANNEL_DIR", os.path.expanduser("~/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย"))
+    WHISPER_MODEL_PATH = os.environ.get("WHISPER_MODEL_PATH", os.path.expanduser("~/.cache/whisper/ggml-base.bin"))
 
-WHISPER_CLI_PATH = "/opt/homebrew/bin/whisper-cli"
-WHISPER_MODEL_PATH = "/Users/litarcopperkaikem/.cache/whisper/ggml-base.bin"
-FFMPEG_PATH = "/opt/homebrew/bin/ffmpeg"
+TEMPLATE_PROJECT_NAME = "ละคร template"
+WHISPER_CLI_PATH = os.environ.get("WHISPER_CLI_PATH", "/opt/homebrew/bin/whisper-cli")
+FFMPEG_PATH = os.environ.get("FFMPEG_PATH", "/opt/homebrew/bin/ffmpeg")
 
 
 def extract_scene_num(p):
@@ -440,7 +447,7 @@ def build_lakorn_project(story_num: str, ep_name: str, target_project_name: str,
                 "type": "in",
                 "start": 0,
                 "duration": 500000,
-                "path": "/Users/litarcopperkaikem/Movies/CapCut/User Data/Cache/effect/6724916044072227332/3ed092e2c06abae5644f5f12014e3020",
+                "path": os.path.expanduser("~/Movies/CapCut/User Data/Cache/effect/6724916044072227332/3ed092e2c06abae5644f5f12014e3020"),
                 "platform": "all",
                 "resource_id": "6724916044072227332",
                 "third_resource_id": "6724916044072227332",
@@ -607,7 +614,7 @@ def build_lakorn_project(story_num: str, ep_name: str, target_project_name: str,
                 "resource_id": "6724845717472416269",
                 "third_resource_id": "6724845717472416269",
                 "source_platform": 1,
-                "path": "/Users/litarcopperkaikem/Library/Containers/com.lemon.lvoverseas/Data/Movies/CapCut/User Data/Cache/effect/6724845717472416269/7b53f4c008c4c684fccf8c7d4d46cc92",
+                "path": os.path.expanduser("~/Library/Containers/com.lemon.lvoverseas/Data/Movies/CapCut/User Data/Cache/effect/6724845717472416269/7b53f4c008c4c684fccf8c7d4d46cc92"),
                 "duration": 500000,
                 "is_overlap": True,
                 "platform": "all",

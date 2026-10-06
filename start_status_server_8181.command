@@ -1,5 +1,11 @@
 #!/bin/bash
-cd "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template"
+cd "$(dirname "$0")"
+
+if [ -f ".env" ]; then
+    set -a
+    source .env 2>/dev/null
+    set +a
+fi
 
 echo "=================================================="
 echo " Starting Lakorn Generation Status Monitor on 8181"

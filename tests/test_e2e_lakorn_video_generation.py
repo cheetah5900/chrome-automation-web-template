@@ -24,9 +24,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Test Configuration
+from app.env_config import get_channel_dir
+
 API_BASE = os.environ.get("FLOW_API_BASE", "http://127.0.0.1:6969")
 PROJECT_ID = "21a1632e-9926-46fa-954c-240d71d78f41"  # ละคร
-LAKORN_BASE = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย"
+LAKORN_BASE = get_channel_dir()
 IMAGE_PATH = os.path.join(LAKORN_BASE, "19/6 - Storyboards/EP01/01 - Scene 01.png")
 PROMPT_PATH = os.path.join(LAKORN_BASE, "19/4 - Animation Prompt/EP01/01 - Scene 01.md")
 

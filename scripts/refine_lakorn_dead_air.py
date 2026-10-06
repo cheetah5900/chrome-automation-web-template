@@ -14,9 +14,16 @@ import time
 import subprocess
 from pythainlp import word_tokenize
 
-DRAFT_ROOT = "/Users/litarcopperkaikem/Movies/CapCut/User Data/Projects/com.lveditor.draft"
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from app.env_config import get_channel_dir, get_capcut_drafts_dir
+    DRAFT_ROOT = get_capcut_drafts_dir()
+    BASE_CHANNEL_DIR = get_channel_dir()
+except Exception:
+    DRAFT_ROOT = os.environ.get("CAPCUT_DRAFTS_ROOT", os.path.expanduser("~/Movies/CapCut/User Data/Projects/com.lveditor.draft"))
+    BASE_CHANNEL_DIR = os.environ.get("LAKORN_CHANNEL_DIR", os.path.expanduser("~/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย"))
+
 PROJ_NAME = "31-1"
-BASE_CHANNEL_DIR = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย"
 EP_VIDEO_DIR = os.path.join(BASE_CHANNEL_DIR, "31", "7 - Videos", "EP01")
 
 

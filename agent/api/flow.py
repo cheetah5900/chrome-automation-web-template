@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from agent.services.flow_client import get_flow_client
+from app.env_config import get_repo_dir
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/flow", tags=["flow"])
@@ -2039,7 +2040,7 @@ async def get_flow_image_models():
         {"value": "NARWHAL", "label": "nano banana 2 (NARWHAL)"}
     ]
     
-    intercept_path = "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/web/flow_models_intercept.json"
+    intercept_path = str(get_repo_dir() / "web" / "flow_models_intercept.json")
     if not os.path.exists(intercept_path):
         return {"models": default_models}
         

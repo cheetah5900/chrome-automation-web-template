@@ -12,9 +12,11 @@ import signal
 import subprocess
 from typing import Any
 
+from app.env_config import get_shopee_project_dir
+
 PID_FILE = os.path.expanduser("~/.shopeesave_watcher.pid")
 LOG_FILE = os.path.expanduser("~/.shopeesave_watcher.log")
-DEFAULT_PROJECT_V1_DIR = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/9 - ป้ายยาที่ตาซ้าย/0 - รอสร้างวิดีโอ/V1 - ดราม่าขายของ"
+DEFAULT_PROJECT_V1_DIR = get_shopee_project_dir()
 DEFAULT_DOWNLOADS_DIR = os.path.expanduser("~/Downloads")
 
 

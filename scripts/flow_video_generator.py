@@ -70,8 +70,7 @@ def check_and_ensure_server(api_base: str, repo_dir: Optional[str] = None) -> bo
     except Exception:
         pass
 
-    log("FlowKit server is not reachable. Attempting auto-start...")
-    target_repo = repo_dir or "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template"
+    target_repo = repo_dir or os.environ.get("REPO_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     runserver_script = os.path.join(target_repo, "runserver.command")
     if os.path.isfile(runserver_script):
         subprocess.Popen([runserver_script], cwd=target_repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

@@ -1,6 +1,13 @@
 #!/bin/bash
 # Move to the directory containing this script
-cd "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template"
+cd "$(dirname "$0")"
+
+# Load local environment configuration if present
+if [ -f ".env" ]; then
+    set -a
+    source .env 2>/dev/null
+    set +a
+fi
 
 echo "=================================================="
 echo " Starting Chrome Automation Web Cockpit..."

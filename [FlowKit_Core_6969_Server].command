@@ -2,5 +2,5 @@
 # ==========================================================
 # [FlowKit Core 6969 Server] Chrome Automation Daemon
 # ==========================================================
-cd "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template"
+cd "$(dirname "$0")"
 exec ./runserver.command

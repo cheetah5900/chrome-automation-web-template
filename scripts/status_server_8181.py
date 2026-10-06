@@ -19,8 +19,15 @@ logger = logging.getLogger("status_server_8181")
 PORT = 8181
 HOST = "0.0.0.0"
 
-CHANNEL_ROOT = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย"
-REPO_ROOT = "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template"
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from app.env_config import get_channel_dir, get_repo_dir
+    CHANNEL_ROOT = get_channel_dir()
+    REPO_ROOT = str(get_repo_dir())
+except Exception:
+    CHANNEL_ROOT = os.environ.get("LAKORN_CHANNEL_DIR", os.path.expanduser("~/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย"))
+    REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 AUDIT_LOG_PATH = os.path.join(REPO_ROOT, "flow_action_audit.log")
 STATE_FILE = os.path.join(os.path.dirname(__file__), "generation_status.json")
 
