@@ -275,6 +275,11 @@ def sanitize_prompt_for_safety(prompt: str, tier: int = 1) -> str:
             (r"\brage\b", "intense focus"),
             (r"\bscreaming\b", "speaking loudly"),
             (r"\bstrangles\b", "stands facing"),
+            (r"\bkicks\b", "moves past"),
+            (r"\bgrinds\b", "steps onto"),
+            (r"\bsnatches\b", "takes"),
+            (r"\bmaliciously\b", "sternly"),
+            (r"\bviolently\b", "firmly"),
             ("กระชาก", "จับ"),
             ("ทุบตี", "ห้ามปราม"),
             ("ตบหน้า", "จ้องหน้า"),
@@ -1060,10 +1065,12 @@ def monitor_video_batch(
             if (m) pcts.push(m[1] + '%');
         }
 
-        const errorTiles = Array.from(document.querySelectorAll('flow-error-tile, [class*="error-tile"]'));
+        const errorTiles = Array.from(document.querySelectorAll('flow-error-tile, [class*="error-tile"], .cdk-overlay-container, [role="alert"]'));
         for (const et of errorTiles) {
             const text = et.innerText || '';
-            if (text.includes('ล้มเหลว') || text.includes('Failed') || text.includes('ละเมิดนโยบาย')) {
+            if (text.includes('unusual activity') || text.includes('browser extensions')) {
+                failureText = 'UNUSUAL_ACTIVITY_EXTENSION_ERROR';
+            } else if (text.includes('ล้มเหลว') || text.includes('Failed') || text.includes('ละเมิดนโยบาย')) {
                 failureText = text.replace(/\\s+/g, ' ').trim().slice(0, 150);
             }
         }
@@ -1143,9 +1150,15 @@ def monitor_video_batch(
         else:
             consecutive_zero_pending = 0
 
-        if failure_text and failure_text != last_failure_text and (time.time() - start_time > 30):
+        if failure_text and failure_text != last_failure_text:
             log(f"Warning: failure text detected: {failure_text}")
             last_failure_text = failure_text
+            if failure_text == 'UNUSUAL_ACTIVITY_EXTENSION_ERROR':
+                log("⚠️ Google Flow flagged unusual activity / extension warning. Auto-refreshing tab...")
+                inspect_tab_js(api_base, "location.reload()")
+                time.sleep(5)
+                ensure_video_mode(api_base, aspect="9:16")
+                break
 
         time.sleep(5)
 
