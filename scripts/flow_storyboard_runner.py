@@ -17,11 +17,28 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 DEFAULT_API_BASE = "http://127.0.0.1:6969"
 DEFAULT_PROJECT_ID = "21a1632e-9926-46fa-954c-240d71d78f41"  # ละคร
 DEFAULT_STICKMAN_PROJECT_ID = "527f23e9-8586-4712-934e-dcf0b7d87417"  # Stickman
+
+def parse_batch_size(val: Any, default: int = 3) -> int:
+    """
+    Parses batch size configuration:
+    - 'unlimit', 'unlimited', 'all', 'inf', '-1', '0', 'max' -> 999999 (queue all scenes continuously)
+    - integer / numeric string -> max(1, int(val))
+    - default -> 3
+    """
+    if val is None:
+        return default
+    val_str = str(val).strip().lower()
+    if val_str in ("unlimit", "unlimited", "all", "inf", "-1", "0", "max"):
+        return 999999
+    try:
+        return max(1, int(val_str))
+    except (ValueError, TypeError):
+        return default
 
 def log(msg: str):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -532,10 +549,13 @@ def process_single_episode(
     all_failed_scenes = []
 
     endpoint = f"{args.api_base}/api/flow/generate-storyboard"
-    batch_size = max(1, args.batch_size)
+    batch_size = parse_batch_size(getattr(args, 'batch_size', '3'), default=3)
     batches = [target_scene_nums[i:i + batch_size] for i in range(0, len(target_scene_nums), batch_size)]
 
-    log(f"🚀 Starting {ep_str} batch processing: {len(batches)} batches (Batch size: {batch_size}, Max retries: {args.max_retries})")
+    if batch_size >= 999999:
+        log(f"🚀 Starting {ep_str} batch processing: UNLIMITED (all {len(target_scene_nums)} scenes queued continuously, Max retries: {args.max_retries})")
+    else:
+        log(f"🚀 Starting {ep_str} batch processing: {len(batches)} batches (Batch size: {batch_size}, Max retries: {args.max_retries})")
 
     # Clear server-side dispatch order queue before this batch session
     try:
@@ -800,7 +820,7 @@ def main():
     parser.add_argument("--api-base", type=str, default=DEFAULT_API_BASE, help="FlowKit API server base URL")
     parser.add_argument("--skip-existing", action="store_true", default=True, help="Skip scenes that already have a completed image file")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing images")
-    parser.add_argument("--batch-size", "-b", type=int, default=25, help="Number of scenes to process per batch (default: 25 for continuous pipeline)")
+    parser.add_argument("--batch-size", "-b", default="3", help="Number of scenes to process per batch (e.g. 3, or 'unlimit', default: 3)")
     parser.add_argument("--max-retries", "-r", type=int, default=2, help="Max retry attempts for failed scenes with softened prompts (default: 2)")
     parser.add_argument("--delay", "-d", type=float, default=None, help="Delay between scene submissions in seconds (default: randomized 0.5-1.0s)")
     parser.add_argument("--timeout", type=int, default=60, help="Max timeout per scene generation in seconds (default: 60)")

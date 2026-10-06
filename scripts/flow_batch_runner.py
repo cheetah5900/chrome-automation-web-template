@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 import urllib.request
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Add script directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -370,25 +371,22 @@ def run_bulk_video_pipeline(
         "results": results
     }
 
-def main():
-    parser = argparse.ArgumentParser(description="Headless Google Flow Batch Video Generator")
-    parser.add_argument("--story-path", "-s", required=True, type=str, help="Root path of the Lakorn story folder")
-    parser.add_argument("--ep", "-e", type=str, default="1", help="Episode number (e.g. 1 or EP01)")
-    parser.add_argument("--scenes", "-sc", type=str, help="Scene range (e.g. '1-5' or '1,3,7' or 'all')")
-    parser.add_argument("--prompt-dir", type=str, help="Custom directory containing animation prompt markdown files")
-    parser.add_argument("--aspect-ratio", "-a", type=str, default="9:16", choices=["16:9", "9:16"], help="Aspect ratio (default: 9:16 for Lakorn)")
-    parser.add_argument("--batch-size", "-b", type=int, default=25, help="Number of scenes to queue concurrently (default: 25)")
-    parser.add_argument("--skip-existing", action="store_true", default=True, help="Skip scenes where MP4 already exists in Videos folder")
-    parser.add_argument("--force", action="store_true", help="Force regenerate even if MP4 exists")
-    parser.add_argument("--delay", "-d", type=float, default=None, help="Delay between prompt submissions in seconds (default: randomized 0.5-1.0s)")
-    parser.add_argument("--timeout", type=int, default=600, help="Max timeout for batch video generation in seconds")
-    parser.add_argument("--project-id", type=str, default=DEFAULT_PROJECT_ID, help="Google Flow project ID")
-    parser.add_argument("--api-base", type=str, default=DEFAULT_API_BASE, help="FlowKit API base URL")
-    parser.add_argument("--auto-capcut", action="store_true", default=True, help="Automatically clone CapCut template and assemble project after batch download")
-    parser.add_argument("--no-capcut", dest="auto_capcut", action="store_false", help="Disable automatic CapCut project building")
-    parser.add_argument("--skip-upload", action="store_true", help="Skip pre-uploading storyboard images if already in Google Flow library")
-
-    args = parser.parse_args()
+def parse_batch_size(val: Any, default: int = 3) -> int:
+    """
+    Parses batch size configuration:
+    - 'unlimit', 'unlimited', 'all', 'inf', '-1', '0', 'max' -> 999999 (queue all scenes continuously)
+    - integer / numeric string -> max(1, int(val))
+    - default -> 3
+    """
+    if val is None:
+        return default
+    val_str = str(val).strip().lower()
+    if val_str in ("unlimit", "unlimited", "all", "inf", "-1", "0", "max"):
+        return 999999
+    try:
+        return max(1, int(val_str))
+    except (ValueError, TypeError):
+        return default
 
 def process_single_episode_videos(story_path: str, ep_num: int, scenes_spec: Optional[str], args, story_num: str) -> dict:
     """Processes video generation for a single episode."""
@@ -497,12 +495,16 @@ def process_single_episode_videos(story_path: str, ep_num: int, scenes_spec: Opt
         })
 
     # Run Universal Bulk Pipeline in Chunks
-    batch_size = max(1, args.batch_size) if hasattr(args, 'batch_size') and args.batch_size else 25
+    batch_size = parse_batch_size(getattr(args, 'batch_size', '3'), default=3)
     all_results = []
     completed_sc_nums = set()
     failed_sc_nums = set()
 
     chunks = [scenes_data[i:i + batch_size] for i in range(0, len(scenes_data), batch_size)]
+    if batch_size >= 999999:
+        log(f"📦 Concurrency Mode: UNLIMITED (queueing all {len(scenes_data)} scenes continuously)")
+    else:
+        log(f"📦 Concurrency Mode: {batch_size} scenes per batch ({len(chunks)} batches total)")
     for chunk_idx, chunk in enumerate(chunks, start=1):
         scenes_in_chunk = [s['scene_num'] for s in chunk]
         notify_status_server(story_num, ep_str, current_scene=scenes_in_chunk[0] if scenes_in_chunk else None, action=f"กำลังสร้างวิดีโอ {ep_str} Batch {chunk_idx}/{len(chunks)} (ฉาก {scenes_in_chunk})", status="RUNNING")
@@ -568,7 +570,7 @@ def main():
     parser.add_argument("--scenes", "-sc", default=None, help="Scene range (e.g. '1-5', 'all', or per-EP '1:4-10; 2:11-20')")
     parser.add_argument("--prompt-dir", default=None, help="Custom directory containing animation prompt markdown files")
     parser.add_argument("--aspect-ratio", "-a", choices=["16:9", "9:16"], default="9:16", help="Aspect ratio (default: 9:16 for Lakorn)")
-    parser.add_argument("--batch-size", "-b", type=int, default=25, help="Number of scenes to queue concurrently (default: 25)")
+    parser.add_argument("--batch-size", "-b", default="3", help="Number of scenes to queue concurrently (e.g. 3, or 'unlimit', default: 3)")
     parser.add_argument("--skip-existing", action="store_true", default=True, help="Skip scenes where MP4 already exists in Videos folder")
     parser.add_argument("--force", action="store_true", help="Force regenerate even if MP4 exists")
     parser.add_argument("--delay", "-d", type=float, default=None, help="Delay between prompt submissions in seconds (default: randomized 0.5-1.0s)")
