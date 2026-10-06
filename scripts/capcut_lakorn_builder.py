@@ -319,6 +319,10 @@ def build_lakorn_project(story_num: str, ep_name: str, target_project_name: str,
     print(f"Building CapCut Project: '{target_project_name}' (Story {story_num}, {ep_name})")
     print(f"=======================================================")
     
+    # Ensure standard final output directory exists
+    final_dir = os.path.join(BASE_CHANNEL_DIR, str(story_num), "10 - Final")
+    os.makedirs(final_dir, exist_ok=True)
+    
     template_dir = os.path.join(CAPCUT_DRAFTS_ROOT, TEMPLATE_PROJECT_NAME)
     if not os.path.isdir(template_dir):
         raise FileNotFoundError(f"Template project not found: {template_dir}")
