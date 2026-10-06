@@ -1015,7 +1015,7 @@ async def launch_profile(payload: LaunchProfilePayload):
     from pathlib import Path
     everyday_profile = str(Path.home() / "Library/Application Support/Google/Chrome")
     ext_dir = str(Path(__file__).resolve().parent.parent / "extension")
-    if not profile_path or profile_path == "/Users/litar/Library/Application Support/Google/Chrome" or profile_path == everyday_profile:
+    if not profile_path or profile_path == everyday_profile or ("Library/Application Support/Google/Chrome" in profile_path):
         profile_path = str(BASE_DIR / "runtime" / "chrome-profiles" / profile.get("name", "AutomationChrome"))
 
     ext_dirs = [ext_dir]
@@ -1484,8 +1484,8 @@ def _default_config() -> dict[str, Any]:
             "video_presets": {
                 "ตึกสวย": {
                     "use_bgm": True,
-                    "target_folder": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/",
-                    "audio_path": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3",
+                    "target_folder": os.path.join(os.path.expanduser("~"), "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/"),
+                    "audio_path": os.path.join(os.path.expanduser("~"), "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3"),
                     "audio_boost": "",
                     "video_audio_boost": "-10",
                     "contrast": "1.10",
@@ -1518,7 +1518,7 @@ def _default_config() -> dict[str, Any]:
             "element_name": "Songkran",
             "element_path": os.path.join(h, "Documents/DDCM/Elements"),
             "local_path": os.path.join(h, "Documents/DDCM"),
-            "remote_path": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/DDCM/Cliparts DDCM",
+            "remote_path": os.path.join(h, "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Projects/DDCM/Cliparts DDCM"),
             "watermark_path": os.path.join(h, "Documents/DDCM/Watermark.png"),
             "first_preview_watermark_path": "",
             "single_count": "12",
@@ -1562,8 +1562,8 @@ def _default_config() -> dict[str, Any]:
             "video_presets": {
                 "ตึกสวย": {
                     "use_bgm": True,
-                    "target_folder": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/",
-                    "audio_path": "/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3",
+                    "target_folder": os.path.join(h, "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/ตึกสวย_40 วีดีโอ/"),
+                    "audio_path": os.path.join(h, "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/MythicForge84 - วิว/วิว/Soundtrack/soundtrack_for_view.mp3"),
                     "audio_boost": "",
                     "video_audio_boost": "-10",
                     "contrast": "1.10",
@@ -6354,7 +6354,8 @@ def import_lakorn_auto(payload: ImportLakornPayload):
             
     # Fallback to legacy hardcoded paths if not found relative to lakorn_path
     if not resolved_ref_dir:
-        global_char_sheet = Path("/Users/litar/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/ผักกาดการละคร - ละครไทย/Character Sheet")
+        from app.env_config import get_channel_dir
+        global_char_sheet = Path(get_channel_dir()) / "Character Sheet"
         if global_char_sheet.exists() and global_char_sheet.is_dir():
             resolved_ref_dir = global_char_sheet
         else:

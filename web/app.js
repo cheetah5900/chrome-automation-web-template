@@ -7419,7 +7419,7 @@ function updateFacebookFolderModeUI() {
       }
     }
     if (mainFolderInput && !mainFolderInput.value.trim()) {
-      mainFolderInput.placeholder = 'เช่น /Users/litarcopperkaikem/.../Channels/2 - ผักกาดการละคร - ละครไทย';
+      mainFolderInput.placeholder = 'เช่น /Users/.../Channels/2 - ผักกาดการละคร - ละครไทย';
     }
   } else {
     if (subfoldersLabel) subfoldersLabel.textContent = 'โฟลเดอร์ย่อยที่ต้องการรัน (Sub folders)';

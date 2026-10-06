@@ -1614,7 +1614,6 @@ function connectToAgent() {
             args: [outputCount, aspectRatio, targetModel, isVideo, targetDuration, targetSubmode]
           });
           await sleep(100);
-        }
 
           // Focus ProseMirror and select all existing text so new prompt replaces it cleanly
           await chrome.scripting.executeScript({
@@ -2541,7 +2540,7 @@ function connectToAgent() {
               }
             };
           } else if (evalCode === 'test_upload_via_top_plus') {
-            const filePath = msg.params?.filePath || '/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย/19/6 - Storyboards/EP01/06 - Scene 06.png';
+            const filePath = msg.params?.filePath || '';
             
             // 1. Dismiss any existing backdrops
             await chrome.scripting.executeScript({

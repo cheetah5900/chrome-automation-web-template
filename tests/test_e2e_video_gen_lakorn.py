@@ -1,8 +1,10 @@
 import asyncio
 import json
 from playwright.async_api import async_playwright
+from app.env_config import get_channel_dir
 
 async def run():
+    lakorn_base_dir = get_channel_dir()
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(viewport={"width": 1280, "height": 800})
@@ -12,19 +14,19 @@ async def run():
         page.on("console", lambda msg: console_logs.append(f"[{msg.type}] {msg.text}"))
         page.on("pageerror", lambda exc: console_logs.append(f"[pageerror] {exc}"))
 
-        await page.add_init_script("""
-            localStorage.setItem('flowVideoPresets', JSON.stringify({
-                'ละคร': {
+        await page.add_init_script(f"""
+            localStorage.setItem('flowVideoPresets', JSON.stringify({{
+                'ละคร': {{
                     'project_id': '21a1632e-9926-46fa-954c-240d71d78f41',
                     'video_model': 'veo_3_1_i2v_lite_low_priority',
                     'orientation': 'VERTICAL',
                     'output_count': '1',
                     'upscale_resolution': 'NONE',
-                    'lakorn_path': '/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย',
+                    'lakorn_path': '{lakorn_base_dir}',
                     'lakorn_ton': '19',
                     'lakorn_ep': '1'
-                }
-            }));
+                }}
+            }}));
         """)
 
         print("=== E2E PHASE 1: DISCOVERY & NAVIGATION ===")
@@ -50,7 +52,7 @@ async def run():
         await asyncio.sleep(2)
 
         print("Step 3: Configuring Video Gen parameters (Project, Vertical 9:16, lite_low_priority, Count 1)...")
-        await page.evaluate("""() => {
+        await page.evaluate("""(basePath) => {
             const proj = document.getElementById('cfg_flow_project_dropdown');
             if (proj) {
                 proj.value = '21a1632e-9926-46fa-954c-240d71d78f41';
@@ -72,7 +74,7 @@ async def run():
                 modelDd.dispatchEvent(new Event('change'));
             }
             const pathInputs = {
-                'cfg_flow_lakorn_path': '/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย',
+                'cfg_flow_lakorn_path': basePath,
                 'cfg_flow_lakorn_ton': '19',
                 'cfg_flow_lakorn_ep': '1'
             };
@@ -84,7 +86,7 @@ async def run():
                 }
             }
             if (typeof calculateFlowKitPaths === 'function') calculateFlowKitPaths();
-        }""")
+        }""", lakorn_base_dir)
         await asyncio.sleep(1)
 
         proj_val = await page.locator("#cfg_flow_project_dropdown").input_value()

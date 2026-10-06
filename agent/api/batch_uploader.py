@@ -13,6 +13,7 @@ from agent.services.flow_client import get_flow_client
 from agent.services.prompt_sanitizer import sanitize_lakorn_prompt
 from agent.db import crud
 from agent.sdk.persistence.sqlite_repository import SQLiteRepository
+from app.env_config import get_repo_dir
 
 import subprocess
 import asyncio
@@ -970,8 +971,9 @@ def extract_scenes_from_flow_project(project_data: dict) -> list[dict]:
             cdn_video_url = _extract_cdn_url(standard_video)
             cdn_upscale_url = _extract_cdn_url(upscaled_video) if upscaled_video else None
             
-            local_cache_path = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{media_id}.mp4"
-            local_upscale_cache = f"file:///Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template/output/_workflow_videos/{upscale_media_id}_upscaled.mp4" if upscale_media_id else None
+            repo_dir = get_repo_dir()
+            local_cache_path = f"file://{repo_dir}/output/_workflow_videos/{media_id}.mp4"
+            local_upscale_cache = f"file://{repo_dir}/output/_workflow_videos/{upscale_media_id}_upscaled.mp4" if upscale_media_id else None
             
             video_url = cdn_video_url or local_cache_path
             upscale_url = (cdn_upscale_url or local_upscale_cache) if upscale_media_id else None

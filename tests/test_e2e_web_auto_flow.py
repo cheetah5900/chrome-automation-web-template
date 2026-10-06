@@ -17,7 +17,7 @@ import urllib.request
 import unittest
 
 BASE_URL = os.environ.get("TEST_BASE_URL", "http://127.0.0.1:6969")
-PROMPT_FILE = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/7 - ละครสัตว์/0 - animation prompt ถึง 270/272_animation_หมุนลูกบาสห้าลูกบนปลายนิ้วพร้อมกัน.md"
+PROMPT_FILE = os.path.join(os.path.expanduser("~"), "Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/7 - ละครสัตว์/0 - animation prompt ถึง 270/272_animation_หมุนลูกบาสห้าลูกบนปลายนิ้วพร้อมกัน.md")
 
 def http_get(path):
     url = f"{BASE_URL}{path}"

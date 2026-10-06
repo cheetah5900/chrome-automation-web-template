@@ -6,13 +6,17 @@ import random
 import glob
 
 # Add template repo to path
-sys.path.insert(0, "/Users/litarcopperkaikem/Documents/Repositiry/chrome-automation-web-template")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from app.env_config import get_channel_dir
+    BASE_DIR = get_channel_dir()
+except Exception:
+    BASE_DIR = os.environ.get("LAKORN_CHANNEL_DIR", os.path.expanduser("~/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย"))
+
 from app.browser import browser_manager
 from app.shopee_affiliate import (
     reset_shopee_stop, apply_stealth_cdp, post_single_shopee_item, is_shopee_stopped
 )
-
-BASE_DIR = "/Users/litarcopperkaikem/Library/CloudStorage/GoogleDrive-cheetah6541@gmail.com/My Drive/Knowledge Vault/Project/AI shorts/Channels/2 - ผักกาดการละคร - ละครไทย"
 
 STORIES_CONFIG = [
     ("21", [1, 2, 3]),
