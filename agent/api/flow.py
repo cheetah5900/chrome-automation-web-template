@@ -366,6 +366,10 @@ class CdpTypeTextRequest(BaseModel):
     click_submit: bool = False
     output_count: int = 1
     aspect_ratio: Optional[str] = None
+    is_video: bool = False
+    mode: Optional[str] = None
+    duration: Optional[int] = None
+    submode: Optional[str] = None
 
 
 @router.post("/cdp-type-text")
@@ -378,6 +382,10 @@ async def cdp_type_text(body: CdpTypeTextRequest):
         "clickSubmit": body.click_submit,
         "outputCount": body.output_count,
         "aspectRatio": body.aspect_ratio,
+        "isVideo": body.is_video,
+        "mode": body.mode,
+        "duration": body.duration,
+        "submode": body.submode,
     }, timeout=45)
 
 
@@ -1364,7 +1372,9 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
         queue_entries = [e for e in _dispatch_order_queue if e["prompt"] in batch_prompts]
         if queue_entries and len(remaining_tiles) >= len(queue_entries):
             N = len(queue_entries)
-            ordered_tiles = remaining_tiles[:N]
+            # In Google Flow DOM, newly generated tiles appear at index 0 (top-left).
+            # To match dispatch order (first queued -> first rendered), reverse the tile slice:
+            ordered_tiles = list(reversed(remaining_tiles[:N]))
             for q_entry, tile in zip(queue_entries, ordered_tiles):
                 sc_dict = scenes_by_prompt.get(q_entry["prompt"])
                 if sc_dict and sc_dict.get("scene_num") not in completed_scene_nums:

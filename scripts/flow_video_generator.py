@@ -238,6 +238,21 @@ def sanitize_prompt_for_safety(prompt: str, tier: int = 1) -> str:
         ("กักขัง", "ดูแล"),
         ("ทำร้าย", "เผชิญหน้า"),
         ("ทุกข์ทรมาน", "ความลำบาก"),
+        ("กู", "ฉัน"),
+        ("มึง", "แก"),
+        ("ไอ้เด็กเปรต", "เด็กคนนี้"),
+        ("ลากคอ", "เชิญ"),
+        ("โยนออกไปข้างถนน", "พาออกไป"),
+        ("เสนียด", "ความวุ่นวาย"),
+        ("ไสหัวไปซะ", "ออกไปซะ"),
+        ("ราวมัจจุราช", "อย่างจริงจัง"),
+        (r"\brips?\s+off\b", "removes"),
+        (r"\brips?\b", "tears"),
+        (r"\bvenomous\b", "intense"),
+        (r"\bfurious\b", "stern"),
+        (r"\brage\b", "intensity"),
+        (r"\bscreams?\b", "speaks firmly"),
+        (r"\bviolently\b", "firmly"),
     ]
     for pattern, repl in t1_replacements:
         if isinstance(pattern, str) and not pattern.isascii():
@@ -409,9 +424,14 @@ def clear_prompt_box_completely(api_base: str) -> int:
         }
 
         // 4. If any chips remain, click their cancel buttons
-        const frameCancelBtn = document.querySelector('.chip-container button, button.chip-container');
-        if (frameCancelBtn) {
-            frameCancelBtn.click();
+        const cancelIcons = Array.from(document.querySelectorAll('flow-prompt-box mat-icon, flow-image-ingredient-chip mat-icon, .hover-icon-overlay mat-icon')).filter(i => (i.innerText || '').includes('cancel'));
+        for (const icon of cancelIcons) {
+            const opts = { bubbles: true, cancelable: true, view: window };
+            icon.dispatchEvent(new PointerEvent('pointerdown', opts));
+            icon.dispatchEvent(new MouseEvent('mousedown', opts));
+            icon.dispatchEvent(new PointerEvent('pointerup', opts));
+            icon.dispatchEvent(new MouseEvent('mouseup', opts));
+            icon.click();
         }
 
         const chips = Array.from(document.querySelectorAll('flow-image-ingredient-chip, flow-ingredient-chip'));
@@ -461,7 +481,14 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None, im
                                 document.querySelector('button.empty-chip') ||
                                 document.querySelector('button.add-menu-trigger') ||
                                 document.querySelector('button[aria-label*="เพิ่มองค์ประกอบ"]');
-                if (trigger) trigger.click();
+                if (trigger) {
+                    const opts = { bubbles: true, cancelable: true, view: window };
+                    trigger.dispatchEvent(new PointerEvent('pointerdown', opts));
+                    trigger.dispatchEvent(new MouseEvent('mousedown', opts));
+                    trigger.dispatchEvent(new PointerEvent('pointerup', opts));
+                    trigger.dispatchEvent(new MouseEvent('mouseup', opts));
+                    trigger.click();
+                }
             }
             return !!document.querySelector('flow-add-menu-popover-content');
         })()"""
@@ -498,16 +525,21 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None, im
             const popover = document.querySelector('flow-add-menu-popover-content');
             if (!popover) return {{ ok: false, error: 'popover not open' }};
             const items = Array.from(popover.querySelectorAll('button.asset-item, flow-add-menu-asset-item, .asset-item'));
-            const match = items.find(el => {{
+            const match = items.slice().reverse().find(el => {{
                 const t = (el.innerText || el.getAttribute('aria-label') || '').toLowerCase();
                 return t.includes(targetBase) || t.includes(targetFull);
             }});
             if (match) {{
                 const btn = match.querySelector('button') || match;
+                const opts = {{ bubbles: true, cancelable: true, view: window }};
+                btn.dispatchEvent(new PointerEvent('pointerdown', opts));
+                btn.dispatchEvent(new MouseEvent('mousedown', opts));
+                btn.dispatchEvent(new PointerEvent('pointerup', opts));
+                btn.dispatchEvent(new MouseEvent('mouseup', opts));
                 btn.click();
                 return {{ ok: true, text: match.innerText.replace(/\\s+/g, ' ').trim() }};
             }}
-            return {{ ok: false, error: `No asset found matching '${target_base}'` }};
+            return {{ ok: false, error: 'No asset found matching ' + '{target_base}' }};
         }})()"""
         return inspect_tab_js(api_base, click_js)
 
@@ -524,40 +556,55 @@ def attach_start_frame(api_base: str, file_name: str, project_id: str = None, im
         error_exit(f"Failed to find or attach storyboard image '{file_name}': {res.get('error')}. Refusing to attach incorrect asset.")
 
     log(f"Successfully clicked storyboard frame: {res.get('text', file_name)}")
-    time.sleep(0.5)
 
-    # Click detail pane 'เพิ่มไปยังพรอมต์' / 'Add to prompt' if present
+    # Robustly wait for detail pane 'เพิ่มไปยังพรอมต์' / 'Add to prompt' button and click it
     add_btn_js = """(() => {
-        const addBtn = document.querySelector('flow-add-menu-detail-pane button.detail-add-to-prompt-btn') ||
-                       Array.from(document.querySelectorAll('.cdk-overlay-container button, flow-add-menu-detail-pane button')).find(b => {
-                           const t = (b.innerText || '').toLowerCase();
-                           return t.includes('เพิ่มไปยังพรอมต์') || t.includes('add to prompt') || t.trim() === 'add';
-                       });
-        if (addBtn) {
-            addBtn.click();
-            return { clicked: true };
+        const btn = document.querySelector('flow-add-menu-detail-pane button.detail-add-to-prompt-btn') ||
+                    Array.from(document.querySelectorAll('.cdk-overlay-container button, flow-add-menu-detail-pane button')).find(b => {
+                        const t = (b.innerText || '').toLowerCase().trim();
+                        return t === 'add to prompt' || t === 'เพิ่มไปยังพรอมต์';
+                    });
+        if (btn && !btn.disabled) {
+            const opts = { bubbles: true, cancelable: true, view: window };
+            btn.dispatchEvent(new PointerEvent('pointerdown', opts));
+            btn.dispatchEvent(new MouseEvent('mousedown', opts));
+            btn.dispatchEvent(new PointerEvent('pointerup', opts));
+            btn.dispatchEvent(new MouseEvent('mouseup', opts));
+            btn.click();
+            return { clicked: true, text: btn.innerText.trim() };
         }
-        return { clicked: false };
+        return { clicked: false, hasPane: !!document.querySelector('flow-add-menu-detail-pane') };
     })()"""
-    inspect_tab_js(api_base, add_btn_js)
-    time.sleep(0.3)
 
-    # Close backdrop if open
-    close_js = """(() => {
-        if (document.querySelector('flow-add-menu-popover-content')) {
-            const backdrop = document.querySelector('.cdk-overlay-backdrop');
-            if (backdrop) backdrop.click();
-        }
-        return true;
-    })()"""
-    inspect_tab_js(api_base, close_js)
-    time.sleep(0.4)
+    clicked_add = False
+    for attempt in range(10):
+        time.sleep(0.3)
+        res_add = inspect_tab_js(api_base, add_btn_js)
+        if res_add and res_add.get("clicked"):
+            clicked_add = True
+            log(f"Clicked 'Add to prompt' button successfully on attempt {attempt+1}.")
+            break
 
-    # Strict Verification: Must have EXACTLY 1 start frame image chip!
-    chips_count = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-prompt-box .chip-image, flow-prompt-box flow-image-ingredient-chip img").length)()')
-    if chips_count != 1:
-        time.sleep(0.5)
-        chips_count = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-prompt-box .chip-image, flow-prompt-box flow-image-ingredient-chip img").length)()')
+    # Wait for the start frame chip to appear in the prompt box
+    chips_count = 0
+    for _ in range(10):
+        time.sleep(0.3)
+        chips_count = inspect_tab_js(api_base, '(() => document.querySelectorAll("flow-prompt-box .chip-image, flow-prompt-box flow-image-ingredient-chip img").length)()') or 0
+        if chips_count == 1:
+            break
+
+    # Only if chip verified and popover is still open, dismiss popover
+    if chips_count == 1:
+        close_js = """(() => {
+            if (document.querySelector('flow-add-menu-popover-content')) {
+                const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                if (backdrop) backdrop.click();
+            }
+            return true;
+        })()"""
+        inspect_tab_js(api_base, close_js)
+        time.sleep(0.2)
+
     if chips_count != 1:
         error_exit(f"CRITICAL GUARD: Expected exactly 1 start frame chip for {file_name}, but found {chips_count}! Refusing to generate with invalid chip count.")
 
@@ -606,14 +653,18 @@ def set_aspect_ratio(api_base: str, aspect: str = "16:9") -> bool:
     """Sets video aspect ratio to 16:9 or 9:16, preserving x1 output count and 6s duration."""
     return ensure_video_settings(api_base, aspect=aspect, duration=6, submode="เฟรม", output_count=1)
 
-def submit_prompt_and_generate(api_base: str, prompt: str, aspect: str = "16:9") -> bool:
+def submit_prompt_and_generate(api_base: str, prompt: str, aspect: str = "9:16") -> bool:
     """Types prompt and triggers generation using FlowKit CDP endpoint."""
     log("Typing prompt into ProseMirror and clicking generate...")
     res = http_post(f"{api_base}/api/flow/cdp-type-text", {
         "text": prompt,
         "click_submit": True,
         "output_count": 1,
-        "aspect_ratio": aspect
+        "aspect_ratio": aspect,
+        "is_video": True,
+        "mode": "video",
+        "duration": 6,
+        "submode": "เฟรม"
     })
     
     result_data = res.get("result", {})
@@ -840,36 +891,51 @@ def dispatch_video_flow(
     return True
 
 def _match_video_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
-    """Matches newly generated video tiles to scene items using keyword scoring + reverse submission order."""
+    """Matches newly generated video tiles to scene items using strict prompt semantic/Jaccard similarity.
+    Compares scene prompt against tile's footer title / text, rejecting false matches with low confidence."""
     N = len(scenes)
     M = len(new_tiles)
     if M == 0 or N == 0:
         return []
 
-    boilerplate_words = {
-        "video", "animation", "cinematic", "motion", "render", "style", "pixar",
-        "smooth", "cute", "camera", "movement", "slow", "pan", "zoom", "subtle"
+    STOPWORDS = {
+        "the", "a", "an", "in", "on", "at", "with", "his", "her", "and", "or", "as", "to", "for",
+        "of", "by", "is", "was", "shot", "medium", "wide", "close", "suit", "black", "luxury",
+        "kid", "boy", "old", "faced", "tiny", "short", "tailored", "while", "from", "into", "thai",
+        "video", "animation", "cinematic", "motion", "render", "style", "pixar", "smooth", "cute"
     }
+
+    def _stem(w: str) -> str:
+        w = w.lower()
+        for suff in ["ing", "tion", "ed", "es", "s"]:
+            if len(w) > len(suff) + 3 and w.endswith(suff):
+                return w[:-len(suff)]
+        return w
 
     scores = []
     for i, sc in enumerate(scenes):
         sc_prompt = sc.get("prompt", "")
-        sc_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", sc_prompt.lower())) - boilerplate_words
+        sc_words = set(_stem(w) for w in re.findall(r"[a-zA-Z]{3,}", sc_prompt.lower())) - STOPWORDS
         row = []
         for j, tl in enumerate(new_tiles):
             tl_footer = tl.get("footer_title", "")
-            tl_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", tl_footer.lower()))
-            overlap = len(sc_words.intersection(tl_words))
-            expected_j = max(0, min(M - 1, N - 1 - i))
-            pos_penalty = abs(j - expected_j) * 0.5
-            total_score = overlap * 10 - pos_penalty
-            row.append(total_score)
+            tl_words = set(_stem(w) for w in re.findall(r"[a-zA-Z]{3,}", tl_footer.lower())) - STOPWORDS
+            overlap = sc_words.intersection(tl_words)
+            if not overlap or not sc_words:
+                row.append(0.0)
+            else:
+                jaccard = len(overlap) / (len(sc_words) + len(tl_words) - len(overlap))
+                expected_j = max(0, min(M - 1, N - 1 - i))
+                pos_bonus = max(0.0, 0.05 - abs(j - expected_j) * 0.005)
+                row.append(jaccard * 100.0 + pos_bonus)
         scores.append(row)
 
     candidates = []
     for i in range(N):
         for j in range(M):
-            candidates.append((scores[i][j], i, j))
+            score = scores[i][j]
+            if score >= 10.0:
+                candidates.append((score, i, j))
     candidates.sort(reverse=True, key=lambda x: x[0])
 
     matched = []
@@ -877,6 +943,9 @@ def _match_video_tiles_to_scenes(scenes: list, new_tiles: list) -> list:
     used_tiles = set()
     for score, i, j in candidates:
         if i not in used_scenes and j not in used_tiles:
+            sc_num = scenes[i].get("scene_num", i + 1)
+            tl_title = new_tiles[j].get("footer_title", "")[:40]
+            log(f"  🎯 [Prompt Match] Scene {sc_num:02d} matched Tile (score={score:.1f}, title={tl_title!r})")
             matched.append((scenes[i], new_tiles[j]))
             used_scenes.add(i)
             used_tiles.add(j)
@@ -973,7 +1042,7 @@ def monitor_video_batch(
 
         new_tiles = [t for t in tiles if t["media_id"] not in seen_ids]
 
-        if len(new_tiles) >= len(batch_scenes):
+        if len(new_tiles) >= len(batch_scenes) and pending_count == 0:
             log(f"All {len(new_tiles)} target video(s) completed rendering!")
             break
 

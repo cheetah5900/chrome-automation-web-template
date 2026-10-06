@@ -225,6 +225,28 @@ except ImportError as e:
 _flow_kit_ws_task = None
 _flow_kit_worker_task = None
 
+_status_server_8181_proc = None
+
+def _ensure_status_server_8181():
+    global _status_server_8181_proc
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.5)
+        result = sock.connect_ex(('127.0.0.1', 8181))
+        sock.close()
+        if result != 0:
+            status_script = BASE_DIR / "scripts" / "status_server_8181.py"
+            if status_script.is_file():
+                print("Server 6969: Auto-launching Status Server on port 8181...")
+                _status_server_8181_proc = subprocess.Popen(
+                    [sys.executable, str(status_script)],
+                    cwd=str(BASE_DIR),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+    except Exception as e:
+        print(f"Server 6969: Error checking/starting status server 8181: {e}")
+
 @app.on_event("startup")
 async def startup_flow_kit():
     global _flow_kit_ws_task, _flow_kit_worker_task
@@ -278,8 +300,21 @@ async def startup_flow_kit():
         _flow_kit_ws_task = asyncio.create_task(run_ws_server())
         _flow_kit_worker_task = asyncio.create_task(controller.start())
         print("Flow Kit background services (WebSocket + Worker) started successfully!")
+
+        # 5. Automatically launch Status Server 8181 from 6969
+        _ensure_status_server_8181()
     except Exception as e:
         print(f"Failed to start Flow Kit background services: {e}")
+
+@app.on_event("shutdown")
+def shutdown_flow_kit():
+    global _status_server_8181_proc
+    if _status_server_8181_proc and _status_server_8181_proc.poll() is None:
+        try:
+            _status_server_8181_proc.terminate()
+            print("Server 6969: Terminated Status Server 8181 on shutdown.")
+        except Exception:
+            pass
 
 
 

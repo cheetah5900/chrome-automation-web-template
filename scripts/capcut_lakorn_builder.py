@@ -31,7 +31,15 @@ WHISPER_MODEL_PATH = "/Users/litarcopperkaikem/.cache/whisper/ggml-base.bin"
 FFMPEG_PATH = "/opt/homebrew/bin/ffmpeg"
 
 
-def get_video_files(story_num: str, ep_name: str):
+def extract_scene_num(p):
+    base = os.path.basename(p)
+    parts = base.split(" - ")
+    if parts and parts[0].isdigit():
+        return int(parts[0])
+    return 999
+
+
+def get_video_files(story_num: str, ep_name: str, scene_range: str = None):
     """Finds and sorts all scene video files for given story and episode."""
     ep_dir = os.path.join(BASE_CHANNEL_DIR, str(story_num), "7 - Videos", ep_name)
     if not os.path.isdir(ep_dir):
@@ -48,15 +56,12 @@ def get_video_files(story_num: str, ep_name: str):
         primary_files = [f for f in all_mp4s if not f.endswith("_v2.mp4")]
     mp4_files = primary_files or all_mp4s
     
-    # Sort files numerically by scene number
-    def extract_scene_num(p):
-        base = os.path.basename(p)
-        parts = base.split(" - ")
-        if parts and parts[0].isdigit():
-            return int(parts[0])
-        return 999
-    
     mp4_files.sort(key=extract_scene_num)
+    if scene_range:
+        parts = scene_range.split("-")
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            s_start, s_end = int(parts[0]), int(parts[1])
+            mp4_files = [f for f in mp4_files if s_start <= extract_scene_num(f) <= s_end]
     return mp4_files
 
 
@@ -305,7 +310,7 @@ def create_video_segment(seg_id: str, mat_id: str, start_us: int, dur_us: int, e
     }
 
 
-def build_lakorn_project(story_num: str, ep_name: str, target_project_name: str):
+def build_lakorn_project(story_num: str, ep_name: str, target_project_name: str, scene_range: str = None):
     """
     Clones 'ละคร template', injects scene videos, adds transitions,
     and applies all Channel editing standards.
@@ -366,8 +371,8 @@ def build_lakorn_project(story_num: str, ep_name: str, target_project_name: str)
         data = json.load(f)
     
     # 4. Get video files
-    video_files = get_video_files(story_num, ep_name)
-    print(f"Found {len(video_files)} video clips in {ep_name}")
+    video_files = get_video_files(story_num, ep_name, scene_range)
+    print(f"Found {len(video_files)} video clips for {target_project_name} in {ep_name}")
     
     # Resolve tracks dynamically
     video_track = None
@@ -661,74 +666,67 @@ def build_lakorn_project(story_num: str, ep_name: str, target_project_name: str)
         bgm_track["attribute"] = (bgm_track.get("attribute", 0) & 3) | 4
         bgm_track["name"] = "BG Music"
         bgm_track["is_default_name"] = False
-        first_seg = bgm_track["segments"][0]
+        template_seg = json.loads(json.dumps(bgm_track["segments"][0]))
         
         bgm_volume = 10 ** (-15 / 20)  # -15 dB
-        first_seg["volume"] = bgm_volume
-        first_seg["last_nonzero_volume"] = bgm_volume
-        
-        first_music_dur = 55366666
-        first_seg["target_timerange"]["start"] = 0
-        first_seg["target_timerange"]["duration"] = first_music_dur
-        first_seg["source_timerange"]["start"] = 39066666
-        first_seg["source_timerange"]["duration"] = first_music_dur + 1
-        
-        # Audio fade out 2.0s
-        fade_out_id = None
-        for ref in first_seg.get("extra_material_refs", []):
-            for af in data.get("materials", {}).get("audio_fades", []):
-                if af.get("id") == ref:
-                    af["fade_out_duration"] = 2000000
-                    fade_out_id = ref
-                    break
-        if not fade_out_id:
-            fade_out_id = str(uuid.uuid4()).upper()
-            data.setdefault("materials", {}).setdefault("audio_fades", []).append({
-                "id": fade_out_id,
-                "type": "audio_fade",
-                "fade_type": 0,
-                "fade_in_duration": 0,
-                "fade_out_duration": 2000000
-            })
-            first_seg.setdefault("extra_material_refs", []).append(fade_out_id)
-            
-        # Create looping track
-        overlap_time = 53366666
-        loop_dur = total_video_dur - overlap_time
-        
-        loop_fade_id = str(uuid.uuid4()).upper()
-        data.setdefault("materials", {}).setdefault("audio_fades", []).append({
-            "id": loop_fade_id,
-            "type": "audio_fade",
-            "fade_type": 0,
-            "fade_in_duration": 2000000,
-            "fade_out_duration": 2000000
-        })
-        
-        loop_seg = json.loads(json.dumps(first_seg))
-        loop_seg["id"] = str(uuid.uuid4()).upper()
-        loop_seg["target_timerange"]["start"] = overlap_time
-        loop_seg["target_timerange"]["duration"] = loop_dur
-        loop_seg["source_timerange"]["start"] = 39066666
-        loop_seg["source_timerange"]["duration"] = loop_dur
-        loop_seg["volume"] = bgm_volume
-        loop_seg["last_nonzero_volume"] = bgm_volume
-        
-        refs = loop_seg.get("extra_material_refs", [])
-        loop_seg["extra_material_refs"] = [loop_fade_id if r == fade_out_id else r for r in refs]
+        bgm_track["segments"] = []
         
         loop_track_id = str(uuid.uuid4()).upper()
         loop_track = {
             "id": loop_track_id,
             "type": "audio",
-            "segments": [loop_seg],
+            "segments": [],
             "flag": 0,
             "attribute": bgm_track["attribute"],
             "name": "BG Music Loop",
             "is_default_name": False
         }
-        data["tracks"].append(loop_track)
-        print(f"Configured BGM loop (Track 'BG Music Loop') overlapping at {overlap_time / 1000000:.2f}s for {loop_dur / 1000000:.2f}s")
+        
+        chunk_dur = 55366666
+        overlap_dur = 2000000
+        step_dur = chunk_dur - overlap_dur  # 53366666
+        source_start = 39066666
+        
+        curr_start = 0
+        seg_idx = 0
+        while curr_start < total_video_dur:
+            dur = min(chunk_dur, total_video_dur - curr_start)
+            is_first = (curr_start == 0)
+            is_last = (curr_start + dur >= total_video_dur)
+            
+            fade_in = 0 if is_first else overlap_dur
+            fade_out = overlap_dur if not is_last else 2000000
+            
+            fade_id = str(uuid.uuid4()).upper()
+            data.setdefault("materials", {}).setdefault("audio_fades", []).append({
+                "id": fade_id,
+                "type": "audio_fade",
+                "fade_type": 0,
+                "fade_in_duration": fade_in,
+                "fade_out_duration": fade_out
+            })
+            
+            seg = json.loads(json.dumps(template_seg))
+            seg["id"] = str(uuid.uuid4()).upper()
+            seg["target_timerange"]["start"] = curr_start
+            seg["target_timerange"]["duration"] = dur
+            seg["source_timerange"]["start"] = source_start
+            seg["source_timerange"]["duration"] = dur
+            seg["volume"] = bgm_volume
+            seg["last_nonzero_volume"] = bgm_volume
+            seg["extra_material_refs"] = [fade_id]
+            
+            if seg_idx % 2 == 0:
+                bgm_track["segments"].append(seg)
+            else:
+                loop_track["segments"].append(seg)
+                
+            curr_start += step_dur
+            seg_idx += 1
+            
+        if loop_track["segments"]:
+            data["tracks"].append(loop_track)
+        print(f"Configured {seg_idx} BGM segments across BG Music and BG Music Loop tracks (-15 dB, cross-fade {overlap_dur / 1000000:.1f}s)")
 
     # 9. Set project duration
     data["duration"] = total_video_dur
@@ -1480,14 +1478,18 @@ def main():
     parser.add_argument("--story", type=str, default="21", help="Story number (e.g. 21)")
     parser.add_argument("--ep", type=str, default=None, help="Episode name (e.g. EP01) or omit for all")
     parser.add_argument("--project", type=str, default=None, help="Target project name directly (e.g. 21-1)")
+    parser.add_argument("--scenes", type=str, default=None, help="Scene range (e.g. 11-20)")
     parser.add_argument("--refine-captions", action="store_true", help="Run Phase 2 Caption-driven refinement instead of building")
     parser.add_argument("--whisper-captions", action="store_true", help="Auto-transcribe scenes with Whisper and refine timeline headlessly")
     args = parser.parse_args()
 
     if args.project:
         parts = args.project.split("-")
-        story = parts[0]
-        ep = f"EP{int(parts[1]):02d}" if len(parts) > 1 and parts[1].isdigit() else "EP01"
+        story = args.story if args.story else parts[0]
+        if args.ep:
+            ep = args.ep
+        else:
+            ep = f"EP{int(parts[1]):02d}" if len(parts) > 1 and parts[1].isdigit() else "EP01"
 
         if args.whisper_captions:
             transcribe_and_inject_captions(args.project, story, ep)
@@ -1495,7 +1497,7 @@ def main():
         elif args.refine_captions:
             refine_project_captions(args.project)
         else:
-            build_lakorn_project(story, ep, args.project)
+            build_lakorn_project(story, ep, args.project, scene_range=args.scenes)
         return
 
     if args.ep:

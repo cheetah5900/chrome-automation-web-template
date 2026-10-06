@@ -31,6 +31,13 @@ if [ ! -z "$PID_8100" ]; then
     kill -9 $PID_8100 2>/dev/null
 fi
 
+echo "Checking for old processes on port 8181..."
+PID_8181=$(lsof -t -i tcp:8181)
+if [ ! -z "$PID_8181" ]; then
+    echo "Killing old status server process (PID: $PID_8181) on port 8181..."
+    kill -9 $PID_8181 2>/dev/null
+fi
+
 # Activate virtual environment
 if [ -d ".venv" ]; then
     source .venv/bin/activate
@@ -41,6 +48,10 @@ fi
 # Run Flow Kit Agent server on port 8100 in background
 echo "Starting Flow Kit Agent server on port 8100..."
 python -m agent.main &
+
+# Run Lakorn Generation Status Server on port 8181 in background
+echo "Starting Lakorn Status Server on port 8181..."
+python scripts/status_server_8181.py &
 
 # Run Uvicorn server on port 6969 with auto-reload on web and app changes
 echo "Starting main Web Cockpit server on port 6969 (Auto-reload enabled)..."
