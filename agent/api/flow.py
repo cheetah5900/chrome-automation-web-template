@@ -631,6 +631,10 @@ async def _eval_js_internal(client, js_code: str, timeout: int = 15):
 
 
 FLOW_CHIP_SELECTORS = (
+    "flow-base-prompt-box flow-image-ingredient-chip, "
+    "flow-base-prompt-box [class*='ingredient-chip'], "
+    "flow-prompt-box flow-image-ingredient-chip, "
+    "[class*='ingredient-chip'], "
     "flow-base-prompt-box flow-ingredient-chip, "
     "flow-prompt-box flow-ingredient-chip, "
     "flow-ingredient-chip"
