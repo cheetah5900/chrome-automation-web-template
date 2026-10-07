@@ -103,7 +103,7 @@ _ensure_json(SETTINGS_FILE, {"openai_api_key": "", "gemini_api_key": "", "openro
 _ensure_json(PROMPTS_FILE, {"prompts": [""]})
 _ensure_json(REF_IMAGE_DEFAULT_FILE, {"reference_image": "", "reference_image_2": "", "reference_image_3": "", "reference_image_4": "", "reference_image_5": "", "reference_image_6": "", "reference_image_7": "", "reference_images_dir": ""})
 
-app = FastAPI(title="Chrome Automation Template", version="1.13.22")
+app = FastAPI(title="Chrome Automation Template", version="1.13.23")
 last_submit_time = 0.0
 
 import time
@@ -458,12 +458,24 @@ def _is_local_port_open(port: int) -> bool:
 
 def _kill_port_processes(port: int):
     try:
-        res = subprocess.run(["lsof", "-t", "-i", f"tcp:{port}"], capture_output=True, text=True)
-        pids = res.stdout.strip().split("\n")
-        for pid in pids:
-            if pid.strip().isdigit():
-                subprocess.run(["kill", "-9", pid.strip()], check=False)
-                print(f"Killed process {pid} on port {port}")
+        if sys.platform == "win32":
+            proc = subprocess.run(["netstat", "-ano"], capture_output=True, text=True)
+            if proc.returncode == 0:
+                for line in proc.stdout.splitlines():
+                    if f":{port} " in line and "LISTENING" in line:
+                        parts = line.strip().split()
+                        if len(parts) >= 5 and parts[-1].isdigit():
+                            pid = int(parts[-1])
+                            if pid > 0:
+                                subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=False)
+                                print(f"Killed process {pid} on port {port}")
+        else:
+            res = subprocess.run(["lsof", "-t", "-i", f"tcp:{port}"], capture_output=True, text=True)
+            pids = res.stdout.strip().split("\n")
+            for pid in pids:
+                if pid.strip().isdigit():
+                    subprocess.run(["kill", "-9", pid.strip()], check=False)
+                    print(f"Killed process {pid} on port {port}")
     except Exception as e:
         print(f"Error killing processes on port {port}: {e}")
 
@@ -486,14 +498,39 @@ def _get_selected_profile_browser_type() -> str:
 
 
 def _get_active_browser_binary(browser_type: str = None) -> str:
-    import os
+    import os, sys
     if browser_type is None:
         browser_type = _get_selected_profile_browser_type()
         
-    canary_binary = "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
-    chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    brave_binary = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
-    edge_binary = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA", r"C:\Users\Default\AppData\Local")
+        prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+        prog_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+
+        chrome_candidates = [
+            rf"{prog_files}\Google\Chrome\Application\chrome.exe",
+            rf"{prog_files_x86}\Google\Chrome\Application\chrome.exe",
+            rf"{local_app_data}\Google\Chrome\Application\chrome.exe",
+        ]
+        chrome_binary = next((p for p in chrome_candidates if os.path.exists(p)), chrome_candidates[0])
+        canary_binary = rf"{local_app_data}\Google\Chrome SxS\Application\chrome.exe"
+        
+        edge_candidates = [
+            rf"{prog_files_x86}\Microsoft\Edge\Application\msedge.exe",
+            rf"{prog_files}\Microsoft\Edge\Application\msedge.exe",
+        ]
+        edge_binary = next((p for p in edge_candidates if os.path.exists(p)), edge_candidates[0])
+
+        brave_candidates = [
+            rf"{prog_files}\BraveSoftware\Brave-Browser\Application\brave.exe",
+            rf"{local_app_data}\BraveSoftware\Brave-Browser\Application\brave.exe",
+        ]
+        brave_binary = next((p for p in brave_candidates if os.path.exists(p)), brave_candidates[0])
+    else:
+        canary_binary = "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
+        chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        brave_binary = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+        edge_binary = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
     
     if browser_type == "canary":
         return canary_binary
@@ -531,20 +568,18 @@ def _get_active_browser_app_name(browser_type: str = None) -> str:
         return "Google Chrome"
         
     # Auto-detect fallback
-    canary_binary = "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
-    chrome_binary = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    brave_binary = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
-    edge_binary = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
-    
-    if os.path.exists(canary_binary):
+    bin_path = _get_active_browser_binary(browser_type)
+    lower_bin = bin_path.lower()
+    if "canary" in lower_bin:
         return "Google Chrome Canary"
-    elif os.path.exists(chrome_binary):
+    elif "chrome" in lower_bin:
         return "Google Chrome"
-    elif os.path.exists(brave_binary):
+    elif "brave" in lower_bin:
         return "Brave Browser"
-    elif os.path.exists(edge_binary):
+    elif "edge" in lower_bin or "msedge" in lower_bin:
         return "Microsoft Edge"
     return "Google Chrome"
+
 
 def is_cdp_ready(port: int = 9222) -> bool:
     import urllib.request

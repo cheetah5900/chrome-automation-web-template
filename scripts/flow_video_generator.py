@@ -75,9 +75,16 @@ def check_and_ensure_server(api_base: str, repo_dir: Optional[str] = None) -> bo
         pass
 
     target_repo = repo_dir or os.environ.get("REPO_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    runserver_script = os.path.join(target_repo, "runserver.command")
+    if sys.platform == "win32":
+        runserver_script = os.path.join(target_repo, "runserver.bat")
+    else:
+        runserver_script = os.path.join(target_repo, "runserver.command")
+
     if os.path.isfile(runserver_script):
-        subprocess.Popen([runserver_script], cwd=target_repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if sys.platform == "win32":
+            subprocess.Popen([runserver_script], cwd=target_repo, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.Popen([runserver_script], cwd=target_repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for i in range(12):
             time.sleep(2)
             try:
@@ -88,7 +95,7 @@ def check_and_ensure_server(api_base: str, repo_dir: Optional[str] = None) -> bo
             except Exception:
                 continue
 
-    error_exit(f"Cannot connect to FlowKit server at {api_base}. Please start runserver.command.")
+    error_exit(f"Cannot connect to FlowKit server at {api_base}. Please start {os.path.basename(runserver_script)}.")
     return False
 
 def verify_extension_connection(api_base: str, project_id: str = DEFAULT_PROJECT_ID):
@@ -107,7 +114,13 @@ def verify_extension_connection(api_base: str, project_id: str = DEFAULT_PROJECT
     log("FlowKit Chrome extension not detected. Opening Google Flow in Chrome...")
     flow_url = f"https://flow.google.com/u/1/project/{project_id}"
     try:
-        subprocess.Popen(["open", "-a", "Google Chrome", flow_url])
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", "-a", "Google Chrome", flow_url])
+        elif sys.platform == "win32":
+            subprocess.Popen(f'start chrome "{flow_url}"', shell=True)
+        else:
+            import webbrowser
+            webbrowser.open(flow_url)
     except Exception as e:
         log(f"Warning: Failed to launch Google Chrome: {e}")
 

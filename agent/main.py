@@ -76,19 +76,34 @@ async def ws_handler(websocket):
 
 def _force_free_port(port: int):
     """Force release port if held by a zombie process (excluding current process)."""
-    import os, subprocess, signal
+    import os, sys, subprocess, signal
     current_pid = os.getpid()
     try:
-        proc = subprocess.run(["lsof", "-t", "-i", f"tcp:{port}"], capture_output=True, text=True)
-        if proc.returncode == 0 and proc.stdout.strip():
-            pids = [int(p.strip()) for p in proc.stdout.strip().split() if p.strip()]
-            for pid in pids:
-                if pid != current_pid:
-                    try:
-                        logger.warning("Port %d held by zombie PID %d. Force killing...", port, pid)
-                        os.kill(pid, signal.SIGKILL)
-                    except OSError:
-                        pass
+        if sys.platform == "win32":
+            proc = subprocess.run(["netstat", "-ano"], capture_output=True, text=True)
+            if proc.returncode == 0:
+                for line in proc.stdout.splitlines():
+                    if f":{port} " in line and "LISTENING" in line:
+                        parts = line.strip().split()
+                        if len(parts) >= 5 and parts[-1].isdigit():
+                            pid = int(parts[-1])
+                            if pid != current_pid and pid > 0:
+                                try:
+                                    logger.warning("Port %d held by zombie PID %d. Force killing...", port, pid)
+                                    subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=False)
+                                except Exception:
+                                    pass
+        else:
+            proc = subprocess.run(["lsof", "-t", "-i", f"tcp:{port}"], capture_output=True, text=True)
+            if proc.returncode == 0 and proc.stdout.strip():
+                pids = [int(p.strip()) for p in proc.stdout.strip().split() if p.strip()]
+                for pid in pids:
+                    if pid != current_pid:
+                        try:
+                            logger.warning("Port %d held by zombie PID %d. Force killing...", port, pid)
+                            os.kill(pid, signal.SIGKILL)
+                        except OSError:
+                            pass
     except Exception as e:
         logger.warning("Failed to force release port %d: %s", port, e)
 
@@ -174,7 +189,7 @@ async def lifespan(app: FastAPI):
     logger.info("Flow Kit stopped")
 
 
-app = FastAPI(title="Flow Kit", version="1.13.22", lifespan=lifespan)
+app = FastAPI(title="Flow Kit", version="1.13.23", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

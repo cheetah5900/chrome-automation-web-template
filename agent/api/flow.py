@@ -1280,8 +1280,21 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
 
         status_js = """(() => {
             const pending = [...document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]')];
-            const errorToast = document.querySelector('mat-snack-bar-container, .error-message, [class*="error-snackbar"], .cdk-overlay-container [role="alert"], [class*="toast"]');
-            const errorText = errorToast ? (errorToast.innerText || '').trim() : '';
+            let errorText = '';
+            let isUnusual = false;
+            const errorElements = [...document.querySelectorAll('flow-error-tile, [class*="error-tile"], [class*="error-card"], mat-snack-bar-container, .error-message, [class*="error-snackbar"], .cdk-overlay-container [role="alert"], [class*="toast"]')];
+            for (const el of errorElements) {
+                const txt = (el.innerText || '').trim();
+                if (txt) {
+                    if (/unusual activity|browser extensions|กิจกรรมที่ผิดปกติ|ส่วนขยาย/i.test(txt)) {
+                        isUnusual = true;
+                        errorText = 'UNUSUAL_ACTIVITY_EXTENSION_ERROR: ' + txt.slice(0, 150);
+                        break;
+                    } else if (/policy|violate|safety|guideline|ละเมิด|นโยบาย/i.test(txt)) {
+                        errorText = txt.slice(0, 150);
+                    }
+                }
+            }
             const tiles = [...document.querySelectorAll('flow-image-tile')];
             const tileData = tiles.map(t => {
                 const img = t.querySelector('img');
@@ -1311,7 +1324,8 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
                 pendingCount: pending.length,
                 pendingPcts: pending.map(p => (p.innerText || '').match(/(\d+)%/)?.[1]).filter(Boolean),
                 tiles: tileData,
-                errorText: errorText
+                errorText: errorText,
+                isUnusual: isUnusual
             };
         })()"""
 
@@ -1319,6 +1333,22 @@ async def collect_storyboard_batch(body: CollectStoryboardBatchRequest):
         pending_count = poll_status.get("pendingCount", 0)
         error_text = poll_status.get("errorText") or ""
         tiles = poll_status.get("tiles") or []
+
+        if poll_status.get("isUnusual") or "unusual activity" in error_text.lower():
+            logger.warning("🚨 [UNUSUAL ACTIVITY DETECTED] Google Flow flagged extension / unusual activity! Auto-reloading tab...")
+            try:
+                await client._send("reload_flow_tab", {}, timeout=10)
+                await asyncio.sleep(6)
+            except Exception as e:
+                logger.error("Failed to reload tab on unusual activity: %s", e)
+            for s in body.scenes:
+                if s.scene_num not in completed_scene_nums:
+                    realtime_results.append({
+                        "scene_num": s.scene_num,
+                        "success": False,
+                        "error": "UNUSUAL_ACTIVITY_EXTENSION_ERROR: Google Flow flagged unusual activity (Tab auto-reloaded)"
+                    })
+            break
 
         if error_text and any(w in error_text.lower() for w in ["policy", "violate", "safety", "guideline", "ละเมิด", "ไม่สามารถสร้าง", "นโยบาย"]):
             logger.warning("Safety policy error detected during batch render: %s", error_text)
@@ -1550,8 +1580,21 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                 await asyncio.sleep(2.5)
                 status_js = """(() => {
                     const pending = [...document.querySelectorAll('flow-pending-tile, [class*="pending-tile"]')];
-                    const errorToast = document.querySelector('mat-snack-bar-container, .error-message, [class*="error-snackbar"], .cdk-overlay-container [role="alert"], [class*="toast"]');
-                    const errorText = errorToast ? (errorToast.innerText || '').trim() : '';
+                    let errorText = '';
+                    let isUnusual = false;
+                    const errorElements = [...document.querySelectorAll('flow-error-tile, [class*="error-tile"], [class*="error-card"], mat-snack-bar-container, .error-message, [class*="error-snackbar"], .cdk-overlay-container [role="alert"], [class*="toast"]')];
+                    for (const el of errorElements) {
+                        const txt = (el.innerText || '').trim();
+                        if (txt) {
+                            if (/unusual activity|browser extensions|กิจกรรมที่ผิดปกติ|ส่วนขยาย/i.test(txt)) {
+                                isUnusual = true;
+                                errorText = 'UNUSUAL_ACTIVITY_EXTENSION_ERROR: ' + txt.slice(0, 150);
+                                break;
+                            } else if (/policy|violate|safety|guideline|ละเมิด|นโยบาย/i.test(txt)) {
+                                errorText = txt.slice(0, 150);
+                            }
+                        }
+                    }
                     const tiles = [...document.querySelectorAll('flow-image-tile')];
                     const tileData = tiles.map(t => {
                         const img = t.querySelector('img');
@@ -1562,15 +1605,25 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
                     }).filter(t => t.src);
                     return {
                         pendingCount: pending.length,
-                        pendingPcts: pending.map(p => (p.innerText || '').match(/(\\d+)%/)?.[1]).filter(Boolean),
+                        pendingPcts: pending.map(p => (p.innerText || '').match(/(\d+)%/)?.[1]).filter(Boolean),
                         tiles: tileData,
-                        errorText: errorText
+                        errorText: errorText,
+                        isUnusual: isUnusual
                     };
                 })()"""
                 render_status = await _eval_js_internal(client, status_js) or {}
                 pending_count = render_status.get("pendingCount", 0)
                 error_text = render_status.get("errorText") or ""
                 tiles = render_status.get("tiles") or []
+
+                if render_status.get("isUnusual") or (error_text and "unusual activity" in error_text.lower()):
+                    logger.warning("🚨 [UNUSUAL ACTIVITY DETECTED] Auto-reloading Google Flow tab to reset session and reCAPTCHA...")
+                    try:
+                        await client._send("reload_flow_tab", {}, timeout=10)
+                        await asyncio.sleep(6)
+                    except Exception as e:
+                        logger.error("Failed to reload tab on unusual activity: %s", e)
+                    raise HTTPException(429, "UNUSUAL_ACTIVITY_EXTENSION_ERROR: Google Flow flagged unusual activity. Tab auto-reloaded. Please retry.")
 
                 if error_text and any(w in error_text.lower() for w in ["policy", "violate", "safety", "guideline", "ละเมิด", "ไม่สามารถสร้าง", "นโยบาย"]):
                     raise HTTPException(422, f"Safety policy block detected: {error_text}")
@@ -2439,7 +2492,10 @@ async def configure_flow_settings_endpoint(body: FlowSettingsRequest):
                         await new Promise(r => setTimeout(r, 350));
                         const menuItems = Array.from(document.querySelectorAll('.cdk-overlay-container [role="menuitem"], .cdk-overlay-container button')).filter(x => x.getAttribute('role') === 'menuitem');
                         const targetItem = isLower ?
-                            (menuItems.find(m => (m.innerText || '').toLowerCase().includes('lower priority')) || menuItems[menuItems.length - 1]) :
+                            (menuItems.find(m => (m.innerText || '').toLowerCase().includes('lite')) ||
+                             menuItems.find(m => (m.innerText || '').toLowerCase().includes('fast')) ||
+                             menuItems.find(m => (m.innerText || '').toLowerCase().includes('lower priority')) ||
+                             menuItems[0]) :
                             menuItems.find(m => (m.innerText || '').toLowerCase().includes(targetModel));
                         if (targetItem) {{
                             targetItem.click();

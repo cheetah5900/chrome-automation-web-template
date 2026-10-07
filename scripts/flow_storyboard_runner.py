@@ -751,6 +751,14 @@ def process_single_episode(
                 item = scenes_map[sc_idx]
                 out_path = item["output_path"]
 
+                if any(kw in str(prev_err).lower() for kw in ["unusual", "extension"]):
+                    log(f"\n  🚨 [AUTO-RECOVERY] Scene {sc_idx:02d} flagged Unusual Activity! Auto-reloading Flow tab and cooling down 8s...")
+                    try:
+                        http_post(f"{args.api_base}/api/flow/reload-flow-tab", {}, timeout=15)
+                        time.sleep(8)
+                    except Exception as e:
+                        log(f"  ⚠️ Could not reload Flow tab: {e}")
+
                 softened_prompt = soften_prompt_for_safety(item["prompt"], round_num=retry_round)
                 notify_status_server(story_num, ep_str, current_scene=sc_idx, action=f"กำลังปรับแก้และลองใหม่ฉาก {sc_idx:02d} (รอบ {retry_round}/{args.max_retries})...", status="FIXING", fixing_scene=sc_idx, failed_scenes=[{"scene_num": s[0], "error": s[1]} for s in failed_scenes])
                 log(f"\n  🛡️ Retrying Scene {sc_idx:02d} with softened prompt:")
