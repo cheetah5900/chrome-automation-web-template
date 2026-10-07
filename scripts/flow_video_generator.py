@@ -800,62 +800,253 @@ def monitor_video_rendering(api_base: str, prompt_snippet: str, timeout_seconds:
     error_exit(f"Timed out after {timeout_seconds}s waiting for video rendering.")
     return []
 
-def retrieve_signed_video_url(api_base: str, media_id: str) -> str:
-    """Executes as29s batchexecute RPC to obtain the signed CDN video URL."""
-    log(f"Retrieving signed CDN MP4 URL for media {media_id}...")
-    rpc_js = """(async () => {
-        const wiz = globalThis.WIZ_global_data || {};
-        const at = wiz.SNlM0e;
-        const sid = wiz.FdrFJe;
-        const bl = wiz.cfb2h;
-        const reqid = Math.floor(Math.random() * 900000) + 100000;
-        const prefix = (window.location.pathname.match(/^\\/u\\/\\d+/) || [""])[0];
-        const freqStr = JSON.stringify([[["as29s", JSON.stringify(["__MEDIA_ID__"]), null, "generic"]]]);
-        const url = `${prefix}/_/AiSandboxAngularFrontend/data/batchexecute?rpcids=as29s&source-path=${encodeURIComponent(window.location.pathname)}&f.sid=${encodeURIComponent(sid || "")}&bl=${encodeURIComponent(bl || "")}&_reqid=${reqid}&rt=c`;
-        const resp = await fetch(url, {
-            method: "POST",
-            credentials: "include",
-            headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8", "x-same-domain": "1" },
-            body: new URLSearchParams({ "f.req": freqStr, at })
-        });
-        const text = await resp.text();
-        const lines = text.split("\\n");
-        for (const line of lines) {
-            if (!line.trim() || line.startsWith(")]}'")) continue;
-            try {
-                const parsed = JSON.parse(line);
-                if (Array.isArray(parsed)) {
-                    for (const item of parsed) {
-                        if (item && item[1] === "as29s" && typeof item[2] === "string") {
-                            const inner = JSON.parse(item[2]);
-                            function findVideoUrl(obj) {
-                                if (typeof obj === "string" && obj.startsWith("https://flow-content.google/video/")) {
-                                    return obj;
-                                }
-                                if (Array.isArray(obj)) {
-                                    for (const x of obj) {
-                                        const res = findVideoUrl(x);
-                                        if (res) return res;
+def retrieve_signed_video_url_via_ui(api_base: str, media_id: str = "", prompt: str = "") -> str:
+    """Clicks into the video tile, verifies the prompt in the floating modal / editor view,
+    clicks the download menu inside the modal (720p Original size), and intercepts the signed CDN URL."""
+    log(f"Inspecting video tile modal and prompt before downloading (media_id: {media_id[:16]}, prompt: {prompt[:30]}...)...")
+    clean_target_prompt = sanitize_prompt(prompt).replace('"', '\\"').replace('\n', ' ')
+
+    ui_dl_js = f"""(async () => {{
+        window._intercepted = [];
+        if (!window._hooked) {{
+            window._hooked = true;
+            const origFetch = window.fetch;
+            window.fetch = async function(...args) {{
+                if (args[0] && typeof args[0] === 'string' && args[0].includes('flow-content.google/video/')) {{
+                    window._intercepted.push(args[0]);
+                }}
+                return origFetch.apply(this, args);
+            }};
+        }}
+
+        const backdrop = document.querySelector('.cdk-overlay-backdrop');
+        if (backdrop) backdrop.click();
+
+        // If currently in an edit view, return to gallery first
+        if (window.location.pathname.includes('/edit/')) {{
+            window.history.back();
+            await new Promise(r => setTimeout(r, 600));
+        }}
+
+        const allTiles = Array.from(document.querySelectorAll('flow-video-tile'));
+        if (!allTiles.length) return {{ error: 'no video tiles found in DOM' }};
+
+        const targetMid = "{media_id}";
+        const expectedP = "{clean_target_prompt}".toLowerCase().trim();
+
+        // Build candidate list
+        let candidateTiles = [];
+        if (targetMid.startsWith("tile_")) {{
+            const idxMatch = targetMid.match(/tile_(\\d+)/);
+            if (idxMatch) {{
+                const targetIdx = parseInt(idxMatch[1]);
+                if (allTiles[targetIdx]) candidateTiles.push({{ tile: allTiles[targetIdx], index: targetIdx }});
+            }}
+        }} else if (targetMid) {{
+            for (let i = 0; i < allTiles.length; i++) {{
+                const t = allTiles[i];
+                const img = t.querySelector('img');
+                if (img && img.src && img.src.includes(targetMid)) {{
+                    candidateTiles.push({{ tile: t, index: i }});
+                    break;
+                }}
+            }}
+        }}
+
+        // If no candidate matched by ID, check top candidates from gallery
+        if (!candidateTiles.length) {{
+            candidateTiles = allTiles.slice(0, 10).map((t, i) => ({{ tile: t, index: i }}));
+        }}
+
+        for (const item of candidateTiles) {{
+            const t = item.tile;
+            const clickable = t.querySelector('flow-video-player, .container, img, video') || t;
+            clickable.click();
+
+            // 1. Wait for modal / edit view to open and inspect flow-expandable-prompt
+            let modalPrompt = '';
+            let editMid = '';
+            for (let w = 0; w < 25; w++) {{
+                await new Promise(r => setTimeout(r, 100));
+                const ep = document.querySelector('flow-expandable-prompt, .prompt-text, [class*="expandable-prompt"]');
+                if (ep && ep.innerText.trim()) {{
+                    modalPrompt = ep.innerText.replace(/keyboard_return|keyboard_arrow_down/g, '').replace(/\\s+/g, ' ').trim();
+                    const m = window.location.pathname.match(/\\/edit\\/([0-9a-fA-F-]+)/);
+                    if (m) editMid = m[1];
+                    break;
+                }}
+            }}
+
+            // 2. Verify prompt if expected prompt was provided
+            if (expectedP && modalPrompt) {{
+                const cleanModal = modalPrompt.toLowerCase().replace(/\\([^)]*\\)/g, '').replace(/\\s+/g, ' ').trim();
+                const cleanExpected = expectedP.replace(/\\([^)]*\\)/g, '').replace(/\\s+/g, ' ').trim();
+
+                const modalWords = new Set(cleanModal.split(' ').filter(w => w.length > 3));
+                const expectedWords = cleanExpected.split(' ').filter(w => w.length > 3);
+                let overlapCount = 0;
+                for (const ew of expectedWords) {{
+                    if (modalWords.has(ew)) overlapCount++;
+                }}
+                const isMatch = cleanModal.includes(cleanExpected.slice(0, 40)) ||
+                                cleanExpected.includes(cleanModal.slice(0, 40)) ||
+                                (expectedWords.length > 0 && (overlapCount / expectedWords.length) >= 0.45);
+
+                if (!isMatch) {{
+                    // Prompt mismatch: return to gallery and inspect next tile
+                    window.history.back();
+                    await new Promise(r => setTimeout(r, 500));
+                    continue;
+                }}
+            }}
+
+            // 3. Matched! Click download button inside modal
+            const dlBtn = document.querySelector('button[aria-label*="Download media"], button[aria-label*="Download"], button[aria-label*="ดาวน์โหลด"]');
+            if (dlBtn) {{
+                dlBtn.click();
+                await new Promise(r => setTimeout(r, 400));
+
+                const p720 = Array.from(document.querySelectorAll('.mat-mdc-menu-content button, [role="menuitem"]'))
+                    .find(b => (b.innerText || '').includes('720p') || (b.innerText || '').includes('Original size'));
+                if (p720) {{
+                    p720.click();
+                    await new Promise(r => setTimeout(r, 1400));
+                }}
+            }}
+
+            // 4. Extract intercepted signed URL
+            let signedUrl = '';
+            const raw = window._intercepted || [];
+            for (let i = raw.length - 1; i >= 0; i--) {{
+                const u = raw[i];
+                if (typeof u === 'string' && u.startsWith('https://flow-content.google/video/')) {{
+                    signedUrl = u;
+                    break;
+                }}
+            }}
+
+            // 5. Navigate back to gallery
+            window.history.back();
+            await new Promise(r => setTimeout(r, 500));
+
+            if (signedUrl) {{
+                return {{
+                    success: true,
+                    verifiedInModal: true,
+                    inspectedIndex: item.index,
+                    modalPrompt: modalPrompt,
+                    mediaId: editMid || targetMid,
+                    url: signedUrl
+                }};
+            }}
+        }}
+
+        // Fallback: If modal click didn't yield URL, try More options on first tile in gallery
+        const firstTile = allTiles[0];
+        const moreBtn = firstTile.querySelector('button[aria-label*="More"], button[aria-label*="ตัวเลือก"]');
+        if (moreBtn) {{
+            moreBtn.click();
+            await new Promise(r => setTimeout(r, 400));
+            const dlBtn = Array.from(document.querySelectorAll('.mat-mdc-menu-content button, [role="menuitem"]')).find(b => (b.innerText || '').includes('Download') || (b.innerText || '').includes('ดาวน์โหลด'));
+            if (dlBtn) {{
+                dlBtn.click();
+                await new Promise(r => setTimeout(r, 400));
+                const p720 = Array.from(document.querySelectorAll('.mat-mdc-menu-content button, [role="menuitem"]')).find(b => (b.innerText || '').includes('720p') || (b.innerText || '').includes('Original size'));
+                if (p720) {{
+                    p720.click();
+                    await new Promise(r => setTimeout(r, 1200));
+                }}
+            }}
+            const raw = window._intercepted || [];
+            for (let i = raw.length - 1; i >= 0; i--) {{
+                const u = raw[i];
+                if (typeof u === 'string' && u.startsWith('https://flow-content.google/video/')) {{
+                    return {{ success: true, url: u, fallback: true }};
+                }}
+            }}
+        }}
+
+        return {{ error: 'No signed URL captured from modal or menu' }};
+    }})()"""
+    try:
+        res = inspect_tab_js(api_base, ui_dl_js, timeout=30)
+        if isinstance(res, dict) and res.get("success") and res.get("url"):
+            cdn_url = res["url"]
+            verified = res.get("verifiedInModal", False)
+            prompt_snip = res.get("modalPrompt", "")[:50]
+            log(f"Successfully obtained Signed CDN URL (verified_in_modal={verified}, prompt={prompt_snip!r}): {cdn_url[:75]}...")
+            return cdn_url
+    except Exception as e:
+        log(f"Notice during UI modal download intercept: {e}")
+    return ""
+
+def retrieve_signed_video_url(api_base: str, media_id: str, prompt: str = "") -> str:
+    """Retrieves signed CDN video URL:
+    1. Primary: Clicks into tile, checks prompt in modal, clicks download (720p), and intercepts signed fetch URL.
+    2. Fallback: Executes as29s batchexecute RPC if media_id is a valid UUID."""
+    log(f"Retrieving signed CDN MP4 URL for media {media_id} (prompt: {prompt[:30]}...)...")
+
+    # 1. Primary: Modal check & UI download intercept
+    ui_url = retrieve_signed_video_url_via_ui(api_base, media_id=media_id, prompt=prompt)
+    if ui_url:
+        return ui_url
+
+    # 2. Fallback: as29s batchexecute RPC
+    if media_id and not media_id.startswith("tile_"):
+        log(f"Trying fallback as29s batchexecute RPC for {media_id}...")
+        rpc_js = """(async () => {
+            const wiz = globalThis.WIZ_global_data || {};
+            const at = wiz.SNlM0e;
+            const sid = wiz.FdrFJe;
+            const bl = wiz.cfb2h;
+            const reqid = Math.floor(Math.random() * 900000) + 100000;
+            const prefix = (window.location.pathname.match(/^\\/u\\/\\d+/) || [""])[0];
+            const freqStr = JSON.stringify([[["as29s", JSON.stringify(["__MEDIA_ID__"]), null, "generic"]]]);
+            const url = `${prefix}/_/AiSandboxAngularFrontend/data/batchexecute?rpcids=as29s&source-path=${encodeURIComponent(window.location.pathname)}&f.sid=${encodeURIComponent(sid || "")}&bl=${encodeURIComponent(bl || "")}&_reqid=${reqid}&rt=c`;
+            const resp = await fetch(url, {
+                method: "POST",
+                credentials: "include",
+                headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8", "x-same-domain": "1" },
+                body: new URLSearchParams({ "f.req": freqStr, at })
+            });
+            const text = await resp.text();
+            const lines = text.split("\\n");
+            for (const line of lines) {
+                if (!line.trim() || line.startsWith(")]}'")) continue;
+                try {
+                    const parsed = JSON.parse(line);
+                    if (Array.isArray(parsed)) {
+                        for (const item of parsed) {
+                            if (item && item[1] === "as29s" && typeof item[2] === "string") {
+                                const inner = JSON.parse(item[2]);
+                                function findVideoUrl(obj) {
+                                    if (typeof obj === "string" && obj.startsWith("https://flow-content.google/video/")) {
+                                        return obj;
                                     }
+                                    if (Array.isArray(obj)) {
+                                        for (const x of obj) {
+                                            const res = findVideoUrl(x);
+                                            if (res) return res;
+                                        }
+                                    }
+                                    return null;
                                 }
-                                return null;
+                                const found = findVideoUrl(inner);
+                                if (found) return found;
                             }
-                            const found = findVideoUrl(inner);
-                            if (found) return found;
                         }
                     }
-                }
-            } catch (e) {}
-        }
-        return null;
-    })()""".replace("__MEDIA_ID__", media_id)
+                } catch (e) {}
+            }
+            return null;
+        })()""".replace("__MEDIA_ID__", media_id)
 
-    for attempt in range(8):
-        video_url = inspect_tab_js(api_base, rpc_js)
-        if video_url:
-            log(f"Signed CDN Video URL obtained successfully: {video_url[:80]}...")
-            return video_url
-        time.sleep(2)
+        for attempt in range(3):
+            video_url = inspect_tab_js(api_base, rpc_js)
+            if video_url:
+                log(f"Signed CDN Video URL obtained successfully via as29s RPC: {video_url[:80]}...")
+                return video_url
+            time.sleep(1.2)
 
     error_exit(f"Failed to retrieve signed CDN video URL for media ID: {media_id}")
     return ""
@@ -912,38 +1103,59 @@ def dispatch_video_flow(
     return True
 
 def verify_tile_full_prompt_and_back(api_base: str, media_id: str, prompt_cache: dict) -> str:
-    """Clicks a tile in the gallery to inspect flow-expandable-prompt, caches it, and navigates back."""
+    """Clicks a tile in the gallery to inspect flow-expandable-prompt inside the modal/editor view,
+    caches it, and navigates back to gallery."""
     if media_id in prompt_cache:
         return prompt_cache[media_id]
 
     js_verify = f"""(async () => {{
         const targetMid = "{media_id}";
-        const img = document.querySelector(`img[data-media-id="${{targetMid}}"]`);
-        if (!img) {{
-            return {{ error: "Image not found for media " + targetMid }};
+        const allTiles = Array.from(document.querySelectorAll('flow-video-tile, flow-grid-tile-container, flow-tile-container'));
+        if (!allTiles.length) return {{ error: "No video tiles in DOM" }};
+
+        let targetTile = null;
+        if (targetMid.startsWith("tile_")) {{
+            const idxMatch = targetMid.match(/tile_(\\d+)/);
+            if (idxMatch) {{
+                const targetIdx = parseInt(idxMatch[1]);
+                if (allTiles[targetIdx]) targetTile = allTiles[targetIdx];
+            }}
+        }} else if (targetMid) {{
+            for (let i = 0; i < allTiles.length; i++) {{
+                const t = allTiles[i];
+                const img = t.querySelector('img');
+                if (img && img.src && img.src.includes(targetMid)) {{
+                    targetTile = t;
+                    break;
+                }}
+            }}
         }}
-        const tile = img.closest("flow-grid-tile-container, flow-tile-container") || img;
-        const clickable = tile.querySelector(".container, img") || tile;
+
+        if (!targetTile) {{
+            targetTile = allTiles[0];
+        }}
+
+        const clickable = targetTile.querySelector('flow-video-player, .container, img, video') || targetTile;
         clickable.click();
-        
+
         let fullPrompt = "";
-        for (let i = 0; i < 20; i++) {{
+        for (let i = 0; i < 25; i++) {{
             await new Promise(r => setTimeout(r, 100));
-            const ep = document.querySelector("flow-expandable-prompt");
+            const ep = document.querySelector('flow-expandable-prompt, .prompt-text, [class*="expandable-prompt"]');
             if (ep && ep.innerText.trim()) {{
-                fullPrompt = ep.innerText.replace(/keyboard_return|keyboard_arrow_down/g, "").trim();
+                fullPrompt = ep.innerText.replace(/keyboard_return|keyboard_arrow_down/g, "").replace(/\\s+/g, ' ').trim();
                 break;
             }}
         }}
-        
+
         // Always navigate back to gallery
         window.history.back();
-        await new Promise(r => setTimeout(r, 400));
-        
+        await new Promise(r => setTimeout(r, 500));
+
         return {{ success: true, media_id: targetMid, fullPrompt: fullPrompt }};
     }})()"""
     try:
-        res = inspect_tab_js(api_base, js_verify)
+        res = inspect_tab_js(api_base, js_verify, timeout=25)
         if isinstance(res, dict) and res.get("success"):
             fp = res.get("fullPrompt", "")
             prompt_cache[media_id] = fp
@@ -1093,7 +1305,8 @@ def monitor_video_batch(
 
         const videoTiles = Array.from(document.querySelectorAll('flow-video-tile, [class*="video-tile"]'));
         const tileData = [];
-        for (const vt of videoTiles) {
+        for (let idx = 0; idx < videoTiles.length; idx++) {
+            const vt = videoTiles[idx];
             const text = vt.innerText || '';
             if (text.includes('ล้มเหลว') || text.includes('Failed') || text.includes('ละเมิดนโยบาย')) {
                 failureText = text.replace(/\\s+/g, ' ').trim().slice(0, 150);
@@ -1105,12 +1318,16 @@ def monitor_video_batch(
                 const match = img.src.match(/\\/image\\/([0-9a-fA-F-]+)/);
                 if (match) mid = match[1];
             }
-            if (mid) {
-                tileData.push({
-                    media_id: mid,
-                    footer_title: footer ? footer.innerText.replace(/\\s+/g, ' ').trim() : ''
-                });
+            if (!mid && img && img.src) {
+                mid = 'tile_' + idx + '_' + img.src.slice(-24);
+            } else if (!mid) {
+                mid = 'tile_' + idx;
             }
+            tileData.push({
+                media_id: mid,
+                tile_index: idx,
+                footer_title: footer ? footer.innerText.replace(/\\s+/g, ' ').trim() : ''
+            });
         }
 
         return {
@@ -1267,7 +1484,7 @@ def generate_video_flow(
         error_exit("No video media ID was produced by Google Flow.")
 
     # 8. Download Candidate 1 (Primary File -> main scene output and _v1 copy)
-    video_url_1 = retrieve_signed_video_url(api_base, primary_id)
+    video_url_1 = retrieve_signed_video_url(api_base, primary_id, prompt=current_prompt)
     file_size_1 = download_video(video_url_1, output_path)
 
     # Save pair copy as _v1
@@ -1286,7 +1503,7 @@ def generate_video_flow(
         cand2_id = candidate_ids[1]
         try:
             log(f"Downloading Candidate 2 pair -> {os.path.basename(v2_path)}...")
-            video_url_2 = retrieve_signed_video_url(api_base, cand2_id)
+            video_url_2 = retrieve_signed_video_url(api_base, cand2_id, prompt=current_prompt)
             v2_size = download_video(video_url_2, v2_path)
             log(f"Saved Candidate 2 pair: {os.path.basename(v2_path)} ({v2_size:,} bytes)")
         except Exception as e:

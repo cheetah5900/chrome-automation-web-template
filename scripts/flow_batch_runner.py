@@ -263,8 +263,9 @@ def run_bulk_video_pipeline(
                 media_id = tl.get("media_id")
                 sc_num = sc.get("scene_num")
                 out_path = sc.get("output_path")
+                sc_prompt = sc.get("prompt", "")
                 try:
-                    video_url = retrieve_signed_video_url(api_base, media_id)
+                    video_url = retrieve_signed_video_url(api_base, media_id, prompt=sc_prompt)
                     size_bytes = download_video(video_url, out_path)
                     results.append({"scene": sc_num, "status": "SUCCESS", "output": out_path, "size": size_bytes})
                     completed_sc_nums.add(sc_num)
@@ -341,8 +342,9 @@ def run_bulk_video_pipeline(
                     media_id = tl.get("media_id")
                     sc_num = sc.get("scene_num")
                     out_path = sc.get("output_path")
+                    sc_prompt = sc.get("prompt", "")
                     try:
-                        video_url = retrieve_signed_video_url(api_base, media_id)
+                        video_url = retrieve_signed_video_url(api_base, media_id, prompt=sc_prompt)
                         size_bytes = download_video(video_url, out_path)
                         results.append({"scene": sc_num, "status": "SUCCESS", "output": out_path, "size": size_bytes})
                         completed_sc_nums.add(sc_num)
