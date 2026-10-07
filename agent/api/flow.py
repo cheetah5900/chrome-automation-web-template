@@ -639,6 +639,8 @@ FLOW_CHIP_SELECTORS = (
     "flow-prompt-box flow-ingredient-chip, "
     "flow-ingredient-chip"
 )
+FLOW_CHIP_COUNT_JS = f"(() => Array.from(document.querySelectorAll(\"{FLOW_CHIP_SELECTORS}\")).filter(el => !el.parentElement || !el.parentElement.closest(\"{FLOW_CHIP_SELECTORS}\")).length)()"
+
 
 
 async def _ensure_project_id(client, project_id: str):
@@ -772,7 +774,7 @@ async def _submit_flow_prompt_internal(
 
     # 1. Clear existing chips and prompt text — with post-clear verification loop
     clear_js = f"""(() => {{
-        const chips = Array.from(document.querySelectorAll("{FLOW_CHIP_SELECTORS}"));
+        const chips = Array.from(document.querySelectorAll("{FLOW_CHIP_SELECTORS}")).filter(el => !el.parentElement || !el.parentElement.closest("{FLOW_CHIP_SELECTORS}"));
         for (const chip of chips) {{
             // Try multiple targets for the cancel/remove action
             const cancelBtn = chip.querySelector('.cancel-button, [aria-label*="remove" i], [aria-label*="delete" i], [aria-label*="ลบ" i], [aria-label*="ยกเลิก" i], .hover-icon-overlay')
@@ -788,13 +790,13 @@ async def _submit_flow_prompt_internal(
         }}
         const pm = document.querySelector('.ProseMirror');
         if (pm) pm.innerText = '';
-        return document.querySelectorAll("{FLOW_CHIP_SELECTORS}").length;
+        return Array.from(document.querySelectorAll("{FLOW_CHIP_SELECTORS}")).filter(el => !el.parentElement || !el.parentElement.closest("{FLOW_CHIP_SELECTORS}")).length;
     }})()"""
     await _eval_js_internal(client, clear_js)
     await asyncio.sleep(0.3)
 
     # Verify chips are fully cleared — retry up to 5 times
-    verify_clear_js = f"(() => document.querySelectorAll(\"{FLOW_CHIP_SELECTORS}\").length)()"
+    verify_clear_js = FLOW_CHIP_COUNT_JS
     for _attempt in range(5):
         chip_count = await _eval_js_internal(client, verify_clear_js) or 0
         if chip_count == 0:
@@ -819,7 +821,7 @@ async def _submit_flow_prompt_internal(
 
             # Guard: skip if this character chip is already attached (prevents duplicates)
             already_attached_js = f"""(() => {{
-                const chips = Array.from(document.querySelectorAll("{FLOW_CHIP_SELECTORS}"));
+                const chips = Array.from(document.querySelectorAll("{FLOW_CHIP_SELECTORS}")).filter(el => !el.parentElement || !el.parentElement.closest("{FLOW_CHIP_SELECTORS}"));
                 return chips.some(chip => {{
                     const t = (chip.innerText || chip.getAttribute('aria-label') || chip.getAttribute('title') || '').toLowerCase();
                     return t.includes("{filename_no_ext.lower()}") || t.includes("{c_name.lower()}");
@@ -930,7 +932,7 @@ async def _submit_flow_prompt_internal(
                 await asyncio.sleep(0.6)
 
             # F. Check chips before click
-            chips_before = await _eval_js_internal(client, f"(() => document.querySelectorAll('{FLOW_CHIP_SELECTORS}').length)()") or 0
+            chips_before = await _eval_js_internal(client, FLOW_CHIP_COUNT_JS) or 0
 
             # Click the matching asset button
             click_item_js = f"""(() => {{
@@ -938,8 +940,8 @@ async def _submit_flow_prompt_internal(
                 if (!popover) {{
                     const trigger = document.querySelector('button.add-menu-trigger') ||
                                     Array.from(document.querySelectorAll('flow-prompt-box button, button')).find(b => {{
-                                        const l = ((b.getAttribute('aria-label')||'') + ' ' + (b.innerText||'')).toLowerCase();
-                                        return l.includes('เพิ่มองค์ประกอบ') || l.includes('add');
+                                         const l = ((b.getAttribute('aria-label')||'') + ' ' + (b.innerText||'')).toLowerCase();
+                                         return l.includes('เพิ่มองค์ประกอบ') || l.includes('add');
                                     }});
                     if (trigger) trigger.click();
                     popover = document.querySelector('flow-add-menu-popover-content');
@@ -970,7 +972,7 @@ async def _submit_flow_prompt_internal(
             await asyncio.sleep(0.5)
 
             # G. Check if direct click added the chip, or if detail pane 'Add to prompt' button is needed
-            chips_after = await _eval_js_internal(client, f"(() => document.querySelectorAll('{FLOW_CHIP_SELECTORS}').length)()") or 0
+            chips_after = await _eval_js_internal(client, FLOW_CHIP_COUNT_JS) or 0
             if chips_after > chips_before:
                 flow_audit_log("ADD_TO_PROMPT", "SUCCESS", {"file": filename, "method": "direct_click", "chips": chips_after})
             else:
@@ -986,7 +988,7 @@ async def _submit_flow_prompt_internal(
                 })()"""
                 add_res = await _eval_js_internal(client, add_prompt_js)
                 await asyncio.sleep(0.5)
-                chips_after = await _eval_js_internal(client, f"(() => document.querySelectorAll('{FLOW_CHIP_SELECTORS}').length)()") or 0
+                chips_after = await _eval_js_internal(client, FLOW_CHIP_COUNT_JS) or 0
                 if chips_after > chips_before:
                     flow_audit_log("ADD_TO_PROMPT", "SUCCESS", {"file": filename, "method": "detail_pane_button", "chips": chips_after})
                 else:
@@ -999,7 +1001,7 @@ async def _submit_flow_prompt_internal(
 
     # 2.5 Hard Gate: Strict Chip Count Assertion before generation
     expected_ref_count = len(unique_refs) if reference_images else 0
-    final_chips = await _eval_js_internal(client, f"(() => document.querySelectorAll('{FLOW_CHIP_SELECTORS}').length)()")
+    final_chips = await _eval_js_internal(client, FLOW_CHIP_COUNT_JS)
     flow_audit_log("HARD_GATE_CHECK", "PASS" if final_chips == expected_ref_count else "FAIL", {
         "expected": expected_ref_count,
         "actual": final_chips,
@@ -1204,14 +1206,16 @@ async def dispatch_storyboard_prompt(body: DispatchStoryboardPromptRequest):
 
 
 async def _download_tile_image_internal(client, img_url: str, out_path: str) -> bool:
-    """Helper to fetch image from browser context at full resolution and save locally."""
-    import os, base64, io
+    """Helper to fetch image from browser context or direct HTTP at full resolution and save locally."""
+    import os, base64, io, re, httpx
     from PIL import Image
     try:
         os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        full_url = re.sub(r'=s\d+', '=s2048', img_url)
+
+        # 1. Try fetching via browser session
         fetch_js = f"""(async () => {{
-            const fullUrl = "{img_url}".replace(/=s\\d+/, '=s2048');
-            const res = await fetch(fullUrl);
+            const res = await fetch("{full_url}");
             if (!res.ok) return {{ ok: false, status: res.status }};
             const blob = await res.blob();
             return new Promise(resolve => {{
@@ -1220,16 +1224,33 @@ async def _download_tile_image_internal(client, img_url: str, out_path: str) -> 
                 reader.readAsDataURL(blob);
             }});
         }})()"""
-        b_res = await _eval_js_internal(client, fetch_js) or {}
-        if b_res.get("ok") and b_res.get("b64"):
-            raw_bytes = base64.b64decode(b_res["b64"])
-            im = Image.open(io.BytesIO(raw_bytes))
-            im.convert("RGB").save(out_path, "JPEG", quality=95)
-            logger.info("Saved batch image to %s (%dx%d)", out_path, im.width, im.height)
-            return True
+        try:
+            b_res = await _eval_js_internal(client, fetch_js, timeout=10) or {}
+            if b_res.get("ok") and b_res.get("b64"):
+                raw_bytes = base64.b64decode(b_res["b64"])
+                im = Image.open(io.BytesIO(raw_bytes))
+                im.convert("RGB").save(out_path, "JPEG", quality=95)
+                logger.info("Saved batch image via browser to %s (%dx%d)", out_path, im.width, im.height)
+                return True
+            else:
+                logger.warning("Browser fetch returned non-ok for %s (b_res=%s), trying direct HTTP fallback...", out_path, b_res)
+        except Exception as browser_err:
+            logger.warning("Browser fetch exception for %s: %s, falling back to direct HTTP...", out_path, browser_err)
+
+        # 2. Direct HTTP download fallback
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as http_client:
+            resp = await http_client.get(full_url)
+            if resp.status_code == 200:
+                im = Image.open(io.BytesIO(resp.content))
+                im.convert("RGB").save(out_path, "JPEG", quality=95)
+                logger.info("Saved batch image via direct HTTP to %s (%dx%d)", out_path, im.width, im.height)
+                return True
+            else:
+                logger.error("Direct HTTP download failed for %s (status %d)", out_path, resp.status_code)
     except Exception as dl_err:
         logger.error("Download tile image error for %s: %s", out_path, dl_err)
     return False
+
 
 
 @router.post("/collect-storyboard-batch")
@@ -1581,28 +1602,9 @@ async def generate_storyboard(body: GenerateStoryboardRequest):
 
             # 4. Download and validate image to output_path if provided
             if body.output_path:
-                os.makedirs(os.path.dirname(os.path.abspath(body.output_path)), exist_ok=True)
-                fetch_js = f"""(async () => {{
-                    const fullUrl = "{generated_img_url}".replace(/=s\\d+/, '=s2048');
-                    const res = await fetch(fullUrl);
-                    if (!res.ok) return {{ ok: false, status: res.status }};
-                    const blob = await res.blob();
-                    return new Promise(resolve => {{
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve({{ ok: true, b64: reader.result.split(',')[1] }});
-                        reader.readAsDataURL(blob);
-                    }});
-                }})()"""
-                b_res = await _eval_js_internal(client, fetch_js) or {}
-                if b_res.get("ok") and b_res.get("b64"):
-                    import base64, io
-                    from PIL import Image
-                    raw_bytes = base64.b64decode(b_res["b64"])
-                    im = Image.open(io.BytesIO(raw_bytes))
-                    im.convert("RGB").save(body.output_path, "JPEG", quality=95)
-                    logger.info("Saved image to %s (%dx%d)", body.output_path, im.width, im.height)
-                else:
-                    raise HTTPException(502, f"Failed to download image via browser session: {b_res}")
+                dl_ok = await _download_tile_image_internal(client, generated_img_url, body.output_path)
+                if not dl_ok:
+                    raise HTTPException(502, f"Failed to download image to {body.output_path}")
 
             return {
                 "success": True,

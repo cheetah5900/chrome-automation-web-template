@@ -110,3 +110,8 @@ def get_status_port() -> int:
 
 def get_flow_agent_port() -> int:
     return int(os.environ.get("FLOW_AGENT_PORT", 8100))
+
+
+def get_flow_project_id() -> str:
+    return os.environ.get("FLOW_PROJECT_ID", "ba5eaa4d-5c5b-4e95-9c59-43c17a294f37")
+

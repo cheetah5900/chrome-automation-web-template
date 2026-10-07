@@ -20,7 +20,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 DEFAULT_API_BASE = "http://127.0.0.1:6969"
-DEFAULT_PROJECT_ID = "21a1632e-9926-46fa-954c-240d71d78f41"  # ละคร
+try:
+    from app.env_config import get_flow_project_id
+    DEFAULT_PROJECT_ID = get_flow_project_id()
+except Exception:
+    DEFAULT_PROJECT_ID = os.environ.get("FLOW_PROJECT_ID", "ba5eaa4d-5c5b-4e95-9c59-43c17a294f37")
 DEFAULT_STICKMAN_PROJECT_ID = "527f23e9-8586-4712-934e-dcf0b7d87417"  # Stickman
 
 def parse_batch_size(val: Any, default: int = 3) -> int:
