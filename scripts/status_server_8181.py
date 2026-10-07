@@ -712,13 +712,48 @@ def index_dashboard():
 
       <!-- Controls: Story Selector & Refresh -->
       <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
-        <!-- Story / EP Selectors -->
+        <!-- Story / EP Selectors with Live Search -->
         <div class="flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800 text-xs">
-          <label class="text-slate-400 font-semibold px-2">เรื่อง:</label>
-          <select id="storySelect" onchange="onStoryChange()" class="bg-slate-800 text-white rounded-lg px-2.5 py-1 font-bold border border-slate-700 outline-none">
-            <option value="31">Story 31</option>
-          </select>
-          <label class="text-slate-400 font-semibold px-2">ตอน:</label>
+          <label class="text-slate-400 font-semibold px-1.5 flex items-center gap-1">
+            <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            เรื่อง:
+          </label>
+
+          <!-- Live Search Combobox -->
+          <div class="relative" id="storySearchContainer">
+            <div class="flex items-center bg-slate-800 rounded-lg border border-slate-700 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition shadow-inner">
+              <input 
+                id="storySearchInput" 
+                type="text" 
+                placeholder="ค้นหาเรื่อง..." 
+                class="bg-transparent text-white rounded-lg px-2.5 py-1 font-bold w-28 md:w-32 outline-none text-xs"
+                autocomplete="off"
+                onfocus="openStoryDropdown()"
+                oninput="onStorySearchInput(this.value)"
+                onkeydown="onStorySearchKeydown(event)"
+              />
+              <button type="button" onclick="toggleStoryDropdown(event)" class="px-1.5 text-slate-400 hover:text-white transition focus:outline-none">
+                <svg id="storyDropdownArrow" class="w-3.5 h-3.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+            </div>
+            
+            <!-- Live Search Dropdown Menu -->
+            <div 
+              id="storyDropdownMenu" 
+              class="hidden absolute left-0 mt-1 w-52 max-h-64 overflow-y-auto bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl z-50 p-1.5 scrollbar-thin"
+            >
+              <div id="storyDropdownList" class="space-y-0.5">
+                <!-- Dynamically populated story items -->
+              </div>
+            </div>
+
+            <!-- Hidden native select for backwards compatibility -->
+            <select id="storySelect" onchange="onStoryChange()" class="hidden">
+              <option value="31">Story 31</option>
+            </select>
+          </div>
+
+          <label class="text-slate-400 font-semibold px-1.5">ตอน:</label>
           <select id="epSelect" onchange="onEpChange()" class="bg-slate-800 text-white rounded-lg px-2.5 py-1 font-bold border border-slate-700 outline-none">
             <option value="EP01">EP01</option>
           </select>
@@ -960,6 +995,10 @@ def index_dashboard():
     if (initStorySelect && savedStory) {
       initStorySelect.innerHTML = `<option value="${activeStory}" selected>Story ${activeStory}</option>`;
     }
+    const initStoryInput = document.getElementById('storySearchInput');
+    if (initStoryInput) {
+      initStoryInput.value = `Story ${activeStory}`;
+    }
     const initEpSelect = document.getElementById('epSelect');
     if (initEpSelect && savedEp) {
       initEpSelect.innerHTML = `<option value="${activeEp}" selected>${activeEp}</option>`;
@@ -1082,14 +1121,195 @@ def index_dashboard():
       epSelect.value = activeEp;
     }
 
-    function onStoryChange() {
-      activeStory = parseInt(document.getElementById('storySelect').value, 10);
+    let currentFilteredStories = [];
+    let currentHighlightedIndex = -1;
+
+    function toggleStoryDropdown(event) {
+      if (event) event.stopPropagation();
+      const menu = document.getElementById('storyDropdownMenu');
+      if (!menu) return;
+      if (menu.classList.contains('hidden')) {
+        openStoryDropdown();
+      } else {
+        closeStoryDropdown();
+      }
+    }
+
+    function openStoryDropdown() {
+      const menu = document.getElementById('storyDropdownMenu');
+      const arrow = document.getElementById('storyDropdownArrow');
+      const input = document.getElementById('storySearchInput');
+      if (!menu) return;
+      menu.classList.remove('hidden');
+      if (arrow) arrow.classList.add('rotate-180');
+      filterStoryDropdown('');
+      if (input) {
+        input.select();
+      }
+    }
+
+    function closeStoryDropdown() {
+      const menu = document.getElementById('storyDropdownMenu');
+      const arrow = document.getElementById('storyDropdownArrow');
+      const input = document.getElementById('storySearchInput');
+      if (!menu) return;
+      menu.classList.add('hidden');
+      if (arrow) arrow.classList.remove('rotate-180');
+      currentHighlightedIndex = -1;
+      if (input && document.activeElement !== input) {
+        input.value = `Story ${activeStory}`;
+      }
+    }
+
+    function onStorySearchInput(val) {
+      const menu = document.getElementById('storyDropdownMenu');
+      if (menu && menu.classList.contains('hidden')) {
+        menu.classList.remove('hidden');
+        const arrow = document.getElementById('storyDropdownArrow');
+        if (arrow) arrow.classList.add('rotate-180');
+      }
+      filterStoryDropdown(val);
+    }
+
+    function filterStoryDropdown(query) {
+      const listEl = document.getElementById('storyDropdownList');
+      if (!listEl) return;
+      const q = (query || '').trim().toLowerCase();
+      
+      currentFilteredStories = availableStoriesCache.filter(s => {
+        if (!q) return true;
+        const strNum = String(s.story);
+        const strLabel = `story ${s.story}`.toLowerCase();
+        return strNum.includes(q) || strLabel.includes(q);
+      });
+
+      currentHighlightedIndex = currentFilteredStories.findIndex(s => s.story === activeStory);
+      if (currentHighlightedIndex === -1 && currentFilteredStories.length > 0) {
+        currentHighlightedIndex = 0;
+      }
+
+      if (currentFilteredStories.length === 0) {
+        listEl.innerHTML = `<div class="px-3 py-2 text-center text-xs text-slate-400">ไม่พบเรื่อง "${query}"</div>`;
+        return;
+      }
+
+      listEl.innerHTML = currentFilteredStories.map((s, idx) => {
+        const isSelected = (s.story === activeStory);
+        const epBadge = (s.episodes && s.episodes.length > 1) ? `${s.episodes.length} EPs` : (s.episodes ? (s.episodes[0] || 'EP01') : 'EP01');
+        return `
+          <button 
+            type="button"
+            id="storyItem_${idx}"
+            onclick="selectStory(${s.story})"
+            class="story-dropdown-item w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
+              isSelected 
+                ? 'bg-indigo-600/30 text-indigo-300 font-bold border border-indigo-500/30' 
+                : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
+            }"
+          >
+            <span class="flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-indigo-400' : 'bg-slate-600'}"></span>
+              Story ${s.story}
+            </span>
+            <span class="text-[10px] text-slate-400 bg-slate-800/90 border border-slate-700/50 px-1.5 py-0.5 rounded font-mono">${epBadge}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function onStorySearchKeydown(e) {
+      const menu = document.getElementById('storyDropdownMenu');
+      const isClosed = !menu || menu.classList.contains('hidden');
+
+      if (e.key === 'Escape') {
+        closeStoryDropdown();
+        e.preventDefault();
+        return;
+      }
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (isClosed) {
+          openStoryDropdown();
+          return;
+        }
+        if (currentFilteredStories.length > 0) {
+          currentHighlightedIndex = (currentHighlightedIndex + 1) % currentFilteredStories.length;
+          updateHighlightedItem();
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (isClosed) {
+          openStoryDropdown();
+          return;
+        }
+        if (currentFilteredStories.length > 0) {
+          currentHighlightedIndex = (currentHighlightedIndex - 1 + currentFilteredStories.length) % currentFilteredStories.length;
+          updateHighlightedItem();
+        }
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!isClosed && currentFilteredStories.length > 0) {
+          const target = currentFilteredStories[Math.max(0, currentHighlightedIndex)];
+          if (target) {
+            selectStory(target.story);
+          }
+        }
+        return;
+      }
+    }
+
+    function updateHighlightedItem() {
+      const items = document.querySelectorAll('.story-dropdown-item');
+      items.forEach((item, idx) => {
+        if (idx === currentHighlightedIndex) {
+          item.classList.add('bg-slate-700/80', 'ring-1', 'ring-indigo-400');
+          item.scrollIntoView({ block: 'nearest' });
+        } else {
+          item.classList.remove('bg-slate-700/80', 'ring-1', 'ring-indigo-400');
+        }
+      });
+    }
+
+    function selectStory(num) {
+      activeStory = parseInt(num, 10);
       localStorage.setItem('flow_status_story', activeStory);
+      
+      const input = document.getElementById('storySearchInput');
+      if (input) input.value = `Story ${activeStory}`;
+
+      const storySelect = document.getElementById('storySelect');
+      if (storySelect) {
+        storySelect.value = activeStory;
+      }
+
+      closeStoryDropdown();
       selectedScenes = [];
       updateSelectionUI();
       updateEpDropdown();
       fetchStatus();
     }
+
+    function onStoryChange() {
+      const storySelect = document.getElementById('storySelect');
+      if (storySelect && storySelect.value) {
+        selectStory(storySelect.value);
+      }
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+      const container = document.getElementById('storySearchContainer');
+      if (container && !container.contains(e.target)) {
+        closeStoryDropdown();
+      }
+    });
 
     function onEpChange() {
       activeEp = document.getElementById('epSelect').value;
@@ -1117,7 +1337,12 @@ def index_dashboard():
           localStorage.setItem('flow_status_story', activeStory);
         }
 
-        if (storySelect.options.length <= 1 || parseInt(storySelect.value, 10) !== activeStory) {
+        const input = document.getElementById('storySearchInput');
+        if (input && document.activeElement !== input) {
+          input.value = `Story ${activeStory}`;
+        }
+
+        if (storySelect && (storySelect.options.length <= 1 || parseInt(storySelect.value, 10) !== activeStory)) {
           storySelect.innerHTML = availableStoriesCache.map(s => 
             `<option value="${s.story}" ${s.story === activeStory ? 'selected' : ''}>Story ${s.story}</option>`
           ).join('');
