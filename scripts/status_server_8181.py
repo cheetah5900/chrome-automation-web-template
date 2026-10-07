@@ -77,7 +77,7 @@ def save_state(state: Dict[str, Any]):
 
 
 def list_available_stories() -> List[Dict[str, Any]]:
-    """Scan channel directory for all stories and their episodes."""
+    """Scan channel directory for all stories and their episodes with image and video completion counts."""
     if not os.path.isdir(CHANNEL_ROOT):
         return []
     result = []
@@ -93,7 +93,32 @@ def list_available_stories() -> List[Dict[str, Any]]:
                         if d.upper().startswith("EP") and os.path.isdir(os.path.join(sub_p, d)):
                             eps.add(d.upper())
             sorted_eps = sorted(list(eps)) if eps else ["EP01"]
-            result.append({"story": story_num, "episodes": sorted_eps})
+
+            total_target, total_img, total_vid = 0, 0, 0
+            for ep_name in sorted_eps:
+                sb_dir = os.path.join(full_p, "6 - Storyboards", ep_name)
+                vd_dir = os.path.join(full_p, "7 - Videos", ep_name)
+                pr_dir = os.path.join(full_p, "4 - Image Prompt", ep_name)
+                tp = len([f for f in os.listdir(pr_dir) if f.endswith(".md") and not f.startswith(".")]) if os.path.isdir(pr_dir) else 0
+                ic = len([f for f in os.listdir(sb_dir) if f.lower().endswith((".jpg", ".jpeg", ".png")) and not f.startswith(".")]) if os.path.isdir(sb_dir) else 0
+                vc = len([f for f in os.listdir(vd_dir) if f.lower().endswith((".mp4", ".mov")) and not f.startswith(".")]) if os.path.isdir(vd_dir) else 0
+                ep_target = tp if tp > 0 else (ic if ic > 0 else (vc if vc > 0 else 40))
+                total_target += ep_target
+                total_img += ic
+                total_vid += vc
+
+            img_done = (total_img >= total_target and total_target > 0)
+            vid_done = (total_vid >= total_target and total_target > 0)
+
+            result.append({
+                "story": story_num,
+                "episodes": sorted_eps,
+                "target": total_target,
+                "img_count": total_img,
+                "vid_count": total_vid,
+                "img_done": img_done,
+                "vid_done": vid_done,
+            })
     return sorted(result, key=lambda x: x["story"], reverse=True)
 
 
@@ -740,7 +765,7 @@ def index_dashboard():
             <!-- Live Search Dropdown Menu -->
             <div 
               id="storyDropdownMenu" 
-              class="hidden absolute left-0 mt-1 w-52 max-h-64 overflow-y-auto bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl z-[100] p-1.5 scrollbar-thin"
+              class="hidden absolute left-0 mt-1 w-72 sm:w-80 max-h-80 overflow-y-auto bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl z-[100] p-1.5 scrollbar-thin"
             >
               <div id="storyDropdownList" class="space-y-0.5">
                 <!-- Dynamically populated story items -->
@@ -1180,7 +1205,9 @@ def index_dashboard():
         if (!q) return true;
         const strNum = String(s.story);
         const strLabel = `story ${s.story}`.toLowerCase();
-        return strNum.includes(q) || strLabel.includes(q);
+        const matchesImg = (s.img_done && (q.includes('รูป') || q.includes('ภาพ') || q.includes('img')));
+        const matchesVid = (s.vid_done && (q.includes('วิ') || q.includes('วิดีโอ') || q.includes('vid')));
+        return strNum.includes(q) || strLabel.includes(q) || matchesImg || matchesVid;
       });
 
       currentHighlightedIndex = currentFilteredStories.findIndex(s => s.story === activeStory);
@@ -1196,22 +1223,46 @@ def index_dashboard():
       listEl.innerHTML = currentFilteredStories.map((s, idx) => {
         const isSelected = (s.story === activeStory);
         const epBadge = (s.episodes && s.episodes.length > 1) ? `${s.episodes.length} EPs` : (s.episodes ? (s.episodes[0] || 'EP01') : 'EP01');
+
+        // Status badges for image and video completion
+        let imgBadge = '';
+        if (s.img_done) {
+          imgBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shrink-0" title="รูปภาพครบ ${s.img_count}/${s.target}"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>รูปครบ</span>`;
+        } else if (s.img_count > 0) {
+          imgBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0" title="รูปภาพได้ ${s.img_count}/${s.target}">🖼️ ${s.img_count}/${s.target}</span>`;
+        } else {
+          imgBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] text-slate-500 bg-slate-800/50 border border-slate-700/40 shrink-0" title="ยังไม่มีรูปภาพ">รูป -</span>`;
+        }
+
+        let vidBadge = '';
+        if (s.vid_done) {
+          vidBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center gap-1 shrink-0" title="วิดีโอครบ ${s.vid_count}/${s.target}"><span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>วิดีโอครบ</span>`;
+        } else if (s.vid_count > 0) {
+          vidBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0" title="วิดีโอได้ ${s.vid_count}/${s.target}">🎬 ${s.vid_count}/${s.target}</span>`;
+        } else {
+          vidBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] text-slate-500 bg-slate-800/50 border border-slate-700/40 shrink-0" title="ยังไม่มีวิดีโอ">วิดีโอ -</span>`;
+        }
+
         return `
           <button 
             type="button"
             id="storyItem_${idx}"
             onclick="selectStory(${s.story})"
-            class="story-dropdown-item w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
+            class="story-dropdown-item w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition gap-2 ${
               isSelected 
                 ? 'bg-indigo-600/30 text-indigo-300 font-bold border border-indigo-500/30' 
                 : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
             }"
           >
-            <span class="flex items-center gap-1.5">
-              <span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-indigo-400' : 'bg-slate-600'}"></span>
-              Story ${s.story}
-            </span>
-            <span class="text-[10px] text-slate-400 bg-slate-800/90 border border-slate-700/50 px-1.5 py-0.5 rounded font-mono">${epBadge}</span>
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-indigo-400' : 'bg-slate-600'} shrink-0"></span>
+              <span class="font-bold text-slate-100 whitespace-nowrap">Story ${s.story}</span>
+              <span class="text-[9px] text-slate-400 bg-slate-800/90 border border-slate-700/50 px-1 rounded font-mono shrink-0">${epBadge}</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              ${imgBadge}
+              ${vidBadge}
+            </div>
           </button>
         `;
       }).join('');
@@ -1343,9 +1394,12 @@ def index_dashboard():
         }
 
         if (storySelect && (storySelect.options.length <= 1 || parseInt(storySelect.value, 10) !== activeStory)) {
-          storySelect.innerHTML = availableStoriesCache.map(s => 
-            `<option value="${s.story}" ${s.story === activeStory ? 'selected' : ''}>Story ${s.story}</option>`
-          ).join('');
+          storySelect.innerHTML = availableStoriesCache.map(s => {
+            const imgLabel = s.img_done ? '• รูปครบ' : (s.img_count ? `• รูป ${s.img_count}/${s.target}` : '');
+            const vidLabel = s.vid_done ? '• วิดีโอครบ' : (s.vid_count ? `• วิดีโอ ${s.vid_count}/${s.target}` : '');
+            const extra = [imgLabel, vidLabel].filter(Boolean).join(' ');
+            return `<option value="${s.story}" ${s.story === activeStory ? 'selected' : ''}>Story ${s.story} ${extra}</option>`;
+          }).join('');
           storySelect.value = activeStory;
         }
 
