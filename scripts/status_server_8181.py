@@ -140,10 +140,46 @@ def get_story_scenes_info(story_num: int, ep_str: str, state: Optional[Dict[str,
     sorted_scene_nums = sorted(list(scene_nums)) if scene_nums else list(range(1, 21))
 
     current_sc = state.get("current_scene")
-    failed_scenes = set(state.get("failed_scenes", []))
-    generating_scenes = set(state.get("generating_scenes", []))
-    if current_sc is not None:
-        generating_scenes.add(current_sc)
+    is_active_story_ep = (
+        int(state.get("story", 0)) == story_num and
+        str(state.get("ep", "")).strip().upper() == ep_str.strip().upper()
+    )
+
+    failed_scenes = set()
+    generating_scenes = set()
+
+    if is_active_story_ep:
+        raw_failed = state.get("failed_scenes", [])
+        if isinstance(raw_failed, list):
+            for item in raw_failed:
+                if isinstance(item, dict):
+                    sc_val = item.get("scene_num") or item.get("scene")
+                    if sc_val is not None:
+                        try:
+                            failed_scenes.add(int(sc_val))
+                        except (ValueError, TypeError):
+                            pass
+                elif isinstance(item, (int, str)) and str(item).isdigit():
+                    failed_scenes.add(int(item))
+
+        raw_generating = state.get("generating_scenes", [])
+        if isinstance(raw_generating, list):
+            for item in raw_generating:
+                if isinstance(item, dict):
+                    sc_val = item.get("scene_num") or item.get("scene")
+                    if sc_val is not None:
+                        try:
+                            generating_scenes.add(int(sc_val))
+                        except (ValueError, TypeError):
+                            pass
+                elif isinstance(item, (int, str)) and str(item).isdigit():
+                    generating_scenes.add(int(item))
+
+        if current_sc is not None:
+            try:
+                generating_scenes.add(int(current_sc))
+            except (ValueError, TypeError):
+                pass
 
     # Resolve fixing scenes for this specific story and episode
     story_ep_key = f"{story_num}_{ep_str}"
