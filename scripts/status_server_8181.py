@@ -689,7 +689,7 @@ def index_dashboard():
   <div class="max-w-[1600px] mx-auto space-y-6">
 
     <!-- Top Navigation Bar -->
-    <header class="card-glass rounded-2xl p-4 md:p-5 shadow-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+    <header class="card-glass rounded-2xl p-4 md:p-5 shadow-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 relative z-40">
       <div class="flex items-center gap-4">
         <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
           <span class="text-xl">🎬</span>
@@ -720,7 +720,7 @@ def index_dashboard():
           </label>
 
           <!-- Live Search Combobox -->
-          <div class="relative" id="storySearchContainer">
+          <div class="relative z-50" id="storySearchContainer">
             <div class="flex items-center bg-slate-800 rounded-lg border border-slate-700 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition shadow-inner">
               <input 
                 id="storySearchInput" 
@@ -740,7 +740,7 @@ def index_dashboard():
             <!-- Live Search Dropdown Menu -->
             <div 
               id="storyDropdownMenu" 
-              class="hidden absolute left-0 mt-1 w-52 max-h-64 overflow-y-auto bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl z-50 p-1.5 scrollbar-thin"
+              class="hidden absolute left-0 mt-1 w-52 max-h-64 overflow-y-auto bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl z-[100] p-1.5 scrollbar-thin"
             >
               <div id="storyDropdownList" class="space-y-0.5">
                 <!-- Dynamically populated story items -->
@@ -925,7 +925,7 @@ def index_dashboard():
   </div>
 
   <!-- Fullscreen Media Modal Lightbox -->
-  <div id="mediaModal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4" onclick="closeModal(event)">
+  <div id="mediaModal" class="hidden fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex items-center justify-center p-4" onclick="closeModal(event)">
     <div class="relative max-w-4xl w-full bg-slate-900 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl flex flex-col md:flex-row max-h-[90vh]" onclick="event.stopPropagation()">
       <button onclick="closeModal()" class="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-slate-800/80 text-white flex items-center justify-center hover:bg-slate-700 transition">✕</button>
       
