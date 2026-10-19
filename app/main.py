@@ -5044,9 +5044,13 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
         has_cap = bool(caption_text)
         has_aff = bool(affiliate_url)
 
+        is_lakorn = (folder_mode == "lakorn")
+        is_ready = bool(has_vid and has_cap and (has_aff or not is_lakorn))
+        status = "ready" if is_ready else ("missing_affiliate" if (is_lakorn and not has_aff) else "warning")
+
         items.append({
             "id": len(items) + 1,
-            "checked": has_aff,  # uncheck by default if missing affiliate link
+            "checked": is_ready,
             "subfolder_name": folder_name,
             "subfolder_path": folder_path,
             "video_path": video_path,
@@ -5059,7 +5063,7 @@ def scan_meta_autopost(req: MetaScanRequest) -> dict[str, Any]:
             "affiliate_file": affiliate_filename,
             "has_affiliate_url": has_aff,
             "scheduled_datetime": scheduled_iso,
-            "status": "ready" if (has_vid and has_cap and has_aff) else ("missing_affiliate" if not has_aff else "warning")
+            "status": status
         })
 
     missing_affiliate_count = sum(1 for it in items if not it["has_affiliate_url"])

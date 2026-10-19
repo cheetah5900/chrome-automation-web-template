@@ -250,6 +250,11 @@ def fast_poll(driver, js_expr: str, timeout: float = 30.0, poll_interval: float 
 def step_1_open_composer(driver, composer_url: str) -> bool:
     """Step 1: Safely focus/recover browser tab, navigate to composer URL, and verify URL & composer readiness."""
     composer_url = (composer_url or "").strip()
+    if "/latest/composer?" in composer_url:
+        composer_url = composer_url.replace("/latest/composer?", "/latest/reels_composer?")
+    elif composer_url.endswith("/latest/composer"):
+        composer_url = composer_url.replace("/latest/composer", "/latest/reels_composer")
+
     if not composer_url or not (composer_url.startswith("http://") or composer_url.startswith("https://")):
         raise ValueError(f"URL ไม่ถูกต้อง: '{composer_url}' (ต้องขึ้นต้นด้วย http:// หรือ https://)")
 
@@ -368,13 +373,13 @@ def step_2_upload_video(driver, video_path: str) -> bool:
             const rect = b.getBoundingClientRect();
             const isVis = rect.width > 10 && rect.height > 10;
             const isEnabled = b.getAttribute('aria-disabled') !== 'true';
-            return isVis && isEnabled && (txt.includes('Add video') || txt.includes('Add Video') || txt.includes('Upload video'));
+            return isVis && isEnabled && (txt.includes('Add video') || txt.includes('Add Video') || txt.includes('Upload video') || txt.includes('Add photo/video'));
         });
         if (direct) return direct;
 
         const textEls = Array.from(document.querySelectorAll('div, span, button')).filter(el => {
             const t = (el.innerText || '').trim();
-            return (t === 'Add video' || t === 'Add Video' || t === 'Upload video') && el.children.length === 0;
+            return (t === 'Add video' || t === 'Add Video' || t === 'Upload video' || t === 'Add photo/video') && el.children.length === 0;
         });
         for (const tEl of textEls) {
             const btnParent = tEl.closest('[role="button"], button');
@@ -822,8 +827,8 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
     Specifically checks if an Instagram schedule box exists; if not, skips Instagram and proceeds to Schedule submit."""
     log("[Meta Step 5] กำลังรอตัวเลือก 'Schedule for later' พร้อมใช้งาน...")
     
-    # 1. Wait for "Schedule for later" / "Schedule" to be enabled and click it (Timeout 60 seconds)
-    wait_for_schedule_option_ready(driver, timeout=60.0)
+    # 1. Wait for "Schedule for later" / "Schedule" to be enabled and click it (Timeout 180 seconds)
+    wait_for_schedule_option_ready(driver, timeout=180.0)
 
     if scheduled_dt_str:
         try:
@@ -1461,7 +1466,7 @@ def _post_single_reel_core(
     step_3_insert_caption(driver, caption)
 
     # Step 4: Click Share Tab to reach Step 3
-    step_4_click_share_tab(driver, timeout=100.0)
+    step_4_click_share_tab(driver, timeout=240.0)
 
     # Step 5: Set Schedule Date & Time (Calendar Navigation)
     step_5_set_schedule(driver, scheduled_dt_str)
