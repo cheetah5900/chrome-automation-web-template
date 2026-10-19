@@ -515,7 +515,7 @@ async function updatePortStatus() {
   const sidebarProfilePort = document.getElementById('sidebar_active_profile_port');
   const browserStatusDot = document.getElementById('sidebar_browser_status_dot');
 
-  const otherTabs = [tabImageGen, tabVideoGen, tabVideoHelper, tabSeedanceGen, tabMetaAutoPost];
+  const otherTabs = [tabImageGen, tabVideoGen, tabVideoHelper, tabSeedanceGen];
 
   if (!select || !select.value) {
     if (badge) {

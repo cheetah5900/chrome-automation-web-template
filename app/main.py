@@ -4391,7 +4391,15 @@ class MetaScanRequest(BaseModel):
     folder_mode: str = "generic"
 
 class MetaRunRequest(BaseModel):
-    posts: list[dict[str, Any]]
+    posts: list[dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
+    main_folder: str = ""
+    subfolders_str: str = ""
+    subfolders: str = ""
+    video_prefix: str = "combined"
+    start_date: str = ""
+    start_hour: int | str = 18
+    folder_mode: str = "generic"
     target_url: str = ""
     job_id: str | None = None
     delay_min: float = 5.0
@@ -4402,6 +4410,7 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", del
     import os
     import sys
     import time
+    import json
     from datetime import datetime
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.common.by import By
@@ -4414,13 +4423,53 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", del
             log("[Meta Auto Post] Error: Chrome driver is not attached")
             return
 
-        # Determine composer URL - STRICTLY use configured target_url from preset/input, NO hardcoded fallback
+        # Determine composer URL - check target_url, active browser tab, or saved presets
         composer_url = target_url.strip() if target_url else ""
+        if not composer_url:
+            try:
+                curr = bot.driver.current_url or ""
+                if "facebook.com" in curr.lower():
+                    composer_url = curr
+                    log(f"[Meta Auto Post] 🌐 ตรวจพบ URL หน้าปัจจุบันบนเบราว์เซอร์: {composer_url}")
+            except Exception:
+                pass
+
+        if not composer_url and os.path.isfile(SETTINGS_FILE):
+            try:
+                with open(SETTINGS_FILE, "r", encoding="utf-8") as sf:
+                    s_data = json.load(sf)
+                    for preset_group in ("meta_presets", "facebook_presets"):
+                        presets = s_data.get(preset_group, {})
+                        for p_name, p_val in presets.items():
+                            p_url = p_val.get("page_url") or p_val.get("url") or ""
+                            if p_url:
+                                composer_url = p_url
+                                log(f"[Meta Auto Post] 📋 ใช้ URL จาก Preset '{p_name}': {composer_url}")
+                                break
+                        if composer_url:
+                            break
+            except Exception:
+                pass
+
         if not composer_url:
             global_meta_progress["status"] = "error"
             global_meta_progress["message"] = "กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน"
             log("[Meta Auto Post Error] กรุณาระบุ URL ของเพจ/Composer ใน Preset หรือช่อง URL ก่อนเริ่มทำงาน")
             return
+
+        # Normalize post items for runner flexibility
+        norm_posts = []
+        for itm in posts:
+            norm = dict(itm)
+            v_path = itm.get("video_path") or itm.get("path") or itm.get("file") or itm.get("video_file") or itm.get("video") or ""
+            cap = itm.get("caption") or itm.get("text") or itm.get("prompt") or itm.get("prompt_text") or itm.get("caption_text") or itm.get("description") or ""
+            sch = itm.get("scheduled_datetime") or itm.get("schedule_time") or itm.get("datetime") or itm.get("date") or ""
+            sub = itm.get("subfolder_name") or itm.get("title") or itm.get("name") or (os.path.basename(os.path.dirname(v_path)) if v_path else "")
+            norm["video_path"] = v_path
+            norm["caption"] = cap
+            norm["scheduled_datetime"] = sch
+            norm["subfolder_name"] = sub
+            norm_posts.append(norm)
 
         from app.meta_autopost import run_meta_autopost_batch
 
@@ -4430,8 +4479,8 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", del
                 global_meta_progress[k] = v
 
         res = run_meta_autopost_batch(
-            posts=posts,
-            target_url=target_url,
+            posts=norm_posts,
+            target_url=composer_url,
             delay_min=delay_min,
             delay_max=delay_max,
             progress_callback=_on_progress
@@ -4439,13 +4488,13 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", del
 
         global_meta_progress["status"] = "completed" if res["ok"] else "completed_with_errors"
         global_meta_progress["percent"] = 100
-        global_meta_progress["current"] = len(posts)
+        global_meta_progress["current"] = len(norm_posts)
         global_meta_progress["errors"] = res.get("errors", [])
         if res["ok"]:
             global_meta_progress["message"] = f"✅ โพสต์ตามคิวสำเร็จครบทั้งหมด {res['success_count']} รายการ"
         else:
             first_err = res["errors"][0] if res.get("errors") else "พบข้อผิดพลาด"
-            global_meta_progress["message"] = f"เสร็จสิ้น {res['success_count']}/{len(posts)} รายการ: {first_err}"
+            global_meta_progress["message"] = f"เสร็จสิ้น {res['success_count']}/{len(norm_posts)} รายการ: {first_err}"
 
     except Exception as e:
         log(f"[Meta Auto Post Error] {e}")
@@ -4455,9 +4504,24 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", del
 @app.post("/api/meta-autopost/run")
 def run_meta_autopost(req: MetaRunRequest) -> dict[str, Any]:
     global global_meta_progress
-    posts = req.posts
+    posts = list(req.posts or req.items or [])
+
+    # If posts/items empty, but main_folder provided, auto-scan via runner mode
+    if not posts and req.main_folder:
+        scan_req = MetaScanRequest(
+            main_folder=req.main_folder,
+            subfolders_str=req.subfolders_str or req.subfolders,
+            video_prefix=req.video_prefix,
+            start_date=req.start_date,
+            start_hour=req.start_hour,
+            folder_mode=req.folder_mode
+        )
+        scan_res = scan_meta_autopost(scan_req)
+        scanned_items = scan_res.get("items", [])
+        posts = [it for it in scanned_items if it.get("video_path") and (it.get("checked", True) or it.get("has_video"))]
+
     if not posts:
-        raise HTTPException(status_code=400, detail="ไม่มีรายการโพสต์ให้ดำเนินการ")
+        raise HTTPException(status_code=400, detail="ไม่มีรายการโพสต์ให้ดำเนินการ (กรุณาระบุ posts, items หรือ main_folder ที่ถูกต้อง)")
 
     global_meta_progress = {
         "status": "running",
@@ -5214,7 +5278,15 @@ global_facebook_progress: dict[str, Any] = {
 }
 
 class FacebookRunRequest(BaseModel):
-    posts: list[dict[str, Any]]
+    posts: list[dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
+    main_folder: str = ""
+    subfolders_str: str = ""
+    subfolders: str = ""
+    video_prefix: str = "combined"
+    start_date: str = ""
+    start_hour: int | str = 18
+    folder_mode: str = "generic"
     target_url: str = ""
     delay_min: float = 5.0
     delay_max: float = 15.0
@@ -5305,9 +5377,20 @@ def _facebook_autopost_worker(posts: list[dict[str, Any]], target_url: str = "",
 @app.post("/api/facebook-autopost/run")
 def run_facebook_autopost(req: FacebookRunRequest) -> dict[str, Any]:
     global global_facebook_progress
-    posts = req.posts
+    posts = list(req.posts or req.items or [])
+    if not posts and req.main_folder:
+        scan_req = FacebookScanRequest(
+            main_folder=req.main_folder,
+            subfolders_str=req.subfolders_str or req.subfolders,
+            video_prefix=req.video_prefix,
+            start_date=req.start_date,
+            start_hour=req.start_hour,
+            folder_mode=req.folder_mode
+        )
+        scan_res = scan_facebook_autopost_endpoint(scan_req)
+        posts = [it for it in scan_res.get("items", []) if it.get("video_path") and (it.get("checked", True) or it.get("has_video"))]
     if not posts:
-        raise HTTPException(status_code=400, detail="ไม่มีรายการโพสต์ให้ดำเนินการ")
+        raise HTTPException(status_code=400, detail="ไม่มีรายการโพสต์ให้ดำเนินการ (กรุณาระบุ posts, items หรือ main_folder ที่ถูกต้อง)")
 
     global_facebook_progress = {
         "status": "running",
