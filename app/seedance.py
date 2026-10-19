@@ -4,7 +4,8 @@ import re
 import time
 import random
 import subprocess
-from typing import Any, Callable, Optional
+import urllib.parse
+from typing import Any, Callable, Optional, Union, List, Dict
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
@@ -255,80 +256,110 @@ def clear_seedance_image(driver) -> bool:
     """Removes all currently attached reference images from Dreamina composer."""
     try:
         total_removed = 0
-        for iteration in range(12):
+        for attempt in range(3):
             res = driver.execute_script("""
-                // 1. Find all reference images currently attached in composer area
-                const imgs = Array.from(document.querySelectorAll('img.image-DAOzUW, [class*="reference"] img')).filter(img => {
-                    const r = img.getBoundingClientRect();
-                    return r.top > 500 && r.height > 5;
+                let removedCount = 0;
+                // Tier 1: Native omniReferenceManager API via React Fiber
+                try {
+                    const visibleEl = Array.from(document.querySelectorAll('.references-Rwg9Ir, [class*="references-"]'))
+                                          .find(el => el.getBoundingClientRect().width > 0 && !el.closest('[class*="record"]')) || 
+                                      document.querySelector('div.tiptap.ProseMirror');
+                    const fKey = visibleEl ? Object.keys(visibleEl).find(k => k.startsWith('__reactFiber')) : null;
+                    let f = fKey ? visibleEl[fKey] : null;
+                    let vgm = null;
+                    while (f) {
+                        if (f.memoizedProps?.service?.videoGeneratorManager) {
+                            vgm = f.memoizedProps.service.videoGeneratorManager;
+                            break;
+                        }
+                        f = f.return;
+                    }
+                    const mgr = vgm?.omniReferenceManager;
+                    if (mgr) {
+                        const refs = mgr._dataStore?.references || [];
+                        const count = refs.length;
+                        if (count > 0) {
+                            if (typeof mgr.resetData === 'function') {
+                                mgr.resetData();
+                                removedCount = count;
+                            } else if (typeof mgr.removeReferenceResources === 'function') {
+                                const ids = refs.map(r => r.id).filter(Boolean);
+                                mgr.removeReferenceResources(ids);
+                                removedCount = count;
+                            }
+                        }
+                    }
+                } catch(e) {
+                    console.warn('VGM clear error:', e);
+                }
+
+                // Tier 2: DOM remove buttons inside reference items
+                const removeButtons = Array.from(document.querySelectorAll(
+                    '[class*="remove-button-container"], [class*="remove-button"], [data-reference-remove-button="true"], .remove-button-container-gGjINO'
+                )).filter(b => {
+                    const r = b.getBoundingClientRect();
+                    return r.top > 0 && r.top < 1000 && !b.closest('[class*="record"]');
                 });
-                if (imgs.length === 0) return { done: true, count: 0 };
 
-                // 2. Hover over the first image and its container to trigger remove button render
-                const targetImg = imgs[0];
-                let p = targetImg;
-                while (p && !p.classList.contains('reference-item-ZGVyJs') && p !== document.body) {
-                    p.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-                    p.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-                    p = p.parentElement;
-                }
-                if (p) {
-                    p.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-                    p.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-                }
-
-                // 3. Find and click the remove button container
-                const removeBtn = document.querySelector('.remove-button-container-B8A1_x, div[class*="remove-button-container"], [data-reference-remove-button="true"], .remove-button-f7uCBH, div[class*="remove-button"]');
-                if (removeBtn) {
-                    const pKey = Object.keys(removeBtn).find(k => k.startsWith('__reactProps'));
-                    if (pKey && removeBtn[pKey] && typeof removeBtn[pKey].onClick === 'function') {
-                        removeBtn[pKey].onClick({ stopPropagation: () => {}, preventDefault: () => {} });
-                        return { done: false, method: 'reactProps', count: imgs.length };
+                for (const btn of removeButtons) {
+                    const pKey = Object.keys(btn).find(k => k.startsWith('__reactProps'));
+                    if (pKey && btn[pKey] && typeof btn[pKey].onClick === 'function') {
+                        btn[pKey].onClick({ stopPropagation: () => {}, preventDefault: () => {} });
+                        removedCount++;
+                    } else if (typeof btn.click === 'function') {
+                        btn.click();
+                        removedCount++;
                     }
-                    removeBtn.click();
-                    return { done: false, method: 'domClick', count: imgs.length };
                 }
 
-                // 4. Fallback search across any reference container
-                const anyRemoveBtn = Array.from(document.querySelectorAll('.remove-button-container-B8A1_x, div[class*="remove-button-container"], [data-reference-remove-button="true"]'))
-                                          .find(b => b.getBoundingClientRect().top > 500);
-                if (anyRemoveBtn) {
-                    const pKey = Object.keys(anyRemoveBtn).find(k => k.startsWith('__reactProps'));
-                    if (pKey && anyRemoveBtn[pKey] && typeof anyRemoveBtn[pKey].onClick === 'function') {
-                        anyRemoveBtn[pKey].onClick({ stopPropagation: () => {}, preventDefault: () => {} });
-                        return { done: false, method: 'reactPropsFallback', count: imgs.length };
+                // Tier 3: Verify remaining references in both VGM store and DOM
+                let remainingVgm = 0;
+                try {
+                    const visibleEl = Array.from(document.querySelectorAll('.references-Rwg9Ir, [class*="references-"]'))
+                                          .find(el => el.getBoundingClientRect().width > 0 && !el.closest('[class*="record"]')) || 
+                                      document.querySelector('div.tiptap.ProseMirror');
+                    const fKey = visibleEl ? Object.keys(visibleEl).find(k => k.startsWith('__reactFiber')) : null;
+                    let f = fKey ? visibleEl[fKey] : null;
+                    while (f) {
+                        if (f.memoizedProps?.service?.videoGeneratorManager) {
+                            const mgr = f.memoizedProps.service.videoGeneratorManager.omniReferenceManager;
+                            remainingVgm = (mgr?._dataStore?.references || []).length;
+                            break;
+                        }
+                        f = f.return;
                     }
-                    anyRemoveBtn.click();
-                    return { done: false, method: 'domClickFallback', count: imgs.length };
-                }
+                } catch(e) {}
 
-                return { done: false, method: 'noButtonFound', count: imgs.length };
+                const composerRefs = Array.from(document.querySelectorAll('.references-Rwg9Ir, [class*="references-"]'))
+                                          .filter(el => {
+                                              const r = el.getBoundingClientRect();
+                                              return r.width > 0 && r.top > 0 && !el.closest('[class*="record"]');
+                                          });
+                const domImgs = composerRefs.flatMap(c => Array.from(c.querySelectorAll('img')))
+                                            .filter(img => img.getBoundingClientRect().width > 10);
+
+                return {
+                    removedCount,
+                    remainingCount: Math.max(remainingVgm, domImgs.length)
+                };
             """)
 
-            if not res or res.get("done"):
-                break
+            time.sleep(0.4)
+            rem_count = res.get("remainingCount", 0) if isinstance(res, dict) else 0
+            rem_removed = res.get("removedCount", 0) if isinstance(res, dict) else 0
+            total_removed += rem_removed
 
-            total_removed += 1
-            time.sleep(0.35)
+            if rem_count == 0:
+                if total_removed > 0:
+                    log(f"[Seedance] 🗑️ นำรูปภาพอ้างอิงทั้งหมด ({total_removed} รูป) ออกเรียบร้อยแล้ว")
+                else:
+                    log("[Seedance] 🗑️ ไม่มีรูปภาพอ้างอิงค้างอยู่บน Dreamina")
+                return True
 
-        # Final verification: check if any composer reference images remain
-        remaining_count = driver.execute_script("""
-            const imgs = Array.from(document.querySelectorAll('img.image-DAOzUW, [class*="reference"] img')).filter(img => {
-                const r = img.getBoundingClientRect();
-                return r.top > 500 && r.height > 5;
-            });
-            return imgs.length;
-        """)
+            time.sleep(0.4)
 
-        if remaining_count == 0:
-            if total_removed > 0:
-                log(f"[Seedance] 🗑️ นำรูปภาพอ้างอิงทั้งหมด ({total_removed} รูป) ออกเรียบร้อยแล้ว")
-            else:
-                log("[Seedance] 🗑️ ไม่มีรูปภาพอ้างอิงค้างอยู่บน Dreamina")
-            return True
-        else:
-            log(f"[Seedance] ⚠️ ยังมีรูปภาพอ้างอิงเหลืออยู่ {remaining_count} รูปบน Dreamina")
-            return False
+        log(f"[Seedance] ⚠️ ยังมีรูปภาพอ้างอิงเหลืออยู่ {rem_count} รูปบน Dreamina")
+        return False
 
     except Exception as e:
         log(f"[Seedance] ⚠️ ข้อผิดพลาดขณะลบรูปภาพ: {e}")
@@ -417,6 +448,7 @@ def wait_for_seedance_upload_and_button_ready(driver, min_wait: float = 5.0, max
         try:
             status = driver.execute_script("""
                 const composerRefContainer = document.querySelector('[data-content-generator-references="true"]') ||
+                                              document.querySelector('.references-Rwg9Ir, [class*="references-"]') ||
                                               document.querySelector('div[class*="content-generator-references"]');
                 let refSpinners = [];
                 if (composerRefContainer) {
@@ -428,11 +460,10 @@ def wait_for_seedance_upload_and_button_ready(driver, min_wait: float = 5.0, max
                     });
                 } else {
                     refSpinners = Array.from(document.querySelectorAll(
-                        '.reference-item-ZGVyJs [class*="spin"], .reference-item-ZGVyJs [class*="loading"], ' +
                         '[class*="reference-item"] [class*="spin"], [class*="reference-item"] [class*="loading"]'
                     )).filter(el => {
                         const r = el.getBoundingClientRect();
-                        return r.width > 0 && r.height > 0 && r.top > 520;
+                        return r.width > 0 && r.height > 0;
                     });
                 }
 
@@ -980,6 +1011,25 @@ def set_seedance_model(driver, model_key: str = "fast") -> str:
     key = (model_key or "fast").lower().strip()
     log(f"[Seedance] กำลังตั้งค่าโมเดลเป็น '{model_key}'...")
 
+    # Check if already selected
+    already_match = driver.execute_script("""
+    const key = arguments[0];
+    const select = Array.from(document.querySelectorAll('.lv-select')).find(el => {
+        const t = (el.innerText || '');
+        return t.includes('Seedance') || t.includes('Dreamina') || t.includes('Fast') || t.includes('Mini') || t.includes('2.0') || t.includes('2.5');
+    });
+    if (!select) return null;
+    const cur = (select.innerText || '').toLowerCase();
+    if (key === 'fast' && (cur.includes('fast') || cur.includes('2.0 fast'))) return select.innerText.trim();
+    if (key === 'mini' && (cur.includes('mini') || cur.includes('2.0 mini'))) return select.innerText.trim();
+    if ((key === '2.0' || key === 'v2') && cur.includes('2.0') && !cur.includes('fast') && !cur.includes('mini')) return select.innerText.trim();
+    if (cur.includes(key)) return select.innerText.trim();
+    return null;
+    """, key)
+    if already_match:
+        log(f"[Seedance] ℹ️ โมเดลปัจจุบันเป็น '{already_match}' อยู่แล้ว (ตรงตามที่ต้องการ)")
+        return already_match
+
     # Open model dropdown
     opened = driver.execute_script("""
     const select = Array.from(document.querySelectorAll('.lv-select')).find(el => {
@@ -1036,6 +1086,22 @@ def set_seedance_aspect_ratio(driver, ratio_target: str = "9:16") -> bool:
     target = (ratio_target or "9:16").strip()
     log(f"[Seedance] กำลังตั้งค่าอัตราส่วนภาพเป็น '{target}'...")
 
+    # Check if already set
+    already_match = driver.execute_script("""
+    const target = arguments[0].trim();
+    const btn = Array.from(document.querySelectorAll('button')).find(b => {
+        const t = (b.innerText || '');
+        return t.includes('16:9') || t.includes('9:16') || t.includes('1:1') || t.includes('3:4') || t.includes('4:3') || t.includes('21:9');
+    });
+    if (btn && (btn.innerText || '').includes(target)) {
+        return btn.innerText.trim();
+    }
+    return null;
+    """, target)
+    if already_match:
+        log(f"[Seedance] ℹ️ อัตราส่วนปัจจุบันเป็น '{already_match}' อยู่แล้ว (ตรงตามที่ต้องการ)")
+        return True
+
     # Open ratio popover if not open
     opened = driver.execute_script("""
     const btn = Array.from(document.querySelectorAll('.toolbar-button-EJ0kAg, button')).find(b => {
@@ -1081,6 +1147,22 @@ def set_seedance_duration(driver, duration_seconds: int = 15) -> bool:
     """Selects duration: 5, 10, 15."""
     target_sec = str(duration_seconds or 15).strip()
     log(f"[Seedance] กำลังตั้งค่าระยะเวลาวิดีโอเป็น {target_sec}s...")
+
+    # Check if already set
+    already_match = driver.execute_script("""
+    const target = arguments[0].trim();
+    const btn = Array.from(document.querySelectorAll('button')).find(b => {
+        const t = (b.innerText || '').trim();
+        return t === '5s' || t === '10s' || t === '15s' || t.endsWith('s');
+    });
+    if (btn && (btn.innerText || '').includes(target + 's')) {
+        return btn.innerText.trim();
+    }
+    return null;
+    """, target_sec)
+    if already_match:
+        log(f"[Seedance] ℹ️ ระยะเวลาปัจจุบันเป็น '{already_match}' อยู่แล้ว (ตรงตามที่ต้องการ)")
+        return True
 
     # Open duration popover if not open
     opened = driver.execute_script("""
@@ -1130,8 +1212,13 @@ def set_seedance_duration(driver, duration_seconds: int = 15) -> bool:
     time.sleep(0.4)
     return True
 
-def set_seedance_prompt(driver, prompt_text: str) -> bool:
-    """Inserts prompt text into ProseMirror editor cleanly without duplicates."""
+def set_seedance_prompt(driver, prompt_text: str, image_paths: Optional[list[str]] = None) -> bool:
+    """
+    Inserts prompt text into ProseMirror/TipTap editor cleanly.
+    Automatically detects uploaded reference images on Dreamina and replaces
+    @img1, @img2, @image1, @1 or character mentions with official Dreamina native
+    reference-mention-tag nodes.
+    """
     if not prompt_text or not prompt_text.strip():
         raise ValueError("ข้อความ Prompt ว่างเปล่า")
 
@@ -1151,8 +1238,11 @@ def set_seedance_prompt(driver, prompt_text: str) -> bool:
     if not editor:
         raise RuntimeError("ไม่พบกล่องข้อความ Prompt (ProseMirror Editor)")
 
+    target_paths = image_paths or []
+
     res = driver.execute_script("""
     const cleanText = arguments[0];
+    const targetPaths = arguments[1] || [];
     const editors = Array.from(document.querySelectorAll('div.tiptap.ProseMirror[contenteditable="true"], [contenteditable="true"]'));
     const editor = editors.find(el => {
         const r = el.getBoundingClientRect();
@@ -1161,118 +1251,456 @@ def set_seedance_prompt(driver, prompt_text: str) -> bool:
     }) || editors[0];
 
     if (!editor) return false;
-
     editor.focus();
 
-    // 1. TipTap API setContent
-    let success = false;
-    if (editor.editor && typeof editor.editor.commands?.setContent === 'function') {
+    const ed = editor.editor;
+    const hasTagNode = ed && ed.schema && ed.schema.nodes["reference-mention-tag"];
+    const hasMentionPattern = /(@img\\d+|@image\\d+|@\\d+)/i.test(cleanText);
+
+    // 1. If no tags or no mention node supported, set plain text
+    if (!hasTagNode || !hasMentionPattern) {
+        let success = false;
+        if (ed && typeof ed.commands?.setContent === 'function') {
+            try {
+                ed.commands.setContent(cleanText);
+                success = true;
+            } catch(e) {}
+        }
+        if (!success || !editor.innerText || editor.innerText.trim() === '') {
+            try {
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(editor);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                document.execCommand('delete', false, null);
+                document.execCommand('insertText', false, cleanText);
+            } catch(e) {
+                editor.innerHTML = '<p>' + cleanText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
+            }
+        }
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        editor.dispatchEvent(new Event('change', { bubbles: true }));
+        return { method: "plain_text" };
+    }
+
+    // 2. Discover available uploaded references
+    let refs = [];
+    try {
+        const visibleEl = document.querySelector(".references-Rwg9Ir, [class*='references-']") ||
+                          document.querySelector("[data-content-generator-references=true]") ||
+                          document.querySelector("div[class*=content-generator-references]") ||
+                          document.querySelector("div.tiptap.ProseMirror");
+        const fKey = visibleEl ? Object.keys(visibleEl).find(k => k.startsWith("__reactFiber")) : null;
+        let f = fKey ? visibleEl[fKey] : null;
+        let vgm = null;
+        while (f) {
+            if (f.memoizedProps?.service?.videoGeneratorManager) {
+                vgm = f.memoizedProps.service.videoGeneratorManager;
+                break;
+            }
+            f = f.return;
+        }
+
+        const rawList = vgm?.omniReferenceManager?._dataStore?.references ||
+                        vgm?.data?.omniReference?.resources ||
+                        vgm?.data?.referenceImages || [];
+
+        refs = Array.from(rawList).map((r, i) => ({
+            index: i + 1,
+            id: r.id,
+            name: (r.file?.name || r.name || "").replace(/\\.[^/.]+$/, "").trim()
+        })).filter(r => r.id);
+    } catch(e) {
+        console.warn("Notice reading Dreamina references:", e);
+    }
+
+    // 3. Fallback: If refs empty, try reading DOM reference item elements
+    if (refs.length === 0) {
         try {
-            editor.editor.commands.setContent(cleanText);
-            success = true;
-        } catch(e) {
-            console.warn('TipTap setContent failed:', e);
+            const domItems = Array.from(document.querySelectorAll("[class*=reference-item], [data-index]"));
+            domItems.forEach((el, i) => {
+                const fKey = Object.keys(el).find(k => k.startsWith("__reactFiber"));
+                let f = el[fKey];
+                while (f) {
+                    if (f.memoizedProps && (f.memoizedProps.id || f.memoizedProps.resource?.id)) {
+                        const id = f.memoizedProps.id || f.memoizedProps.resource?.id;
+                        const name = f.memoizedProps.name || f.memoizedProps.resource?.name || `Image ${i+1}`;
+                        refs.push({ index: i + 1, id: id, name: name });
+                        break;
+                    }
+                    f = f.return;
+                }
+            });
+        } catch(e) {}
+    }
+
+    // 4. Build comprehensive tag-to-id dictionary
+    const tagToId = {};
+    if (refs.length > 0) {
+        // A. 1-based index mapping: @img1, @image1, @1
+        refs.forEach((r, idx) => {
+            const num = idx + 1;
+            tagToId[`@img${num}`] = r.id;
+            tagToId[`@image${num}`] = r.id;
+            tagToId[`@${num}`] = r.id;
+        });
+
+        // B. Target image file path order mapping (if runner provided image_paths)
+        if (Array.isArray(targetPaths) && targetPaths.length > 0) {
+            targetPaths.forEach((p, idx) => {
+                const baseName = (p || "").split("/").pop().split("\\\\").pop().replace(/\\.[^/.]+$/, "").trim().toLowerCase();
+                const matchedRef = refs.find(r => r.name.toLowerCase() === baseName || baseName.includes(r.name.toLowerCase()));
+                if (matchedRef) {
+                    const num = idx + 1;
+                    tagToId[`@img${num}`] = matchedRef.id;
+                    tagToId[`@image${num}`] = matchedRef.id;
+                }
+            });
+        }
+
+        // C. Declaration-based mapping in prompt header:
+        // Matches e.g. "- @img1 = Orange Cat:" or "@image1: Black Cat"
+        const declRegex = /(@(?:img|image)?\\d+)\\s*[:=]\\s*([^\\n:,]+)/gi;
+        let dMatch;
+        while ((dMatch = declRegex.exec(cleanText)) !== null) {
+            const tagKey = dMatch[1].toLowerCase();
+            const declName = dMatch[2].trim().toLowerCase();
+            let matchedRef = refs.find(r => r.name.toLowerCase().includes(declName) || declName.includes(r.name.toLowerCase()));
+            if (!matchedRef && declName.startsWith("location")) {
+                matchedRef = refs.find(r => r.name.toLowerCase().startsWith("location"));
+            }
+            if (!matchedRef && declName.startsWith("equipment")) {
+                matchedRef = refs.find(r => r.name.toLowerCase().startsWith("equipment"));
+            }
+            if (matchedRef) {
+                tagToId[tagKey] = matchedRef.id;
+            }
         }
     }
 
-    // 2. Fallback: Selection insertText if setContent not available or text didn't update
-    if (!success || !editor.innerText || editor.innerText.trim() === '') {
-        try {
-            const sel = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(editor);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            document.execCommand('delete', false, null);
-            document.execCommand('insertText', false, cleanText);
-        } catch(e) {
-            editor.innerHTML = '<p>' + cleanText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
-        }
+    // 5. If no tags could be resolved, fallback to normal setContent
+    if (Object.keys(tagToId).length === 0) {
+        ed.commands.setContent(cleanText);
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        editor.dispatchEvent(new Event('change', { bubbles: true }));
+        return { method: "plain_fallback" };
     }
+
+    // 6. Build TipTap document with native reference-mention-tag nodes
+    const lines = cleanText.split("\\n");
+    const docContent = [];
+    const tagRegex = /(@img\\d+|@image\\d+|@\\d+)/gi;
+
+    for (const line of lines) {
+        if (!line.trim()) {
+            docContent.push({ type: "paragraph" });
+            continue;
+        }
+
+        let lastIdx = 0;
+        let pContent = [];
+        let m;
+        tagRegex.lastIndex = 0;
+
+        while ((m = tagRegex.exec(line)) !== null) {
+            const start = m.index;
+            const matched = m[0];
+            if (start > lastIdx) {
+                pContent.push({ type: "text", text: line.substring(lastIdx, start) });
+            }
+            const refId = tagToId[matched.toLowerCase()] || tagToId[matched];
+            if (refId) {
+                pContent.push({
+                    type: "reference-mention-tag",
+                    attrs: { id: refId, isContinuationPromptBlockPart: false }
+                });
+            } else {
+                pContent.push({ type: "text", text: matched });
+            }
+            lastIdx = tagRegex.lastIndex;
+        }
+
+        if (lastIdx < line.length) {
+            pContent.push({ type: "text", text: line.substring(lastIdx) });
+        }
+
+        docContent.push({ type: "paragraph", content: pContent });
+    }
+
+    ed.commands.setContent({
+        type: "doc",
+        content: docContent
+    });
 
     editor.dispatchEvent(new Event('input', { bubbles: true }));
     editor.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-    """, clean_prompt)
+    return {
+        method: "native_mention_tags",
+        resolvedCount: Object.keys(tagToId).length
+    };
+    """, clean_prompt, target_paths)
 
     time.sleep(0.4)
-    log(f"[Seedance] ✅ วางข้อความ Prompt สำเร็จ ({len(clean_prompt)} ตัวอักษร)")
+    res_method = res.get("method") if isinstance(res, dict) else "ok"
+    if res_method == "native_mention_tags":
+        log(f"[Seedance] 🏷️ แปลง @img เป็น Native Reference Tag ของ Dreamina สำเร็จ ({res.get('resolvedCount', 0)} แท็ก)")
+    else:
+        log(f"[Seedance] ✅ วางข้อความ Prompt สำเร็จ ({len(clean_prompt)} ตัวอักษร)")
     return bool(res)
 
-def click_seedance_generate(driver, timeout: float = 15.0) -> bool:
-    """Clicks the active Generate/Submit button on Dreamina, waiting if it is spinning or loading."""
+
+def click_seedance_generate(driver, timeout: float = 20.0) -> bool:
+    """Clicks the active Generate/Submit button on Dreamina ONCE, handles confirmation dialogs, and verifies generation starts without duplicate clicks."""
     time.sleep(0.5)  # Allow React state to settle
     start_t = time.time()
     last_spin_log = 0.0
+
+    # Record count before click
+    init_record_count = driver.execute_script("""
+        return document.querySelectorAll('.record-ej3loR.standard-Afgbma.video-record-FTTE4w, [class*="video-record"]').length;
+    """) or 0
+
+    clicked_once = False
 
     while time.time() - start_t < timeout:
         if is_seedance_stopped():
             return False
 
-        res = driver.execute_script("""
-        const buttons = Array.from(document.querySelectorAll('button[class*="submit-button"], button.submit-button-IG_OEx'));
-        const activeBtn = buttons.find(b => {
-            const cls = b.className || '';
-            const isCollapsed = cls.includes('collapsed');
-            const rect = b.getBoundingClientRect();
-            return !isCollapsed && rect.width > 0 && rect.height > 0;
-        });
-
-        if (!activeBtn) {
-            return { status: 'not_found' };
-        }
-
-        const isSpinning = activeBtn.classList.contains('lv-btn-loading') ||
-                           activeBtn.classList.contains('loading') ||
-                           !!activeBtn.querySelector('[class*="loading"], [class*="spin"], svg.lv-icon-loading, .lottie-player-o8evZm');
-
-        if (isSpinning) {
-            return { status: 'spinning' };
-        }
-
-        const isDisabled = activeBtn.disabled || activeBtn.classList.contains('lv-btn-disabled') || activeBtn.getAttribute('aria-disabled') === 'true';
-        if (isDisabled) {
-            return { status: 'disabled' };
-        }
-
-        activeBtn.scrollIntoView({ block: 'nearest' });
-        activeBtn.click();
-        return { status: 'clicked' };
+        # First check if a confirmation dialog is already showing
+        dialog_res = driver.execute_script("""
+            const btns = Array.from(document.querySelectorAll('button.lv-btn-primary.action-button-cowG__, button.action-button-cowG__, button.lv-btn-primary'));
+            const primary = btns.find(b => {
+                const txt = b.innerText || '';
+                return (txt.includes('สร้างทั้งหมด') || txt.includes('Generate all') || txt.includes('Generate') || txt.includes('สร้าง')) && 
+                       !b.disabled && !b.classList.contains('lv-btn-disabled') &&
+                       b.closest('.modal, [class*="modal"], [class*="dialog"], [class*="confirm"], .lv-modal');
+            });
+            if (primary) {
+                primary.click();
+                return { clicked: true, text: primary.innerText };
+            }
+            return { clicked: false };
         """)
-
-        status = res.get("status") if isinstance(res, dict) else None
-        if status == "clicked":
-            log("[Seedance] ✅ กดปุ่ม Generate บน Dreamina สำเร็จ")
+        if dialog_res and dialog_res.get("clicked"):
+            log(f"[Seedance] ✅ กดยืนยันเครดิต '{dialog_res.get('text')}' เรียบร้อย")
+            time.sleep(1.0)
             return True
-        elif status == "spinning":
-            now = time.time()
-            if now - last_spin_log >= 2.0:
-                elapsed = now - start_t
-                log(f"[Seedance] ⏳ ปุ่ม Generate ยังคงหมุนรอโหลดอยู่... (รอมาแล้ว {elapsed:.1f}s)")
-                last_spin_log = now
+
+        if not clicked_once:
+            res = driver.execute_script("""
+            const buttons = Array.from(document.querySelectorAll('button[class*="submit-button"], button.submit-button-IG_OEx'));
+            const activeBtn = buttons.find(b => {
+                const cls = b.className || '';
+                const isCollapsed = cls.includes('collapsed');
+                const rect = b.getBoundingClientRect();
+                return !isCollapsed && rect.width > 0 && rect.height > 0;
+            });
+
+            if (!activeBtn) {
+                return { status: 'not_found' };
+            }
+
+            const isSpinning = activeBtn.classList.contains('lv-btn-loading') ||
+                               activeBtn.classList.contains('loading') ||
+                               !!activeBtn.querySelector('[class*="loading"], [class*="spin"], svg.lv-icon-loading, .lottie-player-o8evZm');
+
+            if (isSpinning) {
+                return { status: 'spinning' };
+            }
+
+            const isDisabled = activeBtn.disabled || activeBtn.classList.contains('lv-btn-disabled') || activeBtn.getAttribute('aria-disabled') === 'true';
+            if (isDisabled) {
+                return { status: 'disabled' };
+            }
+
+            return { status: 'ready' };
+            """)
+
+            status = res.get("status") if isinstance(res, dict) else None
+            if status == "ready":
+                # Click ONCE via DOM click & event dispatching
+                driver.execute_script("""
+                    const buttons = Array.from(document.querySelectorAll('button[class*="submit-button"], button.submit-button-IG_OEx'));
+                    const b = buttons.find(b => !b.className.includes('collapsed') && b.getBoundingClientRect().width > 0 && !b.disabled);
+                    if (b) {
+                        b.click();
+                        const opts = { bubbles: true, cancelable: true, view: window };
+                        b.dispatchEvent(new PointerEvent('pointerdown', opts));
+                        b.dispatchEvent(new MouseEvent('mousedown', opts));
+                        b.dispatchEvent(new PointerEvent('pointerup', opts));
+                        b.dispatchEvent(new MouseEvent('mouseup', opts));
+                        b.dispatchEvent(new MouseEvent('click', opts));
+                    }
+                """)
+                clicked_once = True
+                log("[Seedance] 🚀 ส่งคำสั่งคลิกปุ่ม Generate เรียบร้อย (คลิกครั้งเดียวเพื่อป้องกันการสร้างซ้ำ)...")
+            elif status == "spinning":
+                now = time.time()
+                if now - last_spin_log >= 2.0:
+                    elapsed = now - start_t
+                    log(f"[Seedance] ⏳ ปุ่ม Generate ยังคงหมุนรอโหลดอยู่... (รอมาแล้ว {elapsed:.1f}s)")
+                    last_spin_log = now
+                time.sleep(0.4)
+                continue
+
+        # If already clicked once, monitor Dreamina response without clicking again
+        if clicked_once:
+            time.sleep(1.0)
+            check = driver.execute_script("""
+                // 1. Modal confirm?
+                const btns = Array.from(document.querySelectorAll('button.lv-btn-primary.action-button-cowG__, button.action-button-cowG__, button.lv-btn-primary'));
+                const primary = btns.find(b => {
+                    const txt = b.innerText || '';
+                    return (txt.includes('สร้างทั้งหมด') || txt.includes('Generate all') || txt.includes('Generate') || txt.includes('สร้าง')) && 
+                           !b.disabled && !b.classList.contains('lv-btn-disabled') &&
+                           b.closest('.modal, [class*="modal"], [class*="dialog"], [class*="confirm"], .lv-modal');
+                });
+                if (primary) {
+                    primary.click();
+                    return { confirmed: true, action: 'clicked_modal', text: primary.innerText };
+                }
+
+                // 2. Button loading?
+                const genBtn = document.querySelector('button[class*="submit-button"]:not([class*="collapsed"])');
+                const isBtnLoading = genBtn && (
+                    genBtn.classList.contains('lv-btn-loading') ||
+                    genBtn.classList.contains('loading') ||
+                    !!genBtn.querySelector('[class*="loading"], [class*="spin"], svg.lv-icon-loading, .lottie-player-o8evZm')
+                );
+
+                // 3. New record added?
+                const recs = document.querySelectorAll('.record-ej3loR.standard-Afgbma.video-record-FTTE4w, [class*="video-record"]');
+                const hasNewRecord = recs.length > arguments[0];
+                const anyDreaming = Array.from(recs).some(r => {
+                    const txt = r.innerText || '';
+                    return txt.includes('Dreaming') || txt.includes('Generating') || txt.includes('%') || !!r.querySelector('[class*="loading"], [class*="progress"]');
+                });
+
+                if (isBtnLoading || hasNewRecord || anyDreaming) {
+                    return { confirmed: true, action: 'generation_started' };
+                }
+                return { confirmed: false };
+            """, init_record_count)
+
+            if check.get("confirmed"):
+                log(f"[Seedance] ✅ ยืนยันการเริ่มสร้างวิดีโอบน Dreamina เรียบร้อย ({check.get('action')})")
+                return True
+
+            elapsed = time.time() - start_t
+            if elapsed > 4.0 and int(elapsed) % 3 == 0:
+                # Scroll to bottom or refresh feed trigger
+                driver.execute_script("""
+                    const vp = document.querySelector('.viewport-j2F4pH') || document.querySelector('div[class*="viewport"]');
+                    if (vp) {
+                        vp.scrollTop = vp.scrollHeight;
+                        vp.dispatchEvent(new Event('scroll', { bubbles: true }));
+                    }
+                """)
+
+            if elapsed > 7.0:
+                log("[Seedance] ℹ️ ได้รับคำสั่งสร้างเรียบร้อยแล้ว (ไม่ส่งคำสั่งซ้ำเพื่อความปลอดภัย)")
+                return True
 
         time.sleep(0.4)
 
-    # Fallback with Selenium element click
-    real_btn = fast_poll(driver, """
-        return document.querySelector('button.submit-button-IG_OEx:not([disabled]):not(.lv-btn-disabled)') ||
-               document.querySelector('button[class*="submit-button"]:not([class*="collapsed"]):not([disabled]):not(.lv-btn-disabled)');
-    """, timeout=2.0)
-    if real_btn:
-        real_btn.click()
-        log("[Seedance] ✅ กดปุ่ม Generate สำเร็จ (Fallback)")
+    if clicked_once:
         return True
-
     raise RuntimeError("ไม่สามารถกดปุ่ม Generate ได้ (ปุ่มยังคง Disabled หรือไม่พบปุ่ม Generate ที่พร้อมใช้งาน)")
 
+def ensure_seedance_ai_video_mode(driver) -> bool:
+    """Ensures Dreamina is switched to 'AI Video' mode tab (strictly scoped to generator mode-tabs)."""
+    try:
+        res = driver.execute_script("""
+            const modeContainer = document.querySelector('[class*="mode-tabs"], .generator-wjG76T, .tabs-mE6Jic.home-tabs-wUiUZ8');
+            if (!modeContainer) return { found: false, reason: "no_mode_container" };
+            const buttons = Array.from(modeContainer.querySelectorAll('button'));
+            const videoTab = buttons.find(b => (b.innerText || '').trim() === 'AI Video');
+            if (!videoTab) return { found: false, reason: "video_btn_not_found" };
+            const wasActive = videoTab.className.includes('active') || videoTab.getAttribute('aria-selected') === 'true';
+            if (!wasActive) {
+                videoTab.click();
+            }
+            return { found: true, wasActive: wasActive };
+        """)
+        if res and res.get("found"):
+            if not res.get("wasActive"):
+                log("[Seedance] 🎥 สลับแท็บโหมดการทำงานไปยัง 'AI Video' เรียบร้อยแล้ว")
+                time.sleep(1.0)
+            return True
+    except Exception as e:
+        log(f"[Seedance Mode Warning] {e}")
+    return False
+
 def ensure_seedance_tab(bot) -> bool:
-    """Ensures Selenium driver is switched to the Dreamina / Seedance tab."""
+    """
+    Ensures Selenium driver is switched to the Dreamina Create/Generate tab
+    preserving whatever workspace the user is currently on (supports any workspace id),
+    and enforces AI Video mode.
+    """
     if not bot or not bot.driver:
         return False
-    for url_part in ["dreamina.capcut.com", "dreamina", "workspace=0&type=video", "capcut.com/ai-tool"]:
-        if bot.switch_to_tab_containing(url_part):
-            return True
-    return False
+
+    driver = bot.driver
+
+    # 1. Prefer tab already on ai-tool/generate
+    switched = False
+    for target in ["ai-tool/generate", "type=video"]:
+        if bot.switch_to_tab_containing(target):
+            switched = True
+            break
+
+    # 2. Fallback to any Dreamina tab
+    if not switched:
+        for target in ["dreamina.capcut.com", "dreamina"]:
+            if bot.switch_to_tab_containing(target):
+                switched = True
+                break
+
+    if not switched and not driver:
+        return False
+
+    # 3. Verify that the tab is on the Create page (/ai-tool/generate)
+    try:
+        curr_url = driver.current_url or ""
+        if "dreamina.capcut.com" in curr_url and "/ai-tool/generate" not in curr_url:
+            log(f"[Seedance] 🔄 กำลังนำทางกลับมาที่หน้า Create จาก '{curr_url}' โดยคง Workspace เดิม...")
+            # Try clicking the 'Create' button in the sidebar first (preserves active workspace in SPA)
+            clicked_create = driver.execute_script("""
+                const navBtns = Array.from(document.querySelectorAll('button[class*="navigation-item"], a[class*="navigation-item"], button'));
+                const createBtn = navBtns.find(b => (b.innerText || '').trim() === 'Create');
+                if (createBtn) {
+                    createBtn.click();
+                    return true;
+                }
+                return false;
+            """)
+            if clicked_create:
+                time.sleep(1.0)
+                curr_url = driver.current_url or ""
+
+            # If still not on /ai-tool/generate, navigate directly preserving workspace query param
+            if "/ai-tool/generate" not in curr_url:
+                parsed = urllib.parse.urlparse(curr_url)
+                qs = urllib.parse.parse_qs(parsed.query)
+                workspace_param = qs.get("workspace", [None])[0]
+                if workspace_param is not None:
+                    target_url = f"https://dreamina.capcut.com/ai-tool/generate?workspace={workspace_param}&type=video"
+                else:
+                    target_url = "https://dreamina.capcut.com/ai-tool/generate?type=video"
+                log(f"[Seedance] 🌐 นำทางตรงไปยัง: {target_url}")
+                driver.get(target_url)
+                time.sleep(2.0)
+    except Exception as nav_ex:
+        log(f"[Seedance Tab Warning] {nav_ex}")
+
+    # 4. Enforce AI Video mode
+    try:
+        ensure_seedance_ai_video_mode(driver)
+    except Exception:
+        pass
+
+    return True
 
 def toggle_seedance_download_enhancer(driver, enabled: Optional[bool] = None) -> dict[str, Any]:
     """
@@ -1546,7 +1974,7 @@ def find_record_on_dreamina(
 
             // Sequence number conflict check:
             // If card starts with a leading sequence number (e.g. "139 Duration:..."), extract it
-            const cardNumMatch = normC.match(/^(\d+)(?:\\s|[-:])/);
+            const cardNumMatch = /^(\d+)[\s\-:]/.exec(normC);
             const cardLeadingNum = cardNumMatch ? parseInt(cardNumMatch[1], 10) : null;
             const targetNum = (num !== null && num !== undefined && String(num).trim() !== '') ? parseInt(num, 10) : null;
             if (cardLeadingNum !== null && targetNum !== null && !isNaN(cardLeadingNum) && !isNaN(targetNum) && cardLeadingNum !== targetNum) {
@@ -1574,6 +2002,23 @@ def find_record_on_dreamina(
                 isMatched = true;
                 matchType = 'exact_prefix';
                 score = 800;
+            }
+            // 4. Exact Episode Number and Part Number Match
+            else {
+                function extractPart(s) {
+                    if (!s) return null;
+                    const m = s.match(/part\s*(\d+)/i);
+                    return m ? parseInt(m[1], 10) : null;
+                }
+                const tPart = extractPart(name) || extractPart(fullPrompt);
+                const cPart = extractPart(text);
+                if (cardLeadingNum !== null && targetNum !== null && cardLeadingNum === targetNum) {
+                    if (tPart !== null && cPart !== null && tPart === cPart) {
+                        isMatched = true;
+                        matchType = 'exact_episode_and_part';
+                        score = 950;
+                    }
+                }
             }
 
             if (isMatched && score > bestScore) {
@@ -1679,11 +2124,11 @@ def find_record_on_dreamina(
         if max_scroll <= client_h:
             return best_match if best_match else {"found": False}
 
-        # Step-scan reliably through virtual list and trigger lazy-load
+        # Step-scan through virtual list: start from bottom (newest items) upwards to top
         step = 600
-        pos = 0
+        pos = max_scroll
 
-        while pos <= max_scroll:
+        while pos >= 0:
             if is_seedance_stopped():
                 log("[Seedance Find Record] 🛑 ยกเลิกการค้นหาเนื่องจากคำสั่ง Force Stop")
                 return {"found": False, "stopped": True}
@@ -1694,7 +2139,7 @@ def find_record_on_dreamina(
                     vp.dispatchEvent(new Event('scroll', { bubbles: true }));
                 }
             """, pos)
-            time.sleep(0.18)
+            time.sleep(0.15)
             match = driver.execute_script(check_code + r"""
                 const found = checkTarget(arguments[0], arguments[1], arguments[2], arguments[3]);
                 if (found) {
@@ -1736,10 +2181,7 @@ def find_record_on_dreamina(
                 if not best_match or match.get("score", 0) > best_match.get("score", 0):
                     best_match = match
 
-            if match and isinstance(match, dict) and match.get("newMaxScroll", 0) > max_scroll:
-                max_scroll = match.get("newMaxScroll")
-
-            pos += step
+            pos -= step
 
         if best_match and best_match.get("score", 0) >= 90:
             return best_match
@@ -2081,6 +2523,72 @@ def download_seedance_videos(
     except Exception as enh_err:
         log(f"[Seedance Download Enhancer Warning]: {enh_err}")
 
+    # 0. Fast Batch Scan: pre-pair all items from Dreamina feed in a single bottom-up sweep
+    unmatched_items = [it for it in items if not it.get("web_video_src")]
+    if unmatched_items:
+        try:
+            log(f"[Seedance Download] ⚡ ทำการสแกนค้นหาวิดีโอแบบรวดเร็ว (Fast Batch Scan) สำหรับ {len(unmatched_items)} รายการ...")
+            vp_info = driver.execute_script("""
+                const vp = document.querySelector('.viewport-j2F4pH') || document.querySelector('div[class*="viewport"]');
+                if (!vp) return null;
+                vp.scrollTop = vp.scrollHeight;
+                return { scrollHeight: vp.scrollHeight, clientHeight: vp.clientHeight };
+            """)
+            if vp_info and vp_info.get("scrollHeight"):
+                max_h = vp_info["scrollHeight"]
+                step = 600
+                pos = max_h
+                fast_found = {}
+
+                def _get_item_key(it):
+                    n = it.get("num")
+                    p_file = it.get("prompt_file") or it.get("prompt_base_name") or ""
+                    p_match = re.search(r'part\s*(\d+)', p_file, re.IGNORECASE)
+                    p_num = int(p_match.group(1)) if p_match else it.get("sub_index", 1)
+                    return (n, p_num) if n is not None else None
+
+                needed_keys = set(filter(None, [_get_item_key(it) for it in unmatched_items]))
+
+                while pos >= 0 and len(fast_found) < len(needed_keys):
+                    if is_seedance_stopped():
+                        break
+                    cards = driver.execute_script("""
+                        const raw = Array.from(document.querySelectorAll('[class*="record-ej"], [class*="video-record-FTTE4w"]'));
+                        return raw.map(c => {
+                            const vid = c.querySelector('video');
+                            return {
+                                text: (c.innerText || '').slice(0, 200),
+                                videoSrc: vid ? (vid.currentSrc || vid.src || null) : null
+                            };
+                        });
+                    """)
+                    if isinstance(cards, list):
+                        for c in cards:
+                            txt = c.get('text', '')
+                            m = re.search(r'(\d{3})\s*-\s*.*?Part\s*(\d+)', txt, re.IGNORECASE)
+                            if m and c.get('videoSrc'):
+                                k = (int(m.group(1)), int(m.group(2)))
+                                if k in needed_keys and k not in fast_found:
+                                    fast_found[k] = c['videoSrc']
+
+                    pos -= step
+                    driver.execute_script(f"""
+                        const vp = document.querySelector('.viewport-j2F4pH') || document.querySelector('div[class*="viewport"]');
+                        if (vp) {{
+                            vp.scrollTop = {pos};
+                            vp.dispatchEvent(new Event('scroll', {{ bubbles: true }}));
+                        }}
+                    """)
+                    time.sleep(0.10)
+
+                for it in items:
+                    k = _get_item_key(it)
+                    if k and k in fast_found and not it.get("web_video_src"):
+                        it["web_video_src"] = fast_found[k]
+                log(f"[Seedance Download] ⚡ Fast Batch Scan สำเร็จ: พบ {len(fast_found)} / {len(needed_keys)} วิดีโอ")
+        except Exception as f_err:
+            log(f"[Seedance Download Fast Scan Warning]: {f_err}")
+
     results = []
     success_count = 0
     total = len(items)
@@ -2105,23 +2613,23 @@ def download_seedance_videos(
                 "message": f"กำลังดาวน์โหลด [{idx+1}/{total}] {sub_name}..."
             })
 
-        # 1. Always find the exact matching card on Dreamina using full prompt text and distinctive snippets
-        match_res = find_record_on_dreamina(
-            driver,
-            num=num,
-            name=sub_name,
-            prompt_snippet=prompt_snippets,
-            full_prompt=prompt_text,
-            scroll_to_found=True,
-            click_download=True
-        )
+        video_src = item.get("web_video_src")
+        btn_clicked = False
 
-        is_matched = bool(match_res and match_res.get("found"))
-        video_src = match_res.get("videoSrc") if is_matched else None
-        if is_matched and not video_src:
-            video_src = item.get("web_video_src")
-
-        btn_clicked = bool(match_res.get("buttonClicked")) if (match_res and match_res.get("found")) else False
+        if not video_src:
+            # 1. Fallback to individual smart scroll search
+            match_res = find_record_on_dreamina(
+                driver,
+                num=num,
+                name=sub_name,
+                prompt_snippet=prompt_snippets,
+                full_prompt=prompt_text,
+                scroll_to_found=True,
+                click_download=True
+            )
+            is_matched = bool(match_res and match_res.get("found"))
+            video_src = match_res.get("videoSrc") if is_matched else None
+            btn_clicked = bool(match_res.get("buttonClicked")) if (match_res and match_res.get("found")) else False
 
         if not video_src:
             err_msg = f"ไม่พบคลิปสำหรับ '{sub_name}' บนหน้า Dreamina ในขณะนี้"
@@ -2154,11 +2662,17 @@ def download_seedance_videos(
 
             try:
                 import urllib.request
+                cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in driver.get_cookies()])
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    "Referer": "https://dreamina.capcut.com/",
+                    "Cookie": cookie_str
+                }
                 req = urllib.request.Request(
                     video_src,
-                    headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+                    headers=headers
                 )
-                with urllib.request.urlopen(req, timeout=35) as resp, open(dest_path, "wb") as out_f:
+                with urllib.request.urlopen(req, timeout=45) as resp, open(dest_path, "wb") as out_f:
                     while chunk := resp.read(65536):
                         if is_seedance_stopped():
                             log("[Seedance Download] 🛑 ยกเลิกการดาวน์โหลดไฟล์เนื่องจากคำสั่ง Force Stop")
@@ -2247,7 +2761,7 @@ def apply_all_seedance_settings(
 
     # 2. Handle Prompt based on clear_mode (วาง Prompt หลังแนบรูป)
     if prompt_text and prompt_text.strip():
-        results["prompt"] = set_seedance_prompt(driver, prompt_text)
+        results["prompt"] = set_seedance_prompt(driver, prompt_text, image_paths=target_imgs)
     elif clear_mode in ("both", "prompt"):
         results["prompt"] = clear_seedance_prompt(driver)
 
@@ -2259,7 +2773,7 @@ def apply_all_seedance_settings(
         results["generate"] = click_seedance_generate(driver)
 
         # 4. Post-Generate Clearing (ล้างข้อมูลหลังกดสั่งงานและกดส่งเรียบร้อยแล้ว)
-        time.sleep(1.2)
+        time.sleep(3.0)
         if clear_mode in ("both", "prompt"):
             log("[Seedance] 🧹 กำลังล้างข้อความ Prompt หลังกดส่งตาม Clear Mode...")
             results["post_clear_prompt"] = clear_seedance_prompt(driver)
@@ -2302,8 +2816,9 @@ def run_seedance_batch(
     dur_desc = f"{duration}s" if duration else "คงเดิม"
     log(f"[Seedance Engine] เริ่มกระบวนการ Seedance Batch จำนวน {total} รายการ (Model: {model_desc}, Ratio: {ratio_desc}, Duration: {dur_desc}, Image Mode: {image_mode}, Clear Mode: {clear_mode}, Submit: {click_generate})...")
 
-    # Switch to Dreamina tab
+    # Switch to Dreamina tab & enforce AI Video mode
     ensure_seedance_tab(bot)
+    ensure_seedance_ai_video_mode(driver)
 
     # 1. Apply global settings upfront before item loop
     try:
@@ -2378,6 +2893,29 @@ def run_seedance_batch(
                     "message": f"[{idx+1}/{total}] กำลังตั้งค่าและวางข้อมูลสำหรับ โฟลเดอร์ {sub_name}{p_file_str}..."
                 })
 
+            # 0. Anti-duplicate check: If record already exists on Dreamina feed, skip generation!
+            if click_generate and prompt_text:
+                try:
+                    num_val = item.get("num")
+                    p_match = re.search(r'part\s*(\d+)', p_file, re.IGNORECASE)
+                    p_idx = int(p_match.group(1)) if p_match else item.get("sub_index", 1)
+                    existing = driver.execute_script("""
+                        const recs = Array.from(document.querySelectorAll('.record-ej3loR, [class*="video-record"]'));
+                        const n = arguments[0];
+                        const p = arguments[1];
+                        return recs.some(r => {
+                            const txt = r.innerText || '';
+                            if (n && !txt.includes(String(n))) return false;
+                            return txt.includes('Part ' + p) || txt.includes('Part 0' + p);
+                        });
+                    """, num_val, p_idx)
+                    if existing:
+                        log(f"[Seedance Anti-Duplicate] ⏭️ ตรวจพบคลิปหรือคิวเรนเดอร์ของ {sub_name} (Part {p_idx}) อยู่บนหน้าเว็บแล้ว -> ข้ามการสั่งซ้ำเพื่อประหยัดเครดิต")
+                        success_count += 1
+                        continue
+                except Exception as dup_err:
+                    log(f"[Seedance Anti-Duplicate Notice]: {dup_err}")
+
             # 1. Handle Image Attachment based on mode and clear_mode (แนบรูปก่อน)
             if clear_mode in ("both", "image"):
                 if item_mode == "subfolder":
@@ -2423,7 +2961,7 @@ def run_seedance_batch(
 
             # 2. Handle Prompt based on clear_mode (วาง Prompt หลังแนบรูป)
             if prompt_text and prompt_text.strip():
-                set_seedance_prompt(driver, prompt_text)
+                set_seedance_prompt(driver, prompt_text, image_paths=item_img_paths)
             elif clear_mode in ("both", "prompt"):
                 clear_seedance_prompt(driver)
 
@@ -2436,7 +2974,7 @@ def run_seedance_batch(
                 click_seedance_generate(driver)
 
                 # Post-Generate Clearing (ล้างข้อมูลหลังกดสั่งงานและกดส่งเรียบร้อยแล้ว)
-                time.sleep(1.2)
+                time.sleep(2.5)
                 if clear_mode in ("both", "prompt"):
                     log(f"[Seedance] 🧹 ล้างข้อความ Prompt หลังส่งสำเร็จ ({sub_name})")
                     clear_seedance_prompt(driver)

@@ -14,6 +14,7 @@ import os
 from urllib.parse import quote_plus
 import websockets
 import asyncio
+import shutil
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = BASE_DIR / "runtime"
