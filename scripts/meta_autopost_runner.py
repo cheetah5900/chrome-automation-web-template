@@ -95,8 +95,25 @@ def run_meta_runner(
 
     # 1. Resolve Items
     if not items:
+        if not main_folder and preset_name:
+            try:
+                cfg_resp = requests.get(f"{api_url}/api/config", timeout=10)
+                if cfg_resp.status_code == 200:
+                    cfg_data = cfg_resp.json()
+                    for grp in ("facebook_presets", "meta_presets"):
+                        presets = cfg_data.get(grp, {})
+                        if isinstance(presets, dict):
+                            for p_k, p_v in presets.items():
+                                if p_k.strip().lower() == preset_name.strip().lower() and isinstance(p_v, dict):
+                                    main_folder = p_v.get("main_folder") or main_folder
+                                    if (not prefix or prefix == "combined") and p_v.get("video_prefix"):
+                                        prefix = p_v.get("video_prefix")
+                                    break
+            except Exception:
+                pass
+
         if not main_folder:
-            raise ValueError("ต้องระบุ main_folder หรือส่ง items รายการโพสต์")
+            raise ValueError("ต้องระบุ main_folder หรือส่ง items รายการโพสต์ หรือระบุ --preset ที่มี main_folder")
         print(f"🔍 [Runner] กำลังสแกนหาไฟล์วิดีโอและแคปชันใน: {main_folder}...")
         items = scan_meta_items(
             main_folder=main_folder,
