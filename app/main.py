@@ -4401,11 +4401,67 @@ class MetaRunRequest(BaseModel):
     start_hour: int | str = 18
     folder_mode: str = "generic"
     target_url: str = ""
+    preset_name: str = ""
+    preset: str = ""
     job_id: str | None = None
     delay_min: float = 5.0
     delay_max: float = 15.0
 
-def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0):
+def resolve_composer_target_url(target_url: str = "", preset_name: str = "", driver = None) -> str:
+    """Resolves composer URL from target_url, named preset, active tab, or configured default preset."""
+    url = (target_url or "").strip()
+    if url:
+        return url
+
+    p_name = (preset_name or "").strip()
+
+    # 1. Search candidate config files for preset
+    candidate_files = []
+    if "CONFIG_FILE" in globals() and CONFIG_FILE:
+        candidate_files.append(CONFIG_FILE)
+    if "SETTINGS_FILE" in globals() and SETTINGS_FILE:
+        candidate_files.append(SETTINGS_FILE)
+    if "DEFAULTS_FILE" in globals() and DEFAULTS_FILE:
+        candidate_files.append(DEFAULTS_FILE)
+
+    for cf in candidate_files:
+        if cf and os.path.isfile(str(cf)):
+            try:
+                with open(cf, "r", encoding="utf-8") as f:
+                    c_data = json.load(f)
+                    for group in ("facebook_presets", "meta_presets"):
+                        presets = c_data.get(group, {})
+                        if isinstance(presets, dict):
+                            if p_name:
+                                for name, val in presets.items():
+                                    if name.strip().lower() == p_name.lower() and isinstance(val, dict):
+                                        p_url = val.get("page_url") or val.get("channel_url") or val.get("url") or val.get("composer_url") or ""
+                                        if p_url:
+                                            log(f"[Meta Auto Post] 📋 ใช้ URL จาก Preset '{name}': {p_url}")
+                                            return p_url
+                            elif not p_name:
+                                for name, val in presets.items():
+                                    if isinstance(val, dict):
+                                        p_url = val.get("page_url") or val.get("channel_url") or val.get("url") or val.get("composer_url") or ""
+                                        if p_url:
+                                            log(f"[Meta Auto Post] 📋 ใช้ URL จาก Preset '{name}': {p_url}")
+                                            return p_url
+            except Exception:
+                pass
+
+    # 2. Check active browser tab if available
+    if driver:
+        try:
+            curr = driver.current_url or ""
+            if "facebook.com" in curr.lower():
+                log(f"[Meta Auto Post] 🌐 ตรวจพบ URL หน้าปัจจุบันบนเบราว์เซอร์: {curr}")
+                return curr
+        except Exception:
+            pass
+
+    return ""
+
+def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0, preset_name: str = ""):
     global global_meta_progress
     import os
     import sys
@@ -4423,33 +4479,8 @@ def _meta_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", del
             log("[Meta Auto Post] Error: Chrome driver is not attached")
             return
 
-        # Determine composer URL - check target_url, active browser tab, or saved presets
-        composer_url = target_url.strip() if target_url else ""
-        if not composer_url:
-            try:
-                curr = bot.driver.current_url or ""
-                if "facebook.com" in curr.lower():
-                    composer_url = curr
-                    log(f"[Meta Auto Post] 🌐 ตรวจพบ URL หน้าปัจจุบันบนเบราว์เซอร์: {composer_url}")
-            except Exception:
-                pass
-
-        if not composer_url and os.path.isfile(SETTINGS_FILE):
-            try:
-                with open(SETTINGS_FILE, "r", encoding="utf-8") as sf:
-                    s_data = json.load(sf)
-                    for preset_group in ("meta_presets", "facebook_presets"):
-                        presets = s_data.get(preset_group, {})
-                        for p_name, p_val in presets.items():
-                            p_url = p_val.get("page_url") or p_val.get("url") or ""
-                            if p_url:
-                                composer_url = p_url
-                                log(f"[Meta Auto Post] 📋 ใช้ URL จาก Preset '{p_name}': {composer_url}")
-                                break
-                        if composer_url:
-                            break
-            except Exception:
-                pass
+        # Determine composer URL - check target_url, preset_name, active browser tab, or saved presets
+        composer_url = resolve_composer_target_url(target_url=target_url, preset_name=preset_name, driver=bot.driver)
 
         if not composer_url:
             global_meta_progress["status"] = "error"
@@ -4535,9 +4566,10 @@ def run_meta_autopost(req: MetaRunRequest) -> dict[str, Any]:
     log(f"[Meta Auto Post] Received batch run request for {len(posts)} items (Delay: {req.delay_min}s - {req.delay_max}s)")
     
     import threading
+    p_name = req.preset_name or req.preset
     t = threading.Thread(
         target=_meta_autopost_worker,
-        args=(posts, req.target_url, req.delay_min, req.delay_max),
+        args=(posts, req.target_url, req.delay_min, req.delay_max, p_name),
         daemon=True
     )
     t.start()
@@ -5288,6 +5320,8 @@ class FacebookRunRequest(BaseModel):
     start_hour: int | str = 18
     folder_mode: str = "generic"
     target_url: str = ""
+    preset_name: str = ""
+    preset: str = ""
     delay_min: float = 5.0
     delay_max: float = 15.0
 
@@ -5306,7 +5340,7 @@ FacebookRunRequest.model_rebuild()
 FacebookScanRequest.model_rebuild()
 FacebookOpenUrlRequest.model_rebuild()
 
-def _facebook_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0):
+def _facebook_autopost_worker(posts: list[dict[str, Any]], target_url: str = "", delay_min: float = 5.0, delay_max: float = 15.0, preset_name: str = ""):
     global global_facebook_progress
     try:
         driver = _get_facebook_driver()
@@ -5316,15 +5350,7 @@ def _facebook_autopost_worker(posts: list[dict[str, Any]], target_url: str = "",
             log("[Facebook Auto Post] Error: Chrome 9222 driver is not attached")
             return
 
-        clean_url = target_url.strip() if target_url else ""
-        if not clean_url:
-            try:
-                curr = driver.current_url.lower()
-                if "facebook.com" in curr:
-                    clean_url = driver.current_url
-                    log(f"[Facebook Auto Post] ใช้แท็บ Facebook ปัจจุบันบนเบราว์เซอร์: {clean_url}")
-            except Exception:
-                pass
+        clean_url = resolve_composer_target_url(target_url=target_url, preset_name=preset_name, driver=driver)
 
         from app.facebook_autopost import run_facebook_autopost_batch, reset_facebook_stop, find_sample_affiliate_url
 
@@ -5404,9 +5430,10 @@ def run_facebook_autopost(req: FacebookRunRequest) -> dict[str, Any]:
     log(f"[Facebook Auto Post] Received batch run request for {len(posts)} items (Delay: {req.delay_min}s - {req.delay_max}s)")
     
     import threading
+    p_name = req.preset_name or req.preset
     t = threading.Thread(
         target=_facebook_autopost_worker,
-        args=(posts, req.target_url, req.delay_min, req.delay_max),
+        args=(posts, req.target_url, req.delay_min, req.delay_max, p_name),
         daemon=True
     )
     t.start()

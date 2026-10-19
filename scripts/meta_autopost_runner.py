@@ -79,6 +79,7 @@ def run_meta_runner(
     start_date: str = "",
     start_hour: int = 18,
     target_url: str = "",
+    preset_name: str = "",
     delay_min: float = 5.0,
     delay_max: float = 15.0,
     items: Optional[List[Dict[str, Any]]] = None,
@@ -123,6 +124,7 @@ def run_meta_runner(
     run_payload = {
         "items": valid_items,
         "target_url": target_url,
+        "preset_name": preset_name,
         "delay_min": delay_min,
         "delay_max": delay_max
     }
@@ -193,6 +195,7 @@ def main():
     parser.add_argument("--start-date", default=datetime.now().strftime("%Y-%m-%d"), help="Schedule start date (YYYY-MM-DD)")
     parser.add_argument("--start-hour", type=int, default=18, help="Schedule start hour 0-23 (default: 18)")
     parser.add_argument("--target-url", default="", help="Target Meta Composer / Page URL")
+    parser.add_argument("--preset", "--preset-name", default="", help="Preset name configured in 6969 (e.g. ป้ายยา, ผักกาด)")
     parser.add_argument("--delay-min", type=float, default=5.0, help="Min delay between posts (seconds)")
     parser.add_argument("--delay-max", type=float, default=15.0, help="Max delay between posts (seconds)")
     parser.add_argument("--api-url", default=API_DEFAULT_URL, help=f"6969 FastAPI base URL (default: {API_DEFAULT_URL})")
@@ -218,6 +221,7 @@ def main():
             start_date=args.start_date,
             start_hour=args.start_hour,
             target_url=args.target_url,
+            preset_name=args.preset,
             delay_min=args.delay_min,
             delay_max=args.delay_max,
             items=items,
