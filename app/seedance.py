@@ -293,22 +293,25 @@ def clear_seedance_image(driver) -> bool:
                     console.warn('VGM clear error:', e);
                 }
 
-                // Tier 2: DOM remove buttons inside reference items
-                const removeButtons = Array.from(document.querySelectorAll(
-                    '[class*="remove-button-container"], [class*="remove-button"], [data-reference-remove-button="true"], .remove-button-container-gGjINO'
-                )).filter(b => {
-                    const r = b.getBoundingClientRect();
-                    return r.top > 0 && r.top < 1000 && !b.closest('[class*="record"]');
-                });
+                // Tier 2: DOM remove buttons inside reference items (only if Tier 1 did not clear)
+                if (removedCount === 0) {
+                    const composerRef = document.querySelector('[data-content-generator-references="true"], .references-Rwg9Ir, [class*="references-"]');
+                    const removeButtons = composerRef ? Array.from(composerRef.querySelectorAll(
+                        '[class*="remove-button-container"], [class*="remove-button"], [data-reference-remove-button="true"], .remove-button-container-gGjINO'
+                    )).filter(b => {
+                        const r = b.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0;
+                    }) : [];
 
-                for (const btn of removeButtons) {
-                    const pKey = Object.keys(btn).find(k => k.startsWith('__reactProps'));
-                    if (pKey && btn[pKey] && typeof btn[pKey].onClick === 'function') {
-                        btn[pKey].onClick({ stopPropagation: () => {}, preventDefault: () => {} });
-                        removedCount++;
-                    } else if (typeof btn.click === 'function') {
-                        btn.click();
-                        removedCount++;
+                    for (const btn of removeButtons) {
+                        const pKey = Object.keys(btn).find(k => k.startsWith('__reactProps'));
+                        if (pKey && btn[pKey] && typeof btn[pKey].onClick === 'function') {
+                            btn[pKey].onClick({ stopPropagation: () => {}, preventDefault: () => {} });
+                            removedCount++;
+                        } else if (typeof btn.click === 'function') {
+                            btn.click();
+                            removedCount++;
+                        }
                     }
                 }
 
@@ -1089,7 +1092,8 @@ def set_seedance_aspect_ratio(driver, ratio_target: str = "9:16") -> bool:
     # Check if already set
     already_match = driver.execute_script("""
     const target = arguments[0].trim();
-    const btn = Array.from(document.querySelectorAll('button')).find(b => {
+    const btns = Array.from(document.querySelectorAll('[class*="toolbar-button"], button'));
+    const btn = btns.find(b => {
         const t = (b.innerText || '');
         return t.includes('16:9') || t.includes('9:16') || t.includes('1:1') || t.includes('3:4') || t.includes('4:3') || t.includes('21:9');
     });
@@ -1104,7 +1108,8 @@ def set_seedance_aspect_ratio(driver, ratio_target: str = "9:16") -> bool:
 
     # Open ratio popover if not open
     opened = driver.execute_script("""
-    const btn = Array.from(document.querySelectorAll('.toolbar-button-EJ0kAg, button')).find(b => {
+    const btns = Array.from(document.querySelectorAll('[class*="toolbar-button"], button'));
+    const btn = btns.find(b => {
         const t = (b.innerText || '');
         return t.includes('16:9') || t.includes('9:16') || t.includes('1:1') || t.includes('3:4') || t.includes('4:3') || t.includes('21:9');
     });
@@ -1135,7 +1140,7 @@ def set_seedance_aspect_ratio(driver, ratio_target: str = "9:16") -> bool:
     """, target)
 
     time.sleep(0.2)
-    driver.execute_script("document.body.click();")
+    driver.execute_script("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));")
     if not selected:
         raise RuntimeError(f"ไม่พบตัวเลือกอัตราส่วน '{target}' ใน Popover")
 
@@ -1148,12 +1153,13 @@ def set_seedance_duration(driver, duration_seconds: int = 15) -> bool:
     target_sec = str(duration_seconds or 15).strip()
     log(f"[Seedance] กำลังตั้งค่าระยะเวลาวิดีโอเป็น {target_sec}s...")
 
-    # Check if already set
+    # Check if already set (use strict duration regex to avoid matching sidebar 'Assets' or other words)
     already_match = driver.execute_script("""
     const target = arguments[0].trim();
-    const btn = Array.from(document.querySelectorAll('button')).find(b => {
+    const btns = Array.from(document.querySelectorAll('[class*="toolbar-button"], button'));
+    const btn = btns.find(b => {
         const t = (b.innerText || '').trim();
-        return t === '5s' || t === '10s' || t === '15s' || t.endsWith('s');
+        return /^(?:5|10|15)s$/i.test(t) || /^\\d+s$/i.test(t);
     });
     if (btn && (btn.innerText || '').includes(target + 's')) {
         return btn.innerText.trim();
@@ -1166,9 +1172,10 @@ def set_seedance_duration(driver, duration_seconds: int = 15) -> bool:
 
     # Open duration popover if not open
     opened = driver.execute_script("""
-    const btn = Array.from(document.querySelectorAll('.toolbar-button-EJ0kAg, button')).find(b => {
+    const btns = Array.from(document.querySelectorAll('[class*="toolbar-button"], button'));
+    const btn = btns.find(b => {
         const t = (b.innerText || '').trim();
-        return t === '5s' || t === '10s' || t === '15s' || t.endsWith('s');
+        return /^(?:5|10|15)s$/i.test(t) || /^\\d+s$/i.test(t);
     });
     if (btn) {
         if (!btn.classList.contains('lv-popover-open')) {
@@ -1204,7 +1211,7 @@ def set_seedance_duration(driver, duration_seconds: int = 15) -> bool:
     """, target_sec)
 
     time.sleep(0.2)
-    driver.execute_script("document.body.click();")
+    driver.execute_script("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));")
     if not selected:
         raise RuntimeError(f"ไม่สามารถเลือกตัวเลือกระยะเวลา {target_sec}s ได้")
 
