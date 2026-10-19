@@ -521,27 +521,90 @@ def step_3_insert_caption(driver, caption: str) -> bool:
     log(f"[Meta Step 3] ✅ วางข้อความ Description และยืนยันผลสำเร็จ")
     return True
 
-def step_4_click_share_tab(driver, timeout: float = 60.0) -> bool:
+def step_4_click_share_tab(driver, timeout: float = 420.0) -> bool:
     """Step 4: Poll until 'Share' tab is enabled, click, and poll verify Step 3 screen."""
-    log(f"[Meta Step 4] กำลังตรวจสอบสถานะความพร้อมของแท็บ 'Share' (Timeout {timeout}s)...")
-    
-    top_share_btn = fast_poll(driver, '''
-        const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
-        const shareBtn = allBtns.find(b => {
-            const txt = (b.innerText || '').trim().toLowerCase();
-            const isShare = txt.startsWith('share') || txt.startsWith('แชร์');
-            return isShare && b.getBoundingClientRect().y < 120 && b.getAttribute('aria-disabled') !== 'true';
-        });
-        return shareBtn;
-    ''', timeout=timeout, poll_interval=0.3)
+    log(f"[Meta Step 4] กำลังตรวจสอบสถานะความพร้อมของแท็บ 'Share' (Timeout {timeout:.0f}s)...")
+    start_time = time.time()
+    last_log_time = 0.0
+    share_clicked = False
 
-    if top_share_btn:
-        log("[Meta Step 4] แท็บ Share เปิดใช้งานแล้ว! กำลังคลิกเข้าสู่หน้า Share...")
-        try:
-            ActionChains(driver).move_to_element(top_share_btn).pause(0.1).click().perform()
-        except Exception:
-            driver.execute_script("arguments[0].click();", top_share_btn)
-    else:
+    while time.time() - start_time < timeout:
+        if is_meta_stopped():
+            raise RuntimeError("🛑 Force Stop: ผู้ใช้สั่งหยุดการทำงาน")
+
+        # 1. Check if already on Step 3 (Share screen)
+        already_on_step3 = driver.execute_script('''
+            return !!Array.from(document.querySelectorAll('div, span, [role="radio"]')).find(el => {
+                const txt = (el.innerText || '').trim().toLowerCase();
+                return txt === 'scheduling options' || txt === 'share now' || txt.includes('schedule') || txt.includes('กำหนดเวลา') || txt.includes('แชร์เลย');
+            });
+        ''')
+        if already_on_step3:
+            log("[Meta Step 4] ✅ ตรวจพบหน้า Step 3 (Share Screen) พร้อมใช้งานแล้ว")
+            share_clicked = True
+            break
+
+        # 2. Check if top Share tab button is enabled
+        res = driver.execute_script('''
+            const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+            const shareBtn = allBtns.find(b => {
+                const txt = (b.innerText || '').trim().toLowerCase();
+                const isShare = txt.startsWith('share') || txt.startsWith('แชร์');
+                return isShare && b.getBoundingClientRect().y < 120;
+            });
+            const isEnabled = shareBtn && shareBtn.getAttribute('aria-disabled') !== 'true';
+
+            // Detect upload progress percentage if available
+            let uploadText = '';
+            const progressEl = document.querySelector('[role="progressbar"], div[class*="progress" i]');
+            if (progressEl) {
+                const val = progressEl.getAttribute('aria-valuenow') || progressEl.getAttribute('aria-valuetext');
+                if (val) uploadText = `${val}%`;
+            }
+            if (!uploadText) {
+                const allTextEls = Array.from(document.querySelectorAll('div, span, p'));
+                const uEl = allTextEls.find(e => {
+                    if (e.children.length > 2) return false;
+                    const t = (e.innerText || '').toLowerCase();
+                    return (t.includes('upload') || t.includes('อัปโหลด') || t.includes('%')) && t.length < 50;
+                });
+                if (uEl) uploadText = (uEl.innerText || '').trim();
+            }
+
+            return {
+                found: !!shareBtn,
+                enabled: isEnabled,
+                uploadText: uploadText
+            };
+        ''')
+
+        if res and res.get("enabled"):
+            log("[Meta Step 4] แท็บ Share เปิดใช้งานแล้ว! กำลังคลิกเข้าสู่หน้า Share...")
+            try:
+                driver.execute_script('''
+                    const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
+                    const shareBtn = allBtns.find(b => {
+                        const txt = (b.innerText || '').trim().toLowerCase();
+                        const isShare = txt.startsWith('share') || txt.startsWith('แชร์');
+                        return isShare && b.getBoundingClientRect().y < 120 && b.getAttribute('aria-disabled') !== 'true';
+                    });
+                    if (shareBtn) shareBtn.click();
+                ''')
+            except Exception as e:
+                log(f"[Meta Step 4] คลิกแท็บ Share ผ่าน JS ไม่สำเร็จ: {e}")
+            share_clicked = True
+            break
+
+        now = time.time()
+        if now - last_log_time >= 5.0:
+            last_log_time = now
+            elapsed = now - start_time
+            info = f" ({res.get('uploadText')})" if res and res.get('uploadText') else ""
+            log(f"[Meta Step 4] ⏳ กำลังรอวิดีโออัปโหลดและแท็บ 'Share' เปิดใช้งาน{info} ({elapsed:.1f}s / {timeout:.0f}s)...")
+
+        time.sleep(0.5)
+
+    if not share_clicked:
         log("[Meta Step 4] แท็บ Share ด้านบนยังไม่พร้อม ลองกดปุ่ม Next...")
         step1_next = fast_poll(driver, '''
             const allBtns = Array.from(document.querySelectorAll('div[role="button"], button'));
@@ -567,6 +630,19 @@ def step_4_click_share_tab(driver, timeout: float = 60.0) -> bool:
 
     if not on_step3:
         raise RuntimeError("ไม่สามารถเข้าสู่หน้า Step 3 (Share Screen) ได้")
+
+    # Reset scroll to top so Scheduling options is in view
+    try:
+        driver.execute_script('''
+            window.scrollTo(0, 0);
+            document.querySelectorAll('div').forEach(d => {
+                if (d.scrollHeight > d.clientHeight && d.clientHeight > 200) {
+                    d.scrollTop = 0;
+                }
+            });
+        ''')
+    except Exception:
+        pass
 
     log("[Meta Step 4] ✅ เข้าสู่หน้า Step 3 (Share Screen) เรียบร้อยแล้ว")
     return True
@@ -686,12 +762,6 @@ def wait_for_schedule_option_ready(driver, timeout: float = 60.0) -> bool:
 
                 let foundOption = null;
                 for (const el of allCandidates) {
-                    const rect = el.getBoundingClientRect();
-                    // Must be visible and in the Scheduling options area (y between 70 and 550)
-                    if (rect.height === 0 || rect.width === 0) continue;
-                    if (rect.y < 70 || rect.y > 550) continue;
-
-                    // Exclude nav headers and tabs
                     if (el.closest('nav, [role="tablist"], [role="listitem"]')) continue;
 
                     const rawText = (el.innerText || el.textContent || '').trim().toLowerCase();
@@ -701,6 +771,22 @@ def wait_for_schedule_option_ready(driver, timeout: float = 60.0) -> bool:
                     if (!matched) continue;
 
                     const clickable = el.closest('[role="radio"], [role="button"], label, div[tabindex]') || el;
+
+                    // Ensure element belongs to the Scheduling options section (not bottom action bar or modal footer)
+                    let isUnderSchedulingOptions = false;
+                    let container = clickable.parentElement;
+                    for (let depth = 0; depth < 8 && container && container !== document.body; depth++) {
+                        const cText = (container.innerText || '').toLowerCase();
+                        if (cText.includes('share now') || cText.includes('scheduling options') || cText.includes('ตัวเลือกการกำหนดเวลา') || cText.includes('แชร์เลย')) {
+                            isUnderSchedulingOptions = true;
+                            break;
+                        }
+                        container = container.parentElement;
+                    }
+                    if (!isUnderSchedulingOptions) continue;
+
+                    // Scroll element into view so it is never skipped due to container scrolling
+                    try { clickable.scrollIntoView({block: 'center', inline: 'nearest'}); } catch (e) {}
 
                     // Check disabled state on element or ancestors
                     let isDisabled = false;
@@ -775,18 +861,30 @@ def wait_for_schedule_option_ready(driver, timeout: float = 60.0) -> bool:
                 const targetKeywords = ['schedule for later', 'schedule', 'กำหนดเวลาในภายหลัง', 'กำหนดเวลา'];
                 const allCandidates = Array.from(document.querySelectorAll('[role="radio"], [role="button"], input[type="radio"], div, span, label'));
                 for (const el of allCandidates) {
-                    const rect = el.getBoundingClientRect();
-                    if (rect.height === 0 || rect.width === 0 || rect.y < 70 || rect.y > 550) continue;
                     if (el.closest('nav, [role="tablist"], [role="listitem"]')) continue;
                     const rawText = (el.innerText || el.textContent || '').trim().toLowerCase();
                     const ariaLabel = (el.getAttribute('aria-label') || '').trim().toLowerCase();
-                    if (targetKeywords.some(kw => rawText === kw || rawText.startsWith(kw) || ariaLabel === kw || ariaLabel.startsWith(kw))) {
-                        const clickable = el.closest('[role="radio"], [role="button"], label, div[tabindex]') || el;
-                        clickable.click();
-                        const radio = clickable.querySelector('input[type="radio"]');
-                        if (radio && !radio.checked) radio.click();
-                        return true;
+                    if (!targetKeywords.some(kw => rawText === kw || rawText.startsWith(kw) || ariaLabel === kw || ariaLabel.startsWith(kw))) continue;
+
+                    const clickable = el.closest('[role="radio"], [role="button"], label, div[tabindex]') || el;
+
+                    let isUnderSchedulingOptions = false;
+                    let container = clickable.parentElement;
+                    for (let depth = 0; depth < 8 && container && container !== document.body; depth++) {
+                        const cText = (container.innerText || '').toLowerCase();
+                        if (cText.includes('share now') || cText.includes('scheduling options') || cText.includes('ตัวเลือกการกำหนดเวลา') || cText.includes('แชร์เลย')) {
+                            isUnderSchedulingOptions = true;
+                            break;
+                        }
+                        container = container.parentElement;
                     }
+                    if (!isUnderSchedulingOptions) continue;
+
+                    try { clickable.scrollIntoView({block: 'center', inline: 'nearest'}); } catch (e) {}
+                    clickable.click();
+                    const radio = clickable.querySelector('input[type="radio"]');
+                    if (radio && !radio.checked) radio.click();
+                    return true;
                 }
                 return false;
             ''')
@@ -827,8 +925,8 @@ def step_5_set_schedule(driver, scheduled_dt_str: str) -> bool:
     Specifically checks if an Instagram schedule box exists; if not, skips Instagram and proceeds to Schedule submit."""
     log("[Meta Step 5] กำลังรอตัวเลือก 'Schedule for later' พร้อมใช้งาน...")
     
-    # 1. Wait for "Schedule for later" / "Schedule" to be enabled and click it (Timeout 180 seconds)
-    wait_for_schedule_option_ready(driver, timeout=180.0)
+    # 1. Wait for "Schedule for later" / "Schedule" to be enabled and click it (Timeout 300 seconds)
+    wait_for_schedule_option_ready(driver, timeout=300.0)
 
     if scheduled_dt_str:
         try:
@@ -1466,7 +1564,7 @@ def _post_single_reel_core(
     step_3_insert_caption(driver, caption)
 
     # Step 4: Click Share Tab to reach Step 3
-    step_4_click_share_tab(driver, timeout=240.0)
+    step_4_click_share_tab(driver, timeout=420.0)
 
     # Step 5: Set Schedule Date & Time (Calendar Navigation)
     step_5_set_schedule(driver, scheduled_dt_str)
