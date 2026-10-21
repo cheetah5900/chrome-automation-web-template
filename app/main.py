@@ -7906,7 +7906,7 @@ class SeedanceRunRequest(BaseModel):
     items: list[dict[str, Any]]
     model: Optional[str] = None
     aspect_ratio: Optional[str] = None
-    duration: Optional[int] = None
+    duration: Optional[Union[int, str]] = None
     delay_min: float = 5.0
     delay_max: float = 15.0
     click_generate: bool = False
@@ -7918,7 +7918,7 @@ class SeedanceRunRequest(BaseModel):
 class SeedanceApplySettingsRequest(BaseModel):
     model: Optional[str] = None
     aspect_ratio: Optional[str] = None
-    duration: Optional[int] = None
+    duration: Optional[Union[int, str]] = None
     prompt_text: Optional[str] = None
     image_path: Optional[str] = None
     image_paths: Optional[list[str]] = None
@@ -7932,7 +7932,7 @@ class SeedanceDebugStepRequest(BaseModel):
     step: str
     model: Optional[str] = "fast"
     aspect_ratio: Optional[str] = "9:16"
-    duration: Optional[int] = 15
+    duration: Optional[Union[int, str]] = 15
     image_path: Optional[str] = None
     image_paths: Optional[list[str]] = None
     prompt_text: Optional[str] = None
@@ -8358,7 +8358,12 @@ def api_seedance_debug_step(req: SeedanceDebugStepRequest) -> dict[str, Any]:
             return {"ok": True, "message": f"ตั้งค่าอัตราส่วน '{req.aspect_ratio}' สำเร็จ", "result": res}
 
         elif step == "duration":
-            dur = req.duration or 15
+            dur = 15
+            if req.duration is not None and str(req.duration).strip().lower() != "auto":
+                try:
+                    dur = int(req.duration)
+                except (ValueError, TypeError):
+                    dur = 15
             res = set_seedance_duration(driver, dur)
             return {"ok": True, "message": f"ตั้งค่าระยะเวลา {dur}s สำเร็จ", "result": dur}
 

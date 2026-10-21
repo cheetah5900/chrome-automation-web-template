@@ -9364,7 +9364,7 @@ async function saveSeedancePreset() {
     character_sheet: document.getElementById('cfg_seedance_character_sheet')?.value || '',
     model: document.getElementById('cfg_seedance_model')?.value || 'fast',
     aspect_ratio: document.getElementById('cfg_seedance_aspect_ratio')?.value || '9:16',
-    duration: parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15,
+    duration: document.getElementById('cfg_seedance_duration')?.value || 'auto',
     delay_min: parseFloat(document.getElementById('cfg_seedance_delay_min')?.value) || 5,
     delay_max: parseFloat(document.getElementById('cfg_seedance_delay_max')?.value) || 15,
     click_generate: document.getElementById('chkSeedanceClickSubmit')?.checked || false
@@ -9463,7 +9463,7 @@ async function applySeedancePreset(silent = false) {
   }
   if (document.getElementById('cfg_seedance_model')) document.getElementById('cfg_seedance_model').value = preset.model || 'fast';
   if (document.getElementById('cfg_seedance_aspect_ratio')) document.getElementById('cfg_seedance_aspect_ratio').value = preset.aspect_ratio || '9:16';
-  if (document.getElementById('cfg_seedance_duration')) document.getElementById('cfg_seedance_duration').value = preset.duration || 15;
+  if (document.getElementById('cfg_seedance_duration')) document.getElementById('cfg_seedance_duration').value = preset.duration || 'auto';
   if (document.getElementById('cfg_seedance_delay_min')) document.getElementById('cfg_seedance_delay_min').value = preset.delay_min !== undefined ? preset.delay_min : 5;
   if (document.getElementById('cfg_seedance_delay_max')) document.getElementById('cfg_seedance_delay_max').value = preset.delay_max !== undefined ? preset.delay_max : 15;
   if (document.getElementById('chkSeedanceClickSubmit')) document.getElementById('chkSeedanceClickSubmit').checked = !!preset.click_generate;
@@ -9493,7 +9493,8 @@ async function applySeedanceDirectSettings(customOptions = {}) {
 
   const model = customOptions.model || document.getElementById('cfg_seedance_model')?.value || 'fast';
   const aspectRatio = customOptions.aspect_ratio || document.getElementById('cfg_seedance_aspect_ratio')?.value || '9:16';
-  const duration = customOptions.duration !== undefined ? parseInt(customOptions.duration, 10) : (parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15);
+  const rawDur = customOptions.duration !== undefined ? customOptions.duration : (document.getElementById('cfg_seedance_duration')?.value || 'auto');
+  const duration = (rawDur === 'auto' || rawDur === null || rawDur === undefined) ? 'auto' : parseInt(rawDur, 10);
   const promptText = customOptions.prompt_text !== undefined ? customOptions.prompt_text : '';
   const imagePaths = customOptions.image_paths !== undefined ? customOptions.image_paths : (customOptions.image_path ? [customOptions.image_path] : null);
   const imagePath = (imagePaths && imagePaths.length > 0) ? imagePaths[0] : (customOptions.image_path !== undefined ? customOptions.image_path : null);
@@ -9501,7 +9502,8 @@ async function applySeedanceDirectSettings(customOptions = {}) {
   const clearMode = customOptions.clear_mode !== undefined ? customOptions.clear_mode : getSeedanceClearMode();
   const clickGenerate = customOptions.click_generate !== undefined ? customOptions.click_generate : false;
 
-  const logParts = [`Model: ${model}`, `Ratio: ${aspectRatio}`, `Duration: ${duration}s`];
+  const durDesc = duration === 'auto' ? 'Auto (ตามคลิป)' : `${duration}s`;
+  const logParts = [`Model: ${model}`, `Ratio: ${aspectRatio}`, `Duration: ${durDesc}`];
   if (imagePaths && imagePaths.length > 0) logParts.push(`Images: ${imagePaths.length} files`);
   else if (imagePath) logParts.push(`Image: ${imagePath.split('/').pop()}`);
   else if (clearImage) logParts.push(`Clear Image`);
@@ -9627,6 +9629,32 @@ function updateSeedanceRunButtonUI() {
   window.updateSeedanceRunButtonUI = updateSeedanceRunButtonUI;
 
   window.seedanceExpandedFolders = window.seedanceExpandedFolders || new Set();
+
+  function detectSeedancePromptDuration(item) {
+    if (item && item.duration) return item.duration;
+    const pFile = item?.prompt_file || '';
+    const pText = item?.prompt_text || '';
+    const sName = item?.subfolder_name || '';
+
+    let m = pFile.match(/\b(5|10|15)\s*s(?:ec|econds?)?\b/i);
+    if (m) return parseInt(m[1], 10);
+
+    m = pText.match(/exactly\s+(5|10|15)\s*seconds?/i);
+    if (m) return parseInt(m[1], 10);
+    m = pText.match(/\b(5|10|15)\s*s\s+animation\b/i);
+    if (m) return parseInt(m[1], 10);
+    m = pText.match(/duration\s*[:=]\s*(5|10|15)\b/i);
+    if (m) return parseInt(m[1], 10);
+    m = pText.match(/0s?\s*[-–]\s*(5|10|15)(?:\.0)?s\b/i);
+    if (m) return parseInt(m[1], 10);
+
+    m = sName.match(/\b(5|10|15)\s*s\b/i);
+    if (m) return parseInt(m[1], 10);
+    if (/\b60\s*s\b/i.test(sName)) return 15;
+
+    return 15;
+  }
+  window.detectSeedancePromptDuration = detectSeedancePromptDuration;
 
   function renderSeedanceQueue() {
     const container = document.getElementById('seedanceQueueList');
@@ -9786,6 +9814,14 @@ function updateSeedanceRunButtonUI() {
         chip.appendChild(vidSpan);
       }
 
+      // Duration badge on folder chip
+      const groupDurations = Array.from(new Set(group.items.map(x => x.item.duration || detectSeedancePromptDuration(x.item) || 15)));
+      const groupDurText = groupDurations.length === 1 ? `${groupDurations[0]}s` : groupDurations.map(d => `${d}s`).join('/');
+      const durSpan = document.createElement('span');
+      durSpan.style.cssText = 'color: #fbbf24; font-size: 0.72rem; font-weight: 600; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); padding: 1px 4px; border-radius: 4px;';
+      durSpan.textContent = `⏱️ ${groupDurText}`;
+      chip.appendChild(durSpan);
+
       const isExpanded = window.seedanceExpandedFolders && window.seedanceExpandedFolders.has(group.folderName);
       const arrowSpan = document.createElement('span');
       arrowSpan.style.cssText = 'color: rgba(255,255,255,0.4); font-size: 0.7rem; margin-left: 1px;';
@@ -9853,12 +9889,15 @@ function updateSeedanceRunButtonUI() {
           subCard.appendChild(subChk);
 
           const shotText = it.total_prompts > 1 ? ` (${it.sub_index}/${it.total_prompts})` : '';
+          const itDur = it.duration || detectSeedancePromptDuration(it) || 15;
+          const durBadge = `<span style="background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(245, 158, 11, 0.35); color: #fbbf24; font-size: 0.68rem; padding: 0px 4px; border-radius: 4px; font-weight: 600;">⏱️ ${itDur}s</span>`;
           const subContent = document.createElement('span');
           subContent.style.cssText = 'display: inline-flex; align-items: center; gap: 4px;';
           subContent.innerHTML = `
             <span style="color: #c4b5fd; font-weight: 700;">#${x.index + 1}</span>
             <span style="color: #38bdf8; font-family: monospace;">📝 ${it.prompt_file}</span>
             <span style="color: #a78bfa;">${shotText}</span>
+            ${durBadge}
           `;
           subCard.appendChild(subContent);
           drawer.appendChild(subCard);
@@ -10981,7 +11020,12 @@ function updateSeedanceRunButtonUI() {
       const imageSubfolder = document.getElementById('cfg_seedance_image_subfolder')?.value.trim() || 'images';
 
       const clearMode = getSeedanceClearMode();
-      writeConsoleLine(`🚀 [Auto Mode] เริ่มส่งคำสั่งรัน Seedance ${selectedItems.length} รายการ (Mode: ${imageMode}, Clear: ${clearMode}, โฟลเดอร์รูป: ${imageSubfolder}, กด Generate อัตโนมัติ)...`, 'system', 'seedanceConsole');
+      const rawDur = document.getElementById('cfg_seedance_duration')?.value;
+      const durationVal = (rawDur && rawDur !== 'auto') ? parseInt(rawDur, 10) : null;
+      const modelVal = document.getElementById('cfg_seedance_model')?.value || null;
+      const ratioVal = document.getElementById('cfg_seedance_aspect_ratio')?.value || null;
+      const durText = durationVal ? `${durationVal}s` : '✨ Auto (ตามคลิป 5s/10s/15s)';
+      writeConsoleLine(`🚀 [Auto Mode] เริ่มส่งคำสั่งรัน Seedance ${selectedItems.length} รายการ (Duration: ${durText}, Mode: ${imageMode}, Clear: ${clearMode}, โฟลเดอร์รูป: ${imageSubfolder}, กด Generate อัตโนมัติ)...`, 'system', 'seedanceConsole');
 
       try {
         const res = await jsonFetch('/api/seedance/run', {
@@ -10989,9 +11033,9 @@ function updateSeedanceRunButtonUI() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             items: selectedItems,
-            model: null,
-            aspect_ratio: null,
-            duration: null,
+            model: modelVal,
+            aspect_ratio: ratioVal,
+            duration: durationVal,
             delay_min: delayMin,
             delay_max: delayMax,
             click_generate: true,
@@ -11109,16 +11153,21 @@ function updateSeedanceRunButtonUI() {
     const stepPrompt = currentItem.prompt_text || '';
     const imgDesc = stepImgs && stepImgs.length > 0 ? `, รูป: ${stepImgs.map(p => p.split('/').pop()).join(', ')}` : (stepClearImg ? ', ล้างรูป' : '');
     const clearLabel = clearMode === 'both' ? 'ล้างทั้งคู่หลังส่ง' : (clearMode === 'prompt' ? 'ล้าง Prompt หลังส่ง' : 'ล้างรูปหลังส่ง');
-    writeConsoleLine(`[Seedance Step ${stepNum}/${total}] ✍️ กำลังวางข้อมูลและกด Generate สำหรับ "${currentItem.subfolder_name}" (${stepPrompt.length} chars${imgDesc}, ${clearLabel})...`, 'info', 'seedanceConsole');
+    const modelVal = document.getElementById('cfg_seedance_model')?.value || null;
+    const ratioVal = document.getElementById('cfg_seedance_aspect_ratio')?.value || null;
+    const rawDur = document.getElementById('cfg_seedance_duration')?.value;
+    const stepDuration = (rawDur && rawDur !== 'auto') ? parseInt(rawDur, 10) : (currentItem.duration || detectSeedancePromptDuration(currentItem) || 15);
+
+    writeConsoleLine(`[Seedance Step ${stepNum}/${total}] ✍️ กำลังวางข้อมูล (⏱️ ${stepDuration}s) และกด Generate สำหรับ "${currentItem.subfolder_name}" (${stepPrompt.length} chars${imgDesc}, ${clearLabel})...`, 'info', 'seedanceConsole');
 
     try {
       const res = await jsonFetch('/api/seedance/apply-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: null,
-          aspect_ratio: null,
-          duration: null,
+          model: modelVal,
+          aspect_ratio: ratioVal,
+          duration: stepDuration,
           prompt_text: stepPrompt,
           image_path: (stepImgs && stepImgs.length > 0) ? stepImgs[0] : null,
           image_paths: stepImgs,
@@ -11649,7 +11698,8 @@ async function executeSeedanceDebugStep(stepName, btnEl = null, customOptions = 
 
   const model = document.getElementById('cfg_seedance_model')?.value || 'fast';
   const aspectRatio = document.getElementById('cfg_seedance_aspect_ratio')?.value || '9:16';
-  const duration = parseInt(document.getElementById('cfg_seedance_duration')?.value, 10) || 15;
+  const rawDur = document.getElementById('cfg_seedance_duration')?.value;
+  const duration = (rawDur && rawDur !== 'auto') ? parseInt(rawDur, 10) : 15;
 
   let promptText = document.getElementById('seedanceDebugPromptInput')?.value?.trim();
   if (!promptText && seedanceBatchQueue.length > 0) {

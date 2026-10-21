@@ -165,6 +165,47 @@ def extract_leading_number(folder_name: str) -> Optional[int]:
         return int(match.group(1))
     return None
 
+def detect_clip_duration(prompt_file: str = "", prompt_text: str = "", subfolder_name: str = "", fallback: int = 15) -> int:
+    """
+    Detects the intended video duration (in seconds: 5, 10, 15) for a clip
+    from its prompt filename, prompt text content, or subfolder name.
+    """
+    # 1. Check prompt_file for explicit duration (e.g. 'Direct 10s Animation Prompt.md', 'Part 01 - Direct 15s...md')
+    if prompt_file:
+        m = re.search(r'\b(5|10|15)\s*s(?:ec|econds?)?\b', prompt_file, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+
+    # 2. Check prompt_text for explicit duration mentions
+    if prompt_text:
+        # e.g., 'exactly 10 seconds', 'exactly 15 seconds', 'exactly 5 seconds'
+        m = re.search(r'exactly\s+(5|10|15)\s*seconds?', prompt_text, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+        # e.g., '10s Animation Prompt', '15s Animation Prompt'
+        m = re.search(r'\b(5|10|15)\s*s\s+animation\b', prompt_text, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+        # e.g., 'duration: 10s', 'duration = 15'
+        m = re.search(r'duration\s*[:=]\s*(5|10|15)\b', prompt_text, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+        # e.g., 'Timeline: 0s-10.0s' or '0-10s'
+        m = re.search(r'0s?\s*[-–]\s*(5|10|15)(?:\.0)?s\b', prompt_text, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+
+    # 3. Check subfolder_name (e.g. '003 - ลิตาร์เห็นเค้ก 10s')
+    if subfolder_name:
+        m = re.search(r'\b(5|10|15)\s*s\b', subfolder_name, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+        # 60s folders are split into 4 parts of 15s each
+        if re.search(r'\b60\s*s\b', subfolder_name, re.IGNORECASE):
+            return 15
+
+    return fallback
+
 def find_all_images_in_folder(
     folder_path: str,
     subfolder_name: str = "images"
@@ -942,6 +983,13 @@ def scan_seedance_folders(
 
             display_sub_name = f"{sub_name} [{p_idx}/{total_in_folder}] {prompt_file}" if total_in_folder > 1 else sub_name
 
+            item_dur = detect_clip_duration(
+                prompt_file=prompt_file or "",
+                prompt_text=prompt_text or "",
+                subfolder_name=sub_name or "",
+                fallback=15
+            )
+
             items.append({
                 "id": global_id,
                 "num": num,
@@ -956,6 +1004,7 @@ def scan_seedance_folders(
                 "prompt_path": prompt_path or "",
                 "prompt_text": prompt_text,
                 "prompt_length": prompt_len,
+                "duration": item_dur,
                 "is_over_4000": is_over_4000,
                 "has_prompt": bool(prompt_file and prompt_text),
                 "prompt_files": all_prompt_files,
@@ -2725,13 +2774,15 @@ def apply_all_seedance_settings(
     driver,
     model: Optional[str] = None,
     aspect_ratio: Optional[str] = None,
-    duration: Optional[int] = None,
+    duration: Optional[Any] = None,
     prompt_text: Optional[str] = None,
     image_path: Optional[str] = None,
     image_paths: Optional[list[str]] = None,
     clear_image: bool = False,
     clear_mode: str = "both",
-    click_generate: bool = False
+    click_generate: bool = False,
+    prompt_file: str = "",
+    subfolder_name: str = ""
 ) -> dict[str, Any]:
     """Applies generation settings (prompt, image) to Dreamina and optionally clicks generate."""
     bot = browser_manager.get()
@@ -2743,8 +2794,24 @@ def apply_all_seedance_settings(
         results["model"] = set_seedance_model(driver, model)
     if aspect_ratio:
         results["aspect_ratio"] = set_seedance_aspect_ratio(driver, aspect_ratio)
-    if duration is not None and duration > 0:
-        results["duration"] = set_seedance_duration(driver, duration)
+
+    target_dur = None
+    if duration is not None:
+        if str(duration).strip().lower() == "auto":
+            target_dur = detect_clip_duration(
+                prompt_file=prompt_file or "",
+                prompt_text=prompt_text or "",
+                subfolder_name=subfolder_name or "",
+                fallback=15
+            )
+        else:
+            try:
+                target_dur = int(duration)
+            except (ValueError, TypeError):
+                target_dur = None
+
+    if target_dur and target_dur > 0:
+        results["duration"] = set_seedance_duration(driver, target_dur)
 
     # Determine target image paths
     target_imgs = []
@@ -2794,7 +2861,7 @@ def run_seedance_batch(
     items: list[dict[str, Any]],
     model: Optional[str] = None,
     aspect_ratio: Optional[str] = None,
-    duration: Optional[int] = None,
+    duration: Optional[Any] = None,
     delay_min: float = 5.0,
     delay_max: float = 15.0,
     click_generate: bool = False,
@@ -2818,9 +2885,17 @@ def run_seedance_batch(
     success_count = 0
     reset_seedance_stop()
 
+    # Determine if a fixed duration override was provided (e.g. 5, 10, 15)
+    fixed_duration = None
+    if duration is not None and str(duration).strip().lower() != "auto":
+        try:
+            fixed_duration = int(duration)
+        except (ValueError, TypeError):
+            fixed_duration = None
+
     model_desc = model or "คงเดิม"
     ratio_desc = aspect_ratio or "คงเดิม"
-    dur_desc = f"{duration}s" if duration else "คงเดิม"
+    dur_desc = f"{fixed_duration}s (Fixed)" if fixed_duration else "✨ Auto (ตามคลิป 5s/10s/15s)"
     log(f"[Seedance Engine] เริ่มกระบวนการ Seedance Batch จำนวน {total} รายการ (Model: {model_desc}, Ratio: {ratio_desc}, Duration: {dur_desc}, Image Mode: {image_mode}, Clear Mode: {clear_mode}, Submit: {click_generate})...")
 
     # Switch to Dreamina tab & enforce AI Video mode
@@ -2833,8 +2908,8 @@ def run_seedance_batch(
             set_seedance_model(driver, model)
         if aspect_ratio:
             set_seedance_aspect_ratio(driver, aspect_ratio)
-        if duration and duration > 0:
-            set_seedance_duration(driver, duration)
+        if fixed_duration and fixed_duration > 0:
+            set_seedance_duration(driver, fixed_duration)
     except Exception as setup_err:
         log(f"[Seedance Setup Warning] {setup_err}")
 
@@ -2890,7 +2965,22 @@ def run_seedance_batch(
                         log(f"[Seedance] 🔍 ค้นพบรูปภาพเพิ่มเติมใน '{sub_name}': {len(item_img_paths)} รูป")
             p_file = item.get("prompt_file") or ""
             p_file_str = f" • ไฟล์: {p_file}" if p_file else ""
-            log(f"[Seedance] 🎬 กำลังประมวลผล [{idx+1}/{total}] โฟลเดอร์: {sub_name}{p_file_str} (Image Mode: {item_mode}, Clear: {clear_mode})...")
+
+            # Determine duration for this item (Fixed override vs Detected/Saved)
+            item_dur = fixed_duration or item.get("duration") or detect_clip_duration(
+                prompt_file=p_file,
+                prompt_text=prompt_text,
+                subfolder_name=sub_name,
+                fallback=15
+            )
+
+            # Apply duration for this item on Dreamina
+            try:
+                set_seedance_duration(driver, item_dur)
+            except Exception as dur_err:
+                log(f"[Seedance Duration Warning] {dur_err}")
+
+            log(f"[Seedance] 🎬 กำลังประมวลผล [{idx+1}/{total}] โฟลเดอร์: {sub_name}{p_file_str} (⏱️ {item_dur}s, Image Mode: {item_mode}, Clear: {clear_mode})...")
 
             if progress_callback:
                 progress_callback({

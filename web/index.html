@@ -1426,11 +1426,13 @@
                     <label for="cfg_seedance_duration" style="font-weight: bold; color: #8da6ff;">ระยะเวลา (Duration)</label>
                     <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin: 2px 0 6px 0;">ความยาวคลิป</div>
                     <select id="cfg_seedance_duration" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.25); color: white; border: 1px solid rgba(255,255,255,0.12); outline: none;">
-                      <option value="15" selected>15 วินาที (15s)</option>
+                      <option value="auto" selected>✨ อัตโนมัติตามคลิป (Auto: 10s / 15s / 5s)</option>
+                      <option value="15">15 วินาที (15s)</option>
                       <option value="10">10 วินาที (10s)</option>
                       <option value="5">5 วินาที (5s)</option>
                     </select>
                     <div style="display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap;">
+                      <button type="button" class="seedance-quick-btn" data-type="duration" data-val="auto" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">Auto</button>
                       <button type="button" class="seedance-quick-btn" data-type="duration" data-val="15" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">15s</button>
                       <button type="button" class="seedance-quick-btn" data-type="duration" data-val="10" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">10s</button>
                       <button type="button" class="seedance-quick-btn" data-type="duration" data-val="5" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;">5s</button>
